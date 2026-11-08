@@ -89,7 +89,6 @@ export async function summaryServiceFixture() {
   const service = makeService({
     store,
     registry: adapter,
-    clock: { now: () => Date.parse("2026-10-23T00:00:00.000Z") },
     canonicalWorkspace: (workspace) => Effect.succeed(registry(workspace).project),
     secrets: { list: () => Effect.succeed([]), set: () => Effect.void, remove: () => Effect.void },
     generateTypes: () => Effect.die(new Error("Unused fixture operation.")),

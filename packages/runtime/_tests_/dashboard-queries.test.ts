@@ -13,7 +13,6 @@ function fixture() {
 
   const service = makeLocalService({
     store,
-    clock: { now: Date.now },
     home: root,
   });
 

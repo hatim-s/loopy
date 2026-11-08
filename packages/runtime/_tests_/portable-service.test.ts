@@ -110,7 +110,6 @@ function fixture() {
   const service = makeService({
     store,
     registry: () => Effect.succeed(registry),
-    clock: { now: () => now },
     canonicalWorkspace: (workspace) => Effect.succeed(workspace),
     secrets: { list: unsupported, set: unsupported, remove: unsupported },
     generateTypes: unsupported,

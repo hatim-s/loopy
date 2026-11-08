@@ -26,11 +26,7 @@ async function fixture(options: { concurrency?: number } = {}) {
   const body = await compiledBody("workflow", source);
   await Effect.runPromise(registry.save(body));
 
-  const service = makeLocalService({
-    store,
-    home,
-    clock: { now: () => Date.parse("2026-10-17T00:00:00.000Z") },
-  });
+  const service = makeLocalService({ store, home });
 
   const server = startServer({
     service,
@@ -107,7 +103,7 @@ test("a storage outage stays internal and its cause never appears in the HTTP fa
   expect(await response.text()).not.toContain("private-password");
 });
 
-test("hook resolution is atomic and SSE refuses a cursor inside a commit", async () => {
+test("hook routes resolve once and SSE refuses a cursor inside a commit", async () => {
   const f = await fixture();
   const run = await Effect.runPromise(f.service.startRun("workflow", {}, f.root));
   const at = "2026-10-17T00:00:00.000Z";
@@ -152,21 +148,20 @@ test("hook resolution is atomic and SSE refuses a cursor inside a commit", async
   await Effect.runPromise(f.store.release(run.id, "fixture-owner"));
   const wait = (await Effect.runPromise(f.store.getWaits(run.id)))[0]!;
 
-  const rejected = await Effect.runPromiseExit(
-    f.service.resolveHook(wait.token, { ok: "invalid" }),
-  );
-
-  expect(Exit.isFailure(rejected)).toBe(true);
+  const resolve = (route: string, ok: boolean | string) =>
+    f.request(route, { method: "POST", body: JSON.stringify({ payload: { ok } }) });
 
   const stored = async () =>
     (await Effect.runPromise(f.store.getWaits(run.id))).find((hook) => hook.token === wait.token);
 
-  expect((await stored())?.resolvedAt).toBeFalsy();
-  await Effect.runPromise(f.service.resolveHook(wait.token, { ok: true }));
-  expect((await stored())?.resolvedAt).toBe(at);
-  expect(
-    Exit.isFailure(await Effect.runPromiseExit(f.service.resolveHook(wait.token, { ok: false }))),
-  ).toBe(true);
+  expect((await resolve(`/runs/${run.id}/hooks/approval`, "invalid")).status).toBe(400);
+  expect((await resolve(`/hooks/${wait.token}`, "invalid")).status).toBe(400);
+  expect((await stored())?.resolvedAt).toBeUndefined();
+  const started = Date.now();
+  expect((await resolve(`/hooks/${wait.token}`, true)).status).toBe(200);
+  expect(Date.parse((await stored())?.resolvedAt ?? "")).toBeGreaterThanOrEqual(started);
+  expect((await resolve(`/hooks/${wait.token}`, false)).status).toBe(404);
+  expect((await resolve(`/runs/${run.id}/hooks/approval`, false)).status).toBe(404);
 });
 
 test("successful cancellation commits and releases ownership", async () => {
@@ -327,7 +322,6 @@ test("typed unsupported secret and type-generation operations preserve HTTP501",
 
   const service = makeService({
     store: f.store,
-    clock: { now: Date.now },
     registry: () => Effect.die("unused registry"),
     canonicalWorkspace: () => Effect.die("unused workspace"),
     secrets: { list: unsupported, set: unsupported, remove: unsupported },

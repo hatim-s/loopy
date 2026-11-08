@@ -17,8 +17,13 @@ import { overviewBuckets } from "./scan";
 
 type RunFilter = Pick<RunPageQuery, "slug" | "workspace" | "status" | "from" | "to">;
 
-export const PENDING_HOOK = `SELECT w.record FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key
-  WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'
+/**
+ * Selects `column` from the first pending wait of run `r`, binding the current time once. It
+ * mirrors core's isPendingWait, so a run lists as waiting exactly when a signal would be accepted.
+ */
+export const pendingHook = (column: string) => `SELECT ${column} FROM waits w
+  JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key
+  WHERE w.run_id=r.id AND r.status NOT IN ('succeeded','failed','cancelled') AND n.status='waiting'
   AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL
   AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1`;
 
@@ -102,7 +107,7 @@ export function queryRuns(ctx: SqlContext, query: RunPageQuery): RunPreview[] {
   }
 
   if (query.waiting !== undefined) {
-    clauses.push(`${query.waiting ? "" : "NOT "}EXISTS(${PENDING_HOOK})`);
+    clauses.push(`${query.waiting ? "" : "NOT "}EXISTS(${pendingHook("1")})`);
     values.push(query.now);
   }
 
@@ -139,7 +144,7 @@ export function readPendingHooks(ctx: SqlContext, ids: string[], now: string) {
   // One array binding keeps a full run page below workerd's SQL variable limit.
   const rows = ctx.db
     .query<{ id: string; record: string | null }, SqlValue[]>(
-      `SELECT r.id,(${PENDING_HOOK.replace("SELECT w.record", "SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))`,
+      `SELECT r.id,(${pendingHook("json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))`,
     )
     .all(now, JSON.stringify(ids));
 

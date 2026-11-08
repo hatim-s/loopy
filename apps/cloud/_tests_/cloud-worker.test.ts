@@ -248,7 +248,7 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
       expect(row.waitingOn).toMatchObject({
         hook: `approve-${row.id}`,
         seq: 1,
-        expiresAt: index % 2 === 0 ? "2026-10-22T01:00:00.000Z" : null,
+        expiresAt: index % 2 === 0 ? "2126-10-22T01:00:00.000Z" : null,
         since: "2026-10-22T00:00:00.000Z",
       });
       expect(seededHooks.get(row.id)).toMatchObject({

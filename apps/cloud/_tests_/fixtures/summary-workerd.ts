@@ -204,7 +204,6 @@ export class SummaryProbe {
           const service = makeService({
             store,
             registry: () => Effect.succeed(registry),
-            clock: { now: Date.now },
             canonicalWorkspace: () => Effect.succeed(workspace),
             secrets: {
               list: () => Effect.succeed([]),

@@ -47,7 +47,7 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
     openRunStore(home).pipe(Effect.provideService(Scope.Scope, scope)),
   );
 
-  const service = makeLocalService({ home, store, clock: { now: Date.now } });
+  const service = makeLocalService({ home, store });
 
   const daemon = await Effect.runPromise(
     localDaemon({

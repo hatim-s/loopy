@@ -9,14 +9,9 @@ import { generateCommand } from "./typegen/generate";
 
 export { ServiceError } from "../service";
 
-export function makeLocalService(options: {
-  home: string;
-  store: Store & DashboardReader;
-  clock: { now(): number };
-}) {
+export function makeLocalService(options: { home: string; store: Store & DashboardReader }) {
   return makeService({
     store: options.store,
-    clock: options.clock,
     registry: (workspace) =>
       Registry.make(options.home, workspace).pipe(Effect.map(makeArtifactRegistry)),
     canonicalWorkspace: (workspace) =>

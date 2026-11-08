@@ -20,7 +20,6 @@ test("the cache retains the server's streamed output preview size", async () => 
 
   const service = makeLocalService({
     store,
-    clock: { now: Date.now },
     home: f.home,
   });
 

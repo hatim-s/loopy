@@ -42,7 +42,6 @@ export async function save(f: ReturnType<typeof fixture>) {
         const service = makeLocalService({
           store,
           home: f.home,
-          clock: { now: Date.now },
         });
 
         yield* service.putLoopy(result.graph.name, {
@@ -75,7 +74,6 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
         const service = makeLocalService({
           store,
           home: f.home,
-          clock: { now: Date.now },
         });
 
         const run = yield* service.startRun(saved.slug, {}, f.cwd);

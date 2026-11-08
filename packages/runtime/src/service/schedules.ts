@@ -6,7 +6,7 @@ import {
   type Schedule,
   validateTimeZone,
 } from "@loopy/core";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import type { ServiceContext } from "./context";
 import { requireDefinition } from "./definition";
 import { ServiceError } from "./error";
@@ -95,8 +95,10 @@ export function makeScheduleOperations(context: ServiceContext) {
     cron: string,
     tz: string,
   ) {
+    const from = new Date(yield* Clock.currentTimeMillis);
+
     try {
-      return nextFire(cron, new Date(context.clock.now()), tz).toISOString();
+      return nextFire(cron, from, tz).toISOString();
     } catch (error) {
       return yield* Effect.fail(new ServiceError("invalid_cron", errorMessage(error)));
     }

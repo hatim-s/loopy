@@ -12,6 +12,7 @@ import { makeLocalService, Registry } from "../src/local";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { fixtureDaemon, fixtureStore, waitUntil } from "./fixtures/service-runtime";
+import { runAt } from "./fixtures/stores";
 
 const serviceGraph = loopy("test", { input: { name: "string" }, run: ({ input }) => input });
 
@@ -29,19 +30,16 @@ async function fixture(meta: Partial<Pick<Graph["meta"], "scope" | "schedule">> 
   await Effect.runPromise(registry.save(body));
   let now = Date.parse("2026-10-17T00:00:00.000Z");
   const clock = { now: () => now };
+  // The service and store read this clock through Effect's Clock.
+  const onClock = runAt(clock.now);
   const store = await fixtureStore(home);
-
-  const service = makeLocalService({
-    store,
-    clock,
-    home: home,
-  });
+  const service = makeLocalService({ store, home });
 
   return {
     service,
     store,
-    runs: () =>
-      Effect.runPromise(store.queryRuns({ limit: 200, now: new Date(now).toISOString() })),
+    onClock,
+    runs: () => onClock(store.queryRuns({ limit: 200, now: new Date(now).toISOString() })),
     root,
     home,
     clock,
@@ -53,14 +51,14 @@ async function fixture(meta: Partial<Pick<Graph["meta"], "scope" | "schedule">> 
 }
 
 test("service validates input before queuing and hides registry private fields", async () => {
-  const { service, runs, root } = await fixture();
-  await expect(Effect.runPromise(service.startRun("service", {}, root))).rejects.toMatchObject({
+  const { service, runs, root, onClock } = await fixture();
+  await expect(onClock(service.startRun("service", {}, root))).rejects.toMatchObject({
     code: "bad_request",
   });
   expect(await runs()).toEqual([]);
-  const run = await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
+  const run = await onClock(service.startRun("service", { name: "Hatim" }, root));
   expect(run).toMatchObject({ status: "queued", input: { name: "Hatim" }, owner: null });
-  const [loopy] = await Effect.runPromise(service.listLoopies(root));
+  const [loopy] = await onClock(service.listLoopies(root));
   expect(loopy).toMatchObject({ slug: "service", lastRun: run, counts: { queued: 1 } });
 
   for (const privateField of ["source", "revision", "bundles", "secrets", "savedAt"]) {
@@ -69,7 +67,7 @@ test("service validates input before queuing and hides registry private fields",
 });
 
 test("service resumes queued, suspended and abandoned runs and rejects terminal or owned runs", async () => {
-  const { service, store, root } = await fixture();
+  const { service, store, root, onClock } = await fixture();
 
   for (const status of [
     "queued",
@@ -98,60 +96,58 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
       };
     }
 
-    await Effect.runPromise(store.createRun(run));
+    await onClock(store.createRun(run));
 
     if (status === "queued" || status === "suspended" || status === "running") {
-      expect(await Effect.runPromise(service.resumeRun(status))).toMatchObject({
+      expect(await onClock(service.resumeRun(status))).toMatchObject({
         status: status === "queued" ? "queued" : "suspended",
         owner: null,
       });
     } else {
-      await expect(Effect.runPromise(service.resumeRun(status))).rejects.toMatchObject({
+      await expect(onClock(service.resumeRun(status))).rejects.toMatchObject({
         code: "not_claimable",
       });
     }
   }
 
-  const owned = await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
-  await Effect.runPromise(store.claim(owned.id, "owner"));
-  await expect(Effect.runPromise(service.cancelRun(owned.id))).rejects.toMatchObject({
+  const owned = await onClock(service.startRun("service", { name: "Hatim" }, root));
+  await onClock(store.claim(owned.id, "owner"));
+  await expect(onClock(service.cancelRun(owned.id))).rejects.toMatchObject({
     code: "owned_elsewhere",
   });
-  await expect(Effect.runPromise(service.resumeRun(owned.id))).rejects.toMatchObject({
+  await expect(onClock(service.resumeRun(owned.id))).rejects.toMatchObject({
     code: "owned_elsewhere",
   });
-  await Effect.runPromise(store.release(owned.id, "owner"));
-  expect(await Effect.runPromise(service.cancelRun(owned.id))).toMatchObject({
+  await onClock(store.release(owned.id, "owner"));
+  expect(await onClock(service.cancelRun(owned.id))).toMatchObject({
     status: "cancelled",
     owner: null,
   });
-  await expect(Effect.runPromise(service.cancelRun("missing"))).rejects.toMatchObject({
+  await expect(onClock(service.cancelRun("missing"))).rejects.toMatchObject({
     code: "not_found",
     message: "No run 'missing'. Use loopy runs to list run ids.",
   });
 });
 
 test("service pages newest runs by createdAt with default and maximum page sizes", async () => {
-  const { service, store, root, advance } = await fixture();
-  const first = await Effect.runPromise(service.startRun("service", { name: "first" }, root));
+  const { service, store, root, advance, onClock } = await fixture();
+  const first = await onClock(service.startRun("service", { name: "first" }, root));
   advance();
-  const second = await Effect.runPromise(service.startRun("service", { name: "second" }, root));
+  const second = await onClock(service.startRun("service", { name: "second" }, root));
+  expect(await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })))).toEqual([
+    second,
+  ]);
   expect(
-    await Effect.runPromise(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 }))),
-  ).toEqual([second]);
-  expect(
-    await Effect.runPromise(
+    await onClock(
       service.listRuns(decodeBoundary(routes.runs.query)({ before: encodeRunCursor(second) })),
     ),
   ).toEqual([first]);
   expect(
-    await Effect.runPromise(
-      service.listRuns(decodeBoundary(routes.runs.query)({ status: "failed" })),
-    ),
+    await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ status: "failed" }))),
   ).toEqual([]);
 
   for (let i = 0; i < 205; i++) {
-    await Effect.runPromise(
+    await onClock(
       store.createRun({
         id: `page-${i}`,
         slug: "page",
@@ -166,15 +162,15 @@ test("service pages newest runs by createdAt with default and maximum page sizes
   }
 
   expect(
-    await Effect.runPromise(service.listRuns(decodeBoundary(routes.runs.query)({ slug: "page" }))),
+    await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ slug: "page" }))),
   ).toHaveLength(50);
-  expect(await Effect.runPromise(service.listRuns({ slug: "page", limit: 200 }))).toHaveLength(200);
+  expect(await onClock(service.listRuns({ slug: "page", limit: 200 }))).toHaveLength(200);
 });
 
 test("service schedules create, replace, toggle, delete and emit persisted events", async () => {
-  const { service, store, root, advance } = await fixture();
+  const { service, store, root, advance, onClock } = await fixture();
 
-  const first = await Effect.runPromise(
+  const first = await onClock(
     service.putSchedule(
       "service",
       {
@@ -186,26 +182,24 @@ test("service schedules create, replace, toggle, delete and emit persisted event
   );
 
   expect(first).toMatchObject({ workspace: root, enabled: true, lastFireKey: null, tz: "UTC" });
-  expect(await Effect.runPromise(service.listSchedules(root))).toEqual([first]);
+  expect(await onClock(service.listSchedules(root))).toEqual([first]);
   const retryAt = new Date(Date.parse(first.nextFireAt) + 5000).toISOString();
-  await Effect.runPromise(store.failSchedule({ schedule: first, error: "boom", retryAt }));
-  expect(await Effect.runPromise(service.listSchedules(root))).toEqual([
+  await onClock(store.failSchedule({ schedule: first, error: "boom", retryAt }));
+  expect(await onClock(service.listSchedules(root))).toEqual([
     { ...first, failure: { error: "boom", retryAt } },
   ]);
-  await Effect.runPromise(
+  await onClock(
     store.putSchedule({ ...first, lastFireKey: "fired", nextFireAt: first.nextFireAt }),
   );
-  expect(await Effect.runPromise(service.setScheduleEnabled("service", false, root))).toMatchObject(
-    {
-      enabled: false,
-      lastFireKey: "fired",
-    },
-  );
+  expect(await onClock(service.setScheduleEnabled("service", false, root))).toMatchObject({
+    enabled: false,
+    lastFireKey: "fired",
+  });
   advance();
-  const enabled = await Effect.runPromise(service.setScheduleEnabled("service", true, root));
+  const enabled = await onClock(service.setScheduleEnabled("service", true, root));
   expect(enabled).toMatchObject({ enabled: true, input: { name: "first" }, lastFireKey: "fired" });
 
-  const replaced = await Effect.runPromise(
+  const replaced = await onClock(
     service.putSchedule(
       "service",
       {
@@ -224,17 +218,15 @@ test("service schedules create, replace, toggle, delete and emit persisted event
     lastFireKey: null,
   });
   expect(replaced.nextFireAt).not.toBe(first.nextFireAt);
-  expect(await Effect.runPromise(service.deleteSchedule("service", root))).toEqual({
+  expect(await onClock(service.deleteSchedule("service", root))).toEqual({
     deleted: true,
   });
-  expect(await Effect.runPromise(service.listSchedules(root))).toEqual([]);
-  await expect(
-    Effect.runPromise(service.setScheduleEnabled("service", true, root)),
-  ).rejects.toMatchObject({
+  expect(await onClock(service.listSchedules(root))).toEqual([]);
+  await expect(onClock(service.setScheduleEnabled("service", true, root))).rejects.toMatchObject({
     code: "not_found",
   });
   expect(
-    (await Effect.runPromise(store.events(0, 100))).map((event) => `${event.entity}.${event.kind}`),
+    (await onClock(store.events(0, 100))).map((event) => `${event.entity}.${event.kind}`),
   ).toEqual([
     "schedule.saved",
     "schedule.failed",
@@ -247,7 +239,7 @@ test("service schedules create, replace, toggle, delete and emit persisted event
 });
 
 test("service rejects invalid schedule semantics before writing", async () => {
-  const { service, store, root } = await fixture();
+  const { service, store, root, onClock } = await fixture();
 
   const cases = [
     { body: { cron: "bad" }, code: "invalid_cron" },
@@ -258,45 +250,41 @@ test("service rejects invalid schedule semantics before writing", async () => {
   ];
 
   for (const { body, code } of cases) {
-    await expect(
-      Effect.runPromise(service.putSchedule("service", body, root)),
-    ).rejects.toMatchObject({
+    await expect(onClock(service.putSchedule("service", body, root))).rejects.toMatchObject({
       code,
     });
   }
 
   await expect(
-    Effect.runPromise(service.putSchedule("missing", { cron: "* * * * *" }, root)),
+    onClock(service.putSchedule("missing", { cron: "* * * * *" }, root)),
   ).rejects.toMatchObject({
     code: "not_found",
   });
-  await expect(Effect.runPromise(service.deleteSchedule("missing", root))).rejects.toMatchObject({
+  await expect(onClock(service.deleteSchedule("missing", root))).rejects.toMatchObject({
     code: "not_found",
   });
-  expect(await Effect.runPromise(store.listSchedules())).toEqual([]);
+  expect(await onClock(store.listSchedules())).toEqual([]);
 });
 
 test("definition defaults apply and workspace schedule mutations stay isolated", async () => {
-  const { service, store, root } = await fixture({
+  const { service, store, root, onClock } = await fixture({
     schedule: { cron: "*/5 * * * *", tz: "Asia/Kolkata" },
   });
 
-  expect((await Effect.runPromise(service.listLoopies(root)))[0]?.schedule).toEqual({
+  expect((await onClock(service.listLoopies(root)))[0]?.schedule).toEqual({
     cron: "*/5 * * * *",
     tz: "Asia/Kolkata",
     enabled: false,
     nextFireAt: null,
   });
 
-  const saved = await Effect.runPromise(
-    service.putSchedule("service", { input: { name: "default" } }, root),
-  );
+  const saved = await onClock(service.putSchedule("service", { input: { name: "default" } }, root));
 
   expect(saved).toMatchObject({ cron: "*/5 * * * *", tz: "Asia/Kolkata" });
   const other = join(root, "other");
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
 
-  await Effect.runPromise(
+  await onClock(
     store.putSchedule({
       workspace: other,
       slug: "service",
@@ -307,26 +295,22 @@ test("definition defaults apply and workspace schedule mutations stay isolated",
       nextFireAt: "2026-10-17T00:01:00.000Z",
     }),
   );
-  expect(await Effect.runPromise(service.listSchedules(other))).toMatchObject([
-    { workspace: other },
-  ]);
-  await expect(Effect.runPromise(service.putSchedule("service", {}, other))).rejects.toMatchObject({
+  expect(await onClock(service.listSchedules(other))).toMatchObject([{ workspace: other }]);
+  await expect(onClock(service.putSchedule("service", {}, other))).rejects.toMatchObject({
     code: "not_found",
   });
-  await expect(
-    Effect.runPromise(service.setScheduleEnabled("service", false, other)),
-  ).rejects.toMatchObject({
+  await expect(onClock(service.setScheduleEnabled("service", false, other))).rejects.toMatchObject({
     code: "not_found",
   });
-  await expect(Effect.runPromise(service.deleteSchedule("service", other))).rejects.toMatchObject({
+  await expect(onClock(service.deleteSchedule("service", other))).rejects.toMatchObject({
     code: "not_found",
   });
-  await Effect.runPromise(service.deleteSchedule("service", root));
-  expect(await Effect.runPromise(store.listSchedules())).toMatchObject([{ workspace: other }]);
+  await onClock(service.deleteSchedule("service", root));
+  expect(await onClock(store.listSchedules())).toMatchObject([{ workspace: other }]);
 });
 
 test("disabled schedules stay dormant and re-enabling waits for the next slot", async () => {
-  const { service, store, runs, clock, advance, root } = await fixture();
+  const { service, store, runs, clock, advance, root, onClock } = await fixture();
 
   const daemon = await fixtureDaemon({
     concurrency: 4,
@@ -336,7 +320,7 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     prepare: () => Effect.succeed({ graph: serviceGraph, executor: new FakeExecutor() }),
   });
 
-  await Effect.runPromise(
+  await onClock(
     service.putSchedule(
       "service",
       {
@@ -348,16 +332,16 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     ),
   );
   advance(120000);
-  await Effect.runPromise(daemon.pass);
+  await onClock(daemon.pass);
   expect(await runs()).toEqual([]);
-  expect(await Effect.runPromise(service.setScheduleEnabled("service", true, root))).toMatchObject({
+  expect(await onClock(service.setScheduleEnabled("service", true, root))).toMatchObject({
     nextFireAt: "2026-10-17T00:03:00.000Z",
   });
-  await Effect.runPromise(daemon.pass);
+  await onClock(daemon.pass);
   expect(await runs()).toEqual([]);
   advance(60000);
-  await Effect.runPromise(daemon.pass);
-  await Effect.runPromise(
+  await onClock(daemon.pass);
+  await onClock(
     waitUntil(
       Effect.map(
         store.queryRuns({ limit: 200, now: new Date(clock.now()).toISOString() }),
@@ -368,15 +352,15 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
 });
 
 test("global schedules use the service workspace and preserve other workspaces", async () => {
-  const { service, store, root } = await fixture({ scope: "global" });
+  const { service, store, root, onClock } = await fixture({ scope: "global" });
   const other = join(root, "other");
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
 
-  await Effect.runPromise(
+  await onClock(
     service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } }, root),
   );
 
-  const second = await Effect.runPromise(
+  const second = await onClock(
     service.putSchedule(
       "service",
       {
@@ -388,14 +372,12 @@ test("global schedules use the service workspace and preserve other workspaces",
   );
 
   expect(second.workspace).toBe(other);
-  expect(await Effect.runPromise(service.listSchedules(root))).toMatchObject([
+  expect(await onClock(service.listSchedules(root))).toMatchObject([
     { workspace: root, input: { name: "first" } },
   ]);
-  await Effect.runPromise(service.setScheduleEnabled("service", false, other));
-  await Effect.runPromise(service.deleteSchedule("service", other));
-  expect(await Effect.runPromise(store.listSchedules())).toMatchObject([
-    { workspace: root, enabled: true },
-  ]);
+  await onClock(service.setScheduleEnabled("service", false, other));
+  await onClock(service.deleteSchedule("service", other));
+  expect(await onClock(store.listSchedules())).toMatchObject([{ workspace: root, enabled: true }]);
 });
 
 async function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
@@ -422,7 +404,7 @@ async function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
 for (const mutation of ["PUT", "disable"]) {
   test(`a ${mutation} during bundle resolution rejects the pending schedule fire`, async () => {
     const f = await fixture();
-    await Effect.runPromise(
+    await f.onClock(
       f.service.putSchedule("service", { cron: "* * * * *", input: { name: "first" } }, f.root),
     );
     f.advance(60000);
@@ -432,45 +414,45 @@ for (const mutation of ["PUT", "disable"]) {
     try {
       const saved =
         mutation === "PUT"
-          ? await Effect.runPromise(
+          ? await f.onClock(
               f.service.putSchedule(
                 "service",
                 { cron: "0 * * * *", input: { name: "new" } },
                 f.root,
               ),
             )
-          : await Effect.runPromise(f.service.setScheduleEnabled("service", false, f.root));
+          : await f.onClock(f.service.setScheduleEnabled("service", false, f.root));
 
       expect(saved.nextFireAt).toBe(
         mutation === "PUT" ? "2026-10-17T01:00:00.000Z" : "2026-10-17T00:01:00.000Z",
       );
       paused.release();
-      await Effect.runPromise(paused.daemon.pass);
+      await f.onClock(paused.daemon.pass);
       expect(await f.runs()).toEqual([]);
-      expect(await Effect.runPromise(f.service.listSchedules(f.root))).toEqual([saved]);
+      expect(await f.onClock(f.service.listSchedules(f.root))).toEqual([saved]);
     } finally {
       paused.release();
-      await Effect.runPromise(paused.daemon.stop);
+      await f.onClock(paused.daemon.stop);
     }
   });
 }
 
 test("service cursor follows the last event without requiring a run snapshot", async () => {
-  const { service, store, root } = await fixture();
-  const initial = await Effect.runPromise(service.cursor());
-  expect(initial).toEqual({ cursor: 0, epoch: await Effect.runPromise(store.epoch()) });
-  await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
-  const current = await Effect.runPromise(service.cursor());
-  const events = await Effect.runPromise(store.events(0, 100));
+  const { service, store, root, onClock } = await fixture();
+  const initial = await onClock(service.cursor());
+  expect(initial).toEqual({ cursor: 0, epoch: await onClock(store.epoch()) });
+  await onClock(service.startRun("service", { name: "Hatim" }, root));
+  const current = await onClock(service.cursor());
+  const events = await onClock(store.events(0, 100));
   expect(events.at(-1)?.sequence).toBe(current.cursor);
   expect(current).toEqual({ cursor: initial.cursor + 1, epoch: initial.epoch });
 });
 
 test("run graphs stay pinned to the revision each run started on", async () => {
-  const { service, root } = await fixture();
-  const unsaved = await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
+  const { service, root, onClock } = await fixture();
+  const unsaved = await onClock(service.startRun("service", { name: "Hatim" }, root));
   // The fixture registry entry was never compiled to disk, so its run has no graph to show.
-  await expect(Effect.runPromise(service.runGraph(unsaved.id))).rejects.toHaveProperty(
+  await expect(onClock(service.runGraph(unsaved.id))).rejects.toHaveProperty(
     "_tag",
     "RegistryError",
   );
@@ -478,32 +460,32 @@ test("run graphs stay pinned to the revision each run started on", async () => {
   const first = await compiledBody("service", source);
   first.graph.input = { name: "string" };
   first.revision = await revision(first.graph);
-  await Effect.runPromise(service.putLoopy("service", first));
-  const pinned = await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
+  await onClock(service.putLoopy("service", first));
+  const pinned = await onClock(service.startRun("service", { name: "Hatim" }, root));
   const second = await compiledBody("service", source);
   second.graph.input = { name: "string", "note?": "string" };
   second.revision = await revision(second.graph);
-  await Effect.runPromise(service.putLoopy("service", second));
+  await onClock(service.putLoopy("service", second));
   expect(second.revision).not.toBe(first.revision);
   expect(
-    decodeBoundary(routes.runGraph.response)(await Effect.runPromise(service.runGraph(pinned.id))),
+    decodeBoundary(routes.runGraph.response)(await onClock(service.runGraph(pinned.id))),
   ).toEqual({
     revision: first.revision,
     graph: graphView(first.graph),
   });
   expect(
-    decodeBoundary(routes.graph.response)(await Effect.runPromise(service.graph("service", root))),
+    decodeBoundary(routes.graph.response)(await onClock(service.graph("service", root))),
   ).toEqual({
     revision: second.revision,
     graph: graphView(second.graph),
   });
-  await expect(Effect.runPromise(service.runGraph("missing"))).rejects.toMatchObject({
+  await expect(onClock(service.runGraph("missing"))).rejects.toMatchObject({
     code: "not_found",
   });
 });
 
 test("putLoopy preserves every author option from graph meta", async () => {
-  const { service, root, registry } = await fixture();
+  const { service, root, registry, onClock } = await fixture();
 
   const meta = {
     description: "Author metadata",
@@ -513,17 +495,17 @@ test("putLoopy preserves every author option from graph meta", async () => {
     scope: "global" as const,
   };
 
-  await Effect.runPromise(
+  await onClock(
     service.putLoopy("metadata", await compiledBody("metadata", join(root, "metadata.ts"), meta)),
   );
-  const saved = await Effect.runPromise(registry.get("metadata"));
+  const saved = await onClock(registry.get("metadata"));
   expect(saved).toMatchObject({ version: 3, graph: { meta } });
   expect(saved).not.toHaveProperty("description");
 });
 
 test("service maps completion between requireRun and claim to not_claimable", async () => {
-  const { service, store, root } = await fixture();
-  const run = await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
+  const { service, store, root, onClock } = await fixture();
+  const run = await onClock(service.startRun("service", { name: "Hatim" }, root));
   const claim = store.claim.bind(store);
   store.claim = (id, token) =>
     Effect.gen(function* () {
@@ -543,7 +525,7 @@ test("service maps completion between requireRun and claim to not_claimable", as
 
       return yield* claim(id, token);
     });
-  await expect(Effect.runPromise(service.cancelRun(run.id))).rejects.toMatchObject({
+  await expect(onClock(service.cancelRun(run.id))).rejects.toMatchObject({
     code: "not_claimable",
     message: "The run cannot be claimed in its current state.",
   });
@@ -556,7 +538,6 @@ test("loopy views are keyed by workspace and slug so graph and start reach that 
 
   const service = makeLocalService({
     store,
-    clock: { now: Date.now },
     home: home,
   });
 

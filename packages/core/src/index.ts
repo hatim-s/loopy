@@ -90,3 +90,5 @@ export {
   requireRecord,
   setOwnProperty,
 } from "./validation";
+
+export { isPendingWait } from "./waits";

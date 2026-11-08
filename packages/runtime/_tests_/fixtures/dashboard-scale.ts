@@ -43,11 +43,7 @@ export default loopy("reindex-docs", {
   const store = await openStore(home, scope);
   const onClock = runAt(() => now);
 
-  const service = makeLocalService({
-    store,
-    clock: { now: () => now },
-    home: home,
-  });
+  const service = makeLocalService({ store, home });
 
   await Effect.runPromise(
     service.putLoopy("reindex-docs", {
@@ -173,7 +169,6 @@ export async function manyRunsFixture(root: string, scope: Scope.Scope) {
 
   const service = makeLocalService({
     store,
-    clock: { now: Date.now },
     home: home,
   });
 

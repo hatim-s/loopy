@@ -257,7 +257,6 @@ async function serviceFixture(name: string) {
 
   const service = makeLocalService({
     store,
-    clock: { now: Date.now },
     home: f.home,
   });
 

@@ -52,7 +52,7 @@ export function makeRunViews(context: ServiceContext) {
     }
 
     const ids = runs.map((run) => run.id);
-    const now = context.now();
+    const now = yield* context.now;
     const hooks = yield* context.store.pendingHooks(ids, now);
 
     return (run: RunRecord): RunView =>
@@ -68,7 +68,7 @@ export function makeRunViews(context: ServiceContext) {
   const listRuns = Effect.fn("run-views.listRuns")(function* (
     query: Schema.Schema.Type<typeof routes.runs.query>,
   ) {
-    const runs = yield* context.store.queryRuns({ ...query, now: context.now() });
+    const runs = yield* context.store.queryRuns({ ...query, now: yield* context.now });
     const resolved = yield* resolve(runs);
 
     return runs.map(resolved);
@@ -114,7 +114,12 @@ export function makeRunViews(context: ServiceContext) {
           filter.workspace = identity;
         }
 
-        const recent = yield* context.store.queryRuns({ ...filter, limit: 10, now: context.now() });
+        const recent = yield* context.store.queryRuns({
+          ...filter,
+          limit: 10,
+          now: yield* context.now,
+        });
+
         const resolved = yield* resolve(recent, catalog);
 
         const selectedCounts =

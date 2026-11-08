@@ -73,7 +73,6 @@ export class Workspace {
 
     const service = makeService({
       store: this.store,
-      clock: { now: Date.now },
       canonicalWorkspace: requireWorkspace,
       registry: (value) => requireWorkspace(value).pipe(Effect.as(registry)),
       secrets: { list: unsupported, set: unsupported, remove: unsupported },

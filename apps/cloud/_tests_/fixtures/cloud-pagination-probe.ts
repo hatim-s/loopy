@@ -9,7 +9,8 @@ import { DurableSqlDriver } from "../../src/sql-driver";
 
 const at = "2026-10-22T00:00:00.000Z";
 
-const later = "2026-10-22T01:00:00.000Z";
+// The service reads the wall clock, so a pending deadline lies far ahead of it.
+const later = "2126-10-22T01:00:00.000Z";
 
 async function seed(store: SqlRunStore) {
   const hooks = [];
@@ -104,7 +105,6 @@ export async function paginationResponse(
 
   const service = makeService({
     store,
-    clock: { now: () => Date.parse(at) },
     registry: () => Effect.succeed(registry),
     canonicalWorkspace: () => Effect.succeed("pagination"),
     secrets: { list: unsupported, set: unsupported, remove: unsupported },

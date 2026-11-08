@@ -46,7 +46,6 @@ return "done";
   const service = makeLocalService({
     store,
     home,
-    clock: { now: Date.now },
   });
 
   const definition = {

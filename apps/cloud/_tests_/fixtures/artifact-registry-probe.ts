@@ -58,7 +58,6 @@ export class RegistryProbe {
     return makeService({
       store: this.store,
       registry: () => Effect.succeed(registry),
-      clock: { now: Date.now },
       canonicalWorkspace: () => Effect.succeed(workspace),
       secrets: {
         list: () => Effect.succeed([]),

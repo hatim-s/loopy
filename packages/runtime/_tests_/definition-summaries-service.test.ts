@@ -133,7 +133,6 @@ test("native adapter distinguishes absence from corrupt existing files", async (
 
   const service = makeLocalService({
     store: f.store,
-    clock: { now: Date.now },
     home: f.home,
   });
 

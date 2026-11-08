@@ -16,7 +16,6 @@ async function fixture() {
   const service = makeLocalService({
     store,
     home,
-    clock: { now: Date.now },
   });
 
   return {

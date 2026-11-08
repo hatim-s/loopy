@@ -41,7 +41,7 @@ await Effect.runPromise(
   Effect.scoped(
     Effect.gen(function* () {
       const store = yield* openRunStore(home);
-      const service = makeLocalService({ home, store, clock: { now: Date.now } });
+      const service = makeLocalService({ home, store });
 
       const daemon = yield* localDaemon({
         home,

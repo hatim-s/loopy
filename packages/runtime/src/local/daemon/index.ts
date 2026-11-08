@@ -66,11 +66,7 @@ export const localDaemon = (options: DaemonOptions) =>
         }).pipe(Effect.mapError((cause) => new PreparationError({ cause }))),
     });
 
-    const service = makeLocalService({
-      home: options.home,
-      store: options.store,
-      clock: { now: Date.now },
-    });
+    const service = makeLocalService({ home: options.home, store: options.store });
 
     const startedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     const token = crypto.randomUUID();
