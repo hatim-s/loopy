@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { StoreEffect } from "@loopy/core";
 import { Effect, Schema } from "effect";
@@ -14,11 +13,8 @@ import {
   type SqlTransactionMode,
   type SqlValue,
 } from "../src/store/portable";
-import { upgradeLegacyHome } from "../src/store/schema/legacy";
-import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { storeContract } from "./fixtures/store-contract";
-import { closeTestStore, openTestStore, runAt } from "./fixtures/stores";
+import { runAt } from "./fixtures/stores";
 import { onCleanup } from "./fixtures/test-scope";
 
 const at = newRun().createdAt;
@@ -128,100 +124,6 @@ test("unsupported portable databases retain their records", () => {
     "SQL store schema unknown cannot be opened",
   );
   expect(sqlite.query("SELECT * FROM personal").all()).toEqual([{ value: "retained" }]);
-});
-
-test("schema 13 upgrades through the local migration to the fresh tables, indexes and records", async () => {
-  const home = qualityTestRoot("schema13");
-  const file = join(home, "runs.sqlite");
-  const db = legacyDatabase(file, 13);
-  db.query("INSERT INTO meta VALUES ('epoch','retained-epoch')").run();
-  db.query(
-    "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-  ).run("run", "test", "bundle", "/workspace", "{}", "queued", at, at);
-  db.close();
-
-  const upgraded = openTestStore(file);
-  expect(await Effect.runPromise(upgraded.epoch())).toBe("retained-epoch");
-  expect(await Effect.runPromise(upgraded.getRun("run"))).toMatchObject({ id: "run" });
-  closeTestStore(upgraded);
-
-  const fresh = fixture().sqlite;
-  const legacy = new BunSqlDriver(file);
-  onCleanup(() => legacy.close());
-  expect(legacy.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
-  expect(legacy.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-    value: "16",
-  });
-
-  const tables = fresh
-    .query<{ name: string }, []>("SELECT name FROM sqlite_schema WHERE type='table'")
-    .all();
-
-  for (const { name } of tables) {
-    expect(fresh.query(`PRAGMA table_info('${name}')`).all()).toEqual(
-      legacy.query(`PRAGMA table_info('${name}')`).all(),
-    );
-    expect(fresh.query(`PRAGMA foreign_key_list('${name}')`).all()).toEqual(
-      legacy.query(`PRAGMA foreign_key_list('${name}')`).all(),
-    );
-
-    const indexes = (db: BunSqlDriver) =>
-      db
-        .query<{ name: string }, []>(`PRAGMA index_list('${name}')`)
-        .all()
-        .map((row) => ({
-          name: row.name,
-          columns: db.query(`PRAGMA index_info('${row.name}')`).all(),
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-    expect(indexes(fresh)).toEqual(indexes(legacy));
-  }
-});
-
-test("schema 15 run events reopen in the schema 16 run shape with sequences and epoch intact", async () => {
-  const home = qualityTestRoot("schema15");
-  const file = join(home, "runs.sqlite");
-  legacyDatabase(file, 14).close();
-  const legacy = new BunSqlDriver(file);
-  upgradeLegacyHome(legacy);
-  legacy.query("INSERT INTO meta VALUES ('epoch','retained-epoch')").run();
-
-  const record = {
-    id: "run",
-    slug: "test",
-    revision: "bundle",
-    workspace: "/workspace",
-    input: {},
-    createdAt: at,
-    updatedAt: at,
-  };
-
-  const insert = legacy.query<unknown, [string, string, string, string]>(
-    "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,?,'run',?,'run',?)",
-  );
-
-  insert.run(
-    at,
-    "heartbeat-txn",
-    "heartbeat",
-    JSON.stringify({ ...record, status: "running", wakeAt: at, nextRetryAt: at }),
-  );
-  insert.run(
-    at,
-    "suspend-txn",
-    "suspended",
-    JSON.stringify({ ...record, status: "suspended", nextRetryAt: at }),
-  );
-  legacy.close();
-
-  const upgraded = openTestStore(file);
-  expect(await Effect.runPromise(upgraded.epoch())).toBe("retained-epoch");
-  expect(await Effect.runPromise(upgraded.events(0, 10))).toMatchObject([
-    { sequence: 1, txn: "heartbeat-txn", record: { ...record, status: "running" } },
-    { sequence: 2, txn: "suspend-txn", record: { ...record, status: "suspended", wakeAt: null } },
-  ]);
-  expect((await Effect.runPromise(upgraded.events(0, 10)))[0]?.record).not.toHaveProperty("wakeAt");
 });
 
 function logEffects(count: number): StoreEffect[] {

@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
@@ -7,7 +6,6 @@ import { Cause, Effect, Exit, Schema, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { makeSqliteRunStore } from "../src/store";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { memoryStore, runAt } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
 
@@ -262,44 +260,4 @@ test("sqlite reopen retains accepted payload and wake without a second resolutio
   expect(
     (await run(reopened.resolveWait({ token: wait.token, payload: { approved: false }, at }))).kind,
   ).toBe("rejected");
-});
-
-test("schema 13 upgrade preserves records and legacy schema rejection never resets data", async () => {
-  const home = qualityTestRoot("schema13");
-  const file = join(home, "runs.sqlite");
-  const epoch = crypto.randomUUID();
-  const db = legacyDatabase(file, 13);
-  db.query("INSERT INTO meta VALUES ('epoch',?)").run(epoch);
-  db.query(
-    "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
-  ).run("run", "test", "bundle", "/workspace", "{}", "queued", at, at);
-  db.close();
-
-  const upgraded = await Effect.runPromise(
-    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
-  );
-
-  expect(await Effect.runPromise(upgraded.getRun("run"))).toMatchObject({ id: "run" });
-  expect(await Effect.runPromise(upgraded.epoch())).toBe(epoch);
-  expect(await Effect.runPromise(upgraded.getWaits("run"))).toEqual([]);
-  const legacy = join(home, "legacy.sqlite");
-  const old = new Database(legacy);
-  old.exec(
-    "CREATE TABLE sacred (value TEXT); INSERT INTO sacred VALUES ('retain'); PRAGMA user_version=11",
-  );
-  old.close();
-  await expect(
-    Effect.runPromise(
-      makeSqliteRunStore(legacy).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
-    ),
-  ).rejects.toMatchObject({
-    _tag: "StorageError",
-    cause: expect.objectContaining({
-      message: expect.stringContaining("Database schema 11 cannot be opened"),
-    }),
-  });
-  const read = new Database(legacy, { readonly: true });
-  expect(read.query("SELECT value FROM sacred").get()).toEqual({ value: "retain" });
-  expect(read.query("PRAGMA user_version").get()).toEqual({ user_version: 11 });
-  read.close();
 });

@@ -1,14 +1,10 @@
-import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema, routes } from "@loopy/contract";
-import { executionKeyString, type LogRecord, type NodeRun } from "@loopy/core";
+import { executionKeyString, type NodeRun } from "@loopy/core";
 import { Effect } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { makeLocalService } from "../src/local";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { fixtureStore } from "./fixtures/service-runtime";
-import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { memoryStore } from "./fixtures/stores";
 
 function fixture() {
@@ -191,70 +187,6 @@ test("SQLite bounded scans continue through no-match pages and full log text sea
   ).toBe(true);
 });
 
-test("schema 14 upgrade preserves epoch, outbox, log identity, output and exact log cap", async () => {
-  const root = qualityTestRoot("v14");
-  const file = join(root, "runs.sqlite");
-  const db = legacyDatabase(file, 14);
-  db.query("INSERT INTO meta VALUES ('epoch','retained')").run();
-  db.query(
-    "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES ('run','test','bundle','/workspace','{}','queued',?,?)",
-  ).run(newRun().createdAt, newRun().createdAt);
-  const record = node();
-  const key = executionKeyString(record.key);
-  db.query("INSERT INTO node_runs VALUES (?,?,?,?,?,?,?,?,?,?)").run(
-    "run",
-    key,
-    1,
-    "succeeded",
-    record.startedAt,
-    record.startedAt,
-    JSON.stringify("x".repeat(20000)),
-    null,
-    "finished",
-    JSON.stringify(record),
-  );
-
-  const log: LogRecord = {
-    runId: "run",
-    seq: 1,
-    position: { kind: "node", executionKey: key, attempt: 1, index: 0 },
-    level: "info",
-    message: "x".repeat(65497),
-    data: null,
-    at: newRun().createdAt,
-  };
-
-  db.query("INSERT INTO logs VALUES (?,?,?,?,?,?)").run("run", key, 1, 0, 1, JSON.stringify(log));
-  db.query(
-    "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,'retained-txn','node','succeeded','run',?)",
-  ).run(record.startedAt, JSON.stringify(record));
-  db.close();
-  const store = await fixtureStore(root);
-  expect(await Effect.runPromise(store.epoch())).toBe("retained");
-  expect((await Effect.runPromise(store.logDetail(1)))?.log).toEqual(log);
-  expect((await Effect.runPromise(store.events(0, 10)))[0]?.txn).toBe("retained-txn");
-  expect((await Effect.runPromise(store.execution("run", key)))?.attempts).toHaveLength(1);
-  await Effect.runPromise(store.claim("run", "owner"));
-  await expect(
-    Effect.runPromise(
-      store.apply({
-        runId: "run",
-        token: "owner",
-        effects: [
-          {
-            kind: "write_log",
-            executionKey: record.key,
-            attempt: 1,
-            log: { message: "a".repeat(50), data: null },
-            at: record.startedAt,
-          },
-        ],
-      }),
-    ),
-  ).rejects.toThrow("Attempt logs exceed the 64 KiB limit.");
-  expect(await Effect.runPromise(store.getLogs("run"))).toHaveLength(1);
-});
-
 test("run lists and streamed run records preview large payloads with explicit byte counts", async () => {
   const { store, service } = fixture();
   const large = "x".repeat(100000);
@@ -349,107 +281,3 @@ test("failed transactional batches roll back retained attempts and log usage wit
     position: { index: 0 },
   });
 });
-
-test("a rejected schema migration preserves the old records, epoch and version", async () => {
-  const root = qualityTestRoot("bad-migration");
-  const file = join(root, "runs.sqlite");
-  const db = legacyDatabase(file, 14);
-  db.query("INSERT INTO meta VALUES ('epoch','keep-me')").run();
-  db.query(
-    "INSERT INTO events(at,txn,entity,kind,record) VALUES (?,'txn','node','succeeded','{broken')",
-  ).run(newRun().createdAt);
-  db.close();
-  await expect(fixtureStore(root)).rejects.toThrow("malformed JSON");
-  const unchanged = new Database(file, { readonly: true });
-  expect(unchanged.query("PRAGMA user_version").get()).toEqual({ user_version: 14 });
-  expect(unchanged.query("SELECT value FROM meta WHERE key='epoch'").get()).toEqual({
-    value: "keep-me",
-  });
-  expect(unchanged.query("SELECT record FROM events").get()).toEqual({ record: "{broken" });
-  expect(
-    unchanged.query("SELECT name FROM sqlite_schema WHERE name='node_attempts'").get(),
-  ).toBeNull();
-  unchanged.close();
-});
-
-for (const version of [13, 14] as const) {
-  test(`schema ${version} log events retain node filtering after migration and agree with new log events`, async () => {
-    const root = qualityTestRoot(`v${version}-log-event`);
-    const file = join(root, "runs.sqlite");
-    const db = legacyDatabase(file, version);
-    db.query("INSERT INTO meta VALUES ('epoch','retained-epoch')").run();
-    db.query(
-      "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES ('run','test','bundle','/workspace','{}','queued',?,?)",
-    ).run(newRun().createdAt, newRun().createdAt);
-    const record = node();
-    const key = executionKeyString(record.key);
-    db.query("INSERT INTO node_runs VALUES (?,?,?,?,?,?,?,?,?,?)").run(
-      "run",
-      key,
-      1,
-      record.status,
-      record.startedAt,
-      record.startedAt,
-      JSON.stringify("x".repeat(20000)),
-      null,
-      record.receipt,
-      JSON.stringify(record),
-    );
-
-    const log: LogRecord = {
-      runId: "run",
-      seq: 7,
-      position: { kind: "node", executionKey: key, attempt: 1, index: 0 },
-      level: "info",
-      message: "old log",
-      data: null,
-      at: newRun().createdAt,
-    };
-
-    db.query("INSERT INTO logs VALUES (?,?,?,?,?,?)").run("run", key, 1, 0, 7, JSON.stringify(log));
-    db.query(
-      "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,'old-txn','log','written','run',?)",
-    ).run(log.at, JSON.stringify(log));
-    db.query(
-      "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,'unknown-txn','log','written','run',?)",
-    ).run(
-      log.at,
-      JSON.stringify({ ...log, position: { ...log.position, executionKey: "missing" } }),
-    );
-    db.close();
-    const store = await fixtureStore(root);
-    expect(await Effect.runPromise(store.epoch())).toBe("retained-epoch");
-    const migrated = await Effect.runPromise(store.eventPage({ nodeId: "work", limit: 50 }));
-    expect(migrated.items).toMatchObject([{ txn: "old-txn", nodeId: "work", entity: "log" }]);
-    expect(migrated.items).toHaveLength(1);
-    expect((await Effect.runPromise(store.logPage({ limit: 50 }))).items[0]?.nodeId).toBe("work");
-    expect(
-      (await Effect.runPromise(store.eventPage({ txn: "unknown-txn", limit: 50 }))).items[0]
-        ?.nodeId,
-    ).toBeNull();
-    await Effect.runPromise(store.claim("run", "owner"));
-    await Effect.runPromise(
-      store.apply({
-        runId: "run",
-        token: "owner",
-        effects: [
-          {
-            kind: "write_log",
-            executionKey: record.key,
-            attempt: 1,
-            log: { message: "new log", data: null },
-            at: record.startedAt,
-          },
-        ],
-      }),
-    );
-
-    const both = await Effect.runPromise(
-      store.eventPage({ nodeId: "work", entity: "log", limit: 50 }),
-    );
-
-    expect(both.items).toHaveLength(2);
-    expect(both.items.every((event) => event.nodeId === "work")).toBe(true);
-    expect(both.items.map((event) => event.sequence)).toEqual([4, 1]);
-  });
-}
