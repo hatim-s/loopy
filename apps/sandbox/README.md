@@ -21,7 +21,7 @@ bun apps/sandbox/src/index.ts \
   --hostname 127.0.0.1 --port 4010
 ```
 
-`--worktree`, `--state-root`, `--docker-context` and the token are required. The state root must be exactly `<worktree>/.loopy/cloud/sandbox`. The service rejects symlinked state directories and worktree paths. It never uses `~/.loopy`. Binding is limited to `127.0.0.1` and `::1`. A process lock prevents two services from reconciling the same receipts. A dead service PID is reclaimed under an exclusive startup guard. A crash during startup can leave `service-start.lock`. Verify that no startup process is running before removing that guard.
+`--worktree`, `--state-root`, `--docker-context` and the token are required. The state root must be exactly `<worktree>/.loopy/cloud/sandbox`. The service rejects symlinked state directories and worktree paths. It never uses `~/.loopy`. Binding is limited to `127.0.0.1` and `::1`. A process lock prevents two services from reconciling the same receipts. A dead service PID is reclaimed under an exclusive startup guard. A crash during startup can leave `service.lock.guard`. Verify that no startup process is running before removing that guard.
 
 Execution flags are `--max-timeout-ms 600000`, `--memory 256m`, `--cpus 1` and `--pids 64`. The timeout flag caps the entire attempt, including staging. Requested code timeouts and command timeouts also apply inside the container. Commands default to 300 seconds, and parsers have a separate 300 second limit. The outer deadline allows 30 seconds for staging, up to the configured maximum.
 

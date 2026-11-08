@@ -1,12 +1,11 @@
-import { randomUUID } from "node:crypto";
-import { lstat, mkdir, open, realpath, unlink } from "node:fs/promises";
+import { lstat, mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { decodeBoundary } from "@loopy/contract";
-import { errnoCode, struct } from "@loopy/core";
-import { Schema } from "effect";
+import { errnoCode } from "@loopy/core";
 import type { SandboxConfig } from "./config";
-import { readBytes, syncDirectory } from "./journal-files";
+
+// Journal records stay small; legacy receipts that embed a captured result fit as well.
+export const STATE_FILE_BYTES = 2 * 1024 * 1024;
 
 export function stateLayout(root: string) {
   return {
@@ -15,7 +14,6 @@ export function stateLayout(root: string) {
     exports: join(root, "exports"),
     results: join(root, "results"),
     lock: join(root, "service.lock"),
-    startGuard: join(root, "service-start.lock"),
   };
 }
 
@@ -60,81 +58,4 @@ export async function validateStateRoot(config: Pick<SandboxConfig, "worktree" |
   }
 
   return root;
-}
-
-const lockSchema = struct({ pid: Schema.Int.check(Schema.isGreaterThan(0)), nonce: Schema.String });
-
-async function readLock(path: string) {
-  const bytes = await readBytes(path, 1024);
-
-  return bytes === null ? null : decodeBoundary(lockSchema)(JSON.parse(bytes.toString("utf8")));
-}
-
-function processAlive(pid: number) {
-  try {
-    process.kill(pid, 0);
-
-    return true;
-  } catch (cause) {
-    if (errnoCode(cause) === "ESRCH") {
-      return false;
-    }
-
-    throw cause;
-  }
-}
-
-export async function lockStateRoot(root: string): Promise<() => Promise<void>> {
-  const layout = stateLayout(root);
-  const value = { pid: process.pid, nonce: randomUUID() };
-
-  // A separate exclusive guard prevents concurrent restarts from both reclaiming a dead PID.
-  const guard = await open(layout.startGuard, "wx", 0o600).catch((cause: unknown) => {
-    if (errnoCode(cause) === "EEXIST") {
-      throw new Error(
-        "Sandbox startup guard is held. Verify no startup process is running before removing service-start.lock.",
-      );
-    }
-
-    throw cause;
-  });
-
-  try {
-    const owner = await readLock(layout.lock);
-
-    if (owner !== null) {
-      if (processAlive(owner.pid)) {
-        throw new Error("Another sandbox service owns this state root.");
-      }
-
-      await unlink(layout.lock);
-    }
-
-    const file = await open(layout.lock, "wx", 0o600);
-
-    try {
-      await file.writeFile(JSON.stringify(value));
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-
-    await syncDirectory(root);
-  } finally {
-    await guard.close();
-    await unlink(layout.startGuard);
-  }
-
-  return async () => {
-    const current = await readLock(layout.lock);
-
-    if (current?.nonce !== value.nonce) {
-      throw new Error(
-        "Sandbox process lock changed owner. Leave it intact and inspect the state root.",
-      );
-    }
-
-    await unlink(layout.lock);
-    await syncDirectory(root);
-  };
 }

@@ -6,13 +6,14 @@ import {
   type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
 } from "@loopy/contract/sandbox";
+import { acquirePidLock } from "@loopy/runtime/os";
 import { Cause, Effect, Exit, Fiber, FiberMap, FiberSet, Scope } from "effect";
 import type { SandboxConfig } from "../config";
-import { io, type SandboxFailure, type SandboxOperationError } from "../operations";
+import { checked, io, type SandboxFailure, type SandboxOperationError } from "../operations";
 import { publicReceipt } from "../receipt-view";
 import { SandboxRequestError } from "../request-error";
 import { closeableScope } from "../scope";
-import { lockStateRoot, validateStateRoot } from "../state-root";
+import { stateLayout, validateStateRoot } from "../state-root";
 import { Stopping, stoppingConflict } from "../stopping";
 import { AttemptAdmissions } from "./admissions";
 import type { AttemptDependencies, AttemptDependenciesFactory } from "./dependencies";
@@ -59,8 +60,8 @@ export class Attempts {
         Effect.gen(function* () {
           yield* io("state root", () => validateStateRoot(config));
           yield* Effect.acquireRelease(
-            io("lock", () => lockStateRoot(config.stateRoot)),
-            (unlock) => io("unlock", unlock).pipe(Effect.orDie),
+            checked("lock", () => acquirePidLock(stateLayout(config.stateRoot).lock)),
+            (unlock) => checked("unlock", unlock).pipe(Effect.orDie),
           );
 
           const dependencies = yield* Effect.acquireRelease(createDependencies(), (value) =>

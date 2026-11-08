@@ -734,7 +734,7 @@ test("state roots reject symlinks and public binding; live root ownership is exc
 
   await open(config, succeedingBackend);
   await expect(openAttempts(config, dependencies(config, succeedingBackend))).rejects.toThrow(
-    "Another sandbox service owns",
+    `Process ${process.pid} holds`,
   );
 });
 
@@ -771,7 +771,7 @@ test("concurrent restarts reclaim a dead process lock under one startup owner", 
     [
       process.execPath,
       "-e",
-      `import {lockStateRoot} from ${JSON.stringify(resolve(import.meta.dir, "../../../apps/sandbox/src/state-root.ts"))}; await lockStateRoot(${JSON.stringify(config.stateRoot)});`,
+      `import {acquirePidLock} from ${JSON.stringify(resolve(import.meta.dir, "../../runtime/src/os/pid-lock.ts"))}; acquirePidLock(${JSON.stringify(stateLayout(config.stateRoot).lock)});`,
     ],
     {
       stdout: "ignore",

@@ -1,7 +1,6 @@
 export { CommandExecutionError, type ResolvedCommand } from "./command-error";
 
 export {
-  acquirePidLock,
   canonicalPath,
   processAlive,
   publishExclusive,
@@ -11,6 +10,8 @@ export {
   writeExclusive,
   writeFileAtomically,
 } from "./fs";
+
+export { acquirePidLock, type PidLockAttempt, tryPidLock } from "./pid-lock";
 
 export { executeLocalCommand } from "./process";
 

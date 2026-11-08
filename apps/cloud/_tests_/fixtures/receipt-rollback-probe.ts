@@ -2,8 +2,8 @@ import type { DurableObjectState } from "@cloudflare/workers-types";
 import { decodeBoundary } from "@loopy/contract";
 import { authorityOperations } from "@loopy/contract/sandbox";
 import { Schema } from "effect";
-import { ReceiptAuthority } from "../../../../apps/cloud/src/receipts/authority";
-import { ReceiptSql } from "../../../../apps/cloud/src/receipts/sql";
+import { ReceiptAuthority } from "../../src/receipts/authority";
+import { ReceiptSql } from "../../src/receipts/sql";
 import { receiptRecoveryProbe } from "./receipt-recovery-probe";
 
 export class ReceiptRollbackProbe {
