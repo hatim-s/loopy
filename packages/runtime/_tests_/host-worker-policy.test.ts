@@ -8,6 +8,7 @@ import { newRun } from "../../core/_tests_/fixtures/run";
 import { LocalExecutor } from "../src/executor";
 import { FilesystemReceipts } from "../src/executor/receipts";
 import { activate, makeDaemon } from "../src/host";
+import { withBundles } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { MemorySqlStore } from "./fixtures/stores";
 import { waitForFile } from "./fixtures/wait";
@@ -54,11 +55,7 @@ for (const kind of ["command", "code"] as const) {
             : code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" }),
       });
 
-      for (const node of graph.nodes) {
-        if (node.kind === "code") {
-          node.module.bundleHash = "a".repeat(64);
-        }
-      }
+      withBundles(graph);
 
       await Effect.runPromise(
         Effect.scoped(

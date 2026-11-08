@@ -31,11 +31,13 @@ import {
   readDaemonFile,
   ServiceError,
 } from "../src/local";
+import { compileOrThrow } from "./fixtures/compile";
+import { compiledBody } from "./fixtures/compiled";
 import { serveHttp } from "./fixtures/http-server";
 import { fixture, object, runFixture, save } from "./fixtures/project";
-import { countPasses, fixtureStore, nextPass, waitUntil } from "./fixtures/service-runtime";
+import { countPasses, fixtureStore, nextPass } from "./fixtures/service-runtime";
 import { fixtureScope } from "./fixtures/test-scope";
-import { bounded, until } from "./fixtures/wait";
+import { bounded, eventually, until } from "./fixtures/wait";
 
 const servers: Awaited<ReturnType<typeof startDaemon>>[] = [];
 
@@ -881,7 +883,12 @@ test("local server leaves event pruning to the runtime daemon", async () => {
     await Effect.runPromise(daemon.start);
     expect(prune).not.toHaveBeenCalled();
     await Effect.runPromise(Effect.forkIn(daemon.run, scope));
-    await Effect.runPromise(waitUntil(Effect.sync(() => prune.mock.calls.length > 0)));
+    await Effect.runPromise(
+      eventually(
+        "the daemon to prune events",
+        Effect.sync(() => prune.mock.calls.length > 0),
+      ),
+    );
     await Effect.runPromise(nextPass(daemon, passes));
     expect(prune).toHaveBeenCalledTimes(1);
   } finally {
@@ -1001,8 +1008,6 @@ function artifactState(paths: string[]) {
 
 test("compiled save route verifies artifacts, stores private bundles and returns only GraphView", async () => {
   const { f, service, store } = await serviceFixture("compiled-save");
-  const { compile } = await import("@loopy/compiler");
-  const { compiledBody } = await import("./fixtures/compiled");
   const source = join(f.cwd, "compiled.ts");
   const sdk = "loopy";
   await Bun.write(
@@ -1013,11 +1018,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
     join(f.cwd, "answer.ts"),
     'throw new Error("Must not execute while saving."); export default () => 42;',
   );
-  const result = await Effect.runPromise(compile(source));
-
-  if (!result.ok) {
-    throw new Error(JSON.stringify(result.diagnostics));
-  }
+  const result = await compileOrThrow(source);
 
   const body = {
     ...(await compiledBody("compiled-save", source)),
@@ -1116,8 +1117,6 @@ test("compiled save route verifies artifacts, stores private bundles and returns
 
 test("saving another revision retains the earlier graph and executable artifacts", async () => {
   const { f, service } = await serviceFixture("revisions");
-  const { compile } = await import("@loopy/compiler");
-  const { compiledBody } = await import("./fixtures/compiled");
   const source = join(f.cwd, "revision.ts");
   await Bun.write(
     source,
@@ -1128,11 +1127,7 @@ test("saving another revision retains the earlier graph and executable artifacts
 
   for (const value of [1, 2]) {
     await Bun.write(join(f.cwd, "value.ts"), `export default ()=>${value};`);
-    const compiled = await Effect.runPromise(compile(source));
-
-    if (!compiled.ok) {
-      throw new Error(JSON.stringify(compiled.diagnostics));
-    }
+    const compiled = await compileOrThrow(source);
 
     await Effect.runPromise(
       service.putLoopy("revisions", {

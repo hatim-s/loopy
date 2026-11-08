@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { Effect } from "effect";
 
 interface WaitOptions {
   /** Generous by default: a passing test never waits this long, and a loaded machine needs headroom. */
@@ -36,6 +37,29 @@ export async function until<T>(
     await delay(intervalMs);
   }
 }
+
+// A real-time pause, so polling also makes progress while a TestClock holds Effect time still.
+const pause = Effect.promise(() => delay(1));
+
+/** The Effect form of `until` for a check that is itself an Effect. */
+export const eventually = <E, R>(
+  label: string,
+  check: Effect.Effect<boolean, E, R>,
+  { timeoutMs = 15_000 }: WaitOptions = {},
+) =>
+  Effect.gen(function* () {
+    const deadline = performance.now() + timeoutMs;
+
+    while (!(yield* check)) {
+      if (performance.now() >= deadline) {
+        return yield* Effect.die(
+          new Error(`Timed out after ${timeoutMs} ms waiting for ${label}.`),
+        );
+      }
+
+      yield* pause;
+    }
+  });
 
 export function waitForFile(path: string, options?: WaitOptions) {
   return until(`${path} to exist`, () => Bun.file(path).exists(), options);

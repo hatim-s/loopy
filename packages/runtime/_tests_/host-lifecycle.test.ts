@@ -5,6 +5,7 @@ import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { ActivationWorkCleanupFailed, activate, DriverCleanupFailed } from "../src/host";
+import { withBundles } from "./fixtures/compiled";
 import { MemorySqlStore } from "./fixtures/stores";
 
 function graph(wide = false) {
@@ -16,11 +17,7 @@ function graph(wide = false) {
     run: () => (wide ? parallel({ first: work, second: work }) : work()),
   });
 
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
+  withBundles(graph);
 
   return graph;
 }

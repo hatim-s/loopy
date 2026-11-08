@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { compile } from "@loopy/compiler";
 import { graphSchema } from "@loopy/contract";
 import { Effect, Schema, Scope } from "effect";
 import { approveDemoGraph } from "../../core/_tests_/fixtures/graphs";
@@ -12,10 +11,12 @@ import { activate } from "../src/host";
 import { localDaemon, makeLocalService } from "../src/local";
 import { SecretStore } from "../src/os";
 import { openRunStore } from "../src/store";
+import { compileOrThrow } from "./fixtures/compile";
 import { fixture } from "./fixtures/executor";
-import { waitUntil } from "./fixtures/service-runtime";
+import {} from "./fixtures/service-runtime";
 import { MemorySqlStore } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
+import { eventually } from "./fixtures/wait";
 
 test("compiled command parser gets only the command result, then code runs through service and daemon", async () => {
   const f = await fixture();
@@ -34,11 +35,7 @@ test("compiled command parser gets only the command result, then code runs throu
 const echo = defineCommand({key: "fixture.echo", program: "printf", parse: "./parse.ts", positionals: [{name: "word"}]}, {kind: "record", fields: {word: "string"}});
 export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw"], {label: "raw"}); const raw = echo({args: ["hello"]}); return code("greet", {in: {word: raw.get("word")}, out: {kind: "record", fields: {message: "string"}}, module: "./code.ts"});}});`,
   );
-  const compiled = await Effect.runPromise(compile(source));
-
-  if (!compiled.ok) {
-    throw new Error(JSON.stringify(compiled.diagnostics));
-  }
+  const compiled = await compileOrThrow(source);
 
   const home = join(f.root, "home");
   const scope = fixtureScope();
@@ -71,11 +68,7 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
   );
   const run = await Effect.runPromise(service.startRun("sequence", {}, f.workspace));
   await writeFile(join(f.workspace, "code.ts"), 'export default () => ({message: "replacement"});');
-  const replacement = await Effect.runPromise(compile(source));
-
-  if (!replacement.ok) {
-    throw new Error(JSON.stringify(replacement.diagnostics));
-  }
+  const replacement = await compileOrThrow(source);
 
   await Effect.runPromise(
     service.putLoopy("sequence", {
@@ -90,7 +83,10 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
   expect((await Effect.runPromise(store.getRun(run.id)))?.revision).toBe(compiled.revision);
   await Effect.runPromise(Effect.forkIn(daemon.run, scope));
   await Effect.runPromise(
-    waitUntil(Effect.map(store.getRun(run.id), (stored) => stored?.status === "succeeded")),
+    eventually(
+      "the run to succeed",
+      Effect.map(store.getRun(run.id), (stored) => stored?.status === "succeeded"),
+    ),
   );
   const snapshot = await Effect.runPromise(service.runSnapshot(run.id));
   expect(snapshot.run).toMatchObject({ status: "succeeded", output: { message: "hello!" } });

@@ -11,8 +11,9 @@ import { FakeExecutor, runIn } from "../../core/_tests_/fixtures/run";
 import { makeLocalService, Registry } from "../src/local";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { fixtureDaemon, fixtureStore, waitUntil } from "./fixtures/service-runtime";
+import { fixtureDaemon, fixtureStore } from "./fixtures/service-runtime";
 import { runAt } from "./fixtures/stores";
+import { eventually } from "./fixtures/wait";
 
 const serviceGraph = loopy("test", { input: { name: "string" }, run: ({ input }) => input });
 
@@ -342,7 +343,8 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
   advance(60000);
   await onClock(daemon.pass);
   await onClock(
-    waitUntil(
+    eventually(
+      "the scheduled run to succeed",
       Effect.map(
         store.queryRuns({ limit: 200, now: new Date(clock.now()).toISOString() }),
         (all) => all.length === 1 && all[0]?.status === "succeeded",

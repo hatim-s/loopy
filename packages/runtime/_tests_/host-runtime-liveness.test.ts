@@ -10,8 +10,9 @@ import {
   PreparationError,
   ScheduleDefinitionError,
 } from "../src/host";
-import { countPasses, nextPass, waitUntil } from "./fixtures/service-runtime";
+import { countPasses, nextPass } from "./fixtures/service-runtime";
 import { MemorySqlStore } from "./fixtures/stores";
+import { eventually } from "./fixtures/wait";
 
 const graph = loopy("test", { input: {}, run: () => sh(["true"]) });
 
@@ -248,7 +249,10 @@ test("claim contention is silent while another queued run completes", async () =
         yield* store.createRun(newRun());
         yield* store.createRun({ ...newRun(), id: "second" });
         yield* Effect.forkScoped(daemon.run);
-        yield* waitUntil(Effect.map(store.getRun("second"), (run) => run?.status === "succeeded"));
+        yield* eventually(
+          "the second run to succeed",
+          Effect.map(store.getRun("second"), (run) => run?.status === "succeeded"),
+        );
         yield* nextPass(daemon, passes);
         expect((yield* store.getRun("run"))?.status).toBe("queued");
         expect(errors).toEqual([]);
@@ -450,7 +454,10 @@ test("ownership loss reports activation unsubscribe defects instead of suppressi
         yield* Effect.forkScoped(daemon.run);
         yield* Deferred.await(entered);
         yield* TestClock.adjust(250);
-        yield* waitUntil(Effect.sync(() => errors.length > 0));
+        yield* eventually(
+          "a reported error",
+          Effect.sync(() => errors.length > 0),
+        );
         expect(errors).toHaveLength(1);
 
         const cleanup = errors
@@ -505,7 +512,10 @@ test("mixed preparation/interruption Cause never persists a business failure", a
         yield* store.createRun(newRun());
         yield* Effect.forkScoped(daemon.run);
         // TestClock holds the loop in its backoff after this single admission.
-        yield* waitUntil(Effect.sync(() => errors.length > 0));
+        yield* eventually(
+          "a reported error",
+          Effect.sync(() => errors.length > 0),
+        );
         expect(errors).toHaveLength(1);
         expect(errors.every((cause) => Cause.hasInterrupts(cause))).toBe(true);
         expect((yield* store.getRun("run"))?.status).toBe("queued");

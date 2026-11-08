@@ -1,5 +1,5 @@
 import type { PutLoopyBody } from "@loopy/contract";
-import { revision } from "@loopy/core";
+import { type Graph, revision } from "@loopy/core";
 import { loopy } from "@loopy/sdk/graph";
 
 export async function compiledBody(
@@ -30,4 +30,15 @@ export async function compiledBody(
       workspace: meta.workspace ?? path.slice(0, path.lastIndexOf("/")),
     },
   };
+}
+
+/** Gives every code node a stand-in bundle hash, as a save would after bundling. */
+export function withBundles(graph: Graph): Graph {
+  for (const node of graph.nodes) {
+    if (node.kind === "code") {
+      node.module.bundleHash = "a".repeat(64);
+    }
+  }
+
+  return graph;
 }

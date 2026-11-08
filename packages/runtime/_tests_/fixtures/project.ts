@@ -1,12 +1,12 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { compile } from "@loopy/compiler";
 import { requireRecord } from "@loopy/core";
 import { Effect } from "effect";
 import { LocalExecutor } from "../../src/executor";
 import { activate } from "../../src/host";
 import { makeLocalService, Registry } from "../../src/local";
 import { openRunStore } from "../../src/store";
+import { compileOrThrow } from "./compile";
 import { qualityTestRoot } from "./quality-test-root";
 
 /** A project directory holding one author definition and its Loopy home. */
@@ -28,11 +28,7 @@ export function object(text: string) {
 }
 
 export async function save(f: ReturnType<typeof fixture>) {
-  const result = await Effect.runPromise(compile(f.file));
-
-  if (!result.ok) {
-    throw new Error(JSON.stringify(result.diagnostics));
-  }
+  const result = await compileOrThrow(f.file);
 
   return Effect.runPromise(
     Effect.scoped(

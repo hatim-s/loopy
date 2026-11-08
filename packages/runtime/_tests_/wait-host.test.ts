@@ -9,6 +9,7 @@ import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";
 import { makeLocalService, Registry } from "../src/local";
 import { makeSqliteRunStore } from "../src/store";
+import { withBundles } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { MemorySqlStore, runAt } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
@@ -173,11 +174,7 @@ test("a signal accepted while a parallel execution runs survives its completion"
       }),
   });
 
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
+  withBundles(graph);
 
   await Effect.runPromise(f.store.createRun({ ...newRun(), input: {} }));
 
@@ -229,11 +226,7 @@ test("parallel dispatches run concurrently and sampling completes without an exe
       }),
   });
 
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
+  withBundles(graph);
 
   const executor: Executor = {
     lookup: () => {
