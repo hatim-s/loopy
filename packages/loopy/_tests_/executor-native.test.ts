@@ -77,8 +77,9 @@ test("timeout terminates the process group including an inherited grandchild", a
     `const child = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], {stdout: "inherit", stderr: "inherit"}); await Bun.write("child.pid", String(child.pid)); setInterval(() => {}, 1000);`,
   );
 
+  // The timeout must outlast bun startup on a loaded machine, or no grandchild exists to check.
   const result = await Effect.runPromise(
-    f.executor.execute(f.key, 1, { ...f.spec, timeoutMs: 500 }, new AbortController().signal),
+    f.executor.execute(f.key, 1, { ...f.spec, timeoutMs: 2000 }, new AbortController().signal),
   );
 
   expect(result).toMatchObject({
