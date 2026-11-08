@@ -124,17 +124,17 @@ broken("invalid_scope", (graph) => ({
   nodes: graph.nodes.map((node) => (node.id === "7:fail" ? { ...node, scope: null } : node)),
 }));
 
-broken("cycle", (graph) => ({
-  ...graph,
-  edges: [
-    ...graph.edges,
-    {
-      from: contract.decodeBoundary(contract.nodeIdSchema)("8:join"),
-      to: graph.entry,
-      kind: "next",
-    },
-  ],
-}));
+test("graph validation reports cycle", () => {
+  const graph = structuredClone(approveDemoGraph);
+  graph.edges.push({
+    from: contract.decodeBoundary(contract.nodeIdSchema)("8:join"),
+    to: graph.entry,
+    kind: "next",
+  });
+
+  // A back edge is also a second continuation for its source.
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["invalid_scope", "cycle"]);
+});
 
 test("execution identity escapes delimiters and distinguishes runs and iteration paths", () => {
   const nodeId = contract.decodeBoundary(contract.nodeIdSchema)("a/b");
@@ -614,6 +614,33 @@ test("disconnected nodes are diagnosed", () => {
       .filter((error) => error.code === "invalid_scope")
       .map((error) => error.node),
   ).toEqual([contract.decodeBoundary(contract.nodeIdSchema)("orphan")]);
+});
+
+test("a node with next edges to two different targets is diagnosed", () => {
+  const sibling = contract.decodeBoundary(contract.nodeSchema)({
+    id: "sibling",
+    kind: "uuid",
+    label: null,
+    scope: null,
+  });
+
+  const graph = {
+    ...approveDemoGraph,
+    nodes: [...approveDemoGraph.nodes, sibling],
+    edges: [
+      ...approveDemoGraph.edges,
+      { from: approveDemoGraph.entry, to: sibling.id, kind: "next" as const },
+    ],
+  };
+
+  expect(validateGraph(graph)).toEqual([
+    {
+      code: "invalid_scope",
+      node: approveDemoGraph.entry,
+      message: "A node must continue to exactly one next node.",
+      source: null,
+    },
+  ]);
 });
 
 test("a second root with an edge into the graph is diagnosed", () => {

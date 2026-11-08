@@ -1,5 +1,13 @@
 import { type Diagnostic, type Edge, INPUT_REF, type Node, type NodeId } from ".";
-import { ancestors, isBodyTail, reaches, sameBody, successors, targets } from "./context";
+import {
+  ancestors,
+  continuationTargets,
+  isBodyTail,
+  reaches,
+  sameBody,
+  successors,
+  targets,
+} from "./context";
 import { type ValidationContext as Context, diagnostic } from "./validation";
 
 function identity({ graph, nodes }: Context): Diagnostic[] {
@@ -127,7 +135,7 @@ function scopeEdges(context: Context): Diagnostic[] {
 
     const local = from.scope === to.scope && sameBody(context, from, to);
     const entry = targets(from).includes(to.id) && to.scope === from.id;
-    const last = isBodyTail(context, from.id);
+    const last = isBodyTail(context, from);
     const owner = from.scope === null ? undefined : context.nodes.get(from.scope);
 
     const join =
@@ -147,6 +155,15 @@ function scopeEdges(context: Context): Diagnostic[] {
           ),
         ];
   });
+}
+
+// The engine follows one continuation, so a second target would silently never run.
+function continuations(context: Context): Diagnostic[] {
+  return context.graph.nodes.flatMap((node) =>
+    continuationTargets(context, node).length > 1
+      ? [diagnostic("invalid_scope", node.id, "A node must continue to exactly one next node.")]
+      : [],
+  );
 }
 
 function connectivity(context: Context): Diagnostic[] {
@@ -199,6 +216,7 @@ export const structureRules = [
   scopes,
   scopeEdges,
   controlEdges,
+  continuations,
   connectivity,
   cycles,
 ];

@@ -56,7 +56,7 @@ function bodyResultType(
     (child) =>
       child.scope === owner.id &&
       (child.kind === "join" || child.kind === "fail") &&
-      isBodyTail(context, child.id) &&
+      isBodyTail(context, child) &&
       scopeReaches(context, entry, child.id),
   );
 
