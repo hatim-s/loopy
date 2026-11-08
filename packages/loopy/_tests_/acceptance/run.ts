@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import { type CaseName, cases, prepareWait, verifyCase } from "./cases";
+import { cases } from "./cases";
 import { io, Runtime } from "./runtime";
 
 const repo = resolve(import.meta.dir, "../../../..");
@@ -25,6 +25,16 @@ const git = (...args: string[]) =>
     }
   });
 
+type CaseRecord = {
+  name: string;
+  result: "pending" | "pass" | "fail";
+  runId?: string;
+  revision?: string;
+  status?: string;
+};
+
+const pending = (name: string): CaseRecord => ({ name, result: "pending" });
+
 const program = Effect.gen(function* () {
   const root = yield* io("prepare fixture", async () => {
     const parent = join(repo, ".loopy", "acceptance");
@@ -38,13 +48,8 @@ const program = Effect.gen(function* () {
 
   const runtime = new Runtime(root, join(root, "project"));
 
-  const records: {
-    name: CaseName;
-    result: "pending" | "pass" | "fail";
-    runId?: string;
-    revision?: string;
-    status?: string;
-  }[] = cases.map((name) => ({ name, result: "pending" }));
+  const runs = cases.map((acceptance) => ({ acceptance, record: pending(acceptance.name) }));
+  const records = runs.map(({ record }) => record);
 
   const startedAt = new Date().toISOString();
 
@@ -75,20 +80,17 @@ const program = Effect.gen(function* () {
       Effect.gen(function* () {
         yield* runtime.start();
 
-        for (const record of records) {
-          const { name } = record;
+        const saved = new Set<string>();
+
+        for (const { acceptance, record } of runs) {
+          const { name, fixture, input } = acceptance;
 
           const result = yield* Effect.exit(
             Effect.gen(function* () {
-              const fixture = name === "values-no" ? "values" : name;
-
-              if (name !== "values-no") {
+              if (!saved.has(fixture)) {
                 yield* runtime.cli("save", `${fixture}.loopy.ts`);
+                saved.add(fixture);
               }
-
-              const input = name.startsWith("values")
-                ? { choose: name === "values", items: [3, 1, 4] }
-                : {};
 
               const admitted = decodeBoundary(routes.startRun.response)(
                 JSON.parse(
@@ -96,15 +98,18 @@ const program = Effect.gen(function* () {
                     "run",
                     `acceptance-${fixture}`,
                     "--input-json",
-                    JSON.stringify(input),
+                    JSON.stringify(input ?? {}),
                   ),
                 ),
               );
 
               record.runId = admitted.id;
-              record.revision = yield* runtime.revision(admitted.id);
+              record.revision = (yield* runtime.graph(admitted.id)).revision;
 
-              yield* prepareWait(runtime, name, admitted.id);
+              if (acceptance.prepare) {
+                yield* acceptance.prepare(admitted.id, runtime);
+              }
+
               yield* runtime.until(
                 runtime
                   .snapshot(admitted.id)
@@ -119,7 +124,7 @@ const program = Effect.gen(function* () {
               yield* io("write snapshot", () =>
                 Bun.write(join(root, `${name}.json`), JSON.stringify(snapshot, null, 2)),
               );
-              yield* verifyCase(runtime, name, snapshot);
+              yield* acceptance.verify(snapshot, runtime);
             }),
           );
 
@@ -148,19 +153,6 @@ const program = Effect.gen(function* () {
                 daemonPids: runtime.starts,
                 cleanup: Exit.isSuccess(cleanup) ? "stopped" : Cause.pretty(cleanup.cause),
                 retained: true,
-                scope: "Local Bun CLI, daemon, SQLite and native executor.",
-                excluded: [
-                  "cloud",
-                  "Docker",
-                  "providers",
-                  "network workloads",
-                  "lease loss",
-                  "uncertain execution recovery",
-                  "SSE",
-                  "schedules",
-                  "cancellation",
-                  "secrets",
-                ],
               },
               null,
               2,
