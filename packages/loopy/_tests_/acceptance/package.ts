@@ -1,8 +1,20 @@
 import { mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { Schema } from "effect";
 
 const repository = resolve(import.meta.dir, "../../../..");
+
+// The consumer typechecks with the same effect-tsgo and TypeScript 7 builds the repository pins.
+const { devDependencies: pinned } = Schema.decodeUnknownSync(
+  Schema.Struct({
+    devDependencies: Schema.Struct({
+      "@effect/tsgo": Schema.String,
+      "@typescript/native": Schema.String,
+      "bun-types": Schema.String,
+    }),
+  }),
+)(await Bun.file(join(repository, "package.json")).json());
 
 async function assertPrivateImportsAbsent(directory: string) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -74,7 +86,7 @@ async function verifyPackedDistribution() {
         private: true,
         type: "module",
         dependencies: { loopy: `file:${archive}` },
-        devDependencies: { typescript: "5.9.2", "bun-types": "1.4.0" },
+        devDependencies: pinned,
       }),
     );
     await run(["install", "--ignore-scripts"]);
@@ -95,7 +107,8 @@ void [definition, value, contract, engine, local];
 `,
     );
     await run([
-      "node_modules/typescript/bin/tsc",
+      "node_modules/.bin/effect-tsgo",
+      "tsc",
       "--noEmit",
       "--strict",
       "--module",
