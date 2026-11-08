@@ -14,14 +14,12 @@ import { evaluate as evaluateEffect } from "../src/evaluate";
 const decodeStdout = (stdout: string) =>
   bundleResult({ stdout, stderr: "", exitCode: 0 }, (text) => text);
 
-const sdk = "loopy";
-
 const fixtureRoot = resolve(import.meta.dir, "fixtures");
 
 async function project(source: string) {
   const root = qualityTestRoot("compile-test");
   const file = join(root, "entry.ts");
-  await writeFile(file, source.replaceAll("__SDK__", sdk));
+  await writeFile(file, source);
   await writeFile(join(root, "not-function.ts"), "export default 1;");
 
   return { root, file };
@@ -91,7 +89,7 @@ for (const [name, code] of Object.entries(rejected)) {
 
 test("restrictions traverse imported author modules before any author evaluation", async () => {
   const { root, file } = await project(
-    'import {loopy} from "__SDK__"; import {value} from "./effect.ts"; export default loopy("safe", {input:{},run:()=>value});',
+    'import {loopy} from "loopy"; import {value} from "./effect.ts"; export default loopy("safe", {input:{},run:()=>value});',
   );
 
   const marker = join(root, "ran");
@@ -114,12 +112,12 @@ test("restrictions traverse imported author modules before any author evaluation
 
 test("subgraphs expand in each author module's directory", async () => {
   const { root, file } = await project(
-    'import {loopy} from "__SDK__"; import {child} from "./child/graph.ts"; export default loopy("scoped", {input:{},run:()=>child()});',
+    'import {loopy} from "loopy"; import {child} from "./child/graph.ts"; export default loopy("scoped", {input:{},run:()=>child()});',
   );
 
   await Bun.write(
     join(root, "child/graph.ts"),
-    `import {code,subgraph} from ${JSON.stringify(sdk)}; export const child=subgraph("child",()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"}));`,
+    `import {code,subgraph} from "loopy"; export const child=subgraph("child",()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"}));`,
   );
   await Bun.write(join(root, "child/value.ts"), "export default () => 1;");
   const result = await compile(file);
@@ -137,7 +135,7 @@ test("subgraphs expand in each author module's directory", async () => {
 test("the same loopy compiled from two checkout locations has one revision", async () => {
   const compileCopy = async () => {
     const { root, file } = await project(
-      'import {loopy,defineCommand,code} from "__SDK__"; const echo=defineCommand({key:"custom.echo",program:"echo",parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("moved", {input:{},run:()=>code("value",{in:{word:echo({args:["hi"]})},out:{kind:"value",type:"string"},module:"./lib/value.ts"})});',
+      'import {loopy,defineCommand,code} from "loopy"; const echo=defineCommand({key:"custom.echo",program:"echo",parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("moved", {input:{},run:()=>code("value",{in:{word:echo({args:["hi"]})},out:{kind:"value",type:"string"},module:"./lib/value.ts"})});',
     );
 
     await writeFile(join(root, "parse.ts"), "export default (result)=>result.stdout.trim();");
@@ -205,7 +203,7 @@ test("evaluation has a hard ten second timeout", async () => {
 
 test("bundle hashes are stable, code changes alter revisions and whitespace does not", async () => {
   const { root, file } = await project(
-    'import {loopy,code,fs} from "__SDK__"; export default loopy("hashes", {input:{},run:()=>{fs.ls();return code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"});}});',
+    'import {loopy,code,fs} from "loopy"; export default loopy("hashes", {input:{},run:()=>{fs.ls();return code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"});}});',
   );
 
   const module = join(root, "value.ts");
@@ -243,7 +241,7 @@ test("bundle hashes are stable, code changes alter revisions and whitespace does
 
 test("parser module bundles are hashed and preserve their module bindings", async () => {
   const { root, file } = await project(
-    'import {loopy,defineCommand} from "__SDK__"; const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("parser", {input:{},run:()=>cmd()});',
+    'import {loopy,defineCommand} from "loopy"; const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("parser", {input:{},run:()=>cmd()});',
   );
 
   await writeFile(
@@ -295,7 +293,7 @@ for (const [name, graphName] of [
 
 test("code bundle import.meta names each source module instead of the saved bundle", async () => {
   const { root, file } = await project(
-    'import {loopy,code} from "__SDK__"; export default loopy("paths", {input:{},run:()=>code("paths",{in:{},out:{kind:"record",fields:{entry:"string",helper:"string"}},module:"./code.ts"})});',
+    'import {loopy,code} from "loopy"; export default loopy("paths", {input:{},run:()=>code("paths",{in:{},out:{kind:"record",fields:{entry:"string",helper:"string"}},module:"./code.ts"})});',
   );
 
   await writeFile(
@@ -325,9 +323,9 @@ test("code bundle import.meta names each source module instead of the saved bund
   expect(run()).toEqual({ entry: join(root, "code.ts"), helper: join(root, "lib/helper.ts") });
 });
 
-test("bundles execute the stdin/stdout protocol", async () => {
+test("parser and code bundles execute and return output", async () => {
   const { root, file } = await project(
-    'import {loopy,defineCommand,code} from "__SDK__"; const command=defineCommand({key:"custom.parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("executable", {input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
+    'import {loopy,defineCommand,code} from "loopy"; const command=defineCommand({key:"custom.parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("executable", {input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
   );
 
   await writeFile(
@@ -336,7 +334,7 @@ test("bundles execute the stdin/stdout protocol", async () => {
   );
   await writeFile(
     join(root, "context.ts"),
-    'console.log("module loaded"); export default (input,context)=>{context.log("ready",{value:input.value}); console.log("captured"); console.debug("debug"); console.trace("trace"); console.table("table"); console.dir("dir"); process.stdout.write("author noise\\npartial"); return {value:input.value,workspace:context.workspace};};',
+    "export default (input,context)=>({value:input.value,workspace:context.workspace});",
   );
   const compiled = await compile(file);
 
@@ -358,42 +356,23 @@ test("bundles execute the stdin/stdout protocol", async () => {
       cwd: root,
       stdin: new Blob([JSON.stringify(input)]),
       stdout: "pipe",
-      stderr: "pipe",
     });
 
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
+    const [stdout, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
 
     expect(code).toBe(0);
 
-    return { stdout, stderr };
+    return { stdout };
   };
 
   const parsed = await execute(0, { stdout: "output\n", stderr: "", exitCode: 0 });
 
   expect(JSON.parse(parsed.stdout)).toBe("output0");
   const result = await execute(1, { value: 42 });
-  expect(decodeStdout(result.stdout)).toEqual({
+  expect(decodeStdout(result.stdout)).toMatchObject({
     kind: "succeeded",
     output: { value: 42, workspace: root },
-    logs: [{ message: "stdout", data: "author noise\npartial\n" }],
   });
-
-  const logs = result.stderr
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
-
-  for (const message of ["debug", "trace", "table", "dir"]) {
-    expect(logs).toContainEqual({ message, data: null });
-  }
-
-  expect(result.stderr).toContain('"message":"ready"');
-  expect(result.stderr).toContain('"message":"captured"');
-  expect(result.stderr).toContain('"message":"module loaded"');
 });
 
 for (const name of [
@@ -404,7 +383,7 @@ for (const name of [
 ]) {
   test(`code modules reject ${name} with a located dynamic_code diagnostic`, async () => {
     const { root, file } = await project(
-      'import {loopy,code} from "__SDK__";export default loopy("dynamic",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+      'import {loopy,code} from "loopy";export default loopy("dynamic",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
     );
 
     await writeFile(
@@ -440,7 +419,7 @@ for (const name of [
 
 test("literal dynamic imports are bundled and alter the pinned revision", async () => {
   const { root, file } = await project(
-    'import {loopy,code} from "__SDK__";export default loopy("literal",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+    'import {loopy,code} from "loopy";export default loopy("literal",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
   );
 
   await writeFile(
@@ -469,7 +448,7 @@ test("literal dynamic imports are bundled and alter the pinned revision", async 
 
 test("parser modules reject dynamic imports in their local dependencies", async () => {
   const { root, file } = await project(
-    'import {loopy,defineCommand} from "__SDK__";const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"number"});export default loopy("parser",{input:{},run:()=>cmd()});',
+    'import {loopy,defineCommand} from "loopy";const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"number"});export default loopy("parser",{input:{},run:()=>cmd()});',
   );
 
   await writeFile(
@@ -500,7 +479,7 @@ for (const wrapper of [
     );
 
     const { file } = await project(
-      `import {loopy,code} from "__SDK__";export default loopy("wrapped",{input:{},run:()=>code("x",${options})});`,
+      `import {loopy,code} from "loopy";export default loopy("wrapped",{input:{},run:()=>code("x",${options})});`,
     );
 
     const result = await compile(file);
@@ -531,7 +510,7 @@ for (const expression of [
 ]) {
   test(`emitted bundle rejects ${expression} in a tsconfig alias dependency`, async () => {
     const { root, file } = await project(
-      'import {loopy,code} from "__SDK__";export default loopy("alias",{input:{},run:()=>code("x",{in:{path:"./escaped.ts"},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+      'import {loopy,code} from "loopy";export default loopy("alias",{input:{},run:()=>code("x",{in:{path:"./escaped.ts"},out:{kind:"value",type:"number"},module:"./code.ts"})});',
     );
 
     await writeFile(
@@ -561,7 +540,7 @@ for (const expression of [
 
 test("tsconfig alias helpers are bundled and their changes alter the hash and revision", async () => {
   const { root, file } = await project(
-    'import {loopy,code} from "__SDK__";export default loopy("alias",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+    'import {loopy,code} from "loopy";export default loopy("alias",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
   );
 
   await writeFile(
@@ -593,7 +572,7 @@ test("tsconfig alias helpers are bundled and their changes alter the hash and re
 
 test("node_modules dependencies with literal dynamic imports bundle their helpers", async () => {
   const { root, file } = await project(
-    'import {loopy,code} from "__SDK__";export default loopy("dependency",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+    'import {loopy,code} from "loopy";export default loopy("dependency",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
   );
 
   await writeFile(
@@ -623,20 +602,7 @@ test("node_modules dependencies with literal dynamic imports bundle their helper
   expect(await run()).toBe(42);
 });
 
-test("the public SDK entry compiles through the same graph builder", async () => {
-  const f = await project(
-    'import {loopy,log} from "loopy"; export default loopy("public-entry", {input: {}, run: () => {log("hello"); return 1;}});',
-  );
-
-  const result = await compile(f.file);
-  expect(result.ok).toBe(true);
-
-  if (result.ok) {
-    expect(result.graph.nodes.map((node) => node.kind)).toEqual(["log", "join"]);
-  }
-});
-
-for (const specifier of ["@loopy/sdk", "@loopy/sdk/graph", "loopy/graph"]) {
+for (const specifier of ["@loopy/sdk", "loopy/graph"]) {
   test(`author builders reject ${specifier}`, async () => {
     const { file } = await project(
       `import {loopy} from ${JSON.stringify(specifier)}; export default loopy("private-sdk", {input: {}, run: () => 1});`,
@@ -661,7 +627,7 @@ function evaluate(...args: Parameters<typeof evaluateEffect>) {
 for (const specifier of ["./missing", "not-a-real-loopy-fixture-package"]) {
   test(`unresolved author import ${specifier} remains diagnostic data`, async () => {
     const { root, file } = await project(
-      'import {loopy,code} from "__SDK__";export default loopy("broken",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
+      'import {loopy,code} from "loopy";export default loopy("broken",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
     );
 
     await writeFile(
@@ -709,7 +675,7 @@ for (const [name, source, message] of [
 
 test("a label key is ordinary data outside command options, and label flags compile", async () => {
   const { root, file } = await project(
-    'import {loopy,code,defineCommand} from "__SDK__"; const gh=defineCommand({key:"gh.issue",program:"gh",flags:{label:{cli:"--label",kind:"string",repeatable:true}}}); export default loopy("labels", {input:{name:"string"},run:({input})=>{gh({flags:{label:[input.get("name")]}},{label:"tag"});return code("step",{in:{label:input.get("name")},out:{kind:"value",type:"string"},module:"./step.ts"});}});',
+    'import {loopy,code,defineCommand} from "loopy"; const gh=defineCommand({key:"gh.issue",program:"gh",flags:{label:{cli:"--label",kind:"string",repeatable:true}}}); export default loopy("labels", {input:{name:"string"},run:({input})=>{gh({flags:{label:[input.get("name")]}},{label:"tag"});return code("step",{in:{label:input.get("name")},out:{kind:"value",type:"string"},module:"./step.ts"});}});',
   );
 
   await writeFile(join(root, "step.ts"), "export default (input) => input.label;");

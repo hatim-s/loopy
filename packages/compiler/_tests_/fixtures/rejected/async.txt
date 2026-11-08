@@ -1,2 +1,2 @@
-import {loopy, log, wait, code} from "__SDK__";
+import {loopy, log, wait, code} from "loopy";
 export default loopy("invalid", {input:{}, run: async () => 1});

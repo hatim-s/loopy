@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
-import { bundleResult } from "../src/executor/protocol";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { bundleResult, runnerSource } from "../src/executor/protocol";
 import { secretRedactor } from "../src/os/secret-redactor";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const decode = (stdout: string) =>
   bundleResult({ stdout, stderr: "", exitCode: 0 }, (text) => text);
@@ -115,4 +118,49 @@ test("complete log records keep keys and values that end in a secret prefix", ()
 
     expect(result.logs[0]).toEqual(record);
   }
+});
+
+test("the runner turns console output into logs and keeps author stdout apart from the result", async () => {
+  const root = qualityTestRoot("runner");
+  const module = join(root, "context.ts");
+  const runner = join(root, "runner.ts");
+  await writeFile(
+    module,
+    'console.log("module loaded"); export default (input,context)=>{context.log("ready",{value:input.value}); console.log("captured"); console.debug("debug"); console.trace("trace"); console.table("table"); console.dir("dir"); process.stdout.write("author noise\\npartial"); return {value:input.value,workspace:context.workspace};};',
+  );
+  await writeFile(runner, runnerSource(module, "default", "code"));
+
+  const child = Bun.spawn([process.execPath, runner], {
+    cwd: root,
+    stdin: new Blob([JSON.stringify({ value: 42 })]),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+
+  expect(code).toBe(0);
+  expect(decode(stdout)).toEqual({
+    kind: "succeeded",
+    output: { value: 42, workspace: root },
+    logs: [{ message: "stdout", data: "author noise\npartial\n" }],
+  });
+
+  const logs = stderr
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+
+  expect(logs).toEqual(
+    expect.arrayContaining([
+      { message: "module loaded", data: null },
+      { message: "ready", data: { value: 42 } },
+      { message: "captured", data: null },
+      ...["debug", "trace", "table", "dir"].map((message) => ({ message, data: null })),
+    ]),
+  );
 });
