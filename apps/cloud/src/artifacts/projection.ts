@@ -1,4 +1,5 @@
 import { definitionInput, definitionSummarySchema, type PutLoopyBody } from "@loopy/contract";
+import { Schema } from "effect";
 import { ARTIFACT_LIMITS } from "./storage";
 
 export const definitionProjectionSchema = definitionSummarySchema.mapFields((fields) => ({
@@ -13,16 +14,10 @@ type DefinitionProjection = typeof definitionProjectionSchema.Type;
 
 const encoder = new TextEncoder();
 
-export function projectionJson(summary: DefinitionProjection): string {
-  const { scope, description, input, schedule, mode } = summary;
+const encodeProjection = Schema.encodeSync(definitionProjectionSchema);
 
-  return JSON.stringify({
-    scope,
-    description,
-    input,
-    schedule,
-    mode,
-  } satisfies DefinitionProjection);
+export function projectionJson(summary: DefinitionProjection): string {
+  return JSON.stringify(encodeProjection(summary));
 }
 
 function rowBytes(fields: string[]): number {

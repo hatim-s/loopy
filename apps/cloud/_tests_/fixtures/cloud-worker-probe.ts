@@ -3,9 +3,9 @@ import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import type { RunRecord, StoreEffect } from "@loopy/core";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Clock, Effect } from "effect";
-import { ArtifactStorage } from "../../../../apps/cloud/src/artifacts/storage";
-import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
-import { EVENT_RETENTION } from "../../../runtime/src/store/event-outbox";
+import { EVENT_RETENTION } from "../../../../packages/runtime/src/store/event-outbox";
+import { ArtifactStorage } from "../../src/artifacts/storage";
+import { DurableSqlDriver } from "../../src/sql-driver";
 import { paginationResponse } from "./cloud-pagination-probe";
 
 const at = "2026-10-22T00:00:00.000Z";
@@ -193,14 +193,7 @@ export class CloudWorkerProbe {
 
       await onClock(store.createRun(run()));
 
-      const fire = {
-        workspace: "probe",
-        slug: "probe",
-        version: schedule.version,
-        fireKey: `probe@${at}`,
-        nextFireAt: "2026-10-22T00:01:00.000Z",
-        run: run(),
-      };
+      const fire = { schedule, next: "2026-10-22T00:01:00.000Z", run: run() };
 
       const before = await onClock(store.eventCursor());
       const error = await failure(() => onClock(store.fireSchedule(fire)));

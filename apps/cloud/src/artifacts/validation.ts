@@ -1,22 +1,10 @@
-import type { Graph, PutLoopyBody, SavedLoopy } from "@loopy/contract";
+import type { PutLoopyBody } from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
-import type { Publication } from "./definitions";
+import { mebibytes } from "../http";
 import { checkDefinitionRows } from "./projection";
 import { ARTIFACT_LIMITS } from "./storage";
 
 const encoder = new TextEncoder();
-
-export function artifactEntry(row: Publication, graph: Graph): SavedLoopy {
-  return {
-    version: 3,
-    slug: row.slug,
-    graph,
-    revision: row.revision,
-    source: row.source,
-    savedAt: row.saved_at,
-    bundles: graphBundles(graph),
-  };
-}
 
 export function checkArtifactLimits(body: PutLoopyBody, workspaceId: string): void {
   if (body.source.workspace !== workspaceId) {
@@ -31,6 +19,7 @@ export function checkArtifactLimits(body: PutLoopyBody, workspaceId: string): vo
 
   checkDefinitionRows(body);
 
+  // Sizes come from the base64 length so oversize bundles are rejected before decoding.
   const sizes = body.bundles.map(
     (bundle) =>
       (bundle.bytes.length * 3) / 4 -
@@ -44,24 +33,7 @@ export function checkArtifactLimits(body: PutLoopyBody, workspaceId: string): vo
     sizes.some((bytes) => bytes > ARTIFACT_LIMITS.bundleBytes)
   ) {
     throw new Error(
-      "Compiled artifacts exceed cloud limits: 24 MiB request, 1 MiB graph, 8 MiB per bundle, 16 MiB total bundles.",
+      `Compiled artifacts exceed cloud limits: ${mebibytes(ARTIFACT_LIMITS.requestBytes)} request, ${mebibytes(ARTIFACT_LIMITS.graphBytes)} graph, ${mebibytes(ARTIFACT_LIMITS.bundleBytes)} per bundle, ${mebibytes(ARTIFACT_LIMITS.totalBundleBytes)} total bundles.`,
     );
   }
-}
-
-export function graphBundles(graph: Graph): SavedLoopy["bundles"] {
-  return graph.nodes.flatMap((node) => {
-    const executable =
-      node.kind === "code" ? node.module : node.kind === "command" ? node.parse : null;
-
-    if (!executable) {
-      return [];
-    }
-
-    if (executable.bundleHash === null) {
-      throw new Error("Stored graph has an uncompiled executable. Save the loopy again.");
-    }
-
-    return [{ nodeId: node.id, bundleHash: executable.bundleHash }];
-  });
 }

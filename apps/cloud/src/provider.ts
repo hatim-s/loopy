@@ -9,24 +9,23 @@ import {
 } from "@loopy/contract";
 import type { ExecutionKey, ExecutionSpec } from "@loopy/core";
 import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
+import type { BodyLimitError, BodyReadError } from "@loopy/runtime/service";
 import { Effect } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
-import { localEndpoint } from "./environment";
-import { type BodyLimitError, readBoundedText } from "./http";
+import type { CloudConfig } from "./environment";
+import { readBoundedText } from "./http";
 import type { CloudProtocolError } from "./operation";
 import { CloudError, decodeProtocol, platform } from "./operation";
 
 export class SandboxProvider implements DurableExecutionProvider {
   private readonly base: URL;
   constructor(
-    private readonly options: {
-      url: string;
-      token: string;
+    private readonly options: CloudConfig["sandbox"] & {
       workspace: string;
       artifacts: Pick<R2ArtifactRegistry, "getBundle">;
     },
   ) {
-    this.base = localEndpoint(options.url);
+    this.base = options.url;
   }
   private request(url: URL, body?: SandboxAttemptRequest) {
     return Effect.gen({ self: this }, function* () {
@@ -90,7 +89,10 @@ export class SandboxProvider implements DurableExecutionProvider {
   }
   artifact(
     request: SandboxArtifactRequest,
-  ): Effect.Effect<SandboxArtifactRead, CloudError | BodyLimitError | CloudProtocolError> {
+  ): Effect.Effect<
+    SandboxArtifactRead,
+    CloudError | BodyLimitError | BodyReadError | CloudProtocolError
+  > {
     return Effect.gen({ self: this }, function* () {
       const url = new URL("/artifacts", this.base);
       url.searchParams.set("workspace", this.options.workspace);

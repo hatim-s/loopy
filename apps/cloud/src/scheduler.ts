@@ -1,53 +1,73 @@
-import type { DurableObjectStorage, SqlStorageCursor } from "@cloudflare/workers-types";
-import { errorMessage } from "@loopy/core";
-import { activateDurable, type DurableExecutionProvider } from "@loopy/runtime/host";
-import type { SqlRunStore, SqlValue } from "@loopy/runtime/store/portable";
-import { Cause, Effect, Exit } from "effect";
+import type { DurableObjectStorage } from "@cloudflare/workers-types";
+import { type DurableTurn, errorMessage } from "@loopy/core";
+import {
+  activateDurable,
+  type DurableExecutionProvider,
+  fireDueSchedules,
+  SCHEDULE_POLICY,
+  ScheduleDefinitionError,
+} from "@loopy/runtime/host";
+import type { SqlRunStore } from "@loopy/runtime/store/portable";
+import { Cause, Clock, Effect, Exit } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
 import { cloudSync, platform } from "./operation";
-import { WorkspaceSchedules } from "./scheduler-schedules";
 
-export type SchedulerStorage = Pick<
-  DurableObjectStorage,
-  "getAlarm" | "setAlarm" | "deleteAlarm"
-> & {
-  sql: {
-    exec<Row extends Record<string, SqlValue>>(
-      query: string,
-      ...bindings: SqlValue[]
-    ): Pick<SqlStorageCursor<Row>, "toArray" | "one">;
-  };
-};
+export type SchedulerStorage = Pick<DurableObjectStorage, "getAlarm" | "setAlarm" | "deleteAlarm">;
 
-type Candidate = {
-  id: string;
-  cursor: string | null;
-  owner_token: string | null;
-  heartbeat_at: string | null;
-};
+/** Keeps the last whole-turn failure outside the runtime tables. */
+export type SchedulerFailureLog = { read(): string | null; write(error: string): void };
+
+export const SCHEDULER = {
+  /** Retry deadline after a failed release or activation turn. */
+  retryMs: 1000,
+  /** Alarm armed before each turn so an evicted object resumes its persisted work. */
+  recoveryMs: 5000,
+  alarmFloorMs: 50,
+  strandedBatch: 32,
+  maxWork: 16,
+  pollMs: 500,
+  leaseMs: 10_000,
+  statusErrors: 20,
+} as const;
+
+const iso = (ms: number) => new Date(ms).toISOString();
+
+/** Runs an effect to its exit. Interrupts propagate; any other failure becomes a bounded message. */
+function turnFailure<A, E>(effect: Effect.Effect<A, E>) {
+  return Effect.gen(function* () {
+    const exit = yield* Effect.exit(effect);
+
+    if (Exit.isSuccess(exit)) {
+      return { ok: true as const, value: exit.value };
+    }
+
+    if (Cause.hasInterrupts(exit.cause)) {
+      return yield* Effect.failCause(exit.cause);
+    }
+
+    return {
+      ok: false as const,
+      error: errorMessage(Cause.squash(exit.cause)).slice(0, SCHEDULE_POLICY.errorChars),
+    };
+  });
+}
 
 export class WorkspaceScheduler {
-  private readonly schedules: WorkspaceSchedules;
-
   constructor(
     private readonly options: {
       storage: SchedulerStorage;
+      failures: SchedulerFailureLog;
       store: SqlRunStore;
       registry: Pick<R2ArtifactRegistry, "get" | "revisionGraph">;
       provider: DurableExecutionProvider;
       token: string;
       concurrency: number;
-      workspace: string;
     },
-  ) {
-    options.storage.sql.exec(`CREATE TABLE IF NOT EXISTS cloud_turns (
-      run_id TEXT PRIMARY KEY REFERENCES runs(id), next_at TEXT NOT NULL, cursor TEXT, error TEXT
-    )`);
-    this.schedules = new WorkspaceSchedules(options);
-  }
+  ) {}
 
-  wake(at = Date.now()) {
+  wake() {
     return Effect.gen({ self: this }, function* () {
+      const at = yield* Clock.currentTimeMillis;
       const current = yield* platform("get alarm", () => this.options.storage.getAlarm());
 
       if (current === null || at < current) {
@@ -56,202 +76,158 @@ export class WorkspaceScheduler {
     });
   }
 
-  private foreignLease(candidate: Candidate): string | null {
-    const { token, store } = this.options;
+  status() {
+    return Effect.gen({ self: this }, function* () {
+      const { storage, store, failures } = this.options;
 
-    if (candidate.owner_token !== token && candidate.heartbeat_at !== null) {
-      const expires = Date.parse(candidate.heartbeat_at) + store.leaseMs + 1;
-
-      if (Date.now() < expires) {
-        return new Date(expires).toISOString();
-      }
-    }
-
-    return null;
+      return {
+        alarm: yield* platform("get alarm", () => storage.getAlarm()),
+        errors: yield* store.turnErrors(SCHEDULER.statusErrors),
+        schedules: yield* store.scheduleFailures(SCHEDULER.statusErrors),
+        schedulerError: yield* cloudSync("read scheduler error", () => failures.read()),
+      };
+    });
   }
 
-  private releaseSuspended(now: string) {
+  private foreignLease(turn: DurableTurn, now: number): string | null {
+    const owner = turn.owner;
+
+    if (owner === null || owner.token === this.options.token || owner.heartbeatAt === null) {
+      return null;
+    }
+
+    const expires = Date.parse(owner.heartbeatAt) + this.options.store.leaseMs + 1;
+
+    return now < expires ? iso(expires) : null;
+  }
+
+  private releaseStranded(now: number) {
     return Effect.gen({ self: this }, function* () {
-      const { storage, store } = this.options;
+      const { store } = this.options;
 
-      const rows = yield* cloudSync("read cloud SQL", () =>
-        storage.sql
-          .exec<Candidate>(
-            `SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at FROM runs r
-      LEFT JOIN cloud_turns t ON r.id=t.run_id
-      WHERE r.status='suspended' AND r.owner_token IS NOT NULL
-      AND (t.next_at IS NULL OR t.next_at<=?)
-      ORDER BY COALESCE(t.next_at,r.created_at),r.id LIMIT 32`,
-            now,
-          )
-          .toArray(),
-      );
-
-      for (const row of rows) {
-        let nextAt = this.foreignLease(row);
-        let error: string | null = null;
+      for (const turn of yield* store.strandedTurns(iso(now), SCHEDULER.strandedBatch)) {
+        const lease = this.foreignLease(turn, now);
+        const owner = turn.owner;
 
         // Suspension already committed. Releasing it preserves waits without taking a slot.
-        const released = yield* Effect.exit(
-          nextAt === null && row.owner_token !== null
-            ? store.release(row.id, row.owner_token)
-            : Effect.void,
+        const released = yield* turnFailure(
+          lease === null && owner !== null ? store.release(turn.runId, owner.token) : Effect.void,
         );
 
-        if (Exit.isFailure(released)) {
-          if (Cause.hasInterrupts(released.cause)) {
-            return yield* Effect.failCause(released.cause);
-          }
-
-          const cause = released.cause;
-          nextAt = new Date(Date.now() + 1000).toISOString();
-          error = errorMessage(Cause.squash(cause)).slice(0, 1000);
-        }
-
-        yield* cloudSync("cloud SQL", () => this.saveTurn(row, nextAt ?? now, null, error));
+        yield* store.saveTurn({
+          runId: turn.runId,
+          nextAt: released.ok ? (lease ?? iso(now)) : iso(now + SCHEDULER.retryMs),
+          cursor: null,
+          error: released.ok ? null : released.error,
+        });
       }
     });
   }
 
-  private saveTurn(
-    candidate: Candidate,
-    nextAt: string,
-    cursor: string | null,
-    error: string | null,
-  ) {
-    this.options.storage.sql.exec(
-      `INSERT INTO cloud_turns(run_id,next_at,cursor,error) VALUES (?,?,?,?)
-      ON CONFLICT(run_id) DO UPDATE SET next_at=excluded.next_at,cursor=excluded.cursor,error=excluded.error`,
-      candidate.id,
-      nextAt,
-      cursor,
-      error,
-    );
+  private activate(turn: DurableTurn, now: number) {
+    return Effect.gen({ self: this }, function* () {
+      const { store, registry, provider, token } = this.options;
+      const lease = this.foreignLease(turn, now);
+
+      if (lease !== null) {
+        return yield* store.saveTurn({
+          runId: turn.runId,
+          nextAt: lease,
+          cursor: turn.cursor,
+          error: null,
+        });
+      }
+
+      const result = yield* turnFailure(
+        Effect.gen(function* () {
+          const run = yield* store.getRun(turn.runId);
+
+          if (!run) {
+            return null;
+          }
+
+          return yield* activateDurable({
+            store,
+            graph: yield* registry.revisionGraph(run.revision),
+            runId: run.id,
+            provider,
+            token,
+            at: iso(yield* Clock.currentTimeMillis),
+            cursor: turn.cursor,
+            maxWork: SCHEDULER.maxWork,
+            pollMs: SCHEDULER.pollMs,
+          });
+        }),
+      );
+
+      if (!result.ok) {
+        return yield* store.saveTurn({
+          runId: turn.runId,
+          nextAt: iso(now + SCHEDULER.retryMs),
+          cursor: turn.cursor,
+          error: result.error,
+        });
+      }
+
+      // The run disappeared, so there is no turn to persist.
+      if (result.value !== null) {
+        yield* store.saveTurn({
+          runId: turn.runId,
+          nextAt: result.value.nextWakeAt ?? iso(now),
+          cursor: result.value.cursor,
+          error: null,
+        });
+      }
+    });
   }
 
-  private candidates(now: string): Candidate[] {
-    const { storage, concurrency } = this.options;
+  private nextAlarm(now: number) {
+    return Effect.gen({ self: this }, function* () {
+      const { store, concurrency } = this.options;
 
-    const running = storage.sql
-      .exec<Candidate>(
-        `SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at
-      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id WHERE r.status='running'
-      AND (t.next_at IS NULL OR t.next_at<=?) ORDER BY r.created_at,r.id LIMIT ?`,
-        now,
-        concurrency,
-      )
-      .toArray();
+      const dates = [yield* store.nextScheduleAt(), yield* store.nextTurnAt(concurrency)].flatMap(
+        (at) => (at === undefined ? [] : [Date.parse(at)]),
+      );
 
-    const count = storage.sql
-      .exec<{ count: number }>("SELECT COUNT(*) AS count FROM runs WHERE status='running'")
-      .one().count;
-
-    const free = Math.max(0, concurrency - count);
-
-    const ready = storage.sql
-      .exec<Candidate>(
-        `SELECT r.id,t.cursor,r.owner_token,r.heartbeat_at
-      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id
-      WHERE r.owner_token IS NULL AND (r.status='queued' OR (r.status='suspended' AND r.wake_at<=?))
-      AND (t.error IS NULL OR t.next_at<=?)
-      ORDER BY r.created_at,r.id LIMIT ?`,
-        now,
-        now,
-        free,
-      )
-      .toArray();
-
-    return [...running, ...ready];
-  }
-
-  private next(now: number): number | null {
-    const { storage, concurrency } = this.options;
-
-    const deadlines = storage.sql
-      .exec<{ at: string | null }>(
-        `SELECT MIN(MAX(s.next_fire_at,COALESCE(t.next_at,s.next_fire_at))) AS at
-      FROM schedules s LEFT JOIN cloud_schedule_turns t
-      ON s.workspace=t.workspace AND s.slug=t.slug AND s.version=t.version WHERE s.enabled=1
-      UNION ALL SELECT MIN(COALESCE(t.next_at,r.heartbeat_at,r.created_at)) FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id WHERE r.status='running'
-      UNION ALL SELECT MIN(COALESCE(t.next_at,r.created_at)) FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id
-      WHERE r.status='suspended' AND r.owner_token IS NOT NULL
-      UNION ALL SELECT MIN(MAX(CASE WHEN r.status='queued' THEN r.created_at ELSE r.wake_at END,
-      CASE WHEN t.error IS NULL THEN r.created_at ELSE t.next_at END))
-      FROM runs r LEFT JOIN cloud_turns t ON r.id=t.run_id
-      WHERE r.owner_token IS NULL AND (r.status='queued' OR r.status='suspended')
-      AND (SELECT COUNT(*) FROM runs WHERE status='running')<?`,
-        concurrency,
-      )
-      .toArray();
-
-    const dates = deadlines.flatMap(({ at }) => (at === null ? [] : [Date.parse(at)]));
-
-    return dates.length === 0 ? null : Math.max(now + 50, Math.min(...dates));
+      return dates.length === 0 ? null : Math.max(now + SCHEDULER.alarmFloorMs, Math.min(...dates));
+    });
   }
 
   tick() {
     return Effect.gen({ self: this }, function* () {
-      const { storage, store, registry, provider, token } = this.options;
-      const now = new Date().toISOString();
-      yield* platform("set recovery alarm", () => storage.setAlarm(Date.now() + 5000));
+      const { storage, store, registry, concurrency } = this.options;
+      const now = yield* Clock.currentTimeMillis;
+      yield* platform("set recovery alarm", () => storage.setAlarm(now + SCHEDULER.recoveryMs));
 
-      const turn = yield* Effect.exit(
+      const turn = yield* turnFailure(
         Effect.gen({ self: this }, function* () {
-          yield* this.schedules.tick(now);
-          yield* this.releaseSuspended(now);
+          yield* fireDueSchedules(
+            {
+              store,
+              definitionFor: (schedule) =>
+                registry.get(schedule.slug).pipe(
+                  Effect.mapError((cause) => new ScheduleDefinitionError({ cause })),
+                  Effect.flatMap((saved) =>
+                    saved === null
+                      ? Effect.fail(
+                          new ScheduleDefinitionError({
+                            cause: `No saved loopy '${schedule.slug}'. Save it again before retrying the schedule.`,
+                          }),
+                        )
+                      : Effect.succeed(saved),
+                  ),
+                ),
+            },
+            iso(now),
+          );
+          yield* this.releaseStranded(now);
 
-          for (const candidate of yield* cloudSync("scheduler candidates", () =>
-            this.candidates(now),
-          )) {
-            let nextAt = new Date(Date.now() + 1000).toISOString();
-            let cursor = candidate.cursor;
-            let error: string | null = null;
-            const lease = this.foreignLease(candidate);
-
-            if (lease === null) {
-              const result = yield* Effect.exit(
-                Effect.gen(function* () {
-                  const run = yield* store.getRun(candidate.id);
-
-                  if (!run) {
-                    return null;
-                  }
-
-                  return yield* activateDurable({
-                    store,
-                    graph: yield* registry.revisionGraph(run.revision),
-                    runId: run.id,
-                    provider,
-                    token,
-                    at: new Date().toISOString(),
-                    cursor,
-                    maxWork: 16,
-                    pollMs: 500,
-                  });
-                }),
-              );
-
-              if (Exit.isFailure(result)) {
-                if (Cause.hasInterrupts(result.cause)) {
-                  return yield* Effect.failCause(result.cause);
-                }
-
-                error = errorMessage(Cause.squash(result.cause)).slice(0, 1000);
-              } else if (result.value === null) {
-                continue;
-              } else {
-                cursor = result.value.cursor;
-                nextAt = result.value.nextWakeAt ?? now;
-              }
-            } else {
-              nextAt = lease;
-            }
-
-            yield* cloudSync("persist turn", () => this.saveTurn(candidate, nextAt, cursor, error));
+          for (const candidate of yield* store.dueTurns(iso(now), concurrency)) {
+            yield* this.activate(candidate, now);
           }
 
-          yield* store.pruneEvents(now);
-          const next = yield* cloudSync("next alarm", () => this.next(Date.now()));
+          yield* store.pruneEvents(iso(now));
+          const next = yield* this.nextAlarm(yield* Clock.currentTimeMillis);
 
           if (next === null) {
             yield* platform("delete alarm", () => storage.deleteAlarm());
@@ -261,18 +237,9 @@ export class WorkspaceScheduler {
         }),
       );
 
-      if (Exit.isFailure(turn)) {
-        if (Cause.hasInterrupts(turn.cause)) {
-          return yield* Effect.failCause(turn.cause);
-        }
-
-        yield* cloudSync("record scheduler failure", () =>
-          storage.sql.exec(
-            "INSERT OR REPLACE INTO meta(key,value) VALUES ('cloud_scheduler_error',?)",
-            errorMessage(Cause.squash(turn.cause)).slice(0, 1000),
-          ),
-        );
-        yield* platform("set recovery alarm", () => storage.setAlarm(Date.now() + 5000));
+      // The recovery alarm armed before the turn stays in place.
+      if (!turn.ok) {
+        yield* cloudSync("record scheduler failure", () => this.options.failures.write(turn.error));
       }
     });
   }

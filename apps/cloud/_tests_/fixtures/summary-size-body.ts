@@ -1,7 +1,7 @@
 import type { PutLoopyBody } from "@loopy/contract";
 import { canonicalJson, revision } from "@loopy/core";
-import { ARTIFACT_LIMITS } from "../../../../apps/cloud/src/artifacts/storage";
-import { compiledBody } from "../compiled-fixture";
+import { compiledBody } from "../../../../packages/loopy/_tests_/compiled-fixture";
+import { ARTIFACT_LIMITS } from "../../src/artifacts/storage";
 
 export function utf8(value: string): number {
   return new TextEncoder().encode(value).byteLength;

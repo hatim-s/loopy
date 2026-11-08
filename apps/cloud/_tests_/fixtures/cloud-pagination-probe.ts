@@ -4,8 +4,8 @@ import type { RunRecord } from "@loopy/core";
 import { apiRoutes, dispatch, makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect } from "effect";
-import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts";
-import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
+import { R2ArtifactRegistry } from "../../src/artifacts";
+import { DurableSqlDriver } from "../../src/sql-driver";
 
 const at = "2026-10-22T00:00:00.000Z";
 

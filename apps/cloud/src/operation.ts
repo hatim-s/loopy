@@ -10,7 +10,6 @@ export class CloudError extends Data.TaggedError("CloudError")<{
   }
 }
 
-/** Only foreign Promise APIs enter here. Cloud orchestration yields native operations. */
 export function platform<A>(operation: string, run: (signal: AbortSignal) => PromiseLike<A>) {
   return Effect.tryPromise({
     try: (signal) => Promise.resolve(run(signal)),

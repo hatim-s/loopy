@@ -7,8 +7,8 @@ import { decodeBoundary, routes } from "@loopy/contract";
 import { revision } from "@loopy/core";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Miniflare } from "miniflare";
-import { compiledBody } from "./compiled-fixture";
-import { qualityTestRoot } from "./fixtures/quality-test-root";
+import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
 import {
   type QueueProofDetails,
   type QueueProofEvent,

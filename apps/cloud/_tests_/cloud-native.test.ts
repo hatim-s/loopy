@@ -13,12 +13,12 @@ import {
   workspaceVolumeInput,
 } from "@loopy/contract";
 import { canonicalJson, type Json } from "@loopy/core";
-import { RegistryError } from "@loopy/runtime/service";
+import { RegistryError, readBoundedBody } from "@loopy/runtime/service";
 import { Cause, Effect, Exit } from "effect";
 import { Miniflare } from "miniflare";
-import { boundedRequest, readBoundedText } from "../../../apps/cloud/src/http";
-import { SandboxProvider } from "../../../apps/cloud/src/provider";
-import { compiledBody } from "./compiled-fixture";
+import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import { readBoundedText } from "../src/http";
+import { SandboxProvider } from "../src/provider";
 
 const root = resolve(import.meta.dir, "../../..");
 
@@ -206,7 +206,7 @@ test("provider transport failure is typed and cannot become an absent receipt", 
   };
 
   const provider = new SandboxProvider({
-    url: "http://127.0.0.1:1",
+    url: new URL("http://127.0.0.1:1"),
     token: "synthetic",
     workspace: "alpha",
     artifacts,
@@ -251,7 +251,7 @@ test("lost start reply requires lookup of the same persisted attempt", async () 
 
   try {
     const provider = new SandboxProvider({
-      url: server.url.origin,
+      url: new URL(server.url.origin),
       token: "synthetic",
       workspace: "alpha",
       artifacts: { getBundle: () => Effect.succeed(btoa("fixture bundle")) },
@@ -315,15 +315,13 @@ test("bounded stream cleanup retains typed limits and transport failures", async
     },
   });
 
-  const failure = await Effect.runPromiseExit(
-    boundedRequest(new Request("http://127.0.0.1/", { method: "POST", body: broken })),
-  );
+  const failure = await Effect.runPromiseExit(readBoundedBody(broken, 10));
 
   expect(Exit.isFailure(failure)).toBe(true);
 
   if (Exit.isFailure(failure)) {
     expect(failure.cause.reasons.filter(Cause.isFailReason)[0]?.error).toMatchObject({
-      _tag: "CloudError",
+      _tag: "BodyReadError",
       operation: "read body",
     });
   }
@@ -331,7 +329,7 @@ test("bounded stream cleanup retains typed limits and transport failures", async
   expect(broken.locked).toBe(false);
 });
 
-test("request limits preserve combined cleanup failure instead of returning HTTP400", async () => {
+test("a limit failure keeps a rejected cancellation in its cause", async () => {
   const stream = new ReadableStream<Uint8Array>({
     pull(controller) {
       controller.enqueue(new Uint8Array(24 * 1024 * 1024 + 1));
@@ -341,9 +339,7 @@ test("request limits preserve combined cleanup failure instead of returning HTTP
     },
   });
 
-  const exit = await Effect.runPromiseExit(
-    boundedRequest(new Request("http://127.0.0.1/", { method: "POST", body: stream })),
-  );
+  const exit = await Effect.runPromiseExit(readBoundedBody(stream, 24 * 1024 * 1024));
 
   expect(Exit.isFailure(exit)).toBe(true);
 
@@ -351,7 +347,7 @@ test("request limits preserve combined cleanup failure instead of returning HTTP
     const errors = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
     expect(errors).toContainEqual(expect.objectContaining({ _tag: "BodyLimitError" }));
     expect(errors).toContainEqual(
-      expect.objectContaining({ _tag: "CloudError", operation: "cancel body" }),
+      expect.objectContaining({ _tag: "BodyReadError", operation: "cancel body" }),
     );
   }
 
@@ -397,7 +393,7 @@ test("interrupted reads bound stalled cancellation and release the reader lock",
     expect(Cause.hasInterrupts(exit.cause)).toBe(true);
     expect(
       exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error),
-    ).toContainEqual(expect.objectContaining({ _tag: "CloudError", operation: "cancel body" }));
+    ).toContainEqual(expect.objectContaining({ _tag: "BodyReadError", operation: "cancel body" }));
   }
 }, 3000);
 
