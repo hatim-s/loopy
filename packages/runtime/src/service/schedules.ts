@@ -1,4 +1,4 @@
-import type { PutScheduleBody, SavedLoopy } from "@loopy/contract";
+import type { PutScheduleBody, SavedLoopy, ScheduleView } from "@loopy/contract";
 import {
   DEFAULT_TIME_ZONE,
   errorMessage,
@@ -29,14 +29,22 @@ export function makeScheduleOperations(context: ServiceContext) {
 
   const listSchedules = Effect.fn("schedules.listSchedules")(function* (callerWorkspace: string) {
     const workspace = yield* (yield* context.registry(callerWorkspace)).workspace();
+    const schedules = yield* context.store.listSchedules();
 
-    return (yield* context.store.listSchedules())
+    const failures = new Map(
+      (yield* context.store.scheduleFailures(schedules.length))
+        .filter((failure) => failure.workspace === workspace)
+        .map(({ slug, error, retryAt }) => [slug, { error, retryAt }]),
+    );
+
+    return schedules
       .filter((schedule) => schedule.workspace === workspace)
-      .map((schedule) => scheduleView(schedule));
+      .map((schedule) => scheduleView(schedule, failures.get(schedule.slug) ?? null));
   });
 
-  const scheduleView = (schedule: Schedule) => {
-    return { ...schedule, lastFireKey: schedule.lastFireKey ?? null };
+  // Saving or toggling bumps the version, which retires any failure of the previous version.
+  const scheduleView = (schedule: Schedule, failure: ScheduleView["failure"] = null) => {
+    return { ...schedule, lastFireKey: schedule.lastFireKey ?? null, failure };
   };
 
   const putSchedule = Effect.fn("schedules.putSchedule")(function* (
