@@ -307,7 +307,7 @@ test("R2 conditional create preserves the original bytes and enforces bounded te
     value: "original",
     conditionalRejected: true,
     other: null,
-    oversized: "Artifact exceeds its 7 byte limit.",
+    oversized: "Object exceeds its 7 byte limit.",
   });
 });
 

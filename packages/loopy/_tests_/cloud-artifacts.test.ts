@@ -516,7 +516,7 @@ test("cloud rejects unsupported modes, declared secrets, oversized writes and bo
   );
   expect(await call(workspace, "revisionGraph", hash)).toMatchObject({
     status: 400,
-    body: { error: expect.stringContaining("Artifact exceeds its 1048576 byte limit.") },
+    body: { error: expect.stringContaining("Object exceeds its 1048576 byte limit.") },
   });
 });
 

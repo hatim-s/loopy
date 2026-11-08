@@ -2,12 +2,12 @@ import type { DurableObjectStorage } from "@cloudflare/workers-types";
 import { ArtifactValidationError } from "@loopy/runtime/service";
 import { Effect } from "effect";
 import { CloudError, cloudSync } from "../operation";
-import { ARTIFACT_LIMITS, type ArtifactStorage, hashKey } from "./storage";
+import { ARTIFACT_LIMITS, type ImmutableBucket, r2Key } from "./storage";
 
 export class ArtifactCapacity {
   constructor(
     private readonly storage: Pick<DurableObjectStorage, "sql">,
-    private readonly artifacts: ArtifactStorage,
+    private readonly artifacts: ImmutableBucket,
     private readonly workspace: string,
   ) {
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS artifact_graph_sizes (
@@ -33,7 +33,7 @@ export class ArtifactCapacity {
       );
 
       for (const row of missing) {
-        const key = yield* cloudSync("graph key", () => `graphs/${hashKey(row.revision)}.json`);
+        const key = r2Key.graph(row.revision);
         const bytes = yield* this.artifacts.read(key, ARTIFACT_LIMITS.graphBytes);
 
         if (!bytes) {
