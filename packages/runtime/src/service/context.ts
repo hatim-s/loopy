@@ -3,21 +3,28 @@ import { Effect } from "effect";
 import { ServiceError } from "./error";
 import type { ServiceOptions } from "./registry";
 
-export function makeRunAccess(options: ServiceOptions) {
-  const requireRun = Effect.fn("run-access.requireRun")(function* (id: string) {
-    const run = yield* options.store.getRun(id);
+export const runNotFound = (id: string) =>
+  new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`);
 
-    if (!run) {
-      return yield* Effect.fail(
-        new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`),
-      );
-    }
+/** Shared by every operation group so one request sees one clock and one not-found rule. */
+export function makeServiceContext(options: ServiceOptions) {
+  const now = () => new Date(options.clock.now()).toISOString();
 
-    return run;
+  const found = <A, E>(id: string, lookup: Effect.Effect<A | null | undefined, E>) =>
+    Effect.flatMap(lookup, (run) =>
+      run === null || run === undefined ? Effect.fail(runNotFound(id)) : Effect.succeed(run),
+    );
+
+  const requireRun = Effect.fn("context.requireRun")(function* (id: string) {
+    return yield* found(id, options.store.getRun(id));
   });
 
-  const runGraph = Effect.fn("run-access.runGraph")(function* (id: string) {
-    const run = yield* requireRun(id);
+  const requireRunReference = Effect.fn("context.requireRunReference")(function* (id: string) {
+    return yield* found(id, options.store.runReference(id));
+  });
+
+  const runGraph = Effect.fn("context.runGraph")(function* (id: string) {
+    const run = yield* requireRunReference(id);
 
     return {
       revision: run.revision,
@@ -25,5 +32,7 @@ export function makeRunAccess(options: ServiceOptions) {
     };
   });
 
-  return { requireRun, runGraph };
+  return { ...options, now, requireRun, requireRunReference, runGraph };
 }
+
+export type ServiceContext = ReturnType<typeof makeServiceContext>;

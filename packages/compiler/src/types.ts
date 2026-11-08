@@ -40,7 +40,7 @@ export type CompilerDiagnostic = {
   column: number;
 };
 
-export type Bundle = { nodeId: NodeId; bundleHash: string; bytes: Uint8Array };
+export type Bundle = { nodeId: NodeId; bundleHash: string; bytes: Uint8Array<ArrayBuffer> };
 
 export type CompileResult =
   | {
