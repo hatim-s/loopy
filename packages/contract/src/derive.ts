@@ -9,7 +9,7 @@ import {
 } from "@loopy/core";
 import type { PendingHook, RunPreview, StatusCounts } from "./dashboard-reader";
 import type { GraphView } from "./graph";
-import type { LoopyView, RunView, ServerEvent } from "./views";
+import type { LoopyView, RunView, ScheduleView, ServerEvent } from "./views";
 
 type RunViewOptions = {
   run: RunPreview;
@@ -96,7 +96,7 @@ type SavedLoopyInput = Pick<LoopyView, "slug" | "workspace" | "scope" | "mode" |
   schedule: Graph["meta"]["schedule"];
 };
 
-function scheduleView(
+function loopySchedule(
   schedule: Schedule | null,
   declared: SavedLoopyInput["schedule"],
 ): LoopyView["schedule"] {
@@ -125,7 +125,7 @@ export function loopyView(
     scope: saved.scope,
     mode: saved.mode,
     input: saved.input,
-    schedule: scheduleView(schedule, saved.schedule),
+    schedule: loopySchedule(schedule, saved.schedule),
     lastRun: runs.latest[0] ?? null,
     latestRuns: runs.latest,
     counts: runs.counts,
@@ -159,6 +159,11 @@ function nodeEventPreview(event: NodeEvent): NodeEventView {
     : { ...view, truncatedOutputBytes: output.bytes, record: { ...view.record, output: null } };
 }
 
+/** The wire view of a schedule, where a schedule that never fired has a null fire key. */
+export function scheduleView(schedule: Schedule, failure: ScheduleView["failure"]): ScheduleView {
+  return { ...schedule, lastFireKey: schedule.lastFireKey ?? null, failure };
+}
+
 /** The live-stream view of one runtime event. */
 export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunView): ServerEvent {
   switch (event.entity) {
@@ -173,7 +178,7 @@ export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunVi
     case "schedule": {
       return event.kind === "deleted"
         ? event
-        : { ...event, record: { ...event.record, lastFireKey: event.record.lastFireKey ?? null } };
+        : { ...event, record: scheduleView(event.record, event.record.failure) };
     }
 
     default: {

@@ -113,6 +113,7 @@ export {
   nodeDetailEvent,
   previewPayload,
   runView,
+  scheduleView,
   serverEvent,
 } from "./derive";
 

@@ -81,14 +81,6 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
       return summaries;
     });
   }
-  summary(slug: string) {
-    return Effect.gen({ self: this }, function* () {
-      return yield* this.resolveSummary(
-        yield* sync("read definition", () => this.definitions.pointer(slug)),
-        { remaining: ARTIFACT_LIMITS.listBytes },
-      );
-    });
-  }
   private resolveSummary(
     row: Publication | null,
     budget: { remaining: number },

@@ -59,6 +59,15 @@ export class SummarySizeProbe {
       }
 
       const registry = new R2ArtifactRegistry(this.ctx.storage, bucket, workspace);
+
+      // Listing resolves and repairs every summary the way a single read would.
+      const summaryOf = (slug: string) =>
+        Effect.runPromise(
+          registry
+            .listSummaries()
+            .pipe(Effect.map((list) => list.find((item) => item.slug === slug) ?? null)),
+        );
+
       let value;
 
       switch (input.operation) {
@@ -89,16 +98,16 @@ export class SummarySizeProbe {
           break;
         case "save":
           await Effect.runPromise(registry.save(decodeBoundary(putLoopyBodySchema)(input.body)));
-          value = await Effect.runPromise(registry.summary("summary"));
+          value = await summaryOf("summary");
           break;
         case "summary":
-          value = await Effect.runPromise(registry.summary("summary"));
+          value = await summaryOf("summary");
           break;
         case "list":
           value = await Effect.runPromise(registry.listSummaries());
           break;
         case "service": {
-          const summary = await Effect.runPromise(registry.summary("summary"));
+          const summary = await summaryOf("summary");
 
           if (!summary) {
             throw new Error("Synthetic definition is missing.");
