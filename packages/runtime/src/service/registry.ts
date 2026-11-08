@@ -38,7 +38,6 @@ export class ArtifactValidationError extends Data.TaggedError("ArtifactValidatio
 export interface ArtifactRegistry {
   workspace(): Effect.Effect<string, RegistryError>;
   listSummaries(): Effect.Effect<DefinitionSummary[], RegistryError>;
-  summary(slug: string): Effect.Effect<DefinitionSummary | null, RegistryError>;
   get(slug: string): Effect.Effect<SavedLoopy | null, RegistryError>;
   revisionGraph(revision: string): Effect.Effect<Graph, RegistryError>;
   revisionSource(slug: string, revision: string): Effect.Effect<SourceArtifact, RegistryError>;

@@ -110,15 +110,6 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
     next.run = newer(snapshot.run, event.record) ? event.record : snapshot.run;
   } else if (event.entity === "node") {
     return withSnapshotNode(next, event);
-  } else if (event.entity === "log") {
-    const log = { ...event.record };
-    delete log.data;
-    next.logs = upsertBy(
-      snapshot.logs,
-      log,
-      (log) => log.seq === event.record.seq,
-      (log) => log.seq,
-    ).slice(-PAGE_LIMIT);
   } else if (event.entity === "hook") {
     return withSnapshotHook(next, event);
   }

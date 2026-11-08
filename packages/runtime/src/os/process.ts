@@ -2,7 +2,7 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ExecutionMode } from "@loopy/core";
-import { errnoCode, requirePositiveInteger } from "@loopy/core";
+import { errnoCode } from "@loopy/core";
 import { Effect, Exit } from "effect";
 import type { ResolvedCommand } from "./command-error";
 import { filesystem, removeScratch } from "./sandbox/io";
@@ -174,16 +174,10 @@ export function executeLocalCommand(command: ResolvedCommand, options: LocalExec
       return yield* Effect.fail(aborted(options.signal));
     }
 
-    const limits = yield* Effect.try({
-      try: () => ({
-        timeoutMs: requirePositiveInteger(command.timeoutMs, "timeoutMs"),
-        maxOutputBytes: requirePositiveInteger(
-          command.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
-          "maxOutputBytes",
-        ),
-      }),
-      catch: rejected,
-    });
+    const limits = {
+      timeoutMs: command.timeoutMs,
+      maxOutputBytes: command.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
+    };
 
     return yield* Effect.acquireUseRelease(
       prepareLaunch(command, options),

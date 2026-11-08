@@ -1,5 +1,5 @@
 import type { SourceArtifact } from "@loopy/contract";
-import type { Diagnostic, DiagnosticCode, Graph, NodeId } from "@loopy/core";
+import type { DiagnosticCode, Graph, NodeId } from "@loopy/core";
 import type { CallSyntax } from "@loopy/sdk/graph-host";
 
 export type CompilerDiagnosticCode =
@@ -46,7 +46,6 @@ export type CompileResult =
       graph: Graph;
       bundles: Bundle[];
       revision: string;
-      warnings: Diagnostic[];
       sourceArtifact: SourceArtifact;
     }
   | { ok: false; diagnostics: CompilerDiagnostic[] };

@@ -1,5 +1,7 @@
 import {
   type Edge,
+  formatBindingId,
+  formatNodeId,
   type Graph,
   type GraphMeta,
   type GraphRetry,
@@ -10,7 +12,7 @@ import {
   nodeNames,
   type OutSchema,
   type RecordSpec,
-  type RefId,
+  refId,
 } from "@loopy/core";
 import { type AuthorValue, REF, type Ref, Reference, type RefValue, serialize } from "./ref";
 import { refuse, validateLabel } from "./validate";
@@ -39,30 +41,6 @@ type Control = {
   arms: readonly ControlArm[];
   node: (entry: (arm: string) => NodeId) => Extract<NodeData, { kind: ControlKind }>;
 };
-
-function isNodeId(value: string): value is NodeId {
-  return value.length > 0;
-}
-
-function isRefId(value: string): value is RefId {
-  return value.length > 0;
-}
-
-function id(value: string): NodeId {
-  if (isNodeId(value)) {
-    return value;
-  }
-
-  return refuse("unresolved_ref", "Identifiers must be nonempty.");
-}
-
-function bindingId(value: string): RefId {
-  if (isRefId(value)) {
-    return value;
-  }
-
-  return refuse("unresolved_ref", "Identifiers must be nonempty.");
-}
 
 function frame(scope: NodeId | null): Frame {
   return { scope, token: Symbol(), labels: new Set(), first: null, tails: [] };
@@ -148,7 +126,7 @@ export class GraphBuilder {
       this.scope.labels.add(name);
     }
 
-    const nodeId = id(`${this.order.size}:${name}`);
+    const nodeId = formatNodeId(this.order.size, this.prefixes, label ?? fallback);
     this.order.set(nodeId, this.order.size);
 
     return { id: nodeId, label, scope: this.scope.scope };
@@ -175,14 +153,12 @@ export class GraphBuilder {
   }
 
   binding(owner: NodeId, name: string) {
-    return bindingId(`${owner}:${name}`);
+    return formatBindingId(owner, name);
   }
 
-  ref<T, Fields = never>(refId: string, schema?: OutSchema | null): Ref<T, Fields>;
-  ref(refId: string, schema: OutSchema | null = null): RefValue {
-    const referenceId = bindingId(refId);
-
-    return new Reference({ owner: this, scope: this.scope.token, id: referenceId, schema });
+  ref<T, Fields = never>(id: string, schema?: OutSchema | null): Ref<T, Fields>;
+  ref(id: string, schema: OutSchema | null = null): RefValue {
+    return new Reference({ owner: this, scope: this.scope.token, id: refId(id), schema });
   }
 
   check(ref: RefValue) {
@@ -253,7 +229,7 @@ export class GraphBuilder {
         ? [{ id: owner, kind: "next" }]
         : tails.map((nodeId) => ({ id: nodeId, kind }));
 
-    const value = { ref: bindingId(owner), path: [] };
+    const value = { ref: refId(owner), path: [] };
 
     const type = graphTypeResolver({ input: this.input, nodes: this.nodes, edges: this.edges })(
       value,
@@ -286,8 +262,7 @@ export class GraphBuilder {
         (a, b) => (this.order.get(a.from) ?? 0) - (this.order.get(b.from) ?? 0),
       ),
       entry,
-      outputs: output === null ? null : { ref: bindingId(output.id), path: [] },
-      warnings: [],
+      outputs: output === null ? null : { ref: refId(output.id), path: [] },
     };
   }
 }

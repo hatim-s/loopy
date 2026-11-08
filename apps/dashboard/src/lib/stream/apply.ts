@@ -42,14 +42,6 @@ function refreshes(refresh: Refresh | undefined, event: ServerEvent): boolean {
     case "node": {
       return event.entity === "node" && event.runId === refresh.runId;
     }
-
-    case "scope": {
-      return (
-        event.entity === "node" &&
-        event.runId === refresh.runId &&
-        event.record.key.scope.length > 0
-      );
-    }
   }
 }
 

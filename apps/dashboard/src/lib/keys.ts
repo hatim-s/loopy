@@ -5,14 +5,13 @@ import type { ApiQuery } from "../backend/backend";
  * Which stream events make a query stale. The stream patches run lists, snapshots and schedules
  * in place; everything it cannot patch declares one of these and refetches.
  * feed: every event. log: log lines. run: run transitions, of one run or of any (`null`).
- * node: node events of one run. scope: node events inside a map or other scope of one run.
+ * node: node events of one run.
  */
 export type Refresh =
   | { on: "feed" }
   | { on: "log" }
   | { on: "run"; runId: string | null }
-  | { on: "node"; runId: string }
-  | { on: "scope"; runId: string };
+  | { on: "node"; runId: string };
 
 export const keys = {
   overview: (query: ApiQuery<"overview">) => ["overview", query] as const,

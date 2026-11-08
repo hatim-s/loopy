@@ -32,7 +32,6 @@ const run: RunView = {
   id: "run-1",
   slug: "triage",
   workspace: "/work",
-  loopy: { slug: "triage", description: null },
   input: null,
   createdAt: AT,
   updatedAt: AT,
@@ -59,7 +58,6 @@ function snapshot(overrides: Partial<RunSnapshotView> = {}): RunSnapshotView {
   return {
     run,
     nodeRuns: [],
-    logs: [],
     hooks: [],
     cursor: 10,
     epoch: "e1",
@@ -162,22 +160,13 @@ test("node events keep one record per execution key at its latest attempt", () =
   expect(next.cursor).toBe(15);
 });
 
-test("logs land in seq order whatever order the events arrive in", () => {
-  const next = [logEvent(13, 3), logEvent(12, 1), logEvent(11, 2)]
-    .sort((a, b) => a.sequence - b.sequence)
-    .reduce(applyToSnapshot, snapshot());
-
-  expect(next.logs.map((log) => log.seq)).toEqual([1, 2, 3]);
-  expect(next.cursor).toBe(13);
-});
-
 test("events at or below the cursor are already in the snapshot and change nothing", () => {
   const batch = [logEvent(11, 1), logEvent(12, 2)];
   const once = batch.reduce(applyToSnapshot, snapshot());
   const replayed = [logEvent(10, 9), ...batch].reduce(applyToSnapshot, once);
 
   expect(replayed).toBe(once);
-  expect(replayed.logs.map((log) => log.seq)).toEqual([1, 2]);
+  expect(once.cursor).toBe(12);
 });
 
 test("events for another run leave the snapshot alone", () => {
@@ -627,7 +616,6 @@ type ScheduleRecord = Exclude<
   { kind: "deleted" }
 >["record"];
 
-/** A schedule as the store emits it; the view adds a null lastFireKey. */
 const record: ScheduleRecord = {
   workspace: "/work",
   slug: "triage",
@@ -637,10 +625,11 @@ const record: ScheduleRecord = {
   enabled: true,
   nextFireAt: "2026-10-17T10:05:00.000Z",
   version: 2,
+  lastFireKey: null,
   failure: null,
 };
 
-const scheduled: ScheduleView = { ...record, lastFireKey: null };
+const scheduled: ScheduleView = record;
 
 function scheduleSaved(sequence: number, saved: ScheduleRecord) {
   return event(sequence, { entity: "schedule", kind: "saved", runId: null, record: saved });
@@ -790,14 +779,13 @@ test("an unseen save cannot skip a later delete in the same batch", () => {
   expect(client.getQueryState(keys.schedules("/work"))?.isInvalidated).toBe(true);
 });
 
-test("stream snapshots retain bounded root nodes, logs and hooks across long sessions", () => {
+test("stream snapshots retain bounded root nodes and hooks across long sessions", () => {
   let current = snapshot();
   let sequence = 11;
 
   for (let index = 0; index < 1000; index++) {
     const root = nodeEvent(sequence++, index, 1, "running");
     current = applyToSnapshot(current, root);
-    current = applyToSnapshot(current, logEvent(sequence++, index + 1));
     current = applyToSnapshot(
       current,
       event(sequence++, {
@@ -811,9 +799,7 @@ test("stream snapshots retain bounded root nodes, logs and hooks across long ses
 
   expect(current.nodeRuns).toHaveLength(200);
   expect(current.nodeRunsNext).toBeTruthy();
-  expect(current.logs).toHaveLength(200);
   expect(current.hooks).toHaveLength(200);
-  expect(current.logs[0]?.seq).toBe(801);
   expect(current.hooksTruncated).toBe(true);
   expect(current.cursor).toBe(sequence - 1);
 });
@@ -854,16 +840,21 @@ test("stream overflow keeps the execution keyset boundary and preview metadata b
   expect(Object.keys(current.truncatedOutputs ?? {}).sort()).toEqual(firstPage);
 });
 
-test("scoped node bursts invalidate aggregates and refetch active queries once", () => {
+test("scoped node bursts refetch active scope counts once and never the run snapshot", () => {
   jest.useFakeTimers();
   const client = new QueryClient();
   const activeKey = keys.scopes(run.id, "[]");
   const inactiveScope = '[{"nodeId":"0:map","index":0}]';
   const inactiveKey = keys.scopes(run.id, inactiveScope);
   let fetches = 0;
+  let snapshotFetches = 0;
 
   const backend = stubBackend({
-    run: async () => snapshot(),
+    run: async () => {
+      snapshotFetches++;
+
+      return snapshot();
+    },
     scopes: async () => {
       fetches++;
 
@@ -873,7 +864,7 @@ test("scoped node bursts invalidate aggregates and refetch active queries once",
 
   // Observers build each query with its real options, so the stream sees their refresh meta.
   new QueryObserver(client, { ...scopesQuery(backend, run.id, inactiveScope), enabled: false });
-  new QueryObserver(client, { ...runQuery(backend, run.id), enabled: false });
+  const runObserver = new QueryObserver(client, runQuery(backend, run.id));
 
   const observer = new QueryObserver(client, {
     ...scopesQuery(backend, run.id, "[]"),
@@ -885,6 +876,7 @@ test("scoped node bursts invalidate aggregates and refetch active queries once",
   client.setQueryData(keys.run(run.id), snapshot());
 
   const unsubscribe = observer.subscribe(() => undefined);
+  const unsubscribeRun = runObserver.subscribe(() => undefined);
 
   try {
     const root = nodeEvent(11, 0, 1, "running");
@@ -908,10 +900,13 @@ test("scoped node bursts invalidate aggregates and refetch active queries once",
     expect(client.getQueryState(inactiveKey)?.isInvalidated).toBe(true);
     expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.nodeRuns).toEqual([]);
     expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.cursor).toBe(12);
+    expect(client.getQueryState(keys.run(run.id))?.isInvalidated).toBe(false);
     // One fetch: the active list refetches once for both events; the inactive one waits.
     jest.advanceTimersByTime(250);
     expect(fetches).toBe(1);
+    expect(snapshotFetches).toBe(0);
   } finally {
+    unsubscribeRun();
     unsubscribe();
     client.clear();
     jest.useRealTimers();

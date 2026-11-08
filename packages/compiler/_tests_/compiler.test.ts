@@ -1,14 +1,18 @@
 import { expect, test } from "bun:test";
 import { rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { parseModuleOutput } from "@loopy/contract";
 import { type Json, validateGraph } from "@loopy/core";
+import { bundleResult } from "@loopy/runtime/executor/protocol";
 import { Effect } from "effect";
 import { compiledBody } from "../../runtime/_tests_/fixtures/compiled";
 import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
 import { onCleanup } from "../../runtime/_tests_/fixtures/test-scope";
 import { compile as compileEffect } from "../src";
 import { evaluate as evaluateEffect } from "../src/evaluate";
+
+// The executor's own decoder, so these tests read bundle stdout exactly as a run does.
+const decodeStdout = (stdout: string) =>
+  bundleResult({ stdout, stderr: "", exitCode: 0, durationMs: 0 }, (text) => text);
 
 const sdk = "loopy";
 
@@ -279,7 +283,6 @@ for (const name of ["hello", "review", "asset-sync", "www-sync"]) {
     }
 
     expect(validateGraph(result.graph)).toEqual([]);
-    expect(result.warnings).toEqual([]);
     expect(result.bundles.length).toBeGreaterThan(0);
   });
 }
@@ -367,10 +370,10 @@ test("bundles execute the stdin/stdout protocol", async () => {
 
   expect(JSON.parse(parsed.stdout)).toBe("output0");
   const result = await execute(1, { value: 42 });
-  expect(parseModuleOutput(result.stdout)).toEqual({
-    ok: true,
+  expect(decodeStdout(result.stdout)).toEqual({
+    kind: "succeeded",
     output: { value: 42, workspace: root },
-    stdout: "author noise\npartial\n",
+    logs: [{ message: "stdout", data: "author noise\npartial\n" }],
   });
 
   const logs = result.stderr
@@ -459,15 +462,25 @@ test("literal dynamic imports are bundled and alter the pinned revision", async 
 });
 
 test("module stdout rejects a missing or malformed final JSON line", () => {
-  expect(parseModuleOutput("")).toEqual({ ok: false, code: "invalid_result" });
-  expect(parseModuleOutput('{"earlier":true}\nnoise\n')).toEqual({
-    ok: false,
-    code: "invalid_result",
+  const protocolError = {
+    kind: "failed" as const,
+    error: {
+      code: "protocol" as const,
+      message: "Bundle stdout must end with one JSON result line.",
+    },
+    exitCode: null,
+    logs: [],
+  };
+
+  expect(decodeStdout("")).toEqual(protocolError);
+  expect(decodeStdout('{"earlier":true}\nnoise\n')).toEqual({
+    ...protocolError,
+    logs: [{ message: "stdout", data: '{"earlier":true}\nnoise\n' }],
   });
-  expect(parseModuleOutput('leading noise\n{"answer":42}\n')).toEqual({
-    ok: true,
+  expect(decodeStdout('leading noise\n{"answer":42}\n')).toEqual({
+    kind: "succeeded",
     output: { answer: 42 },
-    stdout: "leading noise\n",
+    logs: [{ message: "stdout", data: "leading noise\n" }],
   });
 });
 

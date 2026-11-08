@@ -1,5 +1,4 @@
-import type { Json } from "@loopy/core";
-import { assertJson } from "@loopy/core";
+import { decodeJsonText, type Json } from "@loopy/core";
 
 export function unexpected(command: string, line: string): never {
   throw new Error(
@@ -25,10 +24,7 @@ export function nulFields(stdout: string, command: string): string[] {
 
 export function jsonValue(line: string, command: string): Json {
   try {
-    const value: unknown = JSON.parse(line);
-    assertJson(value);
-
-    return value;
+    return decodeJsonText(line);
   } catch {
     unexpected(command, line);
   }

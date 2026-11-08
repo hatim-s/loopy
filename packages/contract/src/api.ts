@@ -1,6 +1,6 @@
 import { jsonSchema, logRecordSchema, secretValueSchema, struct } from "@loopy/core";
 import { Schema, SchemaGetter } from "effect";
-import { pageLimit, queryCounter, queryNumber } from "./codec";
+import { pageLimit, queryCounter, queryPositiveInt } from "./codec";
 import { putLoopyBodySchema } from "./compiled-loopy";
 import {
   eventHistoryPageSchema,
@@ -21,8 +21,8 @@ import {
   scopeItemsQuerySchema,
   scopesQuerySchema,
 } from "./dashboard";
-import { PAGE_LIMIT } from "./dashboard-reader";
 import { graphRevisionViewSchema, graphViewSchema } from "./graph";
+import { DEFAULT_PAGE_SIZE, PAGE_LIMIT } from "./limits";
 import { sourceArtifactSchema } from "./source-artifact";
 import {
   cursorViewSchema,
@@ -55,7 +55,7 @@ export const runsQuerySchema = struct({
       ),
     ]),
   ),
-  limit: pageLimit(50),
+  limit: pageLimit(DEFAULT_PAGE_SIZE),
   before: Schema.optional(
     Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)),
   ),
@@ -173,7 +173,7 @@ export const routes = {
   log: {
     method: "GET",
     path: "/logs/:id",
-    params: struct({ id: queryNumber.check(Schema.isInt()).check(Schema.isGreaterThan(0)) }),
+    params: struct({ id: queryPositiveInt }),
     query: emptySchema,
     body: Schema.Undefined,
     response: logDetailSchema,
@@ -189,7 +189,7 @@ export const routes = {
   event: {
     method: "GET",
     path: "/event-history/:sequence",
-    params: struct({ sequence: queryNumber.check(Schema.isInt()).check(Schema.isGreaterThan(0)) }),
+    params: struct({ sequence: queryPositiveInt }),
     query: emptySchema,
     body: Schema.Undefined,
     response: serverEventSchema,

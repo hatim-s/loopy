@@ -1,23 +1,24 @@
 import {
+  counter,
   executionKeySchema,
   LOG_LEVELS,
   logRecordSchema,
   NODE_RUN_STATUSES,
   nodeRunSchema,
+  positiveInt,
   RUNTIME_EVENT_ENTITIES,
   runStatusSchema,
   struct,
 } from "@loopy/core";
 import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect";
-import { decodeBoundary, isoDateTime, pageLimit, queryNumber } from "./codec";
+import { decodeBoundary, isoDateTime, pageLimit, queryCounter, queryNumber } from "./codec";
+import { DEFAULT_PAGE_SIZE } from "./limits";
 
 const iso = isoDateTime;
 
-const limit = pageLimit(50);
+const limit = pageLimit(DEFAULT_PAGE_SIZE);
 
-const numericCursor = Schema.optional(
-  queryNumber.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
-);
+const numericCursor = Schema.optional(queryCounter);
 
 export const runFilterFields = {
   slug: Schema.optional(Schema.String),
@@ -27,20 +28,17 @@ export const runFilterFields = {
   to: Schema.optional(iso),
 };
 
-export const statusCountsSchema = Schema.Record(
-  runStatusSchema,
-  Schema.mutableKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-);
+export const statusCountsSchema = Schema.Record(runStatusSchema, Schema.mutableKey(counter));
 
 export const nodeCountsSchema = Schema.Record(
   Schema.Literals(NODE_RUN_STATUSES),
-  Schema.mutableKey(Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)))),
+  Schema.mutableKey(Schema.optionalKey(counter)),
 );
 
 export const scopeCountsSchema = struct({
   nodeId: Schema.String,
   parentScope: executionKeySchema.fields.scope,
-  total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  total: counter,
   totalKind: Schema.optional(Schema.Literal("materialized")),
   counts: nodeCountsSchema,
 });
@@ -78,22 +76,14 @@ export const executionDetailQuerySchema = struct({
 export const executionPageSchema = struct({
   items: Schema.Array(nodeRunSchema).pipe(Schema.mutable),
   next: Schema.NullOr(Schema.String),
-  truncatedOutputs: Schema.Record(
-    Schema.String,
-    Schema.mutableKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  ),
+  truncatedOutputs: Schema.Record(Schema.String, Schema.mutableKey(counter)),
 });
 
 export const executionDetailSchema = struct({
   node: nodeRunSchema,
   attempts: Schema.Array(nodeRunSchema).pipe(Schema.mutable),
-  attemptsNext: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
-  truncatedAttempts: Schema.optional(
-    Schema.Record(
-      Schema.String,
-      Schema.mutableKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-    ),
-  ),
+  attemptsNext: Schema.NullOr(positiveInt),
+  truncatedAttempts: Schema.optional(Schema.Record(Schema.String, Schema.mutableKey(counter))),
 });
 
 export const scopeItemsQuerySchema = struct({
@@ -105,10 +95,8 @@ export const scopeItemsQuerySchema = struct({
 });
 
 export const scopeItemsPageSchema = struct({
-  items: Schema.Array(
-    struct({ index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), counts: nodeCountsSchema }),
-  ).pipe(Schema.mutable),
-  next: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  items: Schema.Array(struct({ index: counter, counts: nodeCountsSchema })).pipe(Schema.mutable),
+  next: Schema.NullOr(counter),
 });
 
 export const MAX_OVERVIEW_BUCKETS = 744;
@@ -178,21 +166,21 @@ export const eventHistoryQuerySchema = struct({
 );
 
 export const logSummarySchema = struct({
-  id: Schema.Int.check(Schema.isGreaterThan(0)),
+  id: positiveInt,
   runId: Schema.String,
   slug: Schema.String,
-  seq: Schema.Int.check(Schema.isGreaterThan(0)),
+  seq: positiveInt,
   at: Schema.String,
   nodeId: Schema.String,
   executionKey: Schema.String,
-  attempt: Schema.Int.check(Schema.isGreaterThan(0)),
+  attempt: positiveInt,
   level: Schema.Literals(LOG_LEVELS),
   message: Schema.String,
-  dataBytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  dataBytes: counter,
 });
 
 export const eventSummarySchema = struct({
-  sequence: Schema.Int.check(Schema.isGreaterThan(0)),
+  sequence: positiveInt,
   at: Schema.String,
   txn: Schema.String,
   runId: Schema.NullOr(Schema.String),
@@ -206,8 +194,8 @@ const feedCursorFields = {
   oldestAt: Schema.optional(Schema.NullOr(Schema.String)),
   newestAt: Schema.optional(Schema.NullOr(Schema.String)),
   scannedToAt: Schema.optional(Schema.NullOr(Schema.String)),
-  next: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  scanned: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  next: Schema.NullOr(counter),
+  scanned: counter,
   hasMore: Schema.Boolean,
   oldest: Schema.NullOr(Schema.Int),
   newest: Schema.NullOr(Schema.Int),
@@ -224,7 +212,7 @@ export const eventHistoryPageSchema = struct({
 });
 
 export const logDetailSchema = struct({
-  id: Schema.Int.check(Schema.isGreaterThan(0)),
+  id: positiveInt,
   log: logRecordSchema,
 });
 
@@ -256,7 +244,7 @@ export const scheduleSummarySchema = struct({
 
 export const scheduleOverviewSchema = struct({
   workspaces: Schema.Array(Schema.String).pipe(Schema.mutable),
-  active: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  active: counter,
   next: Schema.Array(scheduleSummarySchema).pipe(Schema.mutable).check(Schema.isMaxLength(10)),
 });
 

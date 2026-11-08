@@ -115,7 +115,6 @@ export async function capture(daemon: OwnedDaemon, snapshot: RunSnapshotView, wo
     run: snapshot.run,
     nodeRuns: snapshot.nodeRuns,
     retried,
-    logs: snapshot.logs,
     hooks: snapshot.hooks.map((hook) => ({
       runId: hook.runId,
       seq: hook.seq,

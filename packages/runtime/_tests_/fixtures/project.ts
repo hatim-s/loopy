@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compile } from "@loopy/compiler";
-import { requireRecord } from "@loopy/core";
+import { isRecord } from "@loopy/core";
 import { Effect } from "effect";
 import { LocalExecutor } from "../../src/executor";
 import { activate } from "../../src/host";
@@ -24,7 +24,13 @@ export default loopy(${JSON.stringify(name)}, { input: {}, ${definition} });`,
 }
 
 export function object(text: string) {
-  return requireRecord(JSON.parse(text), "CLI output");
+  const value: unknown = JSON.parse(text);
+
+  if (!isRecord(value)) {
+    throw new Error(`CLI output must be an object: ${text}`);
+  }
+
+  return value;
 }
 
 export async function save(f: ReturnType<typeof fixture>) {

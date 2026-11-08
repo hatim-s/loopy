@@ -89,7 +89,6 @@ export function storeRecordContract(
     if (snapshot) {
       snapshot.run.input = null;
       snapshot.nodeRuns.splice(0);
-      snapshot.logs.splice(0);
     }
 
     expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({

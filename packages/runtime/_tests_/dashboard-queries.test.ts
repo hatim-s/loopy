@@ -117,8 +117,7 @@ test("input and attempts persist, bulk reads omit input and selected detail keep
   );
 
   expect(snapshot.nodeRuns).toEqual([]);
-  expect(snapshot.logs).toEqual([]);
-  expect(snapshot.scopes).toMatchObject([
+  expect(await Effect.runPromise(service.scopes("run", { parentScope: "[]" }))).toMatchObject([
     { total: 1, totalKind: "materialized", counts: { succeeded: 1 } },
   ]);
 

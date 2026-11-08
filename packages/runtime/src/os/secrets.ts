@@ -11,8 +11,8 @@ import {
 import { join, resolve } from "node:path";
 import {
   errnoCode,
+  isRecord,
   MAX_SECRET_VALUE_BYTES,
-  requireRecord,
   SecretError,
   secretValueSchema,
   setOwnProperty,
@@ -37,10 +37,13 @@ function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
 
 // BOUNDARY: The secrets.json file is checked for an object with valid secret names and bounded string values.
 function parseSecrets(value: unknown) {
-  const record = requireRecord(value, "The secret store");
+  if (!isRecord(value)) {
+    throw new Error("The secret store must be an object.");
+  }
+
   const secrets: Record<string, string> = {};
 
-  for (const [name, secret] of Object.entries(record)) {
+  for (const [name, secret] of Object.entries(value)) {
     validateSecretName(name);
 
     if (!validSecretValue(secret)) {

@@ -36,7 +36,6 @@ function pendingToggle(client: QueryClient) {
 }
 
 function saved(client: QueryClient, view: ScheduleView) {
-  const { lastFireKey, ...record } = view;
   applyBatch(client, [
     {
       entity: "schedule",
@@ -45,7 +44,7 @@ function saved(client: QueryClient, view: ScheduleView) {
       sequence: 11,
       txn: "t1",
       at: "2026-10-17T10:00:00.000Z",
-      record: lastFireKey === null ? record : { ...record, lastFireKey },
+      record: view,
     },
   ]);
 }

@@ -6,5 +6,5 @@ import type { NodeId } from "./values";
 export type ValidationContext = Context & { graph: Graph; resolveType: ResolveType };
 
 export function diagnostic(code: DiagnosticCode, node: NodeId | null, message: string): Diagnostic {
-  return { code, node, message, source: null };
+  return { code, node, message };
 }

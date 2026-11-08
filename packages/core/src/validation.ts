@@ -9,24 +9,6 @@ export function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isString);
 }
 
-// BOUNDARY: External JSON or module values must be non-null, non-array objects before domain fields are inspected.
-export function requireRecord(value: unknown, location: string): UnknownRecord {
-  if (!isRecord(value)) {
-    throw new Error(`${location} must be an object.`);
-  }
-
-  return value;
-}
-
-// BOUNDARY: External workflow fields must be positive safe integers before execution limits are applied.
-export function requirePositiveInteger(value: unknown, location: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
-    throw new Error(`${location} must be a positive integer.`);
-  }
-
-  return value;
-}
-
 /**
  * Sets a key on a record built from untrusted keys without touching the
  * prototype chain. `record[key] = value` with key `__proto__` would.

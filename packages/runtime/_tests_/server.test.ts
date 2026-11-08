@@ -19,7 +19,7 @@ import {
   scheduleViewSchema,
   serverEventSchema,
 } from "@loopy/contract";
-import { type RuntimeEvent, requireRecord, revision } from "@loopy/core";
+import { type RuntimeEvent, revision } from "@loopy/core";
 import { Effect, Schema, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import {
@@ -71,13 +71,9 @@ test("API returns run records, step traces and cursor logs", async () => {
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
   const headers = { Authorization: `Bearer ${token}` };
   const request = (path: string) => fetch(`${url.origin}/api${path}`, { headers });
-  const detail = requireRecord(await (await request(`/runs/${run.id}`)).json(), "Run detail");
-  expect(detail.nodeRuns).toMatchObject([
-    { status: "succeeded" },
-    { status: "succeeded" },
-    { status: "succeeded" },
-  ]);
-  expect(detail.logs).toEqual([]);
+  expect(await (await request(`/runs/${run.id}`)).json()).toMatchObject({
+    nodeRuns: [{ status: "succeeded" }, { status: "succeeded" }, { status: "succeeded" }],
+  });
   expect(await (await request(`/runs/${run.id}/logs`)).json()).toMatchObject([
     { message: "first" },
     { message: "second" },
@@ -160,7 +156,6 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   const path = `${url.origin}/api/runs/${run.id}`;
   const full = object(await (await fetch(path, { headers })).text());
   expect(full.nodeRuns).toHaveLength(2);
-  expect(full.logs).toEqual([]);
   // The old viewer's logs=false switch is gone; strict query parsing rejects it.
   expect((await fetch(`${path}?logs=false`, { headers })).status).toBe(400);
   expect(await (await fetch(`${path}/logs?after=0`, { headers })).json()).toMatchObject([
