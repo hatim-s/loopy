@@ -17,3 +17,7 @@ test-results/
 .notes/**/*.sqlite-*
 
 packages/loopy/.tsconfig.build.generated-*.json
+
+# scripts/build.ts copies these from the repository root.
+packages/loopy/README.md
+packages/loopy/LICENSE
