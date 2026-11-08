@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { compile as compileEffect } from "@loopy/compiler";
 import { parseModuleOutput } from "@loopy/contract";
 import { canonicalJson, type Json, validateGraph } from "@loopy/core";
@@ -9,7 +9,7 @@ import { Effect } from "effect";
 import { evaluate as evaluateEffect } from "../../compiler/src/evaluate";
 import { compiledBody } from "./compiled-fixture";
 
-const sdk = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
+const sdk = "loopy";
 
 const fixtureRoot = resolve(import.meta.dir, "fixtures/compiler");
 
@@ -152,13 +152,16 @@ for (const effect of ["network", "write"]) {
 
     const source =
       effect === "network"
-        ? `await fetch(${JSON.stringify(server.url.toString())}); export default {graph:${graph}};`
-        : `await Bun.write(${JSON.stringify(outside)}, "escaped"); export default {graph:${graph}};`;
+        ? `await fetch(${JSON.stringify(server.url.toString())}); export default ${graph};`
+        : `await Bun.write(${JSON.stringify(outside)}, "escaped"); export default ${graph};`;
 
     await writeFile(file, source);
 
     try {
-      await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toThrow();
+      await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toMatchObject({
+        _tag: "AuthorDiagnostics",
+        diagnostics: [{ code: "evaluation_failed" }],
+      });
     } finally {
       await server.stop(true);
     }
@@ -172,9 +175,8 @@ test("evaluation has a hard ten second timeout", async () => {
   const source = await Bun.file(file).text();
   const started = performance.now();
   await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toMatchObject({
-    _tag: "AuthorError",
-    code: "evaluation_failed",
-    message: "Command timed out after 10000 ms.",
+    _tag: "AuthorDiagnostics",
+    diagnostics: [{ code: "evaluation_failed", message: "Command timed out after 10000 ms." }],
   });
   expect(performance.now() - started).toBeLessThan(12_000);
 }, 15_000);
@@ -620,18 +622,6 @@ test("node_modules dependencies with literal dynamic imports bundle their helper
   expect(await run()).toBe(42);
 });
 
-test("relative extensionless SDK imports retain trusted builder bindings", async () => {
-  const f = await project("");
-  const specifier = relative(f.root, resolve(import.meta.dir, "../../sdk/src/graph"));
-  await writeFile(
-    f.file,
-    `import {loopy,log} from ${JSON.stringify(specifier)}; export default loopy("relative-sdk", {input: {}, run: () => {log("hello"); return 1;}});`,
-  );
-
-  const result = await compile(f.file);
-  expect(result.ok).toBe(true);
-});
-
 test("the public SDK entry compiles through the same graph builder", async () => {
   const f = await project(
     'import {loopy,log} from "loopy"; export default loopy("public-entry", {input: {}, run: () => {log("hello"); return 1;}});',
@@ -704,15 +694,14 @@ test("a missing builder dependency remains a source diagnostic", async () => {
 });
 
 for (const [name, source, message] of [
-  ["invalid graph", "export default {graph:null};", "Expected object"],
-  ["output overflow", 'export default {graph:"x".repeat(17_000_000)};', "output exceeded"],
+  ["invalid graph", "export default null;", "Expected object"],
+  ["output overflow", 'export default "x".repeat(17_000_000);', "output exceeded"],
 ] as const) {
   test(`evaluator ${name} stays an author failure`, async () => {
     const { file } = await project(source);
     await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toMatchObject({
-      _tag: "AuthorError",
-      code: "evaluation_failed",
-      message: expect.stringContaining(message),
+      _tag: "AuthorDiagnostics",
+      diagnostics: [{ code: "evaluation_failed", message: expect.stringContaining(message) }],
     });
   });
 }

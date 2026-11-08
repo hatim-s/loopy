@@ -46,7 +46,7 @@ test("branch and switch run only selected arms and resolve joined nested values"
 
       return { chosen, nested: [chosen] };
     },
-  }).graph;
+  });
 
   const result = start(graph, { pick: "yes", values: ["x"] });
   expect(result.state.phase).toEqual({
@@ -83,7 +83,7 @@ test("nested maps persist ordered scopes and reconstruct item/index and ancestor
         },
         { concurrency: 1, onError: "fail" },
       ),
-  }).graph;
+  });
 
   let result = start(graph, { outer: ["a", "b"], inner: ["x", "y"] });
 
@@ -133,7 +133,7 @@ test("map bounds concurrency, fences scoped retries and collects failures in inp
         concurrency: 2,
         onError: "collect",
       }),
-  }).graph;
+  });
 
   const first = start(graph, { items: ["a", "b", "c"] });
   const [a, b] = dispatches(first.effects);
@@ -178,7 +178,7 @@ test("parallel joins out of order completions without dispatching running siblin
         left: () => sh(["left"]).get("stdout"),
         right: () => sh(["right"]).get("stdout"),
       }),
-  }).graph;
+  });
 
   const first = start(graph);
   const [left, right] = dispatches(first.effects);
@@ -212,7 +212,7 @@ test("finally persists cleanup once and rescue retains failed child diagnostics"
             message: error.get("message"),
           }),
       ),
-  }).graph;
+  });
 
   const first = start(graph);
   const body = dispatches(first.effects)[0];
@@ -256,7 +256,7 @@ test("sleep and wait persist deadlines, scoped identity, and resume without dupl
         },
         { concurrency: 2, onError: "collect" },
       ),
-  }).graph;
+  });
 
   const first = start(graph, { items: ["a", "b"] });
   expect(first.effects).toContainEqual({
@@ -293,7 +293,7 @@ test("entropy is supplied by host and persisted values survive rehydration", () 
   const graph = loopy("values", {
     input: {},
     run: () => parallel({ time: now, id: uuid, value: random }),
-  }).graph;
+  });
 
   let result = start(graph);
   const samples = result.effects.filter((effect) => effect.kind === "sample");
@@ -324,7 +324,7 @@ test("command argv expands string arrays while preserving spaces within each arg
   const graph = loopy("argv", {
     input: { paths: "string[]" },
     run: ({ input }) => sh(["import", input.get("paths"), "--last"]),
-  }).graph;
+  });
 
   expect(dispatches(start(graph, { paths: ["a b", "c,d", ""] }).effects)[0]?.spec).toMatchObject({
     argv: ["import", "a b", "c,d", "", "--last"],

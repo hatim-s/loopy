@@ -45,7 +45,7 @@ export async function fixture() {
 }
 
 export function commandSpec(argv: readonly string[]): ExecutionSpec {
-  const graph = loopy("command", { input: {}, run: () => sh(argv) }).graph;
+  const graph = loopy("command", { input: {}, run: () => sh(argv) });
 
   const dispatch = step(graph, initialState("run", {}), {
     kind: "run_started",

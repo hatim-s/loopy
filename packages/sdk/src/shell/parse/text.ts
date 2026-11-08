@@ -1,22 +1,21 @@
 import type { CommandResult, Json } from "@loopy/core";
-import type { RenderInput } from "../../render-argv";
 import { jsonValue, lines, unexpected } from "./shared";
 
-export type Wc = { lines: number; words: number; bytes: number; file?: string };
+type Wc = { lines: number; words: number; bytes: number; file?: string };
 
-export type UniqCount = { count: number; line: string };
+type UniqCount = { count: number; line: string };
 
-export type GrepMatch = { file: string | null; line: number; text: string };
+type GrepMatch = { file: string | null; line: number; text: string };
 
-export type Grep = { matches: GrepMatch[]; binaryMatches: string[] };
+type Grep = { matches: GrepMatch[]; binaryMatches: string[] };
 
-export type GrepCount = number;
+type GrepCount = number;
 
-export type Sha256 = { hash: string; file: string };
+type Sha256 = { hash: string; file: string };
 
-export type Jq = Json;
+type Jq = Json;
 
-export function parseWc({ stdout }: CommandResult, input: RenderInput = {}): Wc[] {
+export function parseWc({ stdout }: CommandResult, input: { args?: readonly Json[] } = {}): Wc[] {
   const rows = lines(stdout);
 
   if ((input.args?.length ?? 0) > 1) {

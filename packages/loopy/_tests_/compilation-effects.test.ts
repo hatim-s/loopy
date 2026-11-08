@@ -4,12 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import { Cause, Effect, Exit } from "effect";
-import {
-  AuthorError,
-  CompilationError,
-  EvaluationError,
-  recoverDiagnostics,
-} from "../../compiler/src/errors";
+import { authorFailure, CompilationError, recoverDiagnostics } from "../../compiler/src/errors";
 import { Registry } from "../../runtime/src/local/registry";
 import { makeArtifactRegistry, saveCompiled } from "../../runtime/src/local/save-compiled";
 import { outputOf } from "../../runtime/src/local/typegen/generate";
@@ -95,13 +90,10 @@ test("typegen preserves help printed by a nonzero command and types spawn failur
   });
 });
 
-for (const error of [
-  new AuthorError({ code: "evaluation_failed", file: "fixture.ts", message: "author failure" }),
-  new EvaluationError({
-    diagnostic: { code: "reserved_name", message: "author failure", node: null, source: null },
-  }),
-]) {
-  test(`diagnostic recovery preserves cleanup, defects and interruption with ${error._tag}`, async () => {
+{
+  const error = authorFailure("evaluation_failed", "fixture.ts", "author failure");
+
+  test("diagnostic recovery preserves cleanup, defects and interruption", async () => {
     const cleanup = new CompilationError({
       operation: "remove compiler scratch",
       file: "scratch",

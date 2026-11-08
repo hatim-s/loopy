@@ -1,17 +1,14 @@
 import {
   type Ref as GraphRef,
   type OutSchema,
+  type Predicate,
   projectValue,
   type RefId,
   type Value,
 } from "@loopy/core";
-import { refuse, validateLabel } from "./validate";
+import { refuse } from "./validate";
 
 export const REF = Symbol("loopy.graph.ref");
-
-export const SIZE = Symbol("loopy.graph.size");
-
-const origins = new WeakMap<object, RefValue>();
 
 export type RefContext = {
   check(ref: RefValue): void;
@@ -66,20 +63,33 @@ export type AuthorValue =
   | void
   | RefValue
   | readonly AuthorValue[]
-  | { readonly [key: string]: AuthorValue; readonly [SIZE]?: never; readonly [REF]?: never };
+  | { readonly [key: string]: AuthorValue; readonly [REF]?: never };
 
-export type Size = { readonly [SIZE]: RefValue };
+/** The length of a string or array ref, usable only as a comparison operand. */
+export class Size {
+  constructor(readonly ref: RefValue) {}
+}
+
+/** A predicate keeps its author values until the branch that uses it lowers them in its scope. */
+export class Condition {
+  readonly #lower: (context: RefContext) => Predicate;
+
+  constructor(lower: (context: RefContext) => Predicate) {
+    this.#lower = lower;
+  }
+
+  lower(context: RefContext): Predicate {
+    return this.#lower(context);
+  }
+}
 
 export function serializeRef(ref: RefValue, context: RefContext): GraphRef {
   context.check(ref);
 
-  const value = { ref: ref[REF].id, path: [...ref.path] };
-  origins.set(value, ref);
-
-  return value;
+  return { ref: ref[REF].id, path: [...ref.path] };
 }
 
-// BOUNDARY: Author literals and branded refs are lowered to JSON with one recursive set of rules.
+// BOUNDARY: Author values from JavaScript modules are lowered to graph JSON here.
 export function serialize(value: AuthorValue, context: RefContext): Value {
   if (value === undefined) {
     return null;
@@ -93,8 +103,12 @@ export function serialize(value: AuthorValue, context: RefContext): Value {
     return serializeRef(value, context);
   }
 
-  if (SIZE in value) {
+  if (value instanceof Size) {
     refuse("invalid_size", "Size is allowed only in comparisons.");
+  }
+
+  if (value instanceof Condition) {
+    refuse("predicate_type", "Conditions are allowed only as branch predicates.");
   }
 
   if (Array.isArray(value)) {
@@ -106,11 +120,7 @@ export function serialize(value: AuthorValue, context: RefContext): Value {
   }
 
   return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => {
-      validateLabel(key);
-
-      return [key, serialize(item, context)];
-    }),
+    Object.entries(value).map(([key, item]) => [key, serialize(item, context)]),
   );
 }
 
@@ -119,48 +129,10 @@ export function serializeValues(
   context: RefContext,
 ) {
   return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => {
-      validateLabel(key);
-
-      return [key, serialize(value, context)];
-    }),
+    Object.entries(values).map(([key, value]) => [key, serialize(value, context)]),
   );
 }
 
 export function isRef(value: AuthorValue): value is RefValue {
   return value !== null && typeof value === "object" && REF in value;
-}
-
-// BOUNDARY: Predicate JSON retains its originating handles for scope checks before graph emission.
-export function checkSerialized(value: Value, context: RefContext): void {
-  if (value === null || typeof value !== "object") {
-    return;
-  }
-
-  const origin = origins.get(value);
-
-  if (origin) {
-    context.check(origin);
-
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    for (const child of value) {
-      checkSerialized(child, context);
-    }
-
-    return;
-  }
-
-  for (const child of Object.values(value)) {
-    checkSerialized(child, context);
-  }
-}
-
-export function serializeSize(ref: RefValue, context: RefContext) {
-  const value = { ...serializeRef(ref, context), size: true as const };
-  origins.set(value, ref);
-
-  return value;
 }

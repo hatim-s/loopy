@@ -2,6 +2,8 @@ export { parseArgv } from "./argv";
 
 export { canonicalJson } from "./canonical-json";
 
+export { checkCommandFlags, renderCommandArgv } from "./command-argv";
+
 export { nextFire, parseCron } from "./cron";
 
 export * from "./duration";
@@ -76,6 +78,8 @@ export * from "./queries";
 export * from "./rate-limit";
 
 export { revision, revisionInput } from "./revision";
+
+export { validateSchedule, validateTimeZone } from "./schedule";
 
 export * from "./store";
 

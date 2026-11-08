@@ -13,9 +13,9 @@ import { Cause, Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "./fixture";
 
-const graph = loopy("test", { input: {}, run: () => sh(["true"]) }).graph;
+const graph = loopy("test", { input: {}, run: () => sh(["true"]) });
 
-const empty = loopy("test", { input: {}, run: () => 42 }).graph;
+const empty = loopy("test", { input: {}, run: () => 42 });
 
 const base = Date.parse(newRun().createdAt);
 

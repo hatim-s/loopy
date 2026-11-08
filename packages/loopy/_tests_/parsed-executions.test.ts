@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { activate } from "@loopy/runtime/host";
@@ -57,7 +57,7 @@ test("real parsed git, filesystem, text and redirecting curl executions persist 
     const source = join(f.workspace, "parsed.ts");
     await writeFile(
       source,
-      `import {loopy, git, fs, text, net} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))};
+      `import {loopy, git, fs, text, net} from "loopy";
 export default loopy("parsed", {input: {}, mode: "full", run: () => {
   const repository = git.revParse({flags: {showToplevel: true}}, {label: "git"});
   const path = fs.realpath({args: ["words.txt"]}, {label: "filesystem"});

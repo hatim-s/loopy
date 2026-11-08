@@ -45,7 +45,7 @@ for (const hold of ["retry", "rate-limit"] as const) {
                       approval: () =>
                         wait("approve", { payload: { kind: "value", type: "boolean" } }),
                     }),
-                }).graph;
+                });
 
           const starts: string[] = [];
 
@@ -132,7 +132,7 @@ test("retry beside sleep keeps activation until both persisted deadlines settle"
       const graph = loopy("retry-sleep", {
         input: {},
         run: () => parallel({ work: policyWork, nap: () => sleep("2s") }),
-      }).graph;
+      });
 
       for (const node of graph.nodes) {
         if (node.kind === "code") {

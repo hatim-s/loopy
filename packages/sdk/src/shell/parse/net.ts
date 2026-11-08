@@ -1,7 +1,7 @@
 import type { CommandResult } from "@loopy/core";
 import { jsonValue, unexpected } from "./shared";
 
-export type Curl = {
+type Curl = {
   status: number;
   headers: Record<string, string>;
   body: string;

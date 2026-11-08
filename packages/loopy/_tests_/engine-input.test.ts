@@ -80,7 +80,7 @@ test("map iterations capture their own resolved item and index", () => {
           }),
         { concurrency: 2, onError: "fail" },
       ),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -259,7 +259,7 @@ test("capture excludes command environment and runtime-declared secrets", () => 
   const graph = loopy("command-input", {
     input: {},
     run: () => sh(["echo", secret], { env: { PRIVATE_TOKEN: secret }, stdin: secret }),
-  }).graph;
+  });
 
   graph.meta.secrets = ["PRIVATE_TOKEN"];
   const command = start(graph);

@@ -1,5 +1,5 @@
 import type { PutScheduleBody, SavedLoopy } from "@loopy/contract";
-import { errorMessage, nextFire, parseCron, type Schedule } from "@loopy/core";
+import { errorMessage, nextFire, parseCron, type Schedule, validateTimeZone } from "@loopy/core";
 import { Effect } from "effect";
 import { requireDefinition } from "./definition";
 import { ServiceError } from "./error";
@@ -70,7 +70,7 @@ export function makeScheduleOperations(options: ServiceOptions) {
 
   const validateTimezone = Effect.fn("schedules.validateTimezone")(function* (tz: string) {
     try {
-      new Intl.DateTimeFormat("en", { timeZone: tz });
+      validateTimeZone(tz);
     } catch (error) {
       return yield* Effect.fail(new ServiceError("invalid_timezone", errorMessage(error)));
     }

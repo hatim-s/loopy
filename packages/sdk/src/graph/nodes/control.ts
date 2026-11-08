@@ -1,37 +1,35 @@
-import { ERROR_FIELDS, type Predicate } from "@loopy/core";
+import { ERROR_FIELDS } from "@loopy/core";
 import { currentBuilder } from "../builder";
-import { recordPredicate } from "../predicates";
-import type { Ref } from "../ref";
+import type { Condition, Ref } from "../ref";
 import { type AuthorValue, serialize, serializeRef } from "../ref";
 import type { InferRecord, Result } from "../types";
-import { validateLabel } from "../validate";
+import { validatePredicate } from "../validate";
 
 type Arm = () => AuthorValue;
 
+function labelled(arms: Record<string, Arm>) {
+  return Object.entries(arms).map(([name, run]) => ({ name, run, edge: "case" as const }));
+}
+
 export function branch<Y extends AuthorValue, N extends AuthorValue>(
-  predicate: Predicate,
+  condition: Condition,
   arms: { yes: () => Y; no: () => N },
 ): Ref<Result<Y> | Result<N>> {
   const builder = currentBuilder();
-  const base = builder.allocate("branch", null);
+  const predicate = condition.lower(builder);
+  validatePredicate(predicate, builder);
 
-  // Install the control before expanding callbacks so nested nodes keep call-order identity.
-  const node = {
-    ...base,
-    kind: "branch" as const,
-    predicate: recordPredicate(predicate),
-    arms: { yes: base.id, no: base.id },
-  };
+  const { id, tails } = builder.control("branch", () => ({
+    arms: [
+      { name: "yes", run: arms.yes, edge: "yes" },
+      { name: "no", run: arms.no, edge: "no" },
+    ],
+    node: (entry) => ({ kind: "branch", predicate, arms: { yes: entry("yes"), no: entry("no") } }),
+  }));
 
-  builder.record(node);
-  const yes = builder.arm(base.id, arms.yes);
-  const no = builder.arm(base.id, arms.no);
-  node.arms = { yes: yes.entry, no: no.entry };
-  builder.edge(base.id, yes.entry, "yes");
-  builder.edge(base.id, no.entry, "no");
-  builder.continueFrom(base.id, [...yes.tails, ...no.tails]);
+  builder.continueFrom(id, tails);
 
-  return builder.ref(base.id);
+  return builder.ref(id);
 }
 
 export function switch_<A extends Record<string, Arm>>(
@@ -39,38 +37,22 @@ export function switch_<A extends Record<string, Arm>>(
   arms: A & { default: Arm },
 ): Ref<Result<ReturnType<A[keyof A]>>> {
   const builder = currentBuilder();
-  const base = builder.allocate("switch", null);
+  const value = serializeRef(on, builder);
+  const labels = Object.keys(arms).filter((label) => label !== "default");
 
-  const node = {
-    ...base,
-    kind: "switch" as const,
-    on: serializeRef(on, builder),
-    cases: {},
-    default: base.id,
-  };
+  const { id, tails } = builder.control("switch", () => ({
+    arms: labelled(arms),
+    node: (entry) => ({
+      kind: "switch",
+      on: value,
+      cases: Object.fromEntries(labels.map((label) => [label, entry(label)])),
+      default: entry("default"),
+    }),
+  }));
 
-  builder.record(node);
-  const tails = [];
-  const entries = [];
+  builder.continueFrom(id, tails);
 
-  for (const [label, callback] of Object.entries(arms)) {
-    validateLabel(label);
-    const arm = builder.arm(base.id, callback);
-
-    if (label === "default") {
-      node.default = arm.entry;
-    } else {
-      entries.push([label, arm.entry]);
-    }
-
-    builder.caseEdge(base.id, arm.entry, label);
-    tails.push(...arm.tails);
-  }
-
-  node.cases = Object.fromEntries(entries);
-  builder.continueFrom(base.id, tails);
-
-  return builder.ref(base.id);
+  return builder.ref(id);
 }
 
 type Collected<T> =
@@ -83,73 +65,69 @@ export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
   options: { concurrency?: number; onError: M },
 ): Ref<(M extends "collect" ? Collected<Result<R>> : Result<R>)[]> {
   const builder = currentBuilder();
-  const base = builder.allocate("map", null);
-  const item = builder.binding(base.id, "item");
-  const index = builder.binding(base.id, "index");
+  const items = serializeRef(over, builder);
 
-  const node = {
-    ...base,
-    kind: "map" as const,
-    over: serializeRef(over, builder),
-    body: base.id,
-    item,
-    index,
-    concurrency: options.concurrency ?? 4,
-    onError: options.onError,
-  };
+  const { id, tails } = builder.control("map", (owner) => {
+    const item = builder.binding(owner, "item");
+    const index = builder.binding(owner, "index");
 
-  builder.record(node);
-  const arm = builder.arm(base.id, () => body(builder.ref(item), builder.ref(index)));
-  node.body = arm.entry;
-  builder.edge(base.id, arm.entry, "each");
+    return {
+      arms: [
+        { name: "body", run: () => body(builder.ref(item), builder.ref(index)), edge: "each" },
+      ],
+      node: (entry) => ({
+        kind: "map",
+        over: items,
+        body: entry("body"),
+        item,
+        index,
+        concurrency: options.concurrency ?? 4,
+        onError: options.onError,
+      }),
+    };
+  });
 
-  for (const tail of arm.tails) {
-    builder.edge(tail, base.id, "join");
+  for (const tail of tails) {
+    builder.edge(tail, id, "join");
   }
 
-  builder.continueFrom(base.id, [base.id], "next");
+  builder.continueFrom(id, [id], "next");
 
-  return builder.ref(base.id);
+  return builder.ref(id);
 }
 
 export function parallel<A extends Record<string, Arm>>(
   arms: A,
 ): Ref<{ [K in keyof A]: Result<ReturnType<A[K]>> }, { [K in keyof A]: Result<ReturnType<A[K]>> }> {
   const builder = currentBuilder();
-  const base = builder.allocate("parallel", null);
-  const node = { ...base, kind: "parallel" as const, branches: {} };
-  builder.record(node);
-  const tails = [];
-  const entries = [];
 
-  for (const [label, callback] of Object.entries(arms)) {
-    validateLabel(label);
-    const arm = builder.arm(base.id, callback);
-    entries.push([label, arm.entry]);
-    builder.caseEdge(base.id, arm.entry, label);
-    tails.push(...arm.tails);
-  }
+  const { id, tails } = builder.control("parallel", () => ({
+    arms: labelled(arms),
+    node: (entry) => ({
+      kind: "parallel",
+      branches: Object.fromEntries(Object.keys(arms).map((label) => [label, entry(label)])),
+    }),
+  }));
 
-  node.branches = Object.fromEntries(entries);
-  builder.continueFrom(base.id, tails);
+  builder.continueFrom(id, tails);
 
-  return builder.ref(base.id);
+  return builder.ref(id);
 }
 
 export function finally_<R extends AuthorValue>(body: () => R, cleanup: Arm): Ref<Result<R>> {
   const builder = currentBuilder();
-  const base = builder.allocate("finally", null);
-  const node = { ...base, kind: "finally" as const, body: base.id, cleanup: base.id };
-  builder.record(node);
-  const main = builder.arm(base.id, body);
-  const final = builder.arm(base.id, cleanup);
-  node.body = main.entry;
-  node.cleanup = final.entry;
-  builder.edge(base.id, main.entry, "next");
-  builder.edge(base.id, final.entry, "cleanup");
-  builder.continueFrom(base.id, [...main.tails, ...final.tails]);
 
-  return builder.ref(base.id);
+  const { id, tails } = builder.control("finally", () => ({
+    arms: [
+      { name: "body", run: body, edge: "next" },
+      { name: "cleanup", run: cleanup, edge: "cleanup" },
+    ],
+    node: (entry) => ({ kind: "finally", body: entry("body"), cleanup: entry("cleanup") }),
+  }));
+
+  builder.continueFrom(id, tails);
+
+  return builder.ref(id);
 }
 
 export function rescue<R extends AuthorValue, H extends AuthorValue>(
@@ -157,23 +135,26 @@ export function rescue<R extends AuthorValue, H extends AuthorValue>(
   handler: (error: Ref<InferRecord<typeof ERROR_FIELDS>, InferRecord<typeof ERROR_FIELDS>>) => H,
 ): Ref<Result<R> | Result<H>> {
   const builder = currentBuilder();
-  const base = builder.allocate("rescue", null);
-  const error = builder.binding(base.id, "error");
-  const node = { ...base, kind: "rescue" as const, body: base.id, handler: base.id, error };
-  builder.record(node);
-  const main = builder.arm(base.id, body);
 
-  const caught = builder.arm(base.id, () =>
-    handler(builder.ref(error, { kind: "record", fields: ERROR_FIELDS })),
-  );
+  const { id, tails } = builder.control("rescue", (owner) => {
+    const error = builder.binding(owner, "error");
 
-  node.body = main.entry;
-  node.handler = caught.entry;
-  builder.edge(base.id, main.entry, "next");
-  builder.edge(base.id, caught.entry, "rescue");
-  builder.continueFrom(base.id, [...main.tails, ...caught.tails]);
+    return {
+      arms: [
+        { name: "body", run: body, edge: "next" },
+        {
+          name: "handler",
+          run: () => handler(builder.ref(error, { kind: "record", fields: ERROR_FIELDS })),
+          edge: "rescue",
+        },
+      ],
+      node: (entry) => ({ kind: "rescue", body: entry("body"), handler: entry("handler"), error }),
+    };
+  });
 
-  return builder.ref(base.id);
+  builder.continueFrom(id, tails);
+
+  return builder.ref(id);
 }
 
 export function fail(message: string | Ref<string>): Ref<never> {

@@ -1,16 +1,14 @@
-import { type COMPARISON_OPS, type ComparisonOperand, type Predicate } from "@loopy/core";
-import { currentBuilder } from "./builder";
+import type { COMPARISON_OPS, ComparisonOperand } from "@loopy/core";
 import {
   type AuthorValue,
-  checkSerialized,
+  Condition,
   type Ref,
+  type RefContext,
   type RefValue,
-  SIZE,
-  type Size,
+  Size,
   serialize,
-  serializeSize,
+  serializeRef,
 } from "./ref";
-import { validatePredicate } from "./validate";
 
 type Operand = AuthorValue | Size;
 
@@ -23,42 +21,24 @@ type Numeric = Ref<number> | number | Size;
 type Text = Ref<string> | string;
 
 type Ordering = {
-  (left: Numeric, right: Numeric): Predicate;
-  (left: Text, right: Text): Predicate;
+  (left: Numeric, right: Numeric): Condition;
+  (left: Text, right: Text): Condition;
 };
 
-// BOUNDARY: A comparison lowers either an author value or the private size marker.
-function operand(value: Operand): ComparisonOperand {
-  const builder = currentBuilder();
-
-  if (value !== null && typeof value === "object" && SIZE in value && value[SIZE] !== undefined) {
-    return serializeSize(value[SIZE], builder);
+function operand(value: Operand, context: RefContext): ComparisonOperand {
+  if (value instanceof Size) {
+    return { ...serializeRef(value.ref, context), size: true };
   }
 
-  return serialize(value, builder);
+  return serialize(value, context);
 }
 
-export function recordPredicate(predicate: Predicate): Predicate {
-  const builder = currentBuilder();
-
-  if (predicate.op === "and" || predicate.op === "or") {
-    predicate.predicates.forEach(recordPredicate);
-  } else if (predicate.op === "not") {
-    recordPredicate(predicate.predicate);
-  } else if ("value" in predicate) {
-    checkSerialized(predicate.value, builder);
-  } else if ("left" in predicate) {
-    checkSerialized(predicate.left, builder);
-    checkSerialized(predicate.right, builder);
-  }
-
-  validatePredicate(predicate, builder);
-
-  return predicate;
-}
-
-function compare(op: Comparison, left: Operand, right: Operand): Predicate {
-  return recordPredicate({ op, left: operand(left), right: operand(right) });
+function compare(op: Comparison, left: Operand, right: Operand) {
+  return new Condition((context) => ({
+    op,
+    left: operand(left, context),
+    right: operand(right, context),
+  }));
 }
 
 export function eq<T extends Scalar>(left: Ref<T>, right: Ref<NoInfer<T>> | NoInfer<T>) {
@@ -81,26 +61,32 @@ export function in_<T extends Scalar>(left: Ref<T>, right: Ref<NoInfer<T>[]> | N
   return compare("in", left, right);
 }
 
-export function exists(value: RefValue): Predicate {
-  return recordPredicate({ op: "exists", value: serialize(value, currentBuilder()) });
+export function exists(value: RefValue) {
+  return new Condition((context) => ({ op: "exists", value: serialize(value, context) }));
 }
 
-export function isNull(value: RefValue): Predicate {
-  return recordPredicate({ op: "isNull", value: serialize(value, currentBuilder()) });
+export function isNull(value: RefValue) {
+  return new Condition((context) => ({ op: "isNull", value: serialize(value, context) }));
 }
 
 export function size(value: Ref<string> | Ref<unknown[]>): Size {
-  return { [SIZE]: value };
+  return new Size(value);
 }
 
-export function and(...predicates: Predicate[]): Predicate {
-  return recordPredicate({ op: "and", predicates });
+export function and(...conditions: Condition[]) {
+  return new Condition((context) => ({
+    op: "and",
+    predicates: conditions.map((condition) => condition.lower(context)),
+  }));
 }
 
-export function or(...predicates: Predicate[]): Predicate {
-  return recordPredicate({ op: "or", predicates });
+export function or(...conditions: Condition[]) {
+  return new Condition((context) => ({
+    op: "or",
+    predicates: conditions.map((condition) => condition.lower(context)),
+  }));
 }
 
-export function not(predicate: Predicate): Predicate {
-  return recordPredicate({ op: "not", predicate });
+export function not(condition: Condition) {
+  return new Condition((context) => ({ op: "not", predicate: condition.lower(context) }));
 }

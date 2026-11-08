@@ -31,7 +31,7 @@ test("map failure settles started item cleanup before outer cleanup and never st
           ),
         () => sh(["outer-cleanup"]),
       ),
-  }).graph;
+  });
 
   const first = start(graph, { items: ["a", "b", "never"] });
   const [a, b] = dispatches(first.effects);
@@ -94,7 +94,7 @@ test("suspended map cancellation unwinds each started item and survives cleanup 
           ),
         () => sh(["outer-cleanup"]),
       ),
-  }).graph;
+  });
 
   const first = start(graph, { items: ["a", "b", "never"] });
   const cancelled = step(graph, first.state, { kind: "cancel_requested", at });
@@ -131,7 +131,7 @@ test("cleanup failure takes precedence and rescue catches failures from immediat
           ),
         (error) => error.get("message"),
       ),
-  }).graph;
+  });
 
   const result = start(graph);
   expect(result.state.phase).toMatchObject({
@@ -151,7 +151,7 @@ test("a retry and an indefinite wait suspend until the retry deadline", () => {
         execution: () => sh(["retry"]),
         approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
       }),
-  }).graph;
+  });
 
   const first = start(graph);
   const dispatch = dispatches(first.effects)[0];
@@ -191,7 +191,7 @@ test("sleep deadline advances its parallel branch while an executable sibling re
           return "awake";
         },
       }),
-  }).graph;
+  });
 
   const first = start(graph);
   const dispatch = dispatches(first.effects)[0];

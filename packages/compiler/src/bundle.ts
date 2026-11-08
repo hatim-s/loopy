@@ -1,17 +1,15 @@
 import { createHash } from "node:crypto";
-import { dirname, resolve } from "node:path";
 import type { Graph, Node } from "@loopy/core";
-import { sourcePaths } from "@loopy/runtime/local";
-import { commandParser } from "@loopy/sdk/graph-host";
+import { builtinParser } from "@loopy/sdk/graph-host";
 import { Effect } from "effect";
-import { AuthorError, compilerIO } from "./errors";
+import { AuthorDiagnostics, authorFailure, compilerIO } from "./errors";
 import { checkImports } from "./module-imports";
 import { runnerSource } from "./runner";
-import { typescriptPaths } from "./source";
+import { sourcePaths, typescriptPaths } from "./source-paths";
 import type { Bundle, CompilerDiagnostic, ParserSource } from "./types";
 
-function buildModule(file: string, kind: "code" | "parser") {
-  return compilerIO("bundle module", file, () =>
+function buildModule(module: ParserSource, kind: "code" | "parser") {
+  return compilerIO("bundle module", module.file, () =>
     Bun.build({
       throw: false,
       entrypoints: ["loopy-runner:entry"],
@@ -27,7 +25,7 @@ function buildModule(file: string, kind: "code" | "parser") {
               namespace: "loopy-runner",
             }));
             build.onLoad({ filter: /.*/, namespace: "loopy-runner" }, () => ({
-              contents: runnerSource(file, kind),
+              contents: runnerSource(module.file, module.exportName, kind),
               loader: "ts",
             }));
           },
@@ -45,54 +43,44 @@ const buildNode = Effect.fn(function* (
   entry: string,
 ) {
   if (node.kind === "code") {
-    return { file: node.module.path, result: yield* buildModule(node.module.path, "code") };
+    const module = { file: node.module.path, exportName: "default" };
+
+    return { file: module.file, result: yield* buildModule(module, "code") };
   }
 
-  const parser = parsers.get(node.key)?.file ?? commandParser(node.key);
+  const parser = parsers.get(node.key) ?? builtinParser(node.key);
 
   if (!parser) {
-    return yield* new AuthorError({
-      code: "bundle_failed",
-      file: entry,
-      message: `Declare parser '${node.key}' in a module-level defineCommand descriptor.`,
-    });
+    return yield* authorFailure(
+      "bundle_failed",
+      entry,
+      `Declare parser '${node.key}' in a module-level defineCommand descriptor.`,
+    );
   }
 
-  const sdk = Bun.resolveSync("@loopy/sdk/graph", import.meta.dir);
-
-  const file = parsers.has(node.key)
-    ? parser
-    : resolve(dirname(sdk), sdk.endsWith(".js") ? parser.replace(/\.ts$/, ".js") : parser);
-
-  return { file, result: yield* buildModule(file, "parser") };
+  return { file: parser.file, result: yield* buildModule(parser, "parser") };
 });
 
-type BundleResult =
-  | { ok: true; bundles: Bundle[] }
-  | { ok: false; diagnostics: CompilerDiagnostic[] };
-
+/** Returns the graph with each executable node pointing at the hash of its bundle. */
 export const bundle = Effect.fn(function* (
   graph: Graph,
   parsers: Map<string, ParserSource>,
   entry: string,
 ) {
   const bundles: Bundle[] = [];
+  const nodes: Node[] = [];
 
   for (const node of graph.nodes) {
-    if (node.kind !== "code" && !(node.kind === "command" && node.parse !== null)) {
+    if (node.kind !== "code" && (node.kind !== "command" || node.parse === null)) {
+      nodes.push(node);
       continue;
     }
 
     const { file, result } = yield* buildNode(node, parsers, entry);
-
     const output = result.outputs[0];
 
     if (!result.success || !output) {
-      return yield* new AuthorError({
-        code: "bundle_failed",
-        file,
-        message: result.logs.join("\n"),
-      });
+      return yield* authorFailure("bundle_failed", file, result.logs.join("\n"));
     }
 
     const diagnostics: CompilerDiagnostic[] = [];
@@ -108,13 +96,12 @@ export const bundle = Effect.fn(function* (
     }
 
     if (diagnostics.length > 0) {
-      return {
-        ok: false as const,
+      return yield* new AuthorDiagnostics({
         diagnostics: diagnostics.map((value) => ({
           ...value,
           message: `Emitted bundle: ${value.message}`,
         })),
-      };
+      });
     }
 
     const bytes = new Uint8Array(
@@ -124,12 +111,12 @@ export const bundle = Effect.fn(function* (
     const bundleHash = createHash("sha256").update(bytes).digest("hex");
     bundles.push({ nodeId: node.id, bundleHash, bytes });
 
-    if (node.kind === "code") {
-      node.module.bundleHash = bundleHash;
-    } else if (node.parse !== null) {
-      node.parse.bundleHash = bundleHash;
-    }
+    nodes.push(
+      node.kind === "code"
+        ? { ...node, module: { ...node.module, bundleHash } }
+        : { ...node, parse: node.parse && { ...node.parse, bundleHash } },
+    );
   }
 
-  return { ok: true, bundles } satisfies BundleResult;
+  return { graph: { ...graph, nodes }, bundles };
 });

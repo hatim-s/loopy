@@ -1,5 +1,5 @@
 export type { CommandResult, Json } from "@loopy/core";
 
-export * from "./graph";
+export type { CommandDescriptor } from "./descriptor";
 
-export type { GraphCommandDescriptor as CommandDescriptor } from "./graph/nodes/command";
+export * from "./graph";

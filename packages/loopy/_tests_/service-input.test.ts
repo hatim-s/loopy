@@ -17,7 +17,7 @@ async function setup() {
   const source = join(f.workspace, "input.ts");
   await writeFile(source, "export default null;");
 
-  const { graph } = loopy("input", {
+  const graph = loopy("input", {
     input: { name: "string", count: "number", enabled: "boolean", "limit?": "number" },
     run: ({ input }) => input,
   });

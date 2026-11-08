@@ -43,7 +43,7 @@ import {
   wait,
 } from "@loopy/sdk/graph";
 import type { AuthorValue } from "../../sdk/src/graph/ref";
-import { renderArgv } from "../../sdk/src/render-argv";
+import { capture } from "./fixtures/command-capture";
 import assetSync from "./fixtures/graph-examples/asset-sync";
 import hello from "./fixtures/graph-examples/hello";
 import review from "./fixtures/graph-examples/review";
@@ -52,11 +52,10 @@ import { approveDemoGraph } from "./fixtures/graphs";
 
 function compile(run: () => AuthorValue) {
   const result = loopy("test", { input: {}, run });
-  expect(result.diagnostics).toEqual([]);
-  expect(validateGraph(result.graph)).toEqual([]);
-  expect(decodeBoundary(graphSchema)(result.graph)).toEqual(result.graph);
+  expect(validateGraph(result)).toEqual([]);
+  expect(decodeBoundary(graphSchema)(result)).toEqual(result);
 
-  return result.graph;
+  return result;
 }
 
 function rejects(code: DiagnosticCode, run: () => void) {
@@ -102,9 +101,8 @@ test("approve-demo reproduces the canonical graph exactly", () => {
     },
   });
 
-  expect(result.diagnostics).toEqual([]);
-  expect(validateGraph(result.graph)).toEqual([]);
-  expect(decodeBoundary(graphSchema)(result.graph)).toEqual(approveDemoGraph);
+  expect(validateGraph(result)).toEqual([]);
+  expect(decodeBoundary(graphSchema)(result)).toEqual(approveDemoGraph);
 });
 
 const simple = [
@@ -164,9 +162,7 @@ test("fail is terminal and never receives a scope join", () => {
 });
 
 test("branch carries each successful arm result in its own join", () => {
-  const graph = compile(() =>
-    branch({ op: "eq", left: 1, right: 1 }, { yes: () => "yes", no: () => 3 }),
-  );
+  const graph = compile(() => branch(lte(1, 1), { yes: () => "yes", no: () => 3 }));
 
   expect(graph.nodes.map((node) => node.kind)).toEqual(["branch", "join", "join", "join", "join"]);
   expect(graph.nodes[1]).toMatchObject({
@@ -347,17 +343,14 @@ test("refs cannot escape a branch or cross parallel siblings", () => {
   let leaked: Ref<string> | undefined;
   rejects("out_of_scope_ref", () =>
     compile(() => {
-      branch(
-        { op: "eq", left: 1, right: 1 },
-        {
-          yes: () => {
-            leaked = uuid();
+      branch(lte(1, 1), {
+        yes: () => {
+          leaked = uuid();
 
-            return leaked;
-          },
-          no: () => null,
+          return leaked;
         },
-      );
+        no: () => null,
+      });
 
       return log("leaked", leaked);
     }),
@@ -423,7 +416,7 @@ test("labels are unique per scope and builders restore activation after errors",
   ).toHaveLength(7);
 });
 
-test("declared predicate types reject mismatched operands at the call site", () => {
+test("declared predicate types reject mismatched operands where a branch uses them", () => {
   rejects("predicate_type", () =>
     compile(() => {
       const n = code("n", {
@@ -433,17 +426,13 @@ test("declared predicate types reject mismatched operands at the call site", () 
       });
 
       // @ts-expect-error Runtime validation also protects untyped callers.
-      eq(n.get("n"), "wrong");
-
-      return null;
+      return branch(eq(n.get("n"), "wrong"), { yes: () => 1, no: () => 0 });
     }),
   );
   rejects("predicate_type", () =>
     compile(() => {
       // @ts-expect-error Runtime validation also protects untyped callers.
-      in_(uuid(), [1]);
-
-      return null;
+      return branch(in_(uuid(), [1]), { yes: () => 1, no: () => 0 });
     }),
   );
 });
@@ -496,10 +485,7 @@ test("schemas determine output refs, unknown keys fail, and branch results form 
     expectTypeOf(output.get("words")).toEqualTypeOf<Ref<number>>();
     expectTypeOf(output.get("title")).toEqualTypeOf<Ref<string | undefined>>();
 
-    const result = branch(
-      { op: "eq", left: 1, right: 1 },
-      { yes: () => output.get("words"), no: () => "none" },
-    );
+    const result = branch(lte(1, 1), { yes: () => output.get("words"), no: () => "none" });
 
     expectTypeOf(result).toEqualTypeOf<Ref<number | "none">>();
     rejects("unresolved_ref", () => {
@@ -518,10 +504,9 @@ for (const [name, result, expectedName] of [
   ["www-sync", wwwSync, "www-uacode-sync"],
 ] as const) {
   test(`${name} example compiles to a validated graph without executing modules`, () => {
-    expect(result.diagnostics).toEqual([]);
-    expect(validateGraph(result.graph)).toEqual([]);
-    expect(decodeBoundary(graphSchema)(result.graph).nodes.length).toBeGreaterThan(2);
-    expect(result.graph.name).toBe(expectedName);
+    expect(validateGraph(result)).toEqual([]);
+    expect(decodeBoundary(graphSchema)(result).nodes.length).toBeGreaterThan(2);
+    expect(result.name).toBe(expectedName);
   });
 }
 
@@ -537,17 +522,14 @@ test("deferred predicates retain builder and lexical scope provenance", () => {
   );
   rejects("out_of_scope_ref", () =>
     compile(() => {
-      branch(
-        { op: "eq", left: 1, right: 1 },
-        {
-          yes: () => {
-            captured = gt(size(uuid()), 0);
+      branch(lte(1, 1), {
+        yes: () => {
+          captured = gt(size(uuid()), 0);
 
-            return null;
-          },
-          no: () => null,
+          return null;
         },
-      );
+        no: () => null,
+      });
 
       return captured ? branch(captured, { yes: () => 1, no: () => 0 }) : null;
     }),
@@ -666,10 +648,9 @@ test("size rejects declared non-string scalars and unknown fields are errors", (
   rejects("invalid_size", () =>
     compile(() => {
       const output = wait("number", { payload: { kind: "record", fields: { count: "number" } } });
-      // @ts-expect-error size accepts only string and array refs.
-      gt(size(output.get("count")), 1);
 
-      return null;
+      // @ts-expect-error size accepts only string and array refs.
+      return branch(gt(size(output.get("count")), 1), { yes: () => 1, no: () => 0 });
     }),
   );
 });
@@ -690,7 +671,7 @@ test("raw shell identities and fs.ls's separate raw descriptor survive", () => {
   });
 });
 
-test("stored descriptor data renders false booleans, attached values and ordered flags after resolution", () => {
+test("stored descriptor data renders false booleans, attached values and ordered flags", () => {
   const command = defineCommand({
     key: "render",
     program: "tool",
@@ -705,23 +686,11 @@ test("stored descriptor data renders false booleans, attached values and ordered
     },
   });
 
-  const graph = compile(() =>
-    command({ args: [uuid()], flags: { enabled: false, count: 7, tag: ["a", "b"] } }),
-  );
+  const f = capture(() => {
+    command({ args: ["operand"], flags: { enabled: false, count: 7, tag: ["a", "b"] } });
+  });
 
-  const node = graph.nodes[1];
-
-  if (node?.kind !== "command" || !node.flagSpec) {
-    throw new Error("Expected a descriptor command.");
-  }
-
-  expect(
-    renderArgv(
-      { program: "tool", ...node.flagSpec },
-      { args: ["resolved-id"], flags: { enabled: false, count: 7, tag: ["a", "b"] } },
-      node.key,
-    ),
-  ).toEqual(["sub", "--", "resolved-id", "-n7", "--tag=a", "--tag=b"]);
+  expect(f.executor.calls[0]?.args).toEqual(["sub", "--", "operand", "-n7", "--tag=a", "--tag=b"]);
 });
 
 test("collect maps infer success and failure outcomes while fail maps preserve values", () => {
@@ -744,7 +713,7 @@ test("collect maps infer success and failure outcomes while fail maps preserve v
     },
   });
 
-  expect(validateGraph(result.graph)).toEqual([]);
+  expect(validateGraph(result)).toEqual([]);
 });
 
 test("known command fields resolve through main's validator without synthetic value nodes", () => {
@@ -872,9 +841,8 @@ for (const [kind, control] of [
       },
     });
 
-    expect(result.diagnostics).toEqual([]);
-    expect(validateGraph(result.graph)).toEqual(result.diagnostics);
-    expect(decodeBoundary(graphSchema)(result.graph)).toEqual(result.graph);
+    expect(validateGraph(result)).toEqual([]);
+    expect(decodeBoundary(graphSchema)(result)).toEqual(result);
   });
 }
 
@@ -926,22 +894,18 @@ test("author references to an all-failing branch remain unresolved", () => {
   const result = loopy("never-ref", {
     input: {},
     run: () => {
-      const failed = branch(
-        { op: "eq", left: 1, right: 1 },
-        {
-          yes: () => fail("yes"),
-          no: () => fail("no"),
-        },
-      );
+      const failed = branch(lte(1, 1), {
+        yes: () => fail("yes"),
+        no: () => fail("no"),
+      });
 
       return log("author ref", failed);
     },
   });
 
-  expect(result.diagnostics.map(({ code }) => code)).toEqual(["unresolved_ref"]);
-  expect(result.diagnostics[0]?.node).toBe(
-    result.graph.nodes.find((node) => node.kind === "log")?.id,
-  );
+  const diagnostics = validateGraph(result);
+  expect(diagnostics.map(({ code }) => code)).toEqual(["unresolved_ref"]);
+  expect(diagnostics[0]?.node).toBe(result.nodes.find((node) => node.kind === "log")?.id);
 });
 
 test("a rescue accepts a map body ending in fail", () => {
@@ -954,9 +918,8 @@ test("a rescue accepts a map body ending in fail", () => {
       ),
   });
 
-  expect(result.diagnostics).toEqual([]);
-  expect(validateGraph(result.graph)).toEqual([]);
-  expect(decodeBoundary(graphSchema)(result.graph)).toEqual(result.graph);
+  expect(validateGraph(result)).toEqual([]);
+  expect(decodeBoundary(graphSchema)(result)).toEqual(result);
 });
 
 for (const label of ["__proto__", "constructor", "prototype"]) {
@@ -1020,14 +983,13 @@ test("an author reference to a parallel with one failing arm is unresolved", () 
     },
   });
 
-  expect(result.diagnostics.map(({ code }) => code)).toEqual(["unresolved_ref"]);
-  expect(result.diagnostics[0]?.node).toBe(
-    result.graph.nodes.find((node) => node.kind === "log")?.id,
-  );
-  expect(graphTypeResolver(result.graph)({ ref: "0:parallel", path: [] })).toBe("never");
-  expect(
-    result.graph.nodes.find((node) => node.kind === "join" && node.scope === null),
-  ).toMatchObject({ result: { kind: "none" } });
+  const diagnostics = validateGraph(result);
+  expect(diagnostics.map(({ code }) => code)).toEqual(["unresolved_ref"]);
+  expect(diagnostics[0]?.node).toBe(result.nodes.find((node) => node.kind === "log")?.id);
+  expect(graphTypeResolver(result)({ ref: "0:parallel", path: [] })).toBe("never");
+  expect(result.nodes.find((node) => node.kind === "join" && node.scope === null)).toMatchObject({
+    result: { kind: "none" },
+  });
 });
 
 test("rescue resolves a parallel with one failing arm to its numeric handler", () => {

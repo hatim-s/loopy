@@ -65,7 +65,7 @@ async function fixture() {
         timeout: "1s",
         payload: { kind: "record", fields: { approved: "boolean" } },
       }),
-  }).graph;
+  });
 
   const registry = await Effect.runPromise(Registry.make(home, home));
   mkdirSync(dirname(registry.graphPath("a".repeat(64))), { recursive: true });
@@ -204,7 +204,7 @@ test("wait deadline fails on resume and sleep resumes once from its persisted de
 
       return "awake";
     },
-  }).graph;
+  });
 
   await Effect.runPromise(f.store.createRun({ ...newRun(), id: "sleep", input: {} }));
   expect(await f.run(activate({ ...f, graph, executor, runId: "sleep" }))).toEqual({
@@ -233,7 +233,7 @@ test("a signal accepted while a parallel execution runs survives its completion"
         work: () =>
           code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" }),
       }),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -289,7 +289,7 @@ test("parallel dispatches run concurrently and sampling completes without an exe
         b: () => code("b", { in: {}, out: { kind: "value", type: "number" }, module: "./b.ts" }),
         entropy: () => uuid(),
       }),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -356,7 +356,7 @@ test("cancellation refuses suspended finally graphs without changing their wait"
         () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
         () => null,
       ),
-  }).graph;
+  });
 
   writeFileSync(f.registry.graphPath("a".repeat(64)), JSON.stringify(graph));
   await Effect.runPromise(
@@ -391,7 +391,7 @@ test("an indefinite signal advances its branch before a long sibling completes",
         long: () =>
           code("long", { in: {}, out: { kind: "value", type: "number" }, module: "./long.ts" }),
       }),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {

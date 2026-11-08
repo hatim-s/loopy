@@ -199,7 +199,7 @@ function artifact(hash: string, content: string): SourceArtifact {
 }
 
 async function executable(workspace: string): Promise<PutLoopyBody> {
-  const { graph } = loopy("executable", {
+  const graph = loopy("executable", {
     input: {},
     run: () =>
       code("execute", { in: {}, module: "./entry.ts", out: { kind: "value", type: "string" } }),

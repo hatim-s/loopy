@@ -153,7 +153,6 @@
         "@loopy/core": "workspace:*",
         "@loopy/sdk": "workspace:*",
         "effect": "4.1.2",
-        "oxc-parser": "0.154.0",
       },
     },
     "packages/sdk": {

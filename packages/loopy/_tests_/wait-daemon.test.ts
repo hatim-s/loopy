@@ -17,7 +17,7 @@ test("daemon leaves an indefinite sleep when a durable approval signal wakes its
         const graph = loopy("prompt", {
           input: {},
           run: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
-        }).graph;
+        });
 
         yield* store.createRun({ ...newRun(), input: {} });
         const errors: Cause.Cause<unknown>[] = [];

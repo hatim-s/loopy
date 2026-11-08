@@ -364,7 +364,7 @@ test("Worker alarm persists hooks and supports SQL dashboard queries without cro
         payload: { kind: "record", fields: { approved: "boolean" } },
       });
     },
-  }).graph;
+  });
   body.revision = await revision(body.graph);
   expect((await api("/loopies/alarm-wait", { method: "PUT", body })).status).toBe(200);
 

@@ -90,7 +90,7 @@ test("graph command timeout survives serialization and terminates the actual sub
     loopy("timeout", {
       input: {},
       run: () => sh(["/bin/sleep", "10"], { timeout: 100 }),
-    }).graph,
+    }),
   );
 
   const dispatch = step(graph, initialState("run", {}), {
@@ -125,7 +125,7 @@ test("graph command capture limit survives serialization and bounds actual stdou
     loopy("capture-limit", {
       input: {},
       run: () => sh(["printf", "%s", "x".repeat(1024)], { maxOutputBytes: 256 }),
-    }).graph,
+    }),
   );
 
   const dispatch = step(graph, initialState("run", {}), {
@@ -315,7 +315,7 @@ test("parser execution failures propagate to the stored graph node and run", asy
   const graph = loopy("parser-failure", {
     input: {},
     run: () => sh(["printf", "raw"], { retry: { attempts: 1 } }),
-  }).graph;
+  });
 
   const node = graph.nodes.find((node) => node.kind === "command");
 

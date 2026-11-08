@@ -234,7 +234,7 @@ function work(label = "work") {
 }
 
 function graph(name: string, run: Parameters<typeof loopy>[1]["run"] = () => work()) {
-  const graph = loopy(name, { input: {}, run }).graph;
+  const graph = loopy(name, { input: {}, run });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {

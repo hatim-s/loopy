@@ -7,7 +7,6 @@ import { defineCommand, loopy } from "@loopy/sdk";
 import ts from "typescript";
 import { parseCliHelp } from "../../runtime/src/local/typegen/parse-help";
 import { renderCommandSource } from "../../runtime/src/local/typegen/render";
-import { renderArgv } from "../../sdk/src/render-argv";
 
 const help = `Run Codex non-interactively
 
@@ -59,7 +58,7 @@ describe("CLI help generation", () => {
     const graph = loopy("generated", {
       input: {},
       run: () => codexExec({ args: ["--help"] }),
-    }).graph;
+    });
 
     expect(
       step(graph, initialState("generated", {}), {
@@ -350,26 +349,4 @@ test("captured gh flags accept repeated labels, assignees and reviewers", async 
     reviewer: { repeatable: true },
   });
   expect(warnings.some((warning) => warning.includes("Could not parse option"))).toBe(false);
-  expect(
-    renderArgv(
-      descriptor,
-      { flags: { label: ["bug", "fix"], assignee: ["alice", "bob"], reviewer: ["carol", "dave"] } },
-      "gh.pr.create",
-    ),
-  ).toEqual([
-    "pr",
-    "create",
-    "--assignee",
-    "alice",
-    "--assignee",
-    "bob",
-    "--label",
-    "bug",
-    "--label",
-    "fix",
-    "--reviewer",
-    "carol",
-    "--reviewer",
-    "dave",
-  ]);
 });

@@ -1,4 +1,4 @@
-import { basename, dirname } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type ParserOptions, parseSync, Visitor } from "oxc-parser";
 
@@ -23,7 +23,7 @@ function metaValues(path: string) {
   ]);
 }
 
-export function inlineImportMeta(path: string, lang: Lang, source: string) {
+function inlineImportMeta(path: string, lang: Lang, source: string) {
   const values = metaValues(path);
 
   const { program, errors } = parseSync(path, source, {
@@ -90,6 +90,28 @@ export const sourcePaths: Bun.BunPlugin = {
       }
 
       return { contents: inlineImportMeta(path, lang, source), loader };
+    });
+  },
+};
+
+/** Author TypeScript may import a sibling `.ts` module by its emitted `.js` name. */
+export function typescriptSibling(path: string) {
+  return path.replace(/\.js$/, ".ts");
+}
+
+export const typescriptPaths: Bun.BunPlugin = {
+  name: "typescript-source-paths",
+  setup(build) {
+    build.onResolve({ filter: /^(?:\.|\/).*\.js$/ }, async ({ path, importer }) => {
+      const javascript = resolve(dirname(importer), path);
+
+      if (await Bun.file(javascript).exists()) {
+        return undefined;
+      }
+
+      const typescript = typescriptSibling(javascript);
+
+      return (await Bun.file(typescript).exists()) ? { path: typescript } : undefined;
     });
   },
 };

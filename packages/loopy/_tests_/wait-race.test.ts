@@ -56,7 +56,7 @@ async function createStore(kind: "memory" | "sqlite"): Promise<Store> {
 const graph = loopy("race", {
   input: {},
   run: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
-}).graph;
+});
 
 async function prepare(store: Store) {
   await Effect.runPromise(store.createRun({ ...newRun(), input: {} }));

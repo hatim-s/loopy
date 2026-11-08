@@ -1,5 +1,6 @@
 import type { SourceArtifact } from "@loopy/contract";
 import type { CompilerDiagnosticCode, Diagnostic, Graph, NodeId } from "@loopy/core";
+import type { CallSyntax } from "@loopy/sdk/graph-host";
 
 export type CompilerDiagnostic = {
   code: CompilerDiagnosticCode;
@@ -22,9 +23,14 @@ export type CompileResult =
     }
   | { ok: false; diagnostics: CompilerDiagnostic[] };
 
-export type ParserSource = { file: string };
+export type ParserSource = { file: string; exportName: string };
 
-export type SourceCall = { kind: "code" | "wait"; label: string; start: number; end: number };
+export type SourceCall = {
+  kind: NonNullable<CallSyntax["source"]>;
+  label: string;
+  start: number;
+  end: number;
+};
 
 export type AuthorModule = {
   file: string;

@@ -34,7 +34,7 @@ export function policyGraph() {
         work: policyWork,
         approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
       }),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {

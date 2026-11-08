@@ -25,7 +25,7 @@ function schedule(overrides: Partial<Schedule> = {}): Schedule {
 const graph = loopy("test", {
   input: { "value?": "number", "scheduled?": "boolean" },
   run: ({ input }) => input,
-}).graph;
+});
 
 for (const mode of ["due", "disabled", "stale", "minute-late"] as const) {
   test(`schedule ${mode} preserves startup and fire-key policy`, async () => {

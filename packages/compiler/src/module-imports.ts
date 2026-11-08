@@ -3,9 +3,10 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isString } from "@loopy/core";
 import { Effect } from "effect";
-import { type Expression, type Node, parseSync, Visitor } from "oxc-parser";
+import { type Expression, type Node, type ParseResult, parseSync, Visitor } from "oxc-parser";
 import { diagnostic } from "./diagnostic";
-import { type AuthorError, authorSource, type CompilationError, compilerIO } from "./errors";
+import { type AuthorDiagnostics, authorSource, type CompilationError, compilerIO } from "./errors";
+import { typescriptSibling } from "./source-paths";
 import type { CompilerDiagnostic } from "./types";
 
 export const modulePath = Effect.fn(function* (specifier: string, file: string) {
@@ -15,7 +16,7 @@ export const modulePath = Effect.fn(function* (specifier: string, file: string) 
 
   for (const candidate of [
     path,
-    path.replace(/\.js$/, ".ts"),
+    typescriptSibling(path),
     ...[".ts", ".tsx", ".js", "/index.ts", "/index.js"].map((suffix) => path + suffix),
   ]) {
     if (yield* compilerIO("source exists", candidate, () => Bun.file(candidate).exists())) {
@@ -98,8 +99,12 @@ function importMetaMember(node: Node): boolean {
   );
 }
 
-export function checkImports(file: string, source: string, diagnostics: CompilerDiagnostic[]) {
-  const parsed = parseSync(file, source, { sourceType: "module" });
+export function checkImports(
+  file: string,
+  source: string,
+  diagnostics: CompilerDiagnostic[],
+  parsed: ParseResult = parseSync(file, source, { sourceType: "module" }),
+) {
   const dependencies: string[] = [];
 
   const reject = (node: Node) => {
@@ -209,7 +214,7 @@ export function checkModuleImports(
   file: string,
   diagnostics: CompilerDiagnostic[],
   seen = new Set<string>(),
-): Effect.Effect<void, CompilationError | AuthorError> {
+): Effect.Effect<void, CompilationError | AuthorDiagnostics> {
   return Effect.gen(function* () {
     if (seen.has(file) || file.endsWith(".json")) {
       return;

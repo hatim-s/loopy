@@ -1,7 +1,13 @@
-import { descriptorCommand } from "../../descriptor";
+import type { Prepare } from "../../descriptor";
+import { builtin } from "../../graph/nodes/command";
 import { parseLs } from "../parse/fs";
 
-const rawLs = descriptorCommand({
+export const currentDirectory: Prepare = (input) => ({
+  ...input,
+  args: input.args?.length ? input.args : ["."],
+});
+
+const rawLs = {
   namespace: "fs",
   name: "ls",
   program: "ls",
@@ -19,13 +25,12 @@ const rawLs = descriptorCommand({
   },
   positionals: [{ name: "paths", optional: true, variadic: true }],
   positionalSeparator: true,
-});
+} as const;
 
-const parsedLs = descriptorCommand({
+const parsedLs = {
   namespace: "fs",
   name: "ls",
   program: "find",
-  parse: parseLs,
   preset: { flags: { maxDepth: 1, minDepth: 1, print0: true } },
   flags: {
     maxDepth: { cli: "-maxdepth", kind: "number" },
@@ -34,13 +39,16 @@ const parsedLs = descriptorCommand({
   },
   positionals: [{ name: "directory", optional: true }],
   flagsAfterPositionals: true,
-  prepare: (input) => ({ ...input, args: input.args?.length ? input.args : ["."] }),
-});
+} as const;
 
 export const files = {
-  /** Lists immediate basenames using find, including hidden entries. .raw runs ls. */
-  ls: { raw: rawLs, descriptor: parsedLs.descriptor },
-  cat: descriptorCommand({
+  ls: builtin(parsedLs, {
+    parse: parseLs,
+    out: { kind: "value", type: "string[]" },
+    prepare: currentDirectory,
+    raw: rawLs,
+  }),
+  cat: builtin({
     namespace: "fs",
     name: "cat",
     program: "cat",
@@ -52,7 +60,7 @@ export const files = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  cp: descriptorCommand({
+  cp: builtin({
     namespace: "fs",
     name: "cp",
     program: "cp",
@@ -74,7 +82,7 @@ export const files = {
     ],
     positionalSeparator: true,
   }),
-  mv: descriptorCommand({
+  mv: builtin({
     namespace: "fs",
     name: "mv",
     program: "mv",
@@ -86,7 +94,7 @@ export const files = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  rm: descriptorCommand({
+  rm: builtin({
     namespace: "fs",
     name: "rm",
     program: "rm",
@@ -99,7 +107,7 @@ export const files = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  mkdir: descriptorCommand({
+  mkdir: builtin({
     namespace: "fs",
     name: "mkdir",
     program: "mkdir",
@@ -111,7 +119,7 @@ export const files = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  touch: descriptorCommand({
+  touch: builtin({
     namespace: "fs",
     name: "touch",
     program: "touch",

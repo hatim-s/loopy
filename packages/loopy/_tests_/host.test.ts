@@ -17,7 +17,7 @@ export function graph() {
         out: { kind: "value", type: "number" },
         module: "./work.ts",
       }),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -132,7 +132,7 @@ for (const mode of ["retry", "rate"] as const) {
 
                   return sh(["printf", "third"], { rateLimit });
                 },
-              }).graph;
+              });
 
         const executor: Executor = {
           lookup: () => Effect.succeed({ kind: "none" }),

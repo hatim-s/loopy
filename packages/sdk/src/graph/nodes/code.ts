@@ -1,5 +1,5 @@
 import type { Duration, GraphRetry, OutSchema, RateLimit } from "@loopy/core";
-import { currentBuilder } from "../builder";
+import { currentBuilder, retryPolicy } from "../builder";
 import { type AuthorValue, serializeValues } from "../ref";
 import type { Infer, SchemaFields } from "../types";
 
@@ -23,7 +23,7 @@ export function code<const S extends OutSchema>(
       out: options.out,
       module: { path: options.module, bundleHash: null },
       rateLimit: options.rateLimit ?? null,
-      retry: builder.retry(options.retry),
+      retry: retryPolicy(options.retry),
       timeout: options.timeout ?? null,
     },
     label,

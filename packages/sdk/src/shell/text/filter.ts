@@ -1,5 +1,5 @@
-import { descriptorCommand } from "../../descriptor";
-import type { RenderInput } from "../../render-argv";
+import type { Prepare } from "../../descriptor";
+import { builtin } from "../../graph/nodes/command";
 import { parseGrep, parseGrepCount, parseUniqCount } from "../parse/text";
 
 const GREP_FLAGS = {
@@ -24,45 +24,47 @@ const GREP_FLAGS = {
   C: { cli: "-C", kind: "number" },
 } as const;
 
-function grepInput(input: RenderInput): RenderInput {
-  const flags = { ...input.flags };
+const grepInput: Prepare = (input) => {
   const hasPattern = input.flags?.e !== undefined || input.flags?.f !== undefined;
   const paths = (input.args?.length ?? 0) - (hasPattern ? 0 : 1);
 
-  if (paths > 1) {
-    flags.H = true;
-  }
-
-  return { ...input, flags };
-}
+  return paths > 1 ? { ...input, flags: { ...input.flags, H: true } } : input;
+};
 
 export const filter = {
-  grep: descriptorCommand({
-    parse: parseGrep,
-    okExitCodes: [0, 1],
-    preset: { flags: { n: true } },
-    exclude: ["c", "l", "L", "o", "q", "H", "h", "A", "B", "C"],
-    prepare: grepInput,
-    namespace: "text",
-    name: "grep",
-    program: "grep",
-    flags: GREP_FLAGS,
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-    positionalSeparator: true,
-  }),
-  grepCount: descriptorCommand({
-    namespace: "text",
-    name: "grepCount",
-    program: "grep",
-    parse: parseGrepCount,
-    okExitCodes: [0, 1],
-    preset: { flags: { c: true, h: true } },
-    exclude: ["n", "l", "L", "o", "q", "H", "r", "A", "B", "C", "e", "f"],
-    flags: GREP_FLAGS,
-    positionals: [{ name: "pattern" }, { name: "path", optional: true }],
-    positionalSeparator: true,
-  }),
-  sed: descriptorCommand({
+  grep: builtin(
+    {
+      okExitCodes: [0, 1],
+      preset: { flags: { n: true } },
+      exclude: ["c", "l", "L", "o", "q", "H", "h", "A", "B", "C"],
+      namespace: "text",
+      name: "grep",
+      program: "grep",
+      flags: GREP_FLAGS,
+      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionalSeparator: true,
+    },
+    {
+      parse: parseGrep,
+      out: { kind: "record", fields: { matches: "json[]", binaryMatches: "string[]" } },
+      prepare: grepInput,
+    },
+  ),
+  grepCount: builtin(
+    {
+      namespace: "text",
+      name: "grepCount",
+      program: "grep",
+      okExitCodes: [0, 1],
+      preset: { flags: { c: true, h: true } },
+      exclude: ["n", "l", "L", "o", "q", "H", "r", "A", "B", "C", "e", "f"],
+      flags: GREP_FLAGS,
+      positionals: [{ name: "pattern" }, { name: "path", optional: true }],
+      positionalSeparator: true,
+    },
+    { parse: parseGrepCount, out: { kind: "value", type: "number" } },
+  ),
+  sed: builtin({
     namespace: "text",
     name: "sed",
     program: "sed",
@@ -90,7 +92,7 @@ export const filter = {
       },
     },
   }),
-  awk: descriptorCommand({
+  awk: builtin({
     namespace: "text",
     name: "awk",
     program: "awk",
@@ -105,7 +107,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  cut: descriptorCommand({
+  cut: builtin({
     namespace: "text",
     name: "cut",
     program: "cut",
@@ -117,7 +119,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  sort: descriptorCommand({
+  sort: builtin({
     namespace: "text",
     name: "sort",
     program: "sort",
@@ -130,7 +132,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  uniq: descriptorCommand({
+  uniq: builtin({
     namespace: "text",
     name: "uniq",
     program: "uniq",
@@ -142,21 +144,23 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  uniqCount: descriptorCommand({
-    namespace: "text",
-    name: "uniqCount",
-    parse: parseUniqCount,
-    preset: { flags: { count: true } },
-    program: "uniq",
-    flags: {
-      count: { cli: "-c", kind: "boolean" },
-      repeated: { cli: "-d", kind: "boolean" },
-      unique: { cli: "-u", kind: "boolean" },
-      ignoreCase: { cli: "-i", kind: "boolean" },
+  uniqCount: builtin(
+    {
+      namespace: "text",
+      name: "uniqCount",
+      preset: { flags: { count: true } },
+      program: "uniq",
+      flags: {
+        count: { cli: "-c", kind: "boolean" },
+        repeated: { cli: "-d", kind: "boolean" },
+        unique: { cli: "-u", kind: "boolean" },
+        ignoreCase: { cli: "-i", kind: "boolean" },
+      },
+      positionals: [{ name: "paths", optional: true, variadic: true }],
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-  head: descriptorCommand({
+    { parse: parseUniqCount, out: { kind: "value", type: "json[]" } },
+  ),
+  head: builtin({
     namespace: "text",
     name: "head",
     program: "head",
@@ -166,7 +170,7 @@ export const filter = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  tail: descriptorCommand({
+  tail: builtin({
     namespace: "text",
     name: "tail",
     program: "tail",

@@ -17,7 +17,6 @@
     "effect": "4.1.2",
     "@loopy/core": "workspace:*",
     "@loopy/contract": "workspace:*",
-    "@loopy/sdk": "workspace:*",
-    "oxc-parser": "0.154.0"
+    "@loopy/sdk": "workspace:*"
   }
 }

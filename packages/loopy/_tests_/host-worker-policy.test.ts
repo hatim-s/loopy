@@ -65,7 +65,7 @@ for (const kind of ["command", "code"] as const) {
           kind === "command"
             ? sh([process.execPath, "--no-env-file", "-e", script])
             : code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" }),
-      }).graph;
+      });
 
       for (const node of graph.nodes) {
         if (node.kind === "code") {
@@ -196,7 +196,7 @@ test("a completed real worker receipt wins after completion apply fails", async 
         "-e",
         'const f = Bun.file("count"); const n = await f.exists() ? Number(await f.text()) : 0; await Bun.write("count", String(n+1)); console.log("ok");',
       ]),
-  }).graph;
+  });
 
   try {
     await Effect.runPromise(store.createRun({ ...newRun(), input: {} }));
@@ -239,7 +239,7 @@ test("graceful daemon stop drains a real worker and retains its finished success
         "-e",
         'await Bun.write("started", "once"); while (!(await Bun.file("release").exists())) { await Bun.sleep(10); } console.log("ok");',
       ]),
-  }).graph;
+  });
 
   try {
     await Effect.runPromise(

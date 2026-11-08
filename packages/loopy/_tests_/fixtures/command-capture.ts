@@ -21,7 +21,7 @@ export function capture(run: () => void): Capture {
 
         return null;
       },
-    }).graph;
+    });
 
     for (const node of graph.nodes) {
       if (node.kind === "command" && node.parse) {
