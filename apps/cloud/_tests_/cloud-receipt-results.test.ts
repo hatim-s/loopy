@@ -2,7 +2,6 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { decodeBoundary } from "@loopy/contract";
 import {
   type AuthorityCommand,
-  AuthorityError,
   RECEIPTS_NAMESPACE_HEADER,
   RECEIPTS_PATH,
   resultOperations,
@@ -200,14 +199,4 @@ test("missing, mismatched, malformed and oversized R2 results fail closed", asyn
   await expect(
     Effect.runPromise(results.get({ sha256: badRef.sha256, size: SANDBOX_MAX_CAPTURE_BYTES + 1 })),
   ).rejects.toThrow("HTTP 400");
-});
-
-test("oversized canonical results are rejected as invalid_state before publication", async () => {
-  const results = harness.authority.resultsFor("alpha");
-
-  await expect(
-    Effect.runPromise(
-      results.put({ kind: "succeeded", output: "x".repeat(SANDBOX_MAX_CAPTURE_BYTES), logs: [] }),
-    ),
-  ).rejects.toEqual(new AuthorityError("invalid_state"));
 });

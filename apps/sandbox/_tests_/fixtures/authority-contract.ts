@@ -9,6 +9,7 @@ import {
   type ModelAction,
   modelStep,
 } from "./authority-model";
+import { authorityRules, openCurrent } from "./authority-rules";
 
 const run = Effect.runPromise;
 
@@ -19,13 +20,6 @@ export interface AuthoritySubject {
   plan(runId: string, attempt?: number): Promise<DockerAttemptPlan>;
   /** Drops in-memory state as a process or isolate restart does and keeps durable state. */
   restart(): Promise<void>;
-}
-
-// The filesystem adapter keeps one in-memory epoch and the DO persists a counter, so callers ask.
-async function openCurrent(authority: SandboxAttemptAuthority, nonce: string) {
-  const { epoch } = await run(authority.status({}));
-
-  return run(authority.openSession({ expectedEpoch: epoch, nonce }));
 }
 
 const outcome = (reply: { kind: string; code?: string }) =>
@@ -116,6 +110,8 @@ export function authorityContract(name: string, open: () => Promise<AuthoritySub
       await replay(await open(), trace, `model-${index}`);
     }
   });
+
+  authorityRules(name, open);
 }
 
 async function replay(subject: AuthoritySubject, trace: ModelAction[], id: string) {
