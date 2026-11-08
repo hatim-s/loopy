@@ -10,8 +10,7 @@ import {
 } from "../playground/metrics/sql-probe";
 import { sqlCases } from "../playground/metrics/sql-queries";
 import { evidence, state } from "./config";
-
-const PLANNED_RUNS = 45;
+import { PLANNED_RUNS } from "./plan";
 
 const path = resolve(state, "daemon-readonly.sqlite");
 
@@ -83,7 +82,7 @@ try {
     limits: [
       "Only supplied daemon-readonly.sqlite was opened;no live home DB,API requests,restarts,migrations or writes.",
       "No query timings collected. Host Bun/SQLite differs from cloud DO/Docker.",
-      "Plans identify mechanisms for this45-run data;they do not establish production scalability or runtime parity.",
+      `Plans identify mechanisms for this ${PLANNED_RUNS}-run data;they do not establish production scalability or runtime parity.`,
       "The cloud-native timing artifact and daemon plans are not a controlled hardware comparison.",
     ],
   };
