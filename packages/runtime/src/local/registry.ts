@@ -22,14 +22,16 @@ import { redactSourceArtifact } from "./source-view";
 function readEntry(file: string) {
   const value: unknown = JSON.parse(readFileSync(file, "utf8"));
 
-  if (isRecord(value) && value.version === 3) {
-    const entry = decodeBoundary(savedLoopySchema)(value);
-    validateSlug(entry.slug);
-
-    return entry;
+  if (!isRecord(value) || value.version !== 3) {
+    throw new Error(
+      `Registry entry '${file}' uses an old format. Delete it and save the loopy again.`,
+    );
   }
 
-  return null;
+  const entry = decodeBoundary(savedLoopySchema)(value);
+  validateSlug(entry.slug);
+
+  return entry;
 }
 
 function sameSave(previous: SavedLoopy, body: PutLoopyBody) {
@@ -91,11 +93,7 @@ export class Registry {
           continue;
         }
 
-        const entry = readEntry(file);
-
-        if (entry) {
-          return entry;
-        }
+        return readEntry(file);
       }
 
       return null;
@@ -113,10 +111,7 @@ export class Registry {
 
         for (const file of readdirSync(directory).filter((name) => name.endsWith(".json"))) {
           const entry = readEntry(join(directory, file));
-
-          if (entry) {
-            entries.set(entry.slug, entry);
-          }
+          entries.set(entry.slug, entry);
         }
       }
 
