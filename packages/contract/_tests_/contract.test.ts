@@ -407,4 +407,8 @@ test("schedule events reach the wire as schedule views with a null last fire key
   expect(wire).toEqual({ ...event, record: { ...event.record, lastFireKey: null } });
   expect(contract.decodeBoundary(contract.serverEventSchema)(wire)).toEqual(wire);
   expect(() => contract.decodeBoundary(contract.serverEventSchema)(event)).toThrow();
+  // Only node events carry an output, so only they can report one truncated.
+  expect(() =>
+    contract.decodeBoundary(contract.serverEventSchema)({ ...wire, truncatedOutputBytes: 1 }),
+  ).toThrow();
 });
