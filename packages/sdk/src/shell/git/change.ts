@@ -1,10 +1,8 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin } from "../builtin";
 import { parseBranch, parseRemote, parseTag } from "../parse/git";
 
 export const change = {
   add: builtin({
-    namespace: "git",
-    name: "add",
     program: "git",
     path: ["add"],
     flags: {
@@ -17,8 +15,6 @@ export const change = {
     positionalSeparator: true,
   }),
   commit: builtin({
-    namespace: "git",
-    name: "commit",
     program: "git",
     path: ["commit"],
     flags: {
@@ -35,8 +31,6 @@ export const change = {
     positionalSeparator: true,
   }),
   push: builtin({
-    namespace: "git",
-    name: "push",
     program: "git",
     path: ["push"],
     flags: {
@@ -52,8 +46,6 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   pull: builtin({
-    namespace: "git",
-    name: "pull",
     program: "git",
     path: ["pull"],
     flags: {
@@ -64,8 +56,6 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   fetch: builtin({
-    namespace: "git",
-    name: "fetch",
     program: "git",
     path: ["fetch"],
     flags: {
@@ -78,8 +68,6 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   checkout: builtin({
-    namespace: "git",
-    name: "checkout",
     program: "git",
     path: ["checkout"],
     flags: {
@@ -91,8 +79,6 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   switch: builtin({
-    namespace: "git",
-    name: "switch",
     program: "git",
     path: ["switch"],
     flags: {
@@ -111,8 +97,6 @@ export const change = {
             "%(refname:short)%00%(HEAD)%00%(upstream:short)%00%(objectname)%00%(upstream:track)",
         },
       },
-      namespace: "git",
-      name: "branch",
       program: "git",
       path: ["branch"],
       flags: {
@@ -131,8 +115,6 @@ export const change = {
   remote: builtin(
     {
       preset: { flags: { verbose: true } },
-      namespace: "git",
-      name: "remote",
       program: "git",
       path: ["remote"],
       flags: {
@@ -146,8 +128,6 @@ export const change = {
     {
       exclude: ["delete", "annotate", "message"],
       preset: { flags: { format: "%(refname:short)%00%(objectname)%00%(taggerdate:iso-strict)" } },
-      namespace: "git",
-      name: "tag",
       program: "git",
       path: ["tag"],
       flags: {

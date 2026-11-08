@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { boundaryOptions, diagnosticSchema, graphSchema } from "@loopy/contract";
 import { errorMessage } from "@loopy/core";
-import { compilerLauncher, spawnCaptured } from "@loopy/runtime/os";
+import { spawnCaptured, withBundleSandbox } from "@loopy/runtime/os";
+import { evaluatorSource, graphEntry } from "@loopy/sdk/graph-host";
 import { Effect, Schema } from "effect";
 import {
   AuthorDiagnostics,
@@ -21,7 +22,14 @@ const reportedDiagnostic = Schema.decodeUnknownResult(
   boundaryOptions,
 );
 
-export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule[]) {
+const EVALUATION_TIMEOUT_MS = 10_000;
+
+const EVALUATION_OUTPUT_BYTES = 16 * 1024 * 1024;
+
+export const evaluate = Effect.fn(function* (
+  file: string,
+  modules: readonly Pick<AuthorModule, "file" | "evaluated">[],
+) {
   return yield* Effect.acquireUseRelease(
     compilerIO("create compiler scratch", file, () => mkdtemp(join(tmpdir(), "loopy-compiler-"))),
     (scratch) =>
@@ -32,11 +40,7 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
 
         const entry = join(canonicalScratch, "evaluate.ts");
         yield* compilerIO("write evaluator entry", entry, () =>
-          writeFile(
-            entry,
-            `import {emitGraph} from ${JSON.stringify(Bun.resolveSync("@loopy/sdk/graph-host", import.meta.dir))};
-            await emitGraph(() => import(${JSON.stringify(file)}));`,
-          ),
+          writeFile(entry, evaluatorSource(file)),
         );
         const sources = new Map(modules.map((module) => [module.file, module.evaluated]));
 
@@ -52,9 +56,7 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
                 name: "restricted-author-source",
                 setup(build) {
                   build.onResolve({ filter: /^loopy/ }, ({ path }) =>
-                    SDK_SPECIFIERS.includes(path)
-                      ? { path: Bun.resolveSync("@loopy/sdk/graph", import.meta.dir) }
-                      : undefined,
+                    SDK_SPECIFIERS.includes(path) ? { path: graphEntry() } : undefined,
                   );
                   build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, ({ path }) => {
                     const source = sources.get(path);
@@ -84,27 +86,29 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
         yield* compilerIO("write evaluator", executable, () =>
           writeFile(executable, new Uint8Array(bytes)),
         );
-        const cwd = yield* compilerIO("resolve evaluator cwd", file, () => realpath(dirname(file)));
 
-        const compilerProgram = yield* compilerIO("resolve compiler executable", file, () =>
-          realpath(process.execPath),
-        );
-
-        const [program, args] = yield* compilerLauncher(compilerProgram, cwd).pipe(
-          Effect.mapError(
-            (cause) => new CompilationError({ operation: "compiler launcher", file, cause }),
-          ),
-        );
-
-        const captured = yield* spawnCaptured(
-          {
-            program,
-            args: [...args, "--smol", executable],
-            cwd,
-            env: { PATH: "/usr/bin:/bin", HOME: cwd, TMPDIR: cwd },
-          },
-          { timeoutMs: 10_000, maxOutputBytes: 16 * 1024 * 1024 },
+        // The scratch workspace holds only the evaluator, so no state inside it needs hiding.
+        const captured = yield* withBundleSandbox(
+          { bundle: executable, workspace: canonicalScratch, network: false, home: null },
+          ({ program, args }) =>
+            spawnCaptured(
+              {
+                program,
+                args,
+                cwd: canonicalScratch,
+                env: { PATH: "/usr/bin:/bin", HOME: canonicalScratch, TMPDIR: canonicalScratch },
+              },
+              { timeoutMs: EVALUATION_TIMEOUT_MS, maxOutputBytes: EVALUATION_OUTPUT_BYTES },
+            ),
         ).pipe(
+          Effect.catchTags({
+            ScratchCleanupError: (cause) =>
+              Effect.fail(
+                new CompilationError({ operation: "remove evaluator scratch", file, cause }),
+              ),
+            ProcessFilesystemError: (cause) =>
+              Effect.fail(new CompilationError({ operation: "stage evaluator", file, cause })),
+          }),
           Effect.catchTag(
             "CommandExecutionError",
             (cause): Effect.Effect<never, AuthorDiagnostics | CompilationError> =>

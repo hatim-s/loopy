@@ -18,7 +18,7 @@ export function captureSource(
   modules: AuthorModule[],
 ): SourceArtifact {
   const calls = modules.flatMap((module, index) =>
-    (module.sourceCalls ?? []).map((call) => ({ ...call, module, fileId: `file-${index}` })),
+    module.sourceCalls.map((call) => ({ ...call, module, fileId: `file-${index}` })),
   );
 
   const ranges = graph.nodes.flatMap((node) => {

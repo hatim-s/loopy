@@ -1,9 +1,7 @@
-import { builtin } from "../graph/nodes/command";
+import { builtin, namespace } from "./builtin";
 
-export const archive = {
+export const archive = namespace("archive", {
   tar: builtin({
-    namespace: "archive",
-    name: "tar",
     program: "tar",
     flags: {
       create: { cli: "-c", kind: "boolean" },
@@ -18,8 +16,6 @@ export const archive = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   gzip: builtin({
-    namespace: "archive",
-    name: "gzip",
     program: "gzip",
     flags: {
       decompress: { cli: "-d", kind: "boolean" },
@@ -31,8 +27,6 @@ export const archive = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   zip: builtin({
-    namespace: "archive",
-    name: "zip",
     program: "zip",
     flags: {
       recursive: { cli: "-r", kind: "boolean" },
@@ -43,8 +37,6 @@ export const archive = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   unzip: builtin({
-    namespace: "archive",
-    name: "unzip",
     program: "unzip",
     flags: {
       list: { cli: "-l", kind: "boolean" },
@@ -55,4 +47,4 @@ export const archive = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-};
+});

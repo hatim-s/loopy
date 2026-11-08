@@ -1,10 +1,8 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin } from "../builtin";
 import { parseStashList } from "../parse/git";
 
 export const stash = {
   push: builtin({
-    namespace: "git",
-    name: "stash.push",
     program: "git",
     path: ["stash", "push"],
     flags: {
@@ -16,8 +14,6 @@ export const stash = {
     positionalSeparator: true,
   }),
   pop: builtin({
-    namespace: "git",
-    name: "stash.pop",
     program: "git",
     path: ["stash", "pop"],
     flags: {
@@ -28,8 +24,6 @@ export const stash = {
   list: builtin(
     {
       preset: { flags: { format: "%gd%x00%H%x00%gs" } },
-      namespace: "git",
-      name: "stash.list",
       program: "git",
       path: ["stash", "list"],
       flags: {

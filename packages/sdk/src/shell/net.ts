@@ -1,5 +1,5 @@
 import type { Prepare } from "../descriptor";
-import { builtin } from "../graph/nodes/command";
+import { builtin, namespace } from "./builtin";
 import { CURL_WRITE_OUT, parseCurl } from "./parse/net";
 
 const curlInput: Prepare = (input) => {
@@ -12,15 +12,13 @@ const curlInput: Prepare = (input) => {
   return input;
 };
 
-export const net = {
+export const net = namespace("net", {
   curl: builtin(
     {
       preset: {
         flags: { silent: true, showError: true, dumpHeader: "-", writeOut: CURL_WRITE_OUT },
       },
       exclude: ["output", "include", "head"],
-      namespace: "net",
-      name: "curl",
       program: "curl",
       flags: {
         url: { cli: "--url", kind: "string" },
@@ -61,4 +59,4 @@ export const net = {
       prepare: curlInput,
     },
   ),
-};
+});

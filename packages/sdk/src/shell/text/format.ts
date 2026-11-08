@@ -1,9 +1,7 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin } from "../builtin";
 import { parseJq, parseSha256, parseWc } from "../parse/text";
 
 const base64Descriptor = {
-  namespace: "text",
-  name: "base64",
   program: "base64",
   flags: {
     decode: { cli: "-d", kind: "boolean" },
@@ -27,8 +25,6 @@ export const format = {
   wc: builtin(
     {
       exclude: ["lines", "words", "bytes", "characters"],
-      namespace: "text",
-      name: "wc",
       program: "wc",
       flags: {
         lines: { cli: "-l", kind: "boolean" },
@@ -41,8 +37,6 @@ export const format = {
     { parse: parseWc, out: { kind: "value", type: "json[]" } },
   ),
   tr: builtin({
-    namespace: "text",
-    name: "tr",
     program: "tr",
     flags: {
       delete: { cli: "-d", kind: "boolean" },
@@ -52,8 +46,6 @@ export const format = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   diff: builtin({
-    namespace: "text",
-    name: "diff",
     program: "diff",
     flags: {
       unified: { cli: "-u", kind: "boolean" },
@@ -67,8 +59,6 @@ export const format = {
     {
       exclude: ["rawOutput", "rawOutput0"],
       preset: { flags: { compactOutput: true } },
-      namespace: "text",
-      name: "jq",
       program: "jq",
       flags: {
         rawOutput0: { cli: "--raw-output0", kind: "boolean" },
@@ -86,8 +76,6 @@ export const format = {
     { parse: parseJq, out: { kind: "value", type: "json" } },
   ),
   yq: builtin({
-    namespace: "text",
-    name: "yq",
     program: "yq",
     flags: {
       rawOutput: { cli: "-r", kind: "boolean" },
@@ -100,8 +88,6 @@ export const format = {
   sha256sum: builtin(
     {
       exclude: ["check"],
-      namespace: "text",
-      name: "sha256sum",
       program: "sha256sum",
       flags: {
         check: { cli: "-c", kind: "boolean" },

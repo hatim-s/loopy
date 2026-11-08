@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
 import { type BundledNode, carriesBundle, type Graph, type Node } from "@loopy/core";
+import { runnerSource } from "@loopy/runtime/executor/protocol";
 import { builtinParser } from "@loopy/sdk/graph-host";
 import { Effect } from "effect";
 import { AuthorDiagnostics, authorFailure, compilerIO } from "./errors";
 import { checkImports } from "./module-imports";
-import { runnerSource } from "./runner";
 import { sourcePaths, typescriptPaths } from "./source-paths";
-import type { Bundle, CompilerDiagnostic, ParserSource } from "./types";
+import type { Bundle, CompilerDiagnostic } from "./types";
 
-function buildModule(module: ParserSource, kind: "code" | "parser") {
+type ModuleExport = { file: string; exportName: string };
+
+function buildModule(module: ModuleExport, kind: "code" | "parser") {
   return compilerIO("bundle module", module.file, () =>
     Bun.build({
       throw: false,
@@ -37,24 +39,23 @@ function buildModule(module: ParserSource, kind: "code" | "parser") {
   );
 }
 
-const buildNode = Effect.fn(function* (
-  node: BundledNode,
-  parsers: Map<string, ParserSource>,
-  entry: string,
-) {
+const buildNode = Effect.fn(function* (node: BundledNode, entry: string) {
   if (node.kind === "code") {
     const module = { file: node.module.path, exportName: "default" };
 
     return { file: module.file, result: yield* buildModule(module, "code") };
   }
 
-  const parser = parsers.get(node.key) ?? builtinParser(node.key);
+  const parser =
+    node.parse.module === null
+      ? builtinParser(node.key)
+      : { file: node.parse.module, exportName: "default" };
 
   if (!parser) {
     return yield* authorFailure(
       "bundle_failed",
       entry,
-      `Declare parser '${node.key}' in a module-level defineCommand descriptor.`,
+      `Command '${node.key}' has no built-in parser. Give its descriptor a parse module.`,
     );
   }
 
@@ -62,11 +63,7 @@ const buildNode = Effect.fn(function* (
 });
 
 /** Returns the graph with each executable node pointing at the hash of its bundle. */
-export const bundle = Effect.fn(function* (
-  graph: Graph,
-  parsers: Map<string, ParserSource>,
-  entry: string,
-) {
+export const bundle = Effect.fn(function* (graph: Graph, entry: string) {
   const bundles: Bundle[] = [];
   const nodes: Node[] = [];
 
@@ -76,7 +73,7 @@ export const bundle = Effect.fn(function* (
       continue;
     }
 
-    const { file, result } = yield* buildNode(node, parsers, entry);
+    const { file, result } = yield* buildNode(node, entry);
     const output = result.outputs[0];
 
     if (!result.success || !output) {

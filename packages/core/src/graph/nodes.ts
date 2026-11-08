@@ -105,7 +105,14 @@ export const commandNodeSchema = struct({
   rateLimit: Schema.NullOr(rateLimitSchema),
   retry: retrySchema,
   okExitCodes: Schema.Array(Schema.Int).pipe(Schema.mutable),
-  parse: Schema.NullOr(struct({ bundleHash: Schema.NullOr(Schema.String), input: values })),
+  // A null parser module names the built-in parser for the command key.
+  parse: Schema.NullOr(
+    struct({
+      module: Schema.NullOr(Schema.String),
+      bundleHash: Schema.NullOr(Schema.String),
+      input: values,
+    }),
+  ),
 });
 
 const MAP_ERROR_MODES = ["fail", "collect"] as const;

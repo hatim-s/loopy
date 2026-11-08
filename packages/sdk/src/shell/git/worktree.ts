@@ -1,10 +1,8 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin } from "../builtin";
 import { parseWorktreeList } from "../parse/git";
 
 export const worktree = {
   add: builtin({
-    namespace: "git",
-    name: "worktree.add",
     program: "git",
     path: ["worktree", "add"],
     flags: {
@@ -17,8 +15,6 @@ export const worktree = {
   list: builtin(
     {
       preset: { flags: { porcelain: true, z: false } },
-      namespace: "git",
-      name: "worktree.list",
       program: "git",
       path: ["worktree", "list"],
       flags: {
@@ -29,8 +25,6 @@ export const worktree = {
     { parse: parseWorktreeList, out: { kind: "value", type: "json[]" } },
   ),
   remove: builtin({
-    namespace: "git",
-    name: "worktree.remove",
     program: "git",
     path: ["worktree", "remove"],
     flags: {

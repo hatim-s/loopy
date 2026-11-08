@@ -1,4 +1,4 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin } from "../builtin";
 import {
   parseDf,
   parseDu,
@@ -18,8 +18,6 @@ export const metadata = {
     {
       preset: { flags: { print0: true } },
       exclude: ["print", "ls", "delete", "printf", "exec", "prune"],
-      namespace: "fs",
-      name: "find",
       program: "find",
       flags: {
         name: { cli: "-name", kind: "string" },
@@ -61,8 +59,6 @@ export const metadata = {
     {
       preset: { flags: { json: true, noReport: true } },
       exclude: ["f", "indent", "noIndent", "color", "classify"],
-      namespace: "fs",
-      name: "tree",
       program: "tree",
       flags: {
         a: { cli: "-a", kind: "boolean" },
@@ -84,8 +80,6 @@ export const metadata = {
   stat: builtin(
     {
       preset: { flags: { format: STAT_DARWIN_FORMAT } },
-      namespace: "fs",
-      name: "stat",
       program: "stat",
       flags: {
         format: { cli: "-f", kind: "string" },
@@ -104,8 +98,6 @@ export const metadata = {
     { parse: parseStat, out: { kind: "value", type: "json[]" } },
   ),
   chmod: builtin({
-    namespace: "fs",
-    name: "chmod",
     program: "chmod",
     flags: {
       recursive: { cli: "-R", kind: "boolean" },
@@ -122,8 +114,6 @@ export const metadata = {
     ],
   }),
   ln: builtin({
-    namespace: "fs",
-    name: "ln",
     program: "ln",
     flags: {
       symbolic: { cli: "-s", kind: "boolean" },
@@ -137,8 +127,6 @@ export const metadata = {
   realpath: builtin(
     {
       parsedPositionals: [{ name: "path" }],
-      namespace: "fs",
-      name: "realpath",
       program: "realpath",
       flags: {
         quiet: { cli: "-q", kind: "boolean" },
@@ -149,8 +137,6 @@ export const metadata = {
   ),
   which: builtin(
     {
-      namespace: "fs",
-      name: "which",
       program: "which",
       okExitCodes: [0, 1],
       positionals: [{ name: "program" }],
@@ -159,8 +145,6 @@ export const metadata = {
   ),
   mktemp: builtin(
     {
-      namespace: "fs",
-      name: "mktemp",
       program: "mktemp",
       flags: {
         directory: { cli: "-d", kind: "boolean" },
@@ -179,8 +163,6 @@ export const metadata = {
     {
       preset: { flags: { kilobytes: true } },
       exclude: ["humanReadable"],
-      namespace: "fs",
-      name: "du",
       program: "du",
       flags: {
         humanReadable: { cli: "-h", kind: "boolean" },
@@ -196,8 +178,6 @@ export const metadata = {
     {
       preset: { flags: { kilobytes: true, portable: true } },
       exclude: ["humanReadable"],
-      namespace: "fs",
-      name: "df",
       program: "df",
       flags: {
         humanReadable: { cli: "-h", kind: "boolean" },

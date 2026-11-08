@@ -1,5 +1,5 @@
 import type { Prepare } from "../../descriptor";
-import { builtin } from "../../graph/nodes/command";
+import { builtin } from "../builtin";
 import { parseLs } from "../parse/fs";
 
 export const currentDirectory: Prepare = (input) => ({
@@ -8,8 +8,6 @@ export const currentDirectory: Prepare = (input) => ({
 });
 
 const rawLs = {
-  namespace: "fs",
-  name: "ls",
   program: "ls",
   flags: {
     a: { cli: "-a", kind: "boolean" },
@@ -28,8 +26,6 @@ const rawLs = {
 } as const;
 
 const parsedLs = {
-  namespace: "fs",
-  name: "ls",
   program: "find",
   preset: { flags: { maxDepth: 1, minDepth: 1, print0: true } },
   flags: {
@@ -49,8 +45,6 @@ export const files = {
     raw: rawLs,
   }),
   cat: builtin({
-    namespace: "fs",
-    name: "cat",
     program: "cat",
     flags: {
       n: { cli: "-n", kind: "boolean" },
@@ -61,8 +55,6 @@ export const files = {
     positionalSeparator: true,
   }),
   cp: builtin({
-    namespace: "fs",
-    name: "cp",
     program: "cp",
     flags: {
       recursive: { cli: "-R", kind: "boolean" },
@@ -83,8 +75,6 @@ export const files = {
     positionalSeparator: true,
   }),
   mv: builtin({
-    namespace: "fs",
-    name: "mv",
     program: "mv",
     flags: {
       force: { cli: "-f", kind: "boolean" },
@@ -95,8 +85,6 @@ export const files = {
     positionalSeparator: true,
   }),
   rm: builtin({
-    namespace: "fs",
-    name: "rm",
     program: "rm",
     flags: {
       recursive: { cli: "-r", kind: "boolean" },
@@ -108,8 +96,6 @@ export const files = {
     positionalSeparator: true,
   }),
   mkdir: builtin({
-    namespace: "fs",
-    name: "mkdir",
     program: "mkdir",
     flags: {
       parents: { cli: "-p", kind: "boolean" },
@@ -120,8 +106,6 @@ export const files = {
     positionalSeparator: true,
   }),
   touch: builtin({
-    namespace: "fs",
-    name: "touch",
     program: "touch",
     flags: {
       access: { cli: "-a", kind: "boolean" },

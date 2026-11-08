@@ -1,5 +1,5 @@
 import type { Prepare } from "../../descriptor";
-import { builtin } from "../../graph/nodes/command";
+import { builtin } from "../builtin";
 import { parseGrep, parseGrepCount, parseUniqCount } from "../parse/text";
 
 const GREP_FLAGS = {
@@ -37,8 +37,6 @@ export const filter = {
       okExitCodes: [0, 1],
       preset: { flags: { n: true } },
       exclude: ["c", "l", "L", "o", "q", "H", "h", "A", "B", "C"],
-      namespace: "text",
-      name: "grep",
       program: "grep",
       flags: GREP_FLAGS,
       positionals: [{ name: "paths", optional: true, variadic: true }],
@@ -52,8 +50,6 @@ export const filter = {
   ),
   grepCount: builtin(
     {
-      namespace: "text",
-      name: "grepCount",
       program: "grep",
       okExitCodes: [0, 1],
       preset: { flags: { c: true, h: true } },
@@ -65,8 +61,6 @@ export const filter = {
     { parse: parseGrepCount, out: { kind: "value", type: "number" } },
   ),
   sed: builtin({
-    namespace: "text",
-    name: "sed",
     program: "sed",
     flags: {
       n: { cli: "-n", kind: "boolean" },
@@ -93,8 +87,6 @@ export const filter = {
     },
   }),
   awk: builtin({
-    namespace: "text",
-    name: "awk",
     program: "awk",
     flags: {
       fieldSeparator: { cli: "-F", kind: "string" },
@@ -108,8 +100,6 @@ export const filter = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   cut: builtin({
-    namespace: "text",
-    name: "cut",
     program: "cut",
     flags: {
       fields: { cli: "-f", kind: "string" },
@@ -120,8 +110,6 @@ export const filter = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   sort: builtin({
-    namespace: "text",
-    name: "sort",
     program: "sort",
     flags: {
       numeric: { cli: "-n", kind: "boolean" },
@@ -133,8 +121,6 @@ export const filter = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   uniq: builtin({
-    namespace: "text",
-    name: "uniq",
     program: "uniq",
     flags: {
       count: { cli: "-c", kind: "boolean" },
@@ -146,8 +132,6 @@ export const filter = {
   }),
   uniqCount: builtin(
     {
-      namespace: "text",
-      name: "uniqCount",
       preset: { flags: { count: true } },
       program: "uniq",
       flags: {
@@ -161,8 +145,6 @@ export const filter = {
     { parse: parseUniqCount, out: { kind: "value", type: "json[]" } },
   ),
   head: builtin({
-    namespace: "text",
-    name: "head",
     program: "head",
     flags: {
       lines: { cli: "-n", kind: "number" },
@@ -171,8 +153,6 @@ export const filter = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
   tail: builtin({
-    namespace: "text",
-    name: "tail",
     program: "tail",
     flags: {
       lines: { cli: "-n", kind: "number" },

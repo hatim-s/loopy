@@ -11,7 +11,8 @@ import { linuxBundle } from "./bundle-linux";
 import { filesystem, removeScratch } from "./io";
 import { sandboxTool } from "./tool";
 
-type Options = { bundle: string; workspace: string; network: boolean; home: string };
+/** `home` is a directory to hide even when the workspace contains it, or null for none. */
+type Options = { bundle: string; workspace: string; network: boolean; home: string | null };
 
 export type BundleSandboxOptions = Options & { bun: string };
 

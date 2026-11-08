@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { compile as compileEffect } from "@loopy/compiler";
 import { parseModuleOutput } from "@loopy/contract";
-import { canonicalJson, type Json, validateGraph } from "@loopy/core";
+import { type Json, validateGraph } from "@loopy/core";
 import { Effect } from "effect";
 import { evaluate as evaluateEffect } from "../../compiler/src/evaluate";
 import { compiledBody } from "./compiled-fixture";
@@ -158,7 +158,7 @@ for (const effect of ["network", "write"]) {
     await writeFile(file, source);
 
     try {
-      await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toMatchObject({
+      await expect(evaluate(file, [{ file, evaluated: source }])).rejects.toMatchObject({
         _tag: "AuthorDiagnostics",
         diagnostics: [{ code: "evaluation_failed" }],
       });
@@ -174,7 +174,7 @@ test("evaluation has a hard ten second timeout", async () => {
   const { file } = await project("while(true){} export default {};");
   const source = await Bun.file(file).text();
   const started = performance.now();
-  await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toMatchObject({
+  await expect(evaluate(file, [{ file, evaluated: source }])).rejects.toMatchObject({
     _tag: "AuthorDiagnostics",
     diagnostics: [{ code: "evaluation_failed", message: "Command timed out after 10000 ms." }],
   });
@@ -264,10 +264,6 @@ for (const name of ["hello", "review", "asset-sync", "www-sync"]) {
   });
 }
 
-test("canonical JSON sorts nested keys and preserves array order", () => {
-  expect(canonicalJson({ z: [{ b: 2, a: 1 }], a: null })).toBe('{"a":null,"z":[{"a":1,"b":2}]}');
-});
-
 test("code bundle import.meta names each source module instead of the saved bundle", async () => {
   const { root, file } = await project(
     'import {loopy,code} from "__SDK__"; export default loopy("paths", {input:{},run:()=>code("paths",{in:{},out:{kind:"record",fields:{entry:"string",helper:"string"}},module:"./code.ts"})});',
@@ -302,7 +298,7 @@ test("code bundle import.meta names each source module instead of the saved bund
 
 test("bundles execute the stdin/stdout protocol and preserve prepared parser input", async () => {
   const { root, file } = await project(
-    'import {loopy,defineCommand,code} from "__SDK__"; const command=defineCommand({namespace:"custom",name:"parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("executable", {input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
+    'import {loopy,defineCommand,code} from "__SDK__"; const command=defineCommand({key:"custom.parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("executable", {input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
   );
 
   await writeFile(
@@ -699,9 +695,24 @@ for (const [name, source, message] of [
 ] as const) {
   test(`evaluator ${name} stays an author failure`, async () => {
     const { file } = await project(source);
-    await expect(evaluate(file, [{ file, source, evaluated: source }])).rejects.toMatchObject({
+    await expect(evaluate(file, [{ file, evaluated: source }])).rejects.toMatchObject({
       _tag: "AuthorDiagnostics",
       diagnostics: [{ code: "evaluation_failed", message: expect.stringContaining(message) }],
     });
   });
 }
+
+test("a label key is ordinary data outside command options, and label flags compile", async () => {
+  const { root, file } = await project(
+    'import {loopy,code,defineCommand} from "__SDK__"; const gh=defineCommand({key:"gh.issue",program:"gh",flags:{label:{cli:"--label",kind:"string",repeatable:true}}}); export default loopy("labels", {input:{name:"string"},run:({input})=>{gh({flags:{label:[input.get("name")]}},{label:"tag"});return code("step",{in:{label:input.get("name")},out:{kind:"value",type:"string"},module:"./step.ts"});}});',
+  );
+
+  await writeFile(join(root, "step.ts"), "export default (input) => input.label;");
+  const result = await compile(file);
+
+  if (!result.ok) {
+    throw new Error(JSON.stringify(result.diagnostics));
+  }
+
+  expect(result.graph.nodes.slice(0, 2).map((node) => node.label)).toEqual(["tag", "step"]);
+});

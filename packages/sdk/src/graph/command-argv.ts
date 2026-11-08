@@ -5,10 +5,9 @@ import {
   checkCommandFlags,
 } from "@loopy/core";
 import {
+  type CommandDeclaration,
   type CommandDefinition,
-  type CommandDescriptor,
   type CommandOperands,
-  commandKey,
   type PositionalDefinition,
   type Prepare,
   parsedFlags,
@@ -21,7 +20,6 @@ export type CommandArguments = CommandOperands<string | RefValue, AuthorValue>;
 type Mode = { kind: "raw" } | { kind: "parsed"; prepare?: Prepare };
 
 type RenderedCommand = {
-  key: string;
   program: string;
   operands: (string | RefValue)[];
   flags: Readonly<Record<string, AuthorValue>>;
@@ -79,7 +77,7 @@ const deferred = (value: AuthorValue) => value instanceof RefValue;
 
 /** Each declared variant must accept the same author flags, since the executing host picks one. */
 function variants(
-  descriptor: CommandDescriptor,
+  descriptor: CommandDeclaration,
   input: CommandArguments,
   flags: Readonly<Record<string, AuthorValue>>,
   mode: Mode,
@@ -107,11 +105,11 @@ function variants(
 
 /** Validates author operands and flags with the rules the executor applies to resolved values. */
 export function commandArgv(
-  descriptor: CommandDescriptor,
+  key: string,
+  descriptor: CommandDeclaration,
   input: CommandArguments,
   mode: Mode,
 ): RenderedCommand {
-  const key = commandKey(descriptor);
   const flags = mode.kind === "parsed" ? parsedFlags(descriptor, input) : (input.flags ?? {});
   const unprepared = { ...input, flags };
   const prepared = mode.kind === "parsed" && mode.prepare ? mode.prepare(unprepared) : unprepared;
@@ -127,7 +125,6 @@ export function commandArgv(
   checkCommandFlags(spec, prepared.flags ?? {}, deferred);
 
   return {
-    key,
     program: descriptor.program,
     operands: operands(descriptor, prepared),
     flags: prepared.flags ?? {},
