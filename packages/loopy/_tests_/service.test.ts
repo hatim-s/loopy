@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { decodeBoundary, encodeRunCursor, graphView, routes } from "@loopy/contract";
-import type { Graph, RunRecord } from "@loopy/core";
+import type { Graph } from "@loopy/core";
 import { revision } from "@loopy/core";
 import { makeLocalService, Registry } from "@loopy/runtime/local";
 import { makeService } from "@loopy/runtime/service";

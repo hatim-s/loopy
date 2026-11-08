@@ -390,6 +390,7 @@ function releaseRunning(makeStore: StoreFactory): void {
     await Effect.runPromise(store.release("run", "owner"));
     const after = new Date().toISOString();
     const run = await Effect.runPromise(store.getRun("run"));
+
     if (run?.status !== "suspended" || run.wakeAt === null) {
       throw new Error("Expected a suspended run with a wake time.");
     }
