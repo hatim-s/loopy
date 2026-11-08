@@ -48,8 +48,7 @@ export function makeRunViews(context: ServiceContext) {
       runView({
         run,
         hook: hooks.get(run.id),
-        now,
-        leaseMs: context.store.leaseMs,
+        ownerStale: context.store.ownerStale(run, now),
       });
   });
 

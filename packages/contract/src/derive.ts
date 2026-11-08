@@ -14,8 +14,8 @@ import type { LoopyView, RunView, ScheduleView, ServerEvent } from "./views";
 type RunViewOptions = {
   run: RunPreview;
   hook: PendingHook | undefined;
-  now: string;
-  leaseMs: number;
+  // The store decides staleness because only it knows whether a local owner is still alive.
+  ownerStale: boolean;
 };
 
 function outcome(run: RunRecord) {
@@ -39,7 +39,7 @@ export function previewPayload(value: Json): { value: Json; bytes: number | null
 }
 
 export function runView(options: RunViewOptions): RunView {
-  const { run, now, leaseMs } = options;
+  const { run } = options;
 
   const owner = run.owner
     ? { pid: run.owner.pid, host: run.owner.host, heartbeatAt: run.owner.heartbeatAt }
@@ -71,7 +71,7 @@ export function runView(options: RunViewOptions): RunView {
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     owner,
-    ownerStale: owner !== null && Date.parse(now) - Date.parse(owner.heartbeatAt) > leaseMs,
+    ownerStale: owner !== null && options.ownerStale,
     waitingOn: options.hook
       ? {
           hook: options.hook.name,

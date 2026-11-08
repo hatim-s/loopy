@@ -58,6 +58,7 @@ import {
   claimRun,
   heartbeatRun,
   insertRun,
+  isStaleRun,
   readDueRuns,
   readNextWakeAt,
   readRun,
@@ -181,6 +182,10 @@ export class SqlRunStore implements Store, DurableTurnStore, DashboardReader {
 
   createRun(run: RunRecord) {
     return this.write("createRun", (write) => insertRun(write, run));
+  }
+
+  ownerStale(run: RunRecord, now: string) {
+    return isStaleRun(this.ctx, run, Date.parse(now));
   }
 
   getRun(id: string) {

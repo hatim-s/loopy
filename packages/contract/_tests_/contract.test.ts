@@ -7,10 +7,8 @@ import * as contract from "../src";
 
 const now = newRun().createdAt;
 
-const leaseMs = 60_000;
-
-function view(run: core.RunRecord, hook?: contract.PendingHook) {
-  return contract.runView({ run, hook, now, leaseMs });
+function view(run: core.RunRecord, hook?: contract.PendingHook, ownerStale = false) {
+  return contract.runView({ run, hook, ownerStale });
 }
 
 const hook: contract.PendingHook = {
@@ -22,7 +20,7 @@ const hook: contract.PendingHook = {
   expiresAt: null,
 };
 
-test("views strip fencing tokens and derive staleness at the lease boundary", () => {
+test("views strip fencing tokens and report staleness only for an owned run", () => {
   const run: core.RunRecord = {
     ...newRun(),
     status: "running",
@@ -41,23 +39,8 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
     ),
   ).toBe(false);
   expect(derived.ownerStale).toBe(false);
-  expect(
-    contract.runView({
-      run,
-      hook: undefined,
-      now: new Date(Date.parse(now) + leaseMs).toISOString(),
-      leaseMs,
-    }).ownerStale,
-  ).toBe(false);
-  expect(
-    contract.runView({
-      run,
-      hook: undefined,
-      now: new Date(Date.parse(now) + leaseMs + 1).toISOString(),
-      leaseMs,
-    }).ownerStale,
-  ).toBe(true);
-  expect(view(newRun())).toMatchObject({ owner: null, ownerStale: false });
+  expect(view(run, undefined, true).ownerStale).toBe(true);
+  expect(view(newRun(), undefined, true)).toMatchObject({ owner: null, ownerStale: false });
 });
 
 test("waitingOn names the run's pending hook and is null without one", () => {
