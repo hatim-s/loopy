@@ -1,9 +1,14 @@
 import {
+  type CursorView,
+  decodeEventBatch,
   decodeRouteResponse,
   type ErrorCode,
   type Route,
   type RouteInput,
   routeRequest,
+  routes,
+  type ServerEvent,
+  splitSseFrames,
 } from "@loopy/contract";
 import { readDaemonFile } from "@loopy/runtime/local";
 import { Data, Effect, Exit } from "effect";
@@ -117,6 +122,104 @@ export const request = <R extends Route>(context: ClientContext, route: R, input
 
       case "malformed": {
         return yield* new TransportError({ operation: "decode", method, cause: undefined });
+      }
+    }
+  });
+
+type StreamOutcome =
+  | { kind: "stopped" }
+  | { kind: "ended" }
+  | { kind: "malformed" }
+  | { kind: "rejected"; status: number; text: string };
+
+async function readEvents(
+  response: Response,
+  onBatch: (events: ServerEvent[]) => boolean,
+): Promise<StreamOutcome> {
+  const reader = response.body?.getReader();
+
+  if (!reader) {
+    return { kind: "ended" };
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      const split = splitSseFrames(buffer + decoder.decode(chunk.value, { stream: true }));
+      buffer = split.rest;
+
+      for (const frame of split.frames) {
+        let events: ServerEvent[];
+
+        try {
+          events = decodeEventBatch(frame.data);
+        } catch {
+          return { kind: "malformed" };
+        }
+
+        if (onBatch(events)) {
+          return { kind: "stopped" };
+        }
+      }
+    }
+
+    return { kind: "ended" };
+  } finally {
+    await reader.cancel();
+  }
+}
+
+/**
+ * Streams event batches committed after `from` until `onBatch` returns true. The stream ending
+ * first means the daemon stopped, which the caller sees as a transport failure.
+ */
+export const followEvents = (
+  context: ClientContext,
+  from: CursorView,
+  onBatch: (events: ServerEvent[]) => boolean,
+) =>
+  Effect.gen(function* () {
+    const record = yield* daemon(context);
+
+    const { url } = yield* cliSync(() =>
+      routeRequest(routes.events, { query: { after: from.cursor, epoch: from.epoch } }),
+    );
+
+    const outcome = yield* Effect.tryPromise({
+      try: async (signal): Promise<StreamOutcome> => {
+        const response = await fetch(`http://127.0.0.1:${record.port}${url}`, {
+          headers: { Authorization: `Bearer ${record.token}` },
+          signal,
+        });
+
+        return response.ok
+          ? readEvents(response, onBatch)
+          : { kind: "rejected", status: response.status, text: await response.text() };
+      },
+      catch: (cause) => new TransportError({ operation: "fetch", method: "GET", cause }),
+    });
+
+    switch (outcome.kind) {
+      case "stopped": {
+        return;
+      }
+
+      case "ended": {
+        return yield* new TransportError({ operation: "fetch", method: "GET", cause: undefined });
+      }
+
+      case "malformed": {
+        return yield* new TransportError({ operation: "decode", method: "GET", cause: undefined });
+      }
+
+      case "rejected": {
+        const decoded = decodeRouteResponse(routes.events, outcome.status, outcome.text);
+
+        return yield* decoded.kind === "error"
+          ? new HttpError({ status: outcome.status, ...decoded.error })
+          : new TransportError({ operation: "decode", method: "GET", cause: undefined });
       }
     }
   });

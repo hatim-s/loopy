@@ -10,7 +10,7 @@ import { newRun } from "../../core/_tests_/fixtures/run";
 import { object } from "../../runtime/_tests_/fixtures/project";
 import { onCleanup, runScoped } from "../../runtime/_tests_/fixtures/test-scope";
 import { waitForExit } from "../../runtime/_tests_/fixtures/wait";
-import { cli } from "./fixtures/cli";
+import { cli, spawnCli } from "./fixtures/cli";
 
 async function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
@@ -265,6 +265,75 @@ test("HTTP logs drains every page for normal output and terminal follow", async 
   expect([...normal.stdout.matchAll(/"seq":\s*(\d+)/g)].map((match) => Number(match[1]))).toEqual(
     followed.map((line) => line.seq),
   );
+});
+
+test("logs --follow streams logs written while the run is live and stops when it finishes", async () => {
+  const f = await graphFixture();
+  const at = () => new Date().toISOString();
+  await Effect.runPromise(
+    f.store.createRun({ ...newRun(), id: "live", slug: "compiled", workspace: f.cwd }),
+  );
+  await Effect.runPromise(f.store.claim("live", "live-owner"));
+
+  const write = (message: string) =>
+    Effect.runPromise(
+      f.store.apply({
+        runId: "live",
+        token: "live-owner",
+        effects: [
+          {
+            kind: "write_log",
+            executionKey: {
+              runId: "live",
+              nodeId: decodeBoundary(nodeIdSchema)("0:log"),
+              scope: [],
+            },
+            attempt: 1,
+            log: { message, data: null },
+            at: at(),
+          },
+        ],
+      }),
+    );
+
+  await write("before");
+  const child = spawnCli(f, ["logs", "live", "--follow"], "ignore");
+  onCleanup(() => child.kill());
+  const reader = child.stdout.getReader();
+  const decoder = new TextDecoder();
+  let stdout = "";
+
+  // The first line proves the drain finished, so the next log can only arrive over the stream.
+  while (!stdout.includes("\n")) {
+    const chunk = await reader.read();
+
+    if (chunk.done) {
+      throw new Error(`logs --follow exited early: ${await new Response(child.stderr).text()}`);
+    }
+
+    stdout += decoder.decode(chunk.value, { stream: true });
+  }
+
+  await write("during");
+  await Effect.runPromise(
+    f.store.apply({
+      runId: "live",
+      token: "live-owner",
+      effects: [{ kind: "finish_run", outcome: { status: "succeeded", output: null }, at: at() }],
+    }),
+  );
+
+  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+    stdout += decoder.decode(chunk.value, { stream: true });
+  }
+
+  expect(await child.exited).toBe(0);
+  expect(
+    stdout
+      .trim()
+      .split("\n")
+      .map((line) => object(line).message),
+  ).toEqual(["before", "during"]);
 });
 
 test("HTTP run reports named JSON input errors before creating a run", async () => {
