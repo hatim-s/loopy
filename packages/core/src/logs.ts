@@ -1,5 +1,5 @@
-import { MAX_LOG_BYTES, outputBytes } from "./json";
 import type { AttemptLog } from "./executor";
+import { MAX_LOG_BYTES, outputBytes } from "./json";
 import { isString } from "./validation";
 
 export function limitLogs(logs: AttemptLog[]): AttemptLog[] {
