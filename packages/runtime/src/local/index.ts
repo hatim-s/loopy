@@ -1,10 +1,12 @@
 export { makeSqliteRunStore, openRunStore, type SqliteRunStore } from "../store";
 
-export { localDaemon } from "./daemon";
+export { LocalDaemonError, localDaemon } from "./daemon";
 
 export { daemonUrl, readDaemonFile } from "./daemon/file";
 
 export { installDaemon, uninstallDaemon } from "./daemon/install";
+
+export { DaemonInstallError } from "./daemon/install-files";
 
 export { defaultHome } from "./home";
 
