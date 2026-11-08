@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { executionKeyString, type ScheduleView } from "@loopy/contract";
 import { QueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
-import { onCleanup, runScoped } from "../../../packages/loopy/_tests_/fixtures/test-scope";
+import { onCleanup, runScoped } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { startServer } from "../../../packages/runtime/src/local/server/start-server";
 import { localHttpBackend } from "../src/backend/local-http";
 import { graphModel } from "../src/lib/graph";

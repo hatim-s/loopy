@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { makeLocalService } from "@loopy/runtime/local";
 import { openRunStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
-import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
-import { onCleanup, runScoped } from "../../../packages/loopy/_tests_/fixtures/test-scope";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
+import { onCleanup, runScoped } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { originSecurity } from "../../../packages/runtime/src/local/server/security";
 import {
   createRequestHandler,

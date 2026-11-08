@@ -52,7 +52,7 @@ loopy run hello --input-file input.json
 
 Choose one input source. Use `--key=value` for dash-prefixed values or `-- --key value` for input names that collide with command options. Definitions may set description, mode, scope, declared secrets and schedule. The defaults are project scope and sandbox mode. Saving a new version leaves existing runs pinned to their original graph and bundles.
 
-The workflows under `examples/` still use the removed executable step SDK. Their migration belongs to PR 7; they are not runnable examples of the current builder. The graph fixtures under `packages/loopy/_tests_` exercise the current API.
+The workflows under `examples/` still use the removed executable step SDK. Their migration belongs to PR 7; they are not runnable examples of the current builder. The graph fixtures under `packages/sdk/_tests_/fixtures/graph-examples` exercise the current API.
 
 ## Run, inspect and schedule
 

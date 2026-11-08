@@ -5,11 +5,11 @@ import { revision, waitRecordSchema } from "@loopy/core";
 import { log, loopy, wait } from "@loopy/sdk/graph";
 import { Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
-import { bundleForBrowser } from "../../../packages/loopy/_tests_/fixtures/bundle";
-import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
-import { fileScope, onCleanup } from "../../../packages/loopy/_tests_/fixtures/test-scope";
-import { until } from "../../../packages/loopy/_tests_/fixtures/wait";
+import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
+import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
+import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
+import { until } from "../../../packages/runtime/_tests_/fixtures/wait";
 
 let runtime: Miniflare;
 

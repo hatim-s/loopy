@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
-import { probeRuntime } from "../../../../packages/loopy/_tests_/fixtures/workerd-probe";
 import type { SummarySizeRequest } from "./summary-size-workerd";
+import { probeRuntime } from "./workerd-probe";
 
 export async function summarySizeRuntime() {
   const harness = await probeRuntime({

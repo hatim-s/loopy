@@ -1,6 +1,6 @@
 import type { PutLoopyBody } from "@loopy/contract";
 import { canonicalJson, revision } from "@loopy/core";
-import { compiledBody } from "../../../../packages/loopy/_tests_/compiled-fixture";
+import { compiledBody } from "../../../../packages/runtime/_tests_/fixtures/compiled";
 import { ARTIFACT_LIMITS } from "../../src/artifacts/storage";
 
 export function utf8(value: string): number {

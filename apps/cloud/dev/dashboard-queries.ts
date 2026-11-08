@@ -6,13 +6,13 @@ import { join, resolve } from "node:path";
 import { MAX_OVERVIEW_BUCKETS, MAX_PREVIEW_BYTES, PAGE_LIMIT } from "@loopy/contract";
 import { Effect, Exit, Scope } from "effect";
 import {
-  largeMapFixture,
-  manyRunsFixture,
-} from "../../../packages/loopy/_tests_/dashboard-scale-fixture";
-import {
   dashboardReads,
   queryPlans,
-} from "../../../packages/loopy/_tests_/fixtures/dashboard-reads";
+} from "../../../packages/runtime/_tests_/fixtures/dashboard-reads";
+import {
+  largeMapFixture,
+  manyRunsFixture,
+} from "../../../packages/runtime/_tests_/fixtures/dashboard-scale";
 import { FEED_SCAN_LIMIT } from "../../../packages/runtime/src/store/query/scan";
 
 const parent = resolve(import.meta.dir, "../../..", ".loopy/dashboard-queries");

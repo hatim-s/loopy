@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { qualityTestRoot } from "../../../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { qualityTestRoot } from "../../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { requireCurrentBaseline } from "../../../dev/playground/baseline";
 import { groups, summaryPath } from "../../../dev/playground/journal";
 import { baselineEndpoints } from "../../../dev/playground/metrics/sampler";

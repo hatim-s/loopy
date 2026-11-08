@@ -4,8 +4,8 @@ import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { attemptResources, dockerAttemptPlanSchema } from "@loopy/contract/sandbox";
 import { Effect, Exit, Scope } from "effect";
 import { Miniflare } from "miniflare";
-import { bundleForBrowser } from "../../../../packages/loopy/_tests_/fixtures/bundle";
-import { qualityTestRoot } from "../../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { bundleForBrowser } from "../../../../packages/runtime/_tests_/fixtures/bundle";
+import { qualityTestRoot } from "../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { HttpSandboxAuthority } from "../../../sandbox/src/http-authority";
 
 export const bridgeToken = "synthetic-receipt-bridge-credential-0001";

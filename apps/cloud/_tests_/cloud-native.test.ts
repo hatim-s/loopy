@@ -11,10 +11,10 @@ import { canonicalJson, type Json } from "@loopy/core";
 import { RegistryError, readBoundedBody } from "@loopy/runtime/service";
 import { Cause, Effect, Exit } from "effect";
 import { Miniflare } from "miniflare";
-import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
-import { bundleForBrowser } from "../../../packages/loopy/_tests_/fixtures/bundle";
-import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
-import { fileScope, onCleanup } from "../../../packages/loopy/_tests_/fixtures/test-scope";
+import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
+import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
+import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { readBoundedText } from "../src/http";
 import { SandboxProvider } from "../src/provider";
 

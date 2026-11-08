@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
-import { qualityTestRoot } from "../../../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { qualityTestRoot } from "../../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { playgroundConfigSchema, withReceiptMode } from "../../../dev/playground/config";
 import { approvedDiagnostic, diagnosticPath } from "../../../dev/playground/metrics/snapshot";
 import type { PlaygroundProfile } from "../../../dev/playground/profile";

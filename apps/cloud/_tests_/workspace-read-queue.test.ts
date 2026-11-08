@@ -7,10 +7,10 @@ import { revision } from "@loopy/core";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Effect, Exit, Scope } from "effect";
 import { Miniflare } from "miniflare";
-import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
-import { bundleForBrowser } from "../../../packages/loopy/_tests_/fixtures/bundle";
-import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
-import { bounded } from "../../../packages/loopy/_tests_/fixtures/wait";
+import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
+import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
+import { bounded } from "../../../packages/runtime/_tests_/fixtures/wait";
 import {
   type QueueProofDetails,
   type QueueProofEvent,

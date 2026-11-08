@@ -3,7 +3,7 @@ import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { apiRoutes, dispatch, makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect } from "effect";
-import { runIn } from "../../../../packages/loopy/_tests_/fixture";
+import { runIn } from "../../../../packages/core/_tests_/fixtures/run";
 import { R2ArtifactRegistry } from "../../src/artifacts";
 import { DurableSqlDriver } from "../../src/sql-driver";
 

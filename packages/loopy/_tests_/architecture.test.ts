@@ -3,8 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { Schema } from "effect";
 import ts from "typescript";
-import { bundleForBrowser } from "./fixtures/bundle";
-import { qualityTestRoot } from "./fixtures/quality-test-root";
+import { bundleForBrowser } from "../../runtime/_tests_/fixtures/bundle";
+import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
 
 const ROOT = resolve(import.meta.dir, "../../..");
 
@@ -384,6 +384,21 @@ test("the entries tsconfig.portable.json typechecks without Bun also bundle for 
     qualityTestRoot("portable"),
     { naming: "[dir]/[name].[ext]" },
   );
+});
+
+test("the test script runs every package, app and examples test root", () => {
+  const { scripts } = Schema.decodeUnknownSync(
+    Schema.Struct({ scripts: Schema.Struct({ test: Schema.String }) }),
+  )(manifest(ROOT));
+
+  const roots = [
+    ...["packages", "apps"].flatMap((parent) =>
+      readdirSync(join(ROOT, parent)).map((owner) => `${parent}/${owner}/_tests_`),
+    ),
+    "examples/_tests_",
+  ].filter((root) => existsSync(join(ROOT, root)));
+
+  expect(roots.filter((root) => !scripts.test.split(" ").includes(`./${root}`))).toEqual([]);
 });
 
 test("the published manifest depends on exactly the vendored packages' external dependencies", () => {
