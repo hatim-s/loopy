@@ -1,8 +1,9 @@
-import { cp, lstat, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { CLI_ENTRY } from "../../../../packages/cli/src/entry";
 import { catalogSchema, regularFiles } from "../playground/repository";
+import { lstatOrAbsent } from "../shared/fs";
 import { sha256Hex } from "../shared/hash";
 import { root } from "../stack/constants";
 import { environment, evidencePath, home, port, source, state, upstream } from "./config";
@@ -45,7 +46,7 @@ export async function selections() {
 export async function prepare() {
   await mkdir(state, { recursive: true });
   const marker = await readFile(join(upstream, ".playground-source-sha256"), "utf8");
-  const sourceExists = await lstat(source).catch(() => null);
+  const sourceExists = await lstatOrAbsent(source);
 
   if (sourceExists) {
     if (
