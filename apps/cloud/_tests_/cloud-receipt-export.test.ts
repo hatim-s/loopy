@@ -21,7 +21,6 @@ authorityContract("Durable Object", async () => ({
   resultsFor: (workspace) => harness.authority.resultsFor(workspace),
   plan: (runId, attempt) => harness.plan(runId, attempt),
   restart: () => harness.reopen(),
-  unknownExportToken: "missing",
 }));
 
 async function finished(runId: string) {

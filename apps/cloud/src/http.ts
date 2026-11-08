@@ -16,7 +16,7 @@ export function readBoundedText(
 ): Effect.Effect<string, CloudError | BodyLimitError | BodyReadError> {
   if (!response.body) {
     return Effect.fail(
-      new CloudError({ operation: "read body", cause: "Sandbox returned an empty receipt." }),
+      new CloudError({ operation: "read body", cause: "Sandbox returned an empty response body." }),
     );
   }
 

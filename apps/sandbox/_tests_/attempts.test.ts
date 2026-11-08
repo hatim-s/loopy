@@ -19,7 +19,7 @@ import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/qual
 import type { ArtifactReader } from "../src/artifacts";
 import { Attempts } from "../src/attempt";
 import type { AttemptDependenciesFactory } from "../src/attempt/dependencies";
-import { sandboxConfigSchema } from "../src/config";
+import { sandboxConfig, sandboxConfigSchema } from "../src/config";
 import { type AttemptBackend, DockerBackend } from "../src/docker";
 import { DockerClient } from "../src/docker/client";
 import { ownerOf, SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../src/docker/identity";
@@ -47,14 +47,15 @@ async function fixture() {
   const worktree = qualityTestRoot("cloud-sandbox");
   await writeFile(join(worktree, "package.json"), JSON.stringify({ private: true }));
 
-  const config = decodeBoundary(sandboxConfigSchema)({
-    worktree,
-    stateRoot: join(worktree, ".loopy/cloud/sandbox"),
-    token,
-    dockerContext: SANDBOX_DOCKER_CONTEXT,
-    image: SANDBOX_IMAGE,
-    port: 0,
-  });
+  const config = sandboxConfig(
+    decodeBoundary(sandboxConfigSchema)({
+      worktree,
+      token,
+      dockerContext: SANDBOX_DOCKER_CONTEXT,
+      image: SANDBOX_IMAGE,
+      port: 0,
+    }),
+  );
 
   await validateStateRoot(config);
 
@@ -718,15 +719,9 @@ test("state roots reject symlinks and public binding; live root ownership is exc
   const config = await fixture();
   expect(
     Result.isSuccess(
-      Schema.decodeUnknownResult(sandboxConfigSchema, { onExcessProperty: "error" })({
-        ...config,
-        hostname: "0.0.0.0",
-      }),
+      Schema.decodeUnknownResult(sandboxConfigSchema)({ ...config, hostname: "0.0.0.0" }),
     ),
   ).toBe(false);
-  await expect(
-    validateStateRoot({ ...config, stateRoot: join(config.worktree, "elsewhere") }),
-  ).rejects.toThrow("<worktree>/.loopy/cloud/sandbox");
   const other = await fixture();
   await rm(join(other.stateRoot, "receipts"), { recursive: true });
   await symlink(config.stateRoot, join(other.stateRoot, "receipts"));

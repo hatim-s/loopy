@@ -1,10 +1,11 @@
 import { CLOUD_MAX_REQUEST_BYTES } from "@loopy/contract";
+import { RECEIPTS_PATH, WORKSPACE_HEADER } from "@loopy/contract/sandbox";
 import { bearerMatches, errorResponse, json, readBoundedBody } from "@loopy/runtime/service";
 import { Effect } from "effect";
 import { cloudConfig, type Environment, servesLocally } from "./environment";
 import { acceptsOrigin, mebibytes } from "./http";
 import { platform } from "./operation";
-import { RECEIPTS_PATH, routeReceipts } from "./receipts/route";
+import { routeReceipts } from "./receipts/route";
 
 export { SandboxReceipts } from "./receipts";
 
@@ -59,7 +60,7 @@ function handle(request: Request, env: Environment) {
     }
 
     const headers = new Headers(request.headers);
-    headers.set("X-Loopy-Workspace", principal.workspace);
+    headers.set(WORKSPACE_HEADER, principal.workspace);
     const stub = env.WORKSPACES.get(env.WORKSPACES.idFromName(principal.workspace));
 
     return yield* platform("forward workspace request", () =>

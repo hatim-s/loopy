@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { decodeBoundary } from "@loopy/contract";
 import { Effect } from "effect";
-import { sandboxConfigSchema } from "./config";
+import { sandboxConfig, sandboxConfigSchema } from "./config";
 import { SANDBOX_IMAGE } from "./docker/identity";
 import { startSandbox } from "./server";
 
@@ -9,7 +9,6 @@ const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
     worktree: { type: "string" },
-    "state-root": { type: "string" },
     "docker-context": { type: "string" },
     image: { type: "string", default: SANDBOX_IMAGE },
     hostname: { type: "string" },
@@ -24,19 +23,20 @@ const { values } = parseArgs({
 // An omitted flag stays undefined, so the config schema applies its own default.
 const numeric = (value: string | undefined) => (value === undefined ? undefined : Number(value));
 
-const config = decodeBoundary(sandboxConfigSchema)({
-  worktree: values.worktree,
-  stateRoot: values["state-root"],
-  dockerContext: values["docker-context"],
-  image: values.image,
-  hostname: values.hostname,
-  port: numeric(values.port),
-  maxTimeoutMs: numeric(values["max-timeout-ms"]),
-  memory: values.memory,
-  cpus: numeric(values.cpus),
-  pids: numeric(values.pids),
-  token: process.env.LOOPY_SANDBOX_TOKEN,
-});
+const config = sandboxConfig(
+  decodeBoundary(sandboxConfigSchema)({
+    worktree: values.worktree,
+    dockerContext: values["docker-context"],
+    image: values.image,
+    hostname: values.hostname,
+    port: numeric(values.port),
+    maxTimeoutMs: numeric(values["max-timeout-ms"]),
+    memory: values.memory,
+    cpus: numeric(values.cpus),
+    pids: numeric(values.pids),
+    token: process.env.LOOPY_SANDBOX_TOKEN,
+  }),
+);
 
 await Effect.runPromise(
   Effect.scoped(

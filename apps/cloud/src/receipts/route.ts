@@ -1,11 +1,9 @@
-import { SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract/sandbox";
+import { AUTHORITY_MAX_BODY_BYTES, RECEIPTS_NAMESPACE_HEADER } from "@loopy/contract/sandbox";
 import { bearerMatches, readBoundedBody } from "@loopy/runtime/service";
 import { Effect } from "effect";
 import type { Environment } from "../environment";
 import { cloudConfig } from "../environment";
 import { platform } from "../operation";
-
-export const RECEIPTS_PATH = "/internal/sandbox-receipts";
 
 /** The Worker calls this after servesLocally, so only the local stage on loopback reaches it. */
 export function routeReceipts(request: Request, env: Environment) {
@@ -24,7 +22,7 @@ export function routeReceipts(request: Request, env: Environment) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    if (request.headers.get("X-Loopy-Receipts-Namespace") !== receipts.namespace) {
+    if (request.headers.get(RECEIPTS_NAMESPACE_HEADER) !== receipts.namespace) {
       return Response.json({ error: "forbidden" }, { status: 403 });
     }
 
@@ -32,11 +30,11 @@ export function routeReceipts(request: Request, env: Environment) {
       return Response.json({ error: "method_not_allowed" }, { status: 405 });
     }
 
-    const body = yield* readBoundedBody(request.body, SANDBOX_MAX_REQUEST_BYTES).pipe(
+    const body = yield* readBoundedBody(request.body, AUTHORITY_MAX_BODY_BYTES).pipe(
       Effect.catchTag("BodyLimitError", () => Effect.succeed(null)),
     );
 
-    if (body === null || body.byteLength === 0) {
+    if (body === null) {
       return Response.json({ error: "invalid_request" }, { status: 400 });
     }
 

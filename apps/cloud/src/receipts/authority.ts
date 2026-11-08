@@ -5,6 +5,7 @@ import {
   admitTransition,
   beginExportTransition,
   completeTransition,
+  endExportTransition,
 } from "@loopy/contract/sandbox";
 import type { ReceiptSql } from "./sql";
 
@@ -73,13 +74,18 @@ export class ReceiptAuthority {
 
   endExport(input: AuthorityInput<"endExport">): null {
     return this.db.storage.transactionSync(() => {
-      this.db.checkSession(input.session);
+      const decision = endExportTransition(input, {
+        current: this.db.current(),
+        active: this.db.export(input.token)?.active ?? false,
+      });
 
-      if (!this.db.export(input.token)) {
-        throw new AuthorityError("missing");
+      if (decision.kind === "rejected") {
+        throw new AuthorityError(decision.code);
       }
 
-      this.db.releaseExport(input.token);
+      if (decision.kind === "release") {
+        this.db.releaseExport(input.token);
+      }
 
       return null;
     });

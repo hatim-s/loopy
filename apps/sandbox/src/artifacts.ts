@@ -3,6 +3,7 @@ import {
   artifactHelperName,
   type DockerAttemptPlan,
   SANDBOX_MAX_ARTIFACT_BYTES,
+  SANDBOX_MAX_ARTIFACT_RESPONSE_BYTES,
   type SandboxArtifact,
   sandboxArtifactReadSchema,
   verifiedBase64,
@@ -162,7 +163,7 @@ export class DockerArtifacts implements ArtifactReader {
 
             const output = yield* docker.required(["start", "--attach", helper], {
               timeoutMs: 10_000,
-              maxBytes: 1_500_000,
+              maxBytes: SANDBOX_MAX_ARTIFACT_RESPONSE_BYTES,
             });
 
             const response = yield* checked("artifact response", () =>

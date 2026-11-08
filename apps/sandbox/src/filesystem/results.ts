@@ -1,18 +1,18 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { decodeBoundary, type ExecutionResult, executionResultSchema } from "@loopy/contract";
+import type { ExecutionResult } from "@loopy/contract";
 import {
   AuthorityError,
   type ResultRef,
   resultBytes,
   resultRef,
   SANDBOX_MAX_CAPTURE_BYTES,
-  sameRef,
+  verifiedResult,
 } from "@loopy/contract/sandbox";
 import { publishExclusive, readRegularFile } from "@loopy/runtime/os";
 import { Effect } from "effect";
 import type { ImmutableResults } from "../authority";
-import { checked, failure } from "../operations";
+import { checked, failure, io } from "../operations";
 import { stateLayout } from "../state-root";
 
 export class FilesystemResults implements ImmutableResults {
@@ -33,9 +33,9 @@ export class FilesystemResults implements ImmutableResults {
         readRegularFile(this.path(ref), SANDBOX_MAX_CAPTURE_BYTES),
       );
 
-      const bytes = read && Uint8Array.from(read);
+      const result = yield* io("decode", () => verifiedResult(read && Uint8Array.from(read), ref));
 
-      if (!bytes || !sameRef(yield* Effect.promise(() => resultRef(bytes)), ref)) {
+      if (!result) {
         return yield* Effect.fail(
           failure(
             "immutable-results",
@@ -46,9 +46,7 @@ export class FilesystemResults implements ImmutableResults {
         );
       }
 
-      return yield* checked("decode", () =>
-        decodeBoundary(executionResultSchema)(JSON.parse(new TextDecoder().decode(bytes))),
-      );
+      return result;
     }).pipe(Effect.uninterruptible);
   }
 

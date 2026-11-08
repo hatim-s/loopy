@@ -31,7 +31,6 @@ authorityContract("filesystem", async () => {
       await run(current.close());
       current = new FilesystemAuthority(config.stateRoot);
     },
-    unknownExportToken: "released",
   };
 });
 

@@ -11,7 +11,7 @@ import {
 import { Effect } from "effect";
 import { qualityTestRoot } from "../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import type { ArtifactReader } from "../../src/artifacts";
-import { sandboxConfigSchema } from "../../src/config";
+import { sandboxConfig, sandboxConfigSchema } from "../../src/config";
 import type { AttemptBackend } from "../../src/docker";
 import { FilesystemAuthority } from "../../src/filesystem/authority";
 import { FilesystemResults } from "../../src/filesystem/results";
@@ -52,14 +52,15 @@ export async function authorityFixture() {
   const root = qualityTestRoot("authority");
   await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
 
-  const config = decodeBoundary(sandboxConfigSchema)({
-    worktree: root,
-    stateRoot: join(root, ".loopy/cloud/sandbox"),
-    token: "sandbox-authority-test-token-32-characters",
-    dockerContext: "fixture",
-    image: "fixture",
-    port: 0,
-  });
+  const config = sandboxConfig(
+    decodeBoundary(sandboxConfigSchema)({
+      worktree: root,
+      token: "sandbox-authority-test-token-32-characters",
+      dockerContext: "fixture",
+      image: "fixture",
+      port: 0,
+    }),
+  );
 
   await validateStateRoot(config);
   const authority = new FilesystemAuthority(config.stateRoot);

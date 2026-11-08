@@ -1,5 +1,6 @@
 import { decodeBoundary } from "@loopy/contract";
 import {
+  AUTHORITY_MAX_BODY_BYTES,
   AuthorityError,
   type AuthorityInput,
   authorityErrorSchema,
@@ -7,7 +8,8 @@ import {
   type OperationInput,
   type OperationName,
   operationOutput,
-  SANDBOX_MAX_REQUEST_BYTES,
+  RECEIPTS_NAMESPACE_HEADER,
+  RECEIPTS_PATH,
 } from "@loopy/contract/sandbox";
 import { readBoundedBody } from "@loopy/runtime/service";
 import { Effect } from "effect";
@@ -26,7 +28,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
       );
     }
 
-    this.endpoint = new URL("/internal/sandbox-receipts", base);
+    this.endpoint = new URL(RECEIPTS_PATH, base);
   }
 
   private call<K extends OperationName>(operation: K, input: OperationInput<K>) {
@@ -37,7 +39,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
           redirect: "error",
           headers: {
             Authorization: `Bearer ${this.options.token}`,
-            "X-Loopy-Receipts-Namespace": this.options.namespace,
+            [RECEIPTS_NAMESPACE_HEADER]: this.options.namespace,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ operation, input }),
@@ -73,7 +75,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
     }
 
     const bytes = await Effect.runPromise(
-      readBoundedBody(response.body, SANDBOX_MAX_REQUEST_BYTES).pipe(
+      readBoundedBody(response.body, AUTHORITY_MAX_BODY_BYTES).pipe(
         Effect.catchTag("BodyLimitError", () =>
           Effect.die(new Error("Receipt authority response exceeds its byte limit.")),
         ),

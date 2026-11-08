@@ -2,12 +2,11 @@ import {
   SANDBOX_MAX_REQUEST_BYTES,
   type SandboxError,
   type SandboxErrorCode,
-  sandboxArtifactRequestSchema,
-  sandboxAttemptIdentitySchema,
+  sandboxArtifactQuerySchema,
+  sandboxAttemptQuerySchema,
   sandboxAttemptRequestSchema,
   sandboxErrorStatus,
 } from "@loopy/contract/sandbox";
-import { struct } from "@loopy/core";
 import { bearerMatches, readBoundedBody } from "@loopy/runtime/service";
 import { Cause, Effect, Result, Schema } from "effect";
 import { DockerArtifacts } from "./artifacts";
@@ -21,21 +20,13 @@ import { checked, io, type SandboxFailure } from "./operations";
 import { ExportCleanupError, SandboxRequestError } from "./request-error";
 import { closeableScope } from "./scope";
 
-function error(code: SandboxErrorCode, message: string, status: number = sandboxErrorStatus[code]) {
-  return Response.json({ error: { code, message } } satisfies SandboxError, { status });
+function error(code: SandboxErrorCode, message: string) {
+  return Response.json({ error: { code, message } } satisfies SandboxError, {
+    status: sandboxErrorStatus[code],
+  });
 }
 
 const attemptBodySchema = Schema.fromJsonString(sandboxAttemptRequestSchema);
-
-const identityQuerySchema = struct({
-  ...sandboxAttemptIdentitySchema.fields,
-  executionKey: Schema.fromJsonString(sandboxAttemptIdentitySchema.fields.executionKey),
-});
-
-const artifactQuerySchema = struct({
-  ...identityQuerySchema.fields,
-  path: sandboxArtifactRequestSchema.fields.path,
-});
 
 // BOUNDARY: HTTP request bodies and query parameters are checked against the sandbox wire schemas.
 function decodeRequest<S extends Schema.ConstraintDecoder<unknown>>(
@@ -48,14 +39,6 @@ function decodeRequest<S extends Schema.ConstraintDecoder<unknown>>(
   return Result.isSuccess(decoded)
     ? Effect.succeed(decoded.success)
     : Effect.fail(new SandboxRequestError("invalid_request", message));
-}
-
-function identityQuery(url: URL) {
-  return {
-    workspace: url.searchParams.get("workspace"),
-    executionKey: url.searchParams.get("key"),
-    attempt: Number(url.searchParams.get("attempt")),
-  };
 }
 
 function internalError() {
@@ -116,9 +99,11 @@ async function handle(attempts: Attempts, token: string, request: Request) {
       ),
     );
 
-    // The size limit keeps the request code and reports the HTTP 413 transport status.
     if (body === null) {
-      return error("invalid_request", "Attempt request exceeds its byte limit.", 413);
+      return error(
+        "too_large",
+        `Attempt request exceeds ${SANDBOX_MAX_REQUEST_BYTES} bytes. Reduce its bundles or input.`,
+      );
     }
 
     return respond(
@@ -135,9 +120,9 @@ async function handle(attempts: Attempts, token: string, request: Request) {
   if (route === "GET /artifacts") {
     return respond(
       decodeRequest(
-        artifactQuerySchema,
+        sandboxArtifactQuerySchema,
         "Supply an attempt identity and a relative artifact file path.",
-        { ...identityQuery(url), path: url.searchParams.get("path") },
+        Object.fromEntries(url.searchParams),
       ),
       (input) => attempts.artifact(input),
     );
@@ -146,9 +131,9 @@ async function handle(attempts: Attempts, token: string, request: Request) {
   if (route === "GET /attempts") {
     return respond(
       decodeRequest(
-        identityQuerySchema,
+        sandboxAttemptQuerySchema,
         "Supply workspace, JSON execution key and positive attempt.",
-        identityQuery(url),
+        Object.fromEntries(url.searchParams),
       ),
       (input) => attempts.lookup(input),
     );
@@ -195,7 +180,8 @@ export function startSandbox(
             Bun.serve({
               hostname: config.hostname,
               port: config.port,
-              maxRequestBodySize: SANDBOX_MAX_REQUEST_BYTES,
+              // Bun answers a bare 413 above its own cap. Its 128 MiB default sits above any
+              // request the contract can build, so the handler answers the coded limit error.
               fetch: attemptHandler(attempts, config.token),
             }),
           ),
