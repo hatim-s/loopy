@@ -1,9 +1,49 @@
 import { durationMs } from "../duration";
-import type { ExecutionSpec } from "../executor";
+import { DEFAULT_TIMEOUT_MS, type ExecutionSpec } from "../executor";
 import type { Node } from "../graph/nodes";
 import { isStringArray } from "../validation";
-import { ROOT_CONTEXT, resolve, resolveValues } from "./resolve";
+import { type ResolutionContext, ROOT_CONTEXT, resolve, resolveValues } from "./resolve";
 import type { EngineState } from "./state";
+
+type CommandNode = Extract<Node, { kind: "command" }>;
+
+function commandArgv(node: CommandNode, state: EngineState, context: ResolutionContext) {
+  const [program, ...operands] = node.argv.flatMap((value) => {
+    const argument = resolve(value, state, context);
+
+    if (Array.isArray(argument)) {
+      if (!isStringArray(argument)) {
+        throw new Error("Command argument arrays must contain only strings.");
+      }
+
+      return argument;
+    }
+
+    return [String(argument)];
+  });
+
+  if (program === undefined) {
+    throw new Error("Command argv is empty. Supply a program to run.");
+  }
+
+  return [program, ...operands] satisfies [string, ...string[]];
+}
+
+function parserSpec(node: CommandNode, state: EngineState, context: ResolutionContext) {
+  if (node.parse === null) {
+    return null;
+  }
+
+  if (node.parse.bundleHash === null) {
+    throw new Error("Parser bundle is missing. Save the graph again.");
+  }
+
+  return {
+    bundleHash: node.parse.bundleHash,
+    input: resolveValues(node.parse.input, state, context),
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+  };
+}
 
 export function executionSpec(
   node: Extract<Node, { kind: "code" | "command" }>,
@@ -19,44 +59,31 @@ export function executionSpec(
       kind: "code",
       bundleHash: node.module.bundleHash,
       input: resolveValues(node.in, state, context),
-      timeoutMs: node.timeout === null ? 300_000 : durationMs(node.timeout),
+      timeoutMs: node.timeout === null ? DEFAULT_TIMEOUT_MS : durationMs(node.timeout),
     };
   }
 
-  if (node.parse && node.parse.bundleHash === null) {
-    throw new Error("Parser bundle is missing. Save the graph again.");
-  }
+  const parse = parserSpec(node, state, context);
+  const { options } = node;
 
   return {
     kind: "command",
-    node,
-    argv: node.argv.flatMap((value) => {
-      const argument = resolve(value, state, context);
-
-      if (Array.isArray(argument)) {
-        if (!isStringArray(argument)) {
-          throw new Error("Command argument arrays must contain only strings.");
-        }
-
-        return argument;
-      }
-
-      return [String(argument)];
-    }),
+    key: node.key,
+    argv: commandArgv(node, state, context),
     flags: resolveValues(node.flags, state, context),
-    cwd: node.options.cwd === null ? null : String(resolve(node.options.cwd, state, context)),
+    flagSpec: node.flagSpec ?? null,
+    variants: node.variants ?? {},
+    cwd: options.cwd === null ? null : String(resolve(options.cwd, state, context)),
     env: Object.fromEntries(
-      Object.entries(resolveValues(node.options.env, state, context)).map(([key, value]) => [
+      Object.entries(resolveValues(options.env, state, context)).map(([key, value]) => [
         key,
         String(value),
       ]),
     ),
-    stdin: node.options.stdin === null ? null : String(resolve(node.options.stdin, state, context)),
-    parse: node.parse?.bundleHash
-      ? {
-          bundleHash: node.parse.bundleHash,
-          input: resolveValues(node.parse.input, state, context),
-        }
-      : null,
+    stdin: options.stdin === null ? null : String(resolve(options.stdin, state, context)),
+    timeoutMs: options.timeout === undefined ? DEFAULT_TIMEOUT_MS : durationMs(options.timeout),
+    maxOutputBytes: options.maxOutputBytes ?? null,
+    okExitCodes: [...node.okExitCodes],
+    parse,
   };
 }

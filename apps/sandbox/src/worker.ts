@@ -6,8 +6,8 @@ import {
   executionSpecSchema,
   SANDBOX_MAX_CAPTURE_BYTES,
 } from "@loopy/contract";
-import { durationMs, type Json, renderCommand } from "@loopy/core";
-import { bundleResult } from "@loopy/runtime/executor/protocol";
+import { type CommandSpec, type Json, renderCommand } from "@loopy/core";
+import { bundleResult, commandResult, stoppedResult } from "@loopy/runtime/executor/protocol";
 import { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect } from "effect";
 import { bundleFile, CONTAINER, containerEnvironment } from "./container-layout";
@@ -21,6 +21,9 @@ const environment = {
   ...containerEnvironment,
 };
 
+// Sandbox attempts declare no secrets, so nothing in their output needs masking.
+const unredacted = (text: string) => text;
+
 function bundle(hash: string, input: Json, timeoutMs: number) {
   return Effect.gen(function* () {
     const raw = yield* runCommand(["bun", `${CONTAINER.input}/${bundleFile(hash)}`], {
@@ -31,11 +34,11 @@ function bundle(hash: string, input: Json, timeoutMs: number) {
       maxBytes: SANDBOX_MAX_CAPTURE_BYTES,
     });
 
-    return bundleResult(raw, (text) => text);
+    return bundleResult(raw, unredacted);
   });
 }
 
-function command(spec: Extract<ExecutionSpec, { kind: "command" }>) {
+function command(spec: CommandSpec) {
   return Effect.gen(function* () {
     const cwd = yield* io("worker cwd", () =>
       realpath(resolve(CONTAINER.workspace, spec.cwd ?? ".")),
@@ -45,44 +48,26 @@ function command(spec: Extract<ExecutionSpec, { kind: "command" }>) {
       return failed("validation", "Command cwd must resolve inside /workspace.");
     }
 
-    const raw = yield* runCommand(renderCommand(spec), {
+    const raw = yield* runCommand(renderCommand(spec, process.platform), {
       cwd,
       env: { ...environment, ...spec.env },
       stdin: spec.stdin ?? undefined,
-      timeoutMs:
-        spec.node.options.timeout === undefined ? 300_000 : durationMs(spec.node.options.timeout),
+      timeoutMs: spec.timeoutMs,
       maxBytes: Math.min(
-        spec.node.options.maxOutputBytes ?? SANDBOX_MAX_CAPTURE_BYTES,
+        spec.maxOutputBytes ?? SANDBOX_MAX_CAPTURE_BYTES,
         SANDBOX_MAX_CAPTURE_BYTES,
       ),
     });
 
-    const result = { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode };
+    const step = commandResult(spec, raw, unredacted);
 
-    const logs = [
-      { message: "stdout", data: raw.stdout },
-      { message: "stderr", data: raw.stderr },
-    ];
-
-    if (!spec.node.okExitCodes.includes(raw.exitCode)) {
-      return {
-        ...failed("exit", `Command exited with code ${raw.exitCode}.`),
-        exitCode: raw.exitCode,
-        logs,
-      };
+    if (step.kind === "finished") {
+      return step.result;
     }
 
-    if (spec.parse === null) {
-      return { kind: "succeeded" as const, output: result, logs };
-    }
+    const parsed = yield* bundle(step.bundleHash, step.input, step.timeoutMs);
 
-    const parsed = yield* bundle(
-      spec.parse.bundleHash,
-      { result, input: spec.parse.input },
-      300_000,
-    );
-
-    return { ...parsed, logs: [...logs, ...parsed.logs] };
+    return { ...parsed, logs: [...step.logs, ...parsed.logs] };
   });
 }
 
@@ -93,12 +78,9 @@ function executeSpec(spec: ExecutionSpec) {
     Effect.map(boundedResult),
     Effect.catch((cause) =>
       Effect.succeed(
-        failed(
-          cause instanceof CommandExecutionError && cause.reason === "output_limit"
-            ? "output_limit"
-            : "execution",
-          cause.message,
-        ),
+        cause instanceof CommandExecutionError
+          ? boundedResult(stoppedResult(cause, unredacted))
+          : failed("execution", cause.message),
       ),
     ),
   );

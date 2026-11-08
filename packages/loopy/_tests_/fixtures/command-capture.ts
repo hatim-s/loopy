@@ -42,8 +42,8 @@ export function capture(run: () => void): Capture {
       }
 
       specs.push(dispatch.spec);
-      const [program, ...args] = renderCommand(dispatch.spec);
-      calls.push({ program: program ?? "", args });
+      const [program, ...args] = renderCommand(dispatch.spec, process.platform);
+      calls.push({ program, args });
 
       const result: Extract<ExecutionResult, { kind: "succeeded" }> = {
         kind: "succeeded",

@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { errorMessage, type RunRecord } from "@loopy/core";
 import type { Cause } from "effect";
 import { Clock, Data, Effect } from "effect";
-import { FilesystemReceipts, LocalExecutor } from "../../executor";
+import { LocalExecutor } from "../../executor";
 import { makeDaemon, PreparationError, ScheduleRevisionError } from "../../host";
 import { withLockDirectory } from "../../os";
 import type { SqliteRunStore } from "../../store";
@@ -38,8 +38,6 @@ type DaemonOptions = {
 /** The caller's scope must outlive requests and close before the store scope. */
 export const localDaemon = (options: DaemonOptions) =>
   Effect.gen(function* () {
-    const receipts = new FilesystemReceipts(options.home);
-
     const daemon = yield* makeDaemon({
       store: options.store,
       concurrency: options.concurrency,
@@ -59,7 +57,6 @@ export const localDaemon = (options: DaemonOptions) =>
             graph,
             executor: new LocalExecutor({
               home: options.home,
-              receipts,
               workspace: run.workspace,
               mode: graph.meta.mode,
               secrets: graph.meta.secrets,
@@ -105,7 +102,7 @@ export const localDaemon = (options: DaemonOptions) =>
               );
             }
 
-            // Keep listener acquisition after discovery validation; publication-failure fixtures rely on this boundary.
+            // Validate discovery before binding a port, so a second daemon never holds a listener.
             server = startServer({
               ...options,
               service,

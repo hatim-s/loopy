@@ -1,14 +1,11 @@
 import { dirname } from "node:path";
 import type { BundleSandboxOptions } from "./bundle";
+import { sbpl as quote } from "./tool";
 
-export function macBundle({
-  bundle,
-  workspace,
-  bun,
-  network,
-  home,
-}: BundleSandboxOptions): [string, string[]] {
-  const quote = JSON.stringify;
+export function macBundle(
+  exec: string,
+  { bundle, workspace, bun, network, home }: BundleSandboxOptions,
+): [string, string[]] {
   const directories = new Set<string>();
 
   for (const path of [bundle, bun, workspace]) {
@@ -38,5 +35,5 @@ export function macBundle({
     network ? "(allow network*)" : "(deny network*)",
   ].join("\n");
 
-  return ["/usr/bin/sandbox-exec", ["-p", profile, bun, "--smol", bundle]];
+  return [exec, ["-p", profile, bun, "--smol", bundle]];
 }

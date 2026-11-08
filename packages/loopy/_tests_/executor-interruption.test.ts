@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { Cause, Effect, Fiber, Schema } from "effect";
 import { ExecutionWorker } from "../../runtime/src/executor/execution";
 import { FilesystemReceipts } from "../../runtime/src/executor/receipts";
-import { workerFailure } from "../../runtime/src/executor/response";
+import { workerFailure } from "../../runtime/src/executor/worker-protocol";
 import { commandSpec, fixture } from "./fixtures/executor";
 
 const activeProgram =
@@ -37,7 +37,7 @@ for (const kind of ["command", "code", "parser"] as const) {
           );
 
     if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), input: {} };
+      spec.parse = { bundleHash: "a".repeat(64), input: {}, timeoutMs: 300_000 };
     }
 
     const receipts = new FilesystemReceipts(f.home);
@@ -47,8 +47,7 @@ for (const kind of ["command", "code", "parser"] as const) {
       workspace: f.workspace,
       mode: "sandbox",
       secrets: [],
-      bundlePath: () => f.bundle,
-      receipts,
+      bundles: { ["a".repeat(64)]: f.bundle },
     });
 
     const controller = new AbortController();
@@ -99,7 +98,7 @@ for (const kind of ["command", "code", "parser"] as const) {
           );
 
     if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), input: {} };
+      spec.parse = { bundleHash: "a".repeat(64), input: {}, timeoutMs: 300_000 };
     }
 
     const receipts = new FilesystemReceipts(f.home);
@@ -154,7 +153,7 @@ for (const kind of ["command", "code", "parser"] as const) {
           );
 
     if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), input: {} };
+      spec.parse = { bundleHash: "a".repeat(64), input: {}, timeoutMs: 300_000 };
     }
 
     const receipts = new FilesystemReceipts(f.home);
@@ -165,7 +164,6 @@ for (const kind of ["command", "code", "parser"] as const) {
         workspace: f.workspace,
         mode: "sandbox",
         secrets: [],
-        receipts: receipts.descriptor,
         bundles: { ["a".repeat(64)]: f.bundle },
       },
       key: f.key,
@@ -256,8 +254,7 @@ test("aborted command with failed cleanup preserves both causes and never finish
     workspace: f.workspace,
     mode: "sandbox",
     secrets: [],
-    bundlePath: () => f.bundle,
-    receipts,
+    bundles: { ["a".repeat(64)]: f.bundle },
   });
 
   const controller = new AbortController();
@@ -295,7 +292,7 @@ test("aborted command with failed cleanup preserves both causes and never finish
         error: expect.objectContaining({
           _tag: "ExecutorError",
           cause: expect.objectContaining({
-            _tag: "ProcessCleanupError",
+            _tag: "ScratchCleanupError",
             cause: expect.objectContaining({ _tag: "ProcessFilesystemError" }),
           }),
         }),

@@ -8,7 +8,6 @@ import { absentPath, filesystem } from "./io";
 
 export const ENV_EXEC = "/usr/bin/env";
 
-/** True when child is parent or lives below it. */
 export function within(parent: string, child: string): boolean {
   const path = relative(parent, child);
 
@@ -23,7 +22,6 @@ export const executable = Effect.fn(function* (path: string) {
   }).pipe(Effect.catchIf(absentPath, () => Effect.succeed(false)));
 });
 
-/** Resolve an executable against the command directory and its PATH. */
 export const resolveProgram = Effect.fn(function* (program: string, cwd: string, path: string) {
   const candidates = program.includes(sep)
     ? [resolve(cwd, program)]
@@ -45,7 +43,6 @@ export const resolveProgram = Effect.fn(function* (program: string, cwd: string,
   return yield* Effect.fail(rejected(new Error(`Executable '${program}' was not found.`)));
 });
 
-/** The nearest package root above a program inside home, if any. */
 export const packageDirectory = Effect.fn(function* (program: string, home: string) {
   if (!within(home, program)) {
     return undefined;

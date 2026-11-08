@@ -7,7 +7,7 @@ import {
   type SandboxAttemptRequest,
   workspaceVolumeInput,
 } from "@loopy/contract";
-import { durationMs } from "@loopy/core";
+import { attemptBudgetMs } from "@loopy/core";
 import { Effect, FiberMap, Result, Semaphore } from "effect";
 import { attemptHash, attemptId, validateBundles } from "../admission";
 import type { SandboxConfig } from "../config";
@@ -82,14 +82,6 @@ export class AttemptAdmissions {
 
   private plan(id: string, requestHash: string, request: SandboxAttemptRequest): DockerAttemptPlan {
     const { config } = this.options;
-    const spec = request.spec;
-
-    const timeout =
-      spec.kind === "code"
-        ? spec.timeoutMs
-        : (spec.node.options.timeout === undefined
-            ? 300_000
-            : durationMs(spec.node.options.timeout)) + (spec.parse ? 300_000 : 0);
 
     return {
       id,
@@ -98,7 +90,7 @@ export class AttemptAdmissions {
       executionKey: request.executionKey,
       attempt: request.attempt,
       ...attemptResourceNames(id, attemptHash(workspaceVolumeInput(config.stateRoot, request))),
-      deadline: Date.now() + Math.min(timeout + 30_000, config.maxTimeoutMs),
+      deadline: Date.now() + Math.min(attemptBudgetMs(request.spec), config.maxTimeoutMs),
     };
   }
 

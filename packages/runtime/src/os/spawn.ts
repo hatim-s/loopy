@@ -17,7 +17,12 @@ export type Launch = {
   stdin?: string;
 };
 
-export type Limits = { timeoutMs: number; maxOutputBytes: number; killGraceMs?: number };
+export type SpawnOptions = {
+  timeoutMs: number;
+  maxOutputBytes: number;
+  killGraceMs?: number;
+  signal?: AbortSignal;
+};
 
 export function emptyOutput(): CommandResult {
   return { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
@@ -30,6 +35,15 @@ export function unstarted(cause: unknown): CommandExecutionError {
     output: emptyOutput(),
     cause,
     reason: "unstarted",
+  });
+}
+
+export function aborted(signal: AbortSignal): CommandExecutionError {
+  return new CommandExecutionError({
+    message: "Command aborted.",
+    output: emptyOutput(),
+    cause: signal.reason,
+    reason: "aborted",
   });
 }
 
@@ -49,11 +63,7 @@ function killTree(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals)
   }
 
   try {
-    if (process.platform === "win32") {
-      child.kill(signal);
-    } else {
-      process.kill(-child.pid, signal);
-    }
+    process.kill(-child.pid, signal);
   } catch {
     if (!child.killed) {
       child.kill(signal);
@@ -77,7 +87,6 @@ function decodeCaptured(chunks: Buffer[], partial: boolean): string {
     : buffer.toString("utf8");
 }
 
-/** Appends up to the byte budget and reports whether the chunk overflowed it. */
 function capture(
   destination: Buffer[],
   budget: { bytes: number },
@@ -99,33 +108,25 @@ function trySpawn(launch: Launch): ChildProcessWithoutNullStreams {
   return spawn(launch.program, launch.args, {
     cwd: launch.cwd,
     env: launch.env,
-    detached: process.platform !== "win32",
+    detached: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
 }
 
-/** Runs the process in its own group, bounds output and time, and captures both streams. */
 export function spawnCaptured(
   launch: Launch,
-  limits: Limits,
-  signal: AbortSignal | undefined,
-  started: number,
+  limits: SpawnOptions,
 ): Effect.Effect<CommandResult, CommandExecutionError> {
+  const { signal } = limits;
+
   return Effect.callback((resume) => {
     if (signal?.aborted) {
-      resume(
-        Effect.fail(
-          new CommandExecutionError({
-            message: "Command aborted.",
-            output: emptyOutput(),
-            cause: signal.reason,
-            reason: "aborted",
-          }),
-        ),
-      );
+      resume(Effect.fail(aborted(signal)));
 
       return;
     }
+
+    const started = performance.now();
 
     let complete!: () => void;
 

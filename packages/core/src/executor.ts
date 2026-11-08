@@ -1,31 +1,54 @@
 import { Data, type Effect, Schema } from "effect";
-import { hashSchema, struct } from "./codec";
+import { hashSchema, positiveInt, struct } from "./codec";
 import type { ExecutionKey } from "./graph/key";
-import { commandNodeSchema } from "./graph/nodes";
+import { commandFlagSpecSchema, commandVariantsSchema } from "./graph/nodes";
 import { jsonSchema } from "./json";
 
 const dictionary = Schema.Record(Schema.String, Schema.mutableKey(jsonSchema));
 
+const timeoutMs = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
+
+/** Commands without a declared timeout and every parser get this budget. */
+export const DEFAULT_TIMEOUT_MS = 300_000;
+
+// Covers worker startup, bundle staging and receipt publication around the attempt's own budget.
+const ATTEMPT_GRACE_MS = 30_000;
+
+/** Every setting is resolved, so executors never read graph nodes. */
 export const executionSpecSchema = Schema.Union([
   struct({
     kind: Schema.Literal("code"),
     bundleHash: hashSchema,
     input: dictionary,
-    timeoutMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+    timeoutMs,
   }),
   struct({
     kind: Schema.Literal("command"),
-    node: commandNodeSchema,
-    argv: Schema.Array(Schema.String).pipe(Schema.mutable).check(Schema.isMinLength(1)),
+    key: Schema.String,
+    argv: Schema.NonEmptyArray(Schema.String).pipe(Schema.mutable),
     flags: dictionary,
+    flagSpec: Schema.NullOr(commandFlagSpecSchema),
+    variants: commandVariantsSchema,
     cwd: Schema.NullOr(Schema.String),
     env: Schema.Record(Schema.String, Schema.mutableKey(Schema.String)),
     stdin: Schema.NullOr(Schema.String),
-    parse: Schema.NullOr(struct({ bundleHash: hashSchema, input: dictionary })),
+    timeoutMs,
+    maxOutputBytes: Schema.NullOr(positiveInt),
+    okExitCodes: Schema.Array(Schema.Int).pipe(Schema.mutable),
+    parse: Schema.NullOr(struct({ bundleHash: hashSchema, input: dictionary, timeoutMs })),
   }),
 ]);
 
 export type ExecutionSpec = Schema.Schema.Type<typeof executionSpecSchema>;
+
+export type CommandSpec = Extract<ExecutionSpec, { kind: "command" }>;
+
+/** The outer deadline a host gives one attempt, shared by the local worker and sandbox admission. */
+export function attemptBudgetMs(spec: ExecutionSpec): number {
+  const parse = spec.kind === "command" && spec.parse !== null ? spec.parse.timeoutMs : 0;
+
+  return spec.timeoutMs + parse + ATTEMPT_GRACE_MS;
+}
 
 export const EXECUTION_ERROR_CODES = [
   "execution",
@@ -70,6 +93,7 @@ export const receiptSchema = Schema.Union([
 export type Receipt = Schema.Schema.Type<typeof receiptSchema>;
 
 export interface Executor {
+  /** Idempotent per attempt: returns a finished result and waits for a started attempt to finish. */
   execute(
     executionKey: ExecutionKey,
     attempt: number,

@@ -12,8 +12,9 @@ export class CommandExecutionError extends Data.TaggedError("CommandExecutionErr
 export type ResolvedCommand = {
   program: string;
   args: string[];
-  stdin?: string;
-  env?: Record<string, string>;
-  cwd?: string;
-  timeoutMs?: number;
+  cwd: string | null;
+  env: Record<string, string>;
+  stdin: string | null;
+  timeoutMs: number;
+  maxOutputBytes: number | null;
 };

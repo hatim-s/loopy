@@ -104,8 +104,6 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
             env: { PATH: "/usr/bin:/bin", HOME: cwd, TMPDIR: cwd },
           },
           { timeoutMs: 10_000, maxOutputBytes: 16 * 1024 * 1024 },
-          undefined,
-          performance.now(),
         ).pipe(
           Effect.catchTag(
             "CommandExecutionError",

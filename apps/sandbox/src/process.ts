@@ -24,8 +24,7 @@ export const runCommand: CommandRunner = ([program, ...args], options) =>
       {
         timeoutMs: options.timeoutMs,
         maxOutputBytes: options.maxBytes ?? SANDBOX_MAX_CAPTURE_BYTES,
+        signal: options.signal,
       },
-      options.signal,
-      performance.now(),
     ),
   );

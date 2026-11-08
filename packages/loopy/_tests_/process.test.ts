@@ -12,10 +12,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CommandExecutionError } from "@loopy/runtime/os";
+import { CommandExecutionError, type ResolvedCommand, spawnCaptured } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
-import { executeLocalCommand } from "../../runtime/src/os/process";
-import { filesystem } from "../../runtime/src/os/sandbox/io";
+import { executeLocalCommand, type LocalExecutionOptions } from "../../runtime/src/os/process";
 
 const workspaces: string[] = [];
 
@@ -35,88 +34,108 @@ afterEach(() => {
 const hasBubblewrap =
   process.platform === "linux" && (existsSync("/usr/bin/bwrap") || existsSync("/bin/bwrap"));
 
+const canSandbox = process.platform === "darwin" || hasBubblewrap;
+
+type CommandFields = Pick<ResolvedCommand, "program" | "args"> & Partial<ResolvedCommand>;
+
+/** Production always runs commands sandboxed with a protected home and declared secrets. */
+function run(
+  fields: CommandFields,
+  options: Pick<LocalExecutionOptions, "workspace" | "mode"> & Partial<LocalExecutionOptions>,
+) {
+  return executeLocalCommand(
+    { cwd: null, env: {}, stdin: null, timeoutMs: 300_000, maxOutputBytes: null, ...fields },
+    { protectedHome: workspace(), sensitiveEnv: {}, ...options },
+  );
+}
+
+function spawn(
+  cwd: string,
+  [program, ...args]: [string, ...string[]],
+  options: {
+    stdin?: string;
+    env?: Record<string, string>;
+    timeoutMs?: number;
+    maxOutputBytes?: number;
+    signal?: AbortSignal;
+  } = {},
+) {
+  return spawnCaptured(
+    { program, args, cwd, env: { PATH: process.env.PATH, ...options.env }, stdin: options.stdin },
+    {
+      timeoutMs: options.timeoutMs ?? 30_000,
+      maxOutputBytes: options.maxOutputBytes ?? 1024 * 1024,
+      signal: options.signal,
+    },
+  );
+}
+
 describe("process executor", () => {
   test("passes arguments literally and preserves a failing exit code", async () => {
     const cwd = workspace();
 
     const output = await Effect.runPromise(
-      executeLocalCommand(
-        { program: "/bin/echo", args: ["$(touch injected)", "; exit 2"] },
-        { workspace: cwd, mode: "full" },
-      ),
+      spawn(cwd, ["/bin/echo", "$(touch injected)", "; exit 2"]),
     );
 
     expect(output.stdout).toBe("$(touch injected) ; exit 2\n");
     expect(existsSync(join(cwd, "injected"))).toBe(false);
 
-    const failed = await Effect.runPromise(
-      executeLocalCommand(
-        { program: process.execPath, args: ["-e", "process.exit(7)"] },
-        { workspace: cwd, mode: "full" },
-      ),
-    );
+    const failed = await Effect.runPromise(spawn(cwd, [process.execPath, "-e", "process.exit(7)"]));
 
     expect(failed.exitCode).toBe(7);
   });
 
-  test("resolves relative PATH entries from the command directory", async () => {
-    const cwd = workspace();
-    mkdirSync(join(cwd, "tools"));
-    const executable = join(cwd, "tools", "probe-cmd");
-    writeFileSync(executable, "#!/bin/sh\necho expected\n");
-    chmodSync(executable, 0o755);
+  test.skipIf(!canSandbox)(
+    "resolves relative PATH entries from the command directory",
+    async () => {
+      const cwd = workspace();
+      mkdirSync(join(cwd, "tools"));
+      const executable = join(cwd, "tools", "probe-cmd");
+      writeFileSync(executable, "#!/bin/sh\necho expected\n");
+      chmodSync(executable, 0o755);
 
-    const output = await Effect.runPromise(
-      executeLocalCommand(
-        { program: "probe-cmd", args: [], env: { PATH: "tools" } },
-        { workspace: cwd, mode: "full" },
-      ),
-    );
-
-    expect(output.stdout).toBe("expected\n");
-  });
-
-  test("bounds combined output", async () => {
-    try {
-      await Effect.runPromise(
-        executeLocalCommand(
-          {
-            program: process.execPath,
-            args: [
-              "-e",
-              "process.stdout.write('a'.repeat(2048)); process.stderr.write('b'.repeat(2048))",
-            ],
-            maxOutputBytes: 100,
-          },
-          { workspace: workspace(), mode: "full" },
+      const output = await Effect.runPromise(
+        run(
+          { program: "probe-cmd", args: [], env: { PATH: "tools" } },
+          { workspace: cwd, mode: "full" },
         ),
       );
-      throw new Error("Expected output limit to stop the command");
-    } catch (error) {
-      expect(error).toBeInstanceOf(CommandExecutionError);
 
-      if (!(error instanceof CommandExecutionError)) {
-        throw error;
-      }
+      expect(output.stdout).toBe("expected\n");
+    },
+  );
 
-      const failure = error;
-      expect(failure.message).toContain("output exceeded 100 bytes");
-      expect(
-        Buffer.byteLength(failure.output.stdout) + Buffer.byteLength(failure.output.stderr),
-      ).toBe(100);
-    }
+  test("bounds combined output", async () => {
+    const result = await Effect.runPromise(
+      spawn(
+        workspace(),
+        [
+          process.execPath,
+          "-e",
+          "process.stdout.write('a'.repeat(2048)); process.stderr.write('b'.repeat(2048))",
+        ],
+        { maxOutputBytes: 100 },
+      ).pipe(Effect.flip),
+    );
+
+    expect(result).toBeInstanceOf(CommandExecutionError);
+    expect(result.message).toContain("output exceeded 100 bytes");
+    expect(Buffer.byteLength(result.output.stdout) + Buffer.byteLength(result.output.stderr)).toBe(
+      100,
+    );
   });
 
   test("passes stdin and explicit environment values", async () => {
     const output = await Effect.runPromise(
-      executeLocalCommand(
-        {
-          program: process.execPath,
-          args: ["-e", "console.log(process.env.LOOPY_VALUE + ':' + await Bun.stdin.text())"],
-          env: { LOOPY_VALUE: "input" },
-          stdin: "hello",
-        },
-        { workspace: workspace(), mode: "full" },
+      spawn(
+        workspace(),
+        [
+          process.execPath,
+          "-e",
+          "console.log(process.env.LOOPY_VALUE + ':' + await Bun.stdin.text())",
+        ],
+        { env: { LOOPY_VALUE: "input" }, stdin: "hello" },
       ),
     );
 
@@ -127,14 +146,7 @@ describe("process executor", () => {
     const cwd = workspace();
     await expect(
       Effect.runPromise(
-        executeLocalCommand(
-          {
-            program: "/bin/sh",
-            args: ["-c", "(sleep 1; touch child-survived) & wait"],
-            timeoutMs: 150,
-          },
-          { workspace: cwd, mode: "full" },
-        ),
+        spawn(cwd, ["/bin/sh", "-c", "(sleep 1; touch child-survived) & wait"], { timeoutMs: 150 }),
       ),
     ).rejects.toThrow("timed out");
     await Bun.sleep(1_200);
@@ -145,10 +157,7 @@ describe("process executor", () => {
     const cwd = workspace();
 
     const output = await Effect.runPromise(
-      executeLocalCommand(
-        { program: "/bin/sh", args: ["-c", "(sleep 0.5; touch orphan) & exit 0"] },
-        { workspace: cwd, mode: "full" },
-      ),
+      spawn(cwd, ["/bin/sh", "-c", "(sleep 0.5; touch orphan) & exit 0"]),
     );
 
     expect(output.exitCode).toBe(0);
@@ -170,12 +179,7 @@ describe("process executor", () => {
     `;
 
     await expect(
-      Effect.runPromise(
-        executeLocalCommand(
-          { program: process.execPath, args: ["-e", source], timeoutMs: 100 },
-          { workspace: cwd, mode: "full" },
-        ),
-      ),
+      Effect.runPromise(spawn(cwd, [process.execPath, "-e", source], { timeoutMs: 100 })),
     ).rejects.toThrow("timed out");
     expect(Date.now() - started).toBeLessThan(1_500);
   });
@@ -184,14 +188,9 @@ describe("process executor", () => {
     const cwd = workspace();
     await expect(
       Effect.runPromise(
-        executeLocalCommand(
-          {
-            program: "/bin/sh",
-            args: ["-c", "(trap '' TERM; sleep 0.5; touch ignored) & wait"],
-            timeoutMs: 100,
-          },
-          { workspace: cwd, mode: "full" },
-        ),
+        spawn(cwd, ["/bin/sh", "-c", "(trap '' TERM; sleep 0.5; touch ignored) & wait"], {
+          timeoutMs: 100,
+        }),
       ),
     ).rejects.toThrow("timed out");
     await Bun.sleep(700);
@@ -203,14 +202,9 @@ describe("process executor", () => {
     setTimeout(() => controller.abort(), 50);
     await expect(
       Effect.runPromise(
-        executeLocalCommand(
-          { program: process.execPath, args: ["-e", "setTimeout(() => {}, 10000)"] },
-          {
-            workspace: workspace(),
-            mode: "full",
-            signal: controller.signal,
-          },
-        ),
+        spawn(workspace(), [process.execPath, "-e", "setTimeout(() => {}, 10000)"], {
+          signal: controller.signal,
+        }),
       ),
     ).rejects.toThrow("aborted");
   });
@@ -222,7 +216,7 @@ describe("process executor", () => {
       const outside = workspace();
 
       const direct = await Effect.runPromise(
-        executeLocalCommand(
+        run(
           {
             program: process.execPath,
             args: [
@@ -239,7 +233,7 @@ describe("process executor", () => {
       expect(readFileSync(join(cwd, "inside"), "utf8")).toBe("ok");
 
       const denied = await Effect.runPromise(
-        executeLocalCommand(
+        run(
           {
             program: process.execPath,
             args: [
@@ -258,7 +252,7 @@ describe("process executor", () => {
       symlinkSync(join(outside, "linked-escape"), join(cwd, "file-link"));
 
       const linked = await Effect.runPromise(
-        executeLocalCommand(
+        run(
           {
             program: process.execPath,
             args: ["-e", "require('node:fs').writeFileSync('file-link', 'no')"],
@@ -273,7 +267,7 @@ describe("process executor", () => {
       symlinkSync(outside, join(cwd, "link"));
       await expect(
         Effect.runPromise(
-          executeLocalCommand(
+          run(
             { program: "/bin/echo", args: ["hello"], cwd: "link" },
             { workspace: cwd, mode: "sandbox" },
           ),
@@ -296,7 +290,7 @@ describe("process executor", () => {
       expect(
         (
           await Effect.runPromise(
-            executeLocalCommand(command, {
+            run(command, {
               workspace: cwd,
               mode: "full",
             }),
@@ -305,7 +299,7 @@ describe("process executor", () => {
       ).toContain("reachable");
 
       const denied = await Effect.runPromise(
-        executeLocalCommand(command, {
+        run(command, {
           workspace: cwd,
           mode: "sandbox",
         }),
@@ -336,7 +330,7 @@ describe("process executor", () => {
       expect(
         (
           await Effect.runPromise(
-            executeLocalCommand(command, {
+            run(command, {
               workspace: cwd,
               mode: "full",
             }),
@@ -345,7 +339,7 @@ describe("process executor", () => {
       ).toContain("read");
 
       const denied = await Effect.runPromise(
-        executeLocalCommand(command, {
+        run(command, {
           workspace: cwd,
           mode: "sandbox",
           protectedHome,
@@ -362,7 +356,7 @@ describe("process executor", () => {
     workspaces.push(cwd, outside);
 
     const inside = await Effect.runPromise(
-      executeLocalCommand(
+      run(
         {
           program: process.execPath,
           args: ["-e", "require('node:fs').writeFileSync('inside', process.env.LOOPY_TEST_VALUE)"],
@@ -381,7 +375,7 @@ describe("process executor", () => {
     expect(readFileSync(join(cwd, "inside"), "utf8")).toBe("ok");
 
     const denied = await Effect.runPromise(
-      executeLocalCommand(
+      run(
         {
           program: process.execPath,
           args: [
@@ -408,7 +402,7 @@ describe("process executor", () => {
       expect(
         (
           await Effect.runPromise(
-            executeLocalCommand(network, {
+            run(network, {
               workspace: cwd,
               mode: "full",
             }),
@@ -418,7 +412,7 @@ describe("process executor", () => {
       expect(
         (
           await Effect.runPromise(
-            executeLocalCommand(network, {
+            run(network, {
               workspace: cwd,
               mode: "sandbox",
             }),
@@ -461,7 +455,7 @@ __attribute__((constructor)) static void mark(void) {
       }
 
       const output = await Effect.runPromise(
-        executeLocalCommand(
+        run(
           { program: "/bin/echo", args: ["inside"], env: { LD_PRELOAD: library } },
           { workspace: cwd, mode: "sandbox" },
         ),
@@ -485,7 +479,7 @@ test.skipIf(process.platform !== "darwin" && !hasBubblewrap)(
     const controller = new AbortController();
 
     const pending = Effect.runPromise(
-      executeLocalCommand(
+      run(
         {
           program: process.execPath,
           args: [
@@ -539,7 +533,10 @@ for (const reason of ["timeout", "output_limit", "rejected"] as const) {
           };
 
     const result = await Effect.runPromise(
-      executeLocalCommand(command, { workspace: workspace(), mode: "full" }).pipe(Effect.result),
+      (reason === "rejected"
+        ? run(command, { workspace: workspace(), mode: "full" })
+        : spawn(workspace(), [command.program, ...command.args], command)
+      ).pipe(Effect.result),
     );
 
     expect(result).toMatchObject({
@@ -549,22 +546,9 @@ for (const reason of ["timeout", "output_limit", "rejected"] as const) {
   });
 }
 
-test("unexpected filesystem failures retain their infrastructure tag", async () => {
-  const cause = Object.assign(new Error("fixture I/O failure"), { code: "EIO" });
-
-  const result = await Effect.runPromise(
-    filesystem(() => Promise.reject(cause)).pipe(Effect.result),
-  );
-
-  expect(result).toMatchObject({
-    _tag: "Failure",
-    failure: { _tag: "ProcessFilesystemError", cause: { code: "EIO" } },
-  });
-});
-
 test("invalid command limits are rejected author input", async () => {
   const result = await Effect.runPromise(
-    executeLocalCommand(
+    run(
       { program: "/bin/echo", args: ["fixture"], maxOutputBytes: 0 },
       { workspace: workspace(), mode: "full" },
     ).pipe(Effect.result),

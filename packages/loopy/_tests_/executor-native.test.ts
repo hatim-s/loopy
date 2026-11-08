@@ -94,7 +94,7 @@ test("a worker finishes its receipt after the caller process is killed", async (
   const caller = join(f.root, "caller.ts");
   await writeFile(
     caller,
-    `import {Effect} from ${JSON.stringify(resolve(import.meta.dir, "../node_modules/effect/dist/index.js"))}; import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../../runtime/src/executor/index.ts"))}; import {FilesystemReceipts} from ${JSON.stringify(resolve(import.meta.dir, "../../runtime/src/executor/receipts.ts"))}; const executor = new LocalExecutor({receipts: new FilesystemReceipts(${JSON.stringify(f.home)}), home: ${JSON.stringify(join(f.root, "home"))}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: [], bundlePath: () => ${JSON.stringify(f.bundle)}}); await Effect.runPromise(executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal));`,
+    `import {Effect} from ${JSON.stringify(resolve(import.meta.dir, "../node_modules/effect/dist/index.js"))}; import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../../runtime/src/executor/index.ts"))}; const executor = new LocalExecutor({home: ${JSON.stringify(f.home)}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: [], bundlePath: () => ${JSON.stringify(f.bundle)}}); await Effect.runPromise(executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal));`,
   );
 
   const process = Bun.spawn([Bun.which("bun") ?? "bun", "--no-env-file", caller], {
@@ -114,14 +114,11 @@ test("a worker finishes its receipt after the caller process is killed", async (
     expect(await Effect.runPromise(f.executor.lookup(f.key, 1))).toMatchObject({ kind: "started" });
     process.kill("SIGKILL");
     await process.exited;
-    let receipt = await Effect.runPromise(f.executor.lookup(f.key, 1));
 
-    for (let index = 0; index < 100 && receipt.kind === "started"; index++) {
-      await Bun.sleep(20);
-      receipt = await Effect.runPromise(f.executor.lookup(f.key, 1));
-    }
-
-    expect(receipt).toMatchObject({ kind: "finished", result: { kind: "succeeded", output: 42 } });
+    // Execute waits for the surviving worker's receipt instead of running the attempt again.
+    expect(
+      await Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
+    ).toMatchObject({ kind: "succeeded", output: 42 });
   } finally {
     process.kill();
     await process.exited;
@@ -233,24 +230,27 @@ test("complete log records keep keys and values that end in a secret prefix", ()
   }
 });
 
-test("an exclusive live claim refuses re-execution", async () => {
+test("a live claim makes execution wait for its receipt instead of running again", async () => {
   const f = await fixture();
+  await writeFile(f.bundle, 'await Bun.write("effect", "repeated"); console.log(1);');
+  const identity = { executionKey: f.key, attempt: 1 };
   const receipts = new FilesystemReceipts(f.home);
-  expect(await Effect.runPromise(receipts.claim({ executionKey: f.key, attempt: 1 }))).toEqual({
-    kind: "created",
+  expect(await Effect.runPromise(receipts.claim(identity))).toEqual({ kind: "created" });
+  expect(await Effect.runPromise(receipts.claim(identity))).toMatchObject({
+    kind: "existing",
+    receipt: { kind: "started" },
   });
-  expect(
-    await Effect.runPromise(receipts.claim({ executionKey: f.key, attempt: 1 })),
-  ).toMatchObject({ kind: "existing", receipt: { kind: "started" } });
 
-  const result = await Effect.runPromise(
-    f.executor.execute(f.key, 1, f.spec, new AbortController().signal).pipe(Effect.result),
+  const pending = Effect.runPromise(
+    f.executor.execute(f.key, 1, f.spec, new AbortController().signal),
   );
 
-  expect(result).toMatchObject({
-    _tag: "Failure",
-    failure: { _tag: "ExecutorError", operation: "execute" },
-  });
+  await Bun.sleep(100);
+  const result = { kind: "succeeded" as const, output: 42, logs: [] };
+  await Effect.runPromise(receipts.finish({ ...identity, kind: "finished", result }));
+
+  expect(await pending).toEqual(result);
+  expect(await Bun.file(join(f.workspace, "effect")).exists()).toBe(false);
 });
 
 test("dead unfinished work becomes uncertain and is never repeated", async () => {
@@ -497,7 +497,7 @@ test("a timed-out command retains output and cleanup diagnostics together", asyn
     throw new Error("Expected command fixture.");
   }
 
-  spec.node.options.timeout = 2000;
+  spec.timeoutMs = 2000;
   let scratch: string | undefined;
 
   try {

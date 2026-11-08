@@ -45,8 +45,6 @@ export const daemonOperations: DaemonOperations = {
       const result = yield* spawnCaptured(
         { program, args, cwd: process.cwd(), env: process.env },
         { timeoutMs: 30000, maxOutputBytes: 1024 * 1024 },
-        undefined,
-        performance.now(),
       ).pipe(
         Effect.mapError(
           (cause) =>

@@ -147,7 +147,7 @@ test("typed shell graphs retain exact argv, command identities and execution opt
     ["tar", "-t", "-f", "test.tar"],
   ]);
   expect(f.specs[7]).toMatchObject({ stdin: "input", cwd: "/tmp", env: { LANG: "C" } });
-  expect(f.specs.map((spec) => spec.node.key)).toEqual([
+  expect(f.specs.map((spec) => spec.key)).toEqual([
     "git.status",
     "git.log",
     "git.worktree.list",

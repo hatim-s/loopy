@@ -1,8 +1,8 @@
 import type { ExecutionMode } from "@loopy/core";
 import { Effect } from "effect";
-import { unstarted } from "../spawn";
 import { macSandbox } from "./darwin";
 import { linuxSandbox } from "./linux";
+import { sandboxTool } from "./tool";
 
 export type SandboxOptions = {
   program: string;
@@ -11,22 +11,16 @@ export type SandboxOptions = {
   env: NodeJS.ProcessEnv;
   scratch: string;
   helper?: string;
-  protectedHome?: string;
+  protectedHome: string;
   mode: ExecutionMode;
 };
 
 export function sandboxLauncher(options: SandboxOptions) {
   return Effect.gen(function* () {
-    if (process.platform === "darwin") {
-      return yield* macSandbox(options);
-    }
+    const tool = yield* sandboxTool();
 
-    if (process.platform === "linux") {
-      return yield* linuxSandbox(options);
-    }
-
-    return yield* Effect.fail(
-      unstarted(new Error(`Sandbox mode is unavailable on ${process.platform}.`)),
-    );
+    return tool.kind === "darwin"
+      ? yield* macSandbox(tool.exec, options)
+      : yield* linuxSandbox(tool.bwrap, options);
   });
 }

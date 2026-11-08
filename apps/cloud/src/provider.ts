@@ -7,7 +7,7 @@ import {
   sandboxArtifactSchema,
   sandboxErrorSchema,
 } from "@loopy/contract";
-import type { ExecutionKey, ExecutionSpec } from "@loopy/core";
+import { type ExecutionKey, type ExecutionSpec, specBundles } from "@loopy/core";
 import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
 import { Effect } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
@@ -135,10 +135,7 @@ export class SandboxProvider implements DurableExecutionProvider {
   }
   start(executionKey: ExecutionKey, attempt: number, spec: ExecutionSpec) {
     return Effect.gen({ self: this }, function* () {
-      const hashes =
-        spec.kind === "code" ? [spec.bundleHash] : spec.parse ? [spec.parse.bundleHash] : [];
-
-      const bundles = yield* Effect.forEach(hashes, (hash) =>
+      const bundles = yield* Effect.forEach(specBundles(spec), (hash) =>
         this.options.artifacts.getBundle(hash).pipe(Effect.map((bytes) => ({ hash, bytes }))),
       );
 

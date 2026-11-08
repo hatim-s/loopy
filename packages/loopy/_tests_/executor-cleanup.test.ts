@@ -50,7 +50,7 @@ for (const primary of ["timeout", "interrupt", "defect"] as const) {
     try {
       const exit = await Effect.runPromise(
         operation.pipe(
-          Effect.catchTag("BundleCleanupError", (error) => {
+          Effect.catchTag("ScratchCleanupError", (error) => {
             cleanupObserved = true;
             expect(error.cause).toMatchObject({ _tag: "ProcessFilesystemError" });
 

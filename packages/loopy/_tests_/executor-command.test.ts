@@ -19,12 +19,16 @@ test("full inherited environment stays out of sandbox launcher arguments", async
 
   const launch = await Effect.runPromise(
     prepareLaunch(
-      { program: "/bin/echo", args: ["ok"], env: { LOOPY_ENV_PROBE: "private-env-value" } },
       {
-        workspace: f.workspace,
-        mode: "full",
-        protectedHome: f.home,
+        program: "/bin/echo",
+        args: ["ok"],
+        cwd: null,
+        env: { LOOPY_ENV_PROBE: "private-env-value" },
+        stdin: null,
+        timeoutMs: 1000,
+        maxOutputBytes: null,
       },
+      { workspace: f.workspace, mode: "full", protectedHome: f.home, sensitiveEnv: {} },
     ),
   );
 
@@ -32,9 +36,7 @@ test("full inherited environment stays out of sandbox launcher arguments", async
     expect(JSON.stringify(launch.args)).not.toContain("private-env-value");
     expect(launch.stdin).toContain("private-env-value");
   } finally {
-    if ("scratch" in launch) {
-      await rm(launch.scratch, { recursive: true, force: true });
-    }
+    await rm(launch.scratch, { recursive: true, force: true });
   }
 });
 
@@ -293,8 +295,8 @@ for (const accepted of [false, true]) {
       throw new Error("Expected command spec");
     }
 
-    spec.node.okExitCodes = accepted ? [0, 2] : [0];
-    spec.parse = { bundleHash: "a".repeat(64), input: {} };
+    spec.okExitCodes = accepted ? [0, 2] : [0];
+    spec.parse = { bundleHash: "a".repeat(64), input: {}, timeoutMs: 5000 };
 
     const result = await Effect.runPromise(
       f.executor.execute(f.key, 1, spec, new AbortController().signal),
