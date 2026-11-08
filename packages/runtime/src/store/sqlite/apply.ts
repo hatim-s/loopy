@@ -35,7 +35,7 @@ function applyEffect(write: SqlWrite, runId: string, token: string, effect: Stor
       return;
     }
 
-    case "schedule_retry": {
+    case "schedule_activation": {
       write.db
         .query("UPDATE runs SET next_retry_at=?,wake_at=?,updated_at=? WHERE id=?")
         .run(utc(effect.at), utc(effect.at), write.at, runId);

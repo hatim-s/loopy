@@ -211,7 +211,7 @@ export function storeRecordContract(
             log: { message: "hello", data: null },
             at: offset,
           },
-          { kind: "schedule_retry", at: offset },
+          { kind: "schedule_activation", at: offset },
         ],
       }),
     );

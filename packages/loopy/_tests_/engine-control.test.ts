@@ -355,6 +355,38 @@ test("entropy is supplied by host and persisted values survive rehydration", () 
   });
 });
 
+for (const sample of [
+  { valueKind: "random", value: 2 },
+  { valueKind: "random", value: -0.5 },
+  { valueKind: "uuid", value: "not-a-uuid" },
+] as const) {
+  test(`a ${sample.valueKind} sample of ${sample.value} fails its node`, () => {
+    const graph = loopy("sample", {
+      input: {},
+      run: () => (sample.valueKind === "uuid" ? uuid() : random()),
+    });
+
+    const started = start(graph);
+    const effect = started.effects.find((candidate) => candidate.kind === "sample");
+
+    if (effect?.kind !== "sample") {
+      throw new Error("Expected a sample effect.");
+    }
+
+    const result = step(graph, started.state, {
+      kind: "value_sampled",
+      executionKey: effect.executionKey,
+      sample,
+      at: "2026-10-20T00:00:10.000Z",
+    });
+
+    expect(result.state.phase).toEqual({
+      kind: "finished",
+      outcome: { status: "failed", error: `Invalid ${sample.valueKind} sample.` },
+    });
+  });
+}
+
 test("command argv expands string arrays while preserving spaces within each argument", () => {
   const graph = loopy("argv", {
     input: { paths: "string[]" },

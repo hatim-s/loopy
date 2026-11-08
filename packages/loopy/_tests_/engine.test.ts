@@ -144,7 +144,7 @@ test.each(invalidOutputs)("invalid or oversized output fails without retries", (
   const f = start();
   const result = step(f.graph, f.state, completed(f.dispatch.executionKey, 1, output));
   expect(result.state.phase).toMatchObject({ kind: "finished", outcome: { status: "failed" } });
-  expect(result.effects.some((effect) => effect.kind === "schedule_retry")).toBe(false);
+  expect(result.effects.some((effect) => effect.kind === "schedule_activation")).toBe(false);
 });
 
 test("resume from completed node runs skips code and reconstructs final output", () => {
@@ -197,9 +197,9 @@ test("rate denial fences stale decisions and reserves the same attempt until the
     attempt: 1,
     nextRetryAt: event.retryAt,
   });
-  expect(limited.effects).toContainEqual({ kind: "schedule_retry", at: event.retryAt });
+  expect(limited.effects).toContainEqual({ kind: "schedule_activation", at: event.retryAt });
   expect(step(f.graph, limited.state, { kind: "retry_due", at }).effects).toEqual([
-    { kind: "schedule_retry", at: event.retryAt },
+    { kind: "schedule_activation", at: event.retryAt },
   ]);
   const due = step(f.graph, limited.state, { kind: "retry_due", at: event.retryAt });
   expect(due.effects).toContainEqual(f.dispatch);
@@ -243,7 +243,9 @@ for (const retryOnExit of [false, true]) {
     });
 
     expect(failed.state.nodeRuns[0]?.status).toBe(retryOnExit ? "retrying" : "failed");
-    expect(failed.effects.some((effect) => effect.kind === "schedule_retry")).toBe(retryOnExit);
+    expect(failed.effects.some((effect) => effect.kind === "schedule_activation")).toBe(
+      retryOnExit,
+    );
   });
 }
 
@@ -258,6 +260,7 @@ test("graph retry delay caps at sixty seconds across repeated failures", () => {
   node.retry.attempts = 10;
   let state = f.state;
   let time = Date.parse(at);
+  const delays: number[] = [];
 
   for (let attempt = 1; attempt < 10; attempt++) {
     const failed = step(f.graph, state, {
@@ -270,19 +273,13 @@ test("graph retry delay caps at sixty seconds across repeated failures", () => {
       logs: [],
     });
 
-    const retry = failed.effects.find((effect) => effect.kind === "schedule_retry");
+    const retry = failed.effects.find((effect) => effect.kind === "schedule_activation");
 
-    if (retry?.kind !== "schedule_retry") {
+    if (retry?.kind !== "schedule_activation") {
       throw new Error("Expected retry deadline");
     }
 
-    const delay = Date.parse(retry.at) - time;
-    expect(delay).toBe(Math.min(1000 * 2 ** (attempt - 1), 60_000));
-
-    if (attempt >= 7) {
-      expect(delay).toBe(60_000);
-    }
-
+    delays.push(Date.parse(retry.at) - time);
     time = Date.parse(retry.at);
     const resumed = step(f.graph, failed.state, { kind: "retry_due", at: retry.at });
     expect(resumed.effects).toContainEqual(
@@ -290,4 +287,6 @@ test("graph retry delay caps at sixty seconds across repeated failures", () => {
     );
     state = resumed.state;
   }
+
+  expect(delays).toEqual([1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000]);
 });

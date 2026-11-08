@@ -161,7 +161,10 @@ test("a retry beside an indefinite wait keeps the run leased until the retry dea
   }
 
   const result = failed(graph, first.state, dispatch.executionKey);
-  expect(result.effects).toContainEqual({ kind: "schedule_retry", at: "2026-10-20T00:00:01.000Z" });
+  expect(result.effects).toContainEqual({
+    kind: "schedule_activation",
+    at: "2026-10-20T00:00:01.000Z",
+  });
   expect(result.effects.some((effect) => effect.kind === "suspend_run")).toBe(false);
 
   const resumed = step(graph, initialState("run", {}, result.state.nodeRuns), {
@@ -197,7 +200,10 @@ test("sleep deadline advances its parallel branch while an executable sibling re
     throw new Error("Missing executable sibling");
   }
 
-  expect(first.effects).toContainEqual({ kind: "schedule_retry", at: "2026-10-20T00:00:01.000Z" });
+  expect(first.effects).toContainEqual({
+    kind: "schedule_activation",
+    at: "2026-10-20T00:00:01.000Z",
+  });
   expect(first.effects.some((effect) => effect.kind === "suspend_run")).toBe(false);
 
   const wake = step(graph, first.state, { kind: "retry_due", at: "2026-10-20T00:00:01.000Z" });

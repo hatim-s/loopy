@@ -137,7 +137,7 @@ test(`stale suspension keeps an earlier deadline instead of postponing it`, asyn
       runId: "run",
       token: "owner",
       effects: [
-        { kind: "schedule_retry", at: future },
+        { kind: "schedule_activation", at: future },
         { kind: "suspend_run", wakeAt: at, at },
       ],
     }),

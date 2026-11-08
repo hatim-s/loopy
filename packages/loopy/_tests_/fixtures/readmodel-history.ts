@@ -115,7 +115,7 @@ export async function countHistory(store: Store & DashboardReader) {
         token: "owner",
         effects: [
           { kind: "finish_run", outcome: { status: "succeeded", output: null }, at: readmodelAt },
-          { kind: "schedule_retry", at: "invalid-timestamp" },
+          { kind: "schedule_activation", at: "invalid-timestamp" },
         ],
       }),
     );

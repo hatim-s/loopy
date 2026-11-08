@@ -133,7 +133,7 @@ export class CloudWorkerProbe {
           store.apply({
             runId: "run",
             token: "owner",
-            effects: [...logs(), { kind: "schedule_retry", at: "invalid-date" }],
+            effects: [...logs(), { kind: "schedule_activation", at: "invalid-date" }],
           }),
         ),
       );
