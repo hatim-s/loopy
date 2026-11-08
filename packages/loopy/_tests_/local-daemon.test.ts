@@ -33,7 +33,7 @@ test("daemon publishes a private discovery file and removes it on clean shutdown
     );
 
     const daemon = await Effect.runPromise(
-      localDaemon({ home, cwd, store, port: 0, concurrency: 2 }).pipe(
+      localDaemon({ home, cwd, store, port: 0, concurrency: 2, assets: join(cwd, "assets") }).pipe(
         Effect.provideService(Scope.Scope, scope),
       ),
     );
@@ -136,7 +136,16 @@ test("second foreground daemon reports an actionable error", async () => {
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* openRunStore(home);
-        const daemon = yield* localDaemon({ home, cwd, store, port: 0, concurrency: 1 });
+
+        const daemon = yield* localDaemon({
+          home,
+          cwd,
+          store,
+          port: 0,
+          concurrency: 1,
+          assets: join(cwd, "assets"),
+        });
+
         yield* daemon.start;
 
         const child = Bun.spawn(
@@ -171,7 +180,7 @@ test("failed discovery publication closes its listener and permanently rejects r
   const home = directory();
   const cwd = directory();
   const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("probe") });
-  const port = probe.port;
+  const port = probe.port ?? 0;
   await probe.stop(true);
   await Effect.runPromise(
     Effect.scoped(
@@ -218,7 +227,16 @@ test("an already published daemon starts again without touching a contested star
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* openRunStore(home);
-        const daemon = yield* localDaemon({ home, cwd, store, port: 0, concurrency: 1 });
+
+        const daemon = yield* localDaemon({
+          home,
+          cwd,
+          store,
+          port: 0,
+          concurrency: 1,
+          assets: join(cwd, "assets"),
+        });
+
         const url = yield* daemon.start;
         const lock = join(home, "daemon-start.lock");
         mkdirSync(lock);

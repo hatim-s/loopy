@@ -149,6 +149,7 @@ test("CLI stdin entry and name-only listing do not disclose values", async () =>
       store: runStore,
       concurrency: 4,
       port: 0,
+      assets: join(directory, "assets"),
     }).pipe(Effect.provideService(Scope.Scope, scope)),
   );
 

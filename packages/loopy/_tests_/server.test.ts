@@ -7,10 +7,12 @@ import {
   daemonViewSchema,
   decodeBoundary,
   type ErrorCode,
+  encodeBoundary,
   encodeRunCursor,
   errorBodySchema,
   type Json,
   nodeIdSchema,
+  putLoopyBodySchema,
   routes,
   runSnapshotViewSchema,
   runViewSchema,
@@ -25,9 +27,8 @@ import {
   readDaemonFile,
   ServiceError,
 } from "@loopy/runtime/local";
+import { apiRoutes, dispatch, eventStream } from "@loopy/runtime/service";
 import { Effect, Schema, Scope } from "effect";
-import { eventStream } from "../../runtime/src/local/server/events";
-import { apiRoutes, dispatch } from "../../runtime/src/local/server/routes";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture";
 import { newRun } from "./fixture";
 import {
@@ -38,7 +39,7 @@ import {
   waitUntil,
 } from "./fixtures/service-runtime";
 
-const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
+const daemonMetadata = { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 4 };
 
 const servers: Awaited<ReturnType<typeof startDaemon>>[] = [];
 
@@ -54,7 +55,7 @@ async function startDaemon(options: { home: string; cwd: string; port: number; a
   const store = await fixtureStore(options.home);
 
   const daemon = await Effect.runPromise(
-    localDaemon({ concurrency: 4, ...options, store }).pipe(
+    localDaemon({ concurrency: 4, assets: join(options.cwd, "assets"), ...options, store }).pipe(
       Effect.provideService(Scope.Scope, fixtureScope()),
     ),
   );
@@ -266,7 +267,6 @@ async function serviceFixture(name: string) {
     store,
     clock: { now: Date.now },
     home: f.home,
-    cwd: f.cwd,
   });
 
   return { f, store, service };
@@ -457,7 +457,7 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
   const store = await fixtureStore(f.home);
 
   const daemon = await Effect.runPromise(
-    localDaemon({ concurrency: 4, ...f, store, port: 0 }).pipe(
+    localDaemon({ concurrency: 4, ...f, store, port: 0, assets: join(f.cwd, "assets") }).pipe(
       Effect.provideService(Scope.Scope, fixtureScope()),
     ),
   );
@@ -528,7 +528,7 @@ test("SSE disconnect removes the subscriber", async () => {
 test("response validation rejects a view with extra fields", async () => {
   const { f, store, service } = await serviceFixture("leak");
 
-  const leaking = (await Effect.runPromise(service.listLoopies())).map((loopy) => ({
+  const leaking = (await Effect.runPromise(service.listLoopies(f.cwd))).map((loopy) => ({
     ...loopy,
     secrets: ["private"],
   }));
@@ -748,7 +748,7 @@ async function httpEvents(name: string) {
   await Effect.runPromise(store.createRun(run));
 
   const daemon = await Effect.runPromise(
-    localDaemon({ concurrency: 4, ...f, store, port: 0 }).pipe(
+    localDaemon({ concurrency: 4, ...f, store, port: 0, assets: join(f.cwd, "assets") }).pipe(
       Effect.provideService(Scope.Scope, fixtureScope()),
     ),
   );
@@ -989,7 +989,7 @@ test("local server leaves event pruning to the runtime daemon", async () => {
   const scope = fixtureScope();
 
   const daemon = await Effect.runPromise(
-    localDaemon({ concurrency: 4, ...f, store, port: 0 }).pipe(
+    localDaemon({ concurrency: 4, ...f, store, port: 0, assets: join(f.cwd, "assets") }).pipe(
       Effect.provideService(Scope.Scope, scope),
     ),
   );
@@ -1159,10 +1159,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
     replace: true,
     graph: result.graph,
     revision: result.revision,
-    bundles: result.bundles.map((bundle) => ({
-      ...bundle,
-      bytes: Buffer.from(bundle.bytes).toString("base64"),
-    })),
+    bundles: result.bundles,
   };
 
   const table = apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata });
@@ -1170,7 +1167,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const put = async (payload: typeof body) => {
     const request = new Request("http://localhost/api/loopies/compiled-save", {
       method: "PUT",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(encodeBoundary(putLoopyBodySchema)(payload)),
     });
 
     return dispatch(table, request, new URL(request.url));
@@ -1184,7 +1181,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
         ...body,
         bundles: body.bundles.map((bundle) => ({
           ...bundle,
-          bytes: Buffer.from("changed").toString("base64"),
+          bytes: new TextEncoder().encode("changed"),
         })),
       })
     ).status,
@@ -1212,7 +1209,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
         ...body,
         bundles: body.bundles.map((bundle) => ({
           ...bundle,
-          bytes: Buffer.from("forged").toString("base64"),
+          bytes: new TextEncoder().encode("forged"),
         })),
       })
     ).status,
@@ -1277,10 +1274,7 @@ test("saving another revision retains the earlier graph and executable artifacts
         replace: true,
         graph: compiled.graph,
         revision: compiled.revision,
-        bundles: compiled.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: Buffer.from(bundle.bytes).toString("base64"),
-        })),
+        bundles: compiled.bundles,
       }),
     );
     revisions.push(compiled.revision);

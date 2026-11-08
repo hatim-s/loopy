@@ -65,16 +65,12 @@ export async function save(f: ReturnType<typeof fixture>) {
         const service = makeLocalService({
           store,
           home: f.home,
-          cwd: f.cwd,
           clock: { now: Date.now },
         });
 
         yield* service.putLoopy(result.graph.name, {
           ...result,
-          bundles: result.bundles.map((bundle) => ({
-            ...bundle,
-            bytes: Buffer.from(bundle.bytes).toString("base64"),
-          })),
+          bundles: result.bundles,
           source: { path: f.file, workspace: f.cwd },
           replace: false,
         });
@@ -102,7 +98,6 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
         const service = makeLocalService({
           store,
           home: f.home,
-          cwd: f.cwd,
           clock: { now: Date.now },
         });
 

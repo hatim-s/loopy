@@ -157,7 +157,7 @@ await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   });
   yield* service.putLoopy("packed", {
     graph: compiled.graph, revision: compiled.revision,
-    bundles: compiled.bundles.map(bundle => ({...bundle, bytes: Buffer.from(bundle.bytes).toString("base64")})),
+    bundles: compiled.bundles,
     replace: false, source: {path: ${JSON.stringify(join(fixture, "entry.ts"))}, workspace: cwd},
   });
   const run = yield* service.startRun("packed", {}, cwd);

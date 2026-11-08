@@ -37,7 +37,6 @@ async function setup() {
   const service = makeLocalService({
     store,
     home: f.home,
-    cwd: f.workspace,
     clock: { now: Date.now },
   });
 

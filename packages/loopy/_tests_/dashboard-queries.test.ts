@@ -34,7 +34,6 @@ async function fixture(memory = false) {
     store,
     clock: { now: Date.now },
     home: root,
-    cwd: root,
   });
 
   return { root, store, service };

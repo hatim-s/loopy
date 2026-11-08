@@ -44,17 +44,13 @@ export default loopy("reindex-docs", {
     store,
     clock: { now: () => now },
     home: home,
-    cwd: root,
   });
 
   await Effect.runPromise(
     service.putLoopy("reindex-docs", {
       graph: compiled.graph,
       revision: compiled.revision,
-      bundles: compiled.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
+      bundles: compiled.bundles,
       source: { path: source, workspace: root },
       sourceArtifact: compiled.sourceArtifact,
       replace: false,
@@ -177,7 +173,6 @@ export async function manyRunsFixture() {
     store,
     clock: { now: Date.now },
     home: home,
-    cwd: root,
   });
 
   const source = join(root, "queue-drain.loopy.ts");
@@ -195,10 +190,7 @@ export async function manyRunsFixture() {
     service.putLoopy("queue-drain", {
       graph: compiled.graph,
       revision: compiled.revision,
-      bundles: compiled.bundles.map((bundle) => ({
-        ...bundle,
-        bytes: Buffer.from(bundle.bytes).toString("base64"),
-      })),
+      bundles: compiled.bundles,
       source: { path: source, workspace: root },
       sourceArtifact: compiled.sourceArtifact,
       replace: false,

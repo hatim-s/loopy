@@ -77,7 +77,7 @@ test("waitingOn names the run's pending hook and is null without one", () => {
   expect(view(run).waitingOn).toBeNull();
 });
 
-test("loopy views count matching runs and choose the newest without leaking registry fields", () => {
+test("loopy views carry the store counts, newest run and persisted schedule", () => {
   const saved = {
     slug: "test",
     workspace: "/workspace",
@@ -107,20 +107,9 @@ test("loopy views count matching runs and choose the newest without leaking regi
     nextFireAt: now,
   };
 
-  const result = contract.loopyView(saved, schedule, [
-    newer,
-    view(newRun()),
-    view({ ...newRun(), slug: "other" }),
-  ]);
+  const counts = { ...contract.emptyRunCounts(), succeeded: 1 };
+  const result = contract.loopyView(saved, schedule, { counts, latest: [newer] });
 
-  expect(result.counts).toEqual({
-    queued: 1,
-    running: 0,
-    suspended: 0,
-    succeeded: 1,
-    failed: 0,
-    cancelled: 0,
-  });
   expect(result.lastRun).toEqual(newer);
   expect(result.schedule).toEqual({
     cron: schedule.cron,
@@ -129,7 +118,8 @@ test("loopy views count matching runs and choose the newest without leaking regi
     nextFireAt: now,
   });
   expect(contract.decodeBoundary(contract.loopyViewSchema)(result)).toEqual(result);
-  expect(contract.loopyView(saved, null, [])).toMatchObject({
+  const empty = { counts: contract.emptyRunCounts(), latest: [] };
+  expect(contract.loopyView(saved, null, empty)).toMatchObject({
     workspace: "/workspace",
     lastRun: null,
     schedule: null,
@@ -181,7 +171,7 @@ test("serialized loopy and snapshot views exclude private registry and owner key
       schedule: null,
     },
     null,
-    [run],
+    { counts: contract.emptyRunCounts(), latest: [run] },
   );
 
   const snapshot: contract.RunSnapshotView = {
@@ -295,7 +285,8 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
     schedule: { cron: "0 * * * *", tz: "UTC" },
   } satisfies Parameters<typeof contract.loopyView>[0];
 
-  expect(contract.loopyView(saved, null, []).schedule).toEqual({
+  const empty = { counts: contract.emptyRunCounts(), latest: [] };
+  expect(contract.loopyView(saved, null, empty).schedule).toEqual({
     cron: "0 * * * *",
     tz: "UTC",
     enabled: false,
@@ -314,7 +305,7 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
         enabled: true,
         nextFireAt: now,
       },
-      [],
+      empty,
     ).schedule,
   ).toEqual({ cron: "*/5 * * * *", tz: "Asia/Kolkata", enabled: true, nextFireAt: now });
 });
