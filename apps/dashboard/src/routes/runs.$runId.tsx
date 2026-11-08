@@ -19,11 +19,12 @@ import { Icon } from "../components/ui/icon";
 import { Load } from "../components/ui/load";
 import { Segmented } from "../components/ui/segmented";
 import { useClock } from "../lib/clock";
-import { type GraphModel, type GraphNode, graphModel } from "../lib/graph";
+import { graphModel } from "../lib/graph";
 import { layoutGraph } from "../lib/graph-layout";
 import { useNodeSelection } from "../lib/node-selection";
 import { useExecutions } from "../lib/pages";
-import { firstInside, mapRunning, runMarks } from "../lib/run-marks";
+import { focusOf, focusSummary, openItemTarget, scopeOf } from "../lib/run-focus";
+import { mapRunning, runMarks } from "../lib/run-marks";
 import { searchField } from "../lib/search";
 import {
   useLoopyGraph,
@@ -64,10 +65,6 @@ const FIXED_HEIGHT = "h-[clamp(400px,calc(100dvh-var(--head-h)-240px),640px)]";
 
 const SIDE_HEIGHT = "max-h-[70vh] lg:max-h-[clamp(400px,calc(100dvh-var(--head-h)-240px),640px)]";
 
-function sameScope(a: ScopeTuple, b: ScopeTuple): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
 function ItemChip({ item, onClose }: { item: ScopeTuple; onClose: () => void }) {
   return (
     <span className="flex shrink-0 items-center gap-1 rounded-control bg-active-soft py-0.5 pr-0.5 pl-2 text-xs text-active">
@@ -88,28 +85,6 @@ function ItemChip({ item, onClose }: { item: ScopeTuple; onClose: () => void }) 
       </button>
     </span>
   );
-}
-
-/** Where the selected map or the map around the selected node sits, and its picker scope. */
-function focusOf(options: {
-  model: GraphModel;
-  selected: string;
-  scopeOf: (nodeId: string) => ScopeTuple | null;
-}): {
-  mapId: GraphNode["id"];
-  parentScope: ScopeTuple | null;
-  inside: boolean;
-} | null {
-  const { model, selected, scopeOf } = options;
-  const node = model.nodes.find((item) => item.id === selected);
-
-  if (node?.node.kind === "map") {
-    return { mapId: node.id, parentScope: scopeOf(node.id), inside: false };
-  }
-
-  const mapId = node?.maps.at(-1) ?? null;
-
-  return mapId === null ? null : { mapId, parentScope: scopeOf(mapId), inside: true };
 }
 
 function Workspace(props: {
@@ -148,25 +123,11 @@ function Workspace(props: {
   const definition = useMemo(() => graphModel(graph.graph, null), [graph.graph]);
   const layout = useMemo(() => layoutGraph(definition), [definition]);
 
-  // Where a node executes: the top level, or the open item of the map that owns it. Null when
-  // it runs per item and that map has no item open.
-  const scopeOf = (nodeId: string): ScopeTuple | null => {
-    const owner = definition.nodes.find((node) => node.id === nodeId)?.maps.at(-1);
-
-    if (owner === undefined) {
-      return [];
-    }
-
-    const depth = item?.findIndex((part) => part.nodeId === owner) ?? -1;
-
-    return item && depth >= 0 ? item.slice(0, depth + 1) : null;
-  };
-
   // The snapshot and the item page are bounded, so the selected node's own first page fills in
   // a node they cut off. NodePanel asks for the same page, so this adds no request.
   const selectedScope =
     selected !== null && graph.graph.nodes.some((node) => node.id === selected)
-      ? scopeOf(selected)
+      ? scopeOf(definition, item, selected)
       : null;
 
   const selectedPage = useExecutions(
@@ -222,24 +183,16 @@ function Workspace(props: {
     (node) => node.state.kind === "ran" && node.state.status === "failed",
   );
 
-  const focus = selected ? focusOf({ model, selected, scopeOf }) : null;
+  const focus = selected ? focusOf(definition, item, selected) : null;
   const openEntry = focus ? item?.find((part) => part.nodeId === focus.mapId) : undefined;
   const mapModel = focus ? model.nodes.find((node) => node.id === focus.mapId) : undefined;
 
   const openItem = (index: number) => {
-    if (!focus || focus.parentScope === null) {
-      return;
+    const target = focus && openItemTarget(focus, graph.graph, index);
+
+    if (target) {
+      setSearch(target);
     }
-
-    // Opening an item from the map's list moves to the first node it runs, where the item's
-    // input, output and error live. From a node inside the map, the node stays.
-    const next = [...focus.parentScope, { nodeId: focus.mapId, index }];
-
-    setSearch(
-      focus.inside
-        ? { item: next }
-        : { item: next, node: firstInside(graph.graph, focus.mapId) ?? focus.mapId },
-    );
   };
 
   const switcher = (
@@ -283,7 +236,7 @@ function Workspace(props: {
       <RunNodePanel
         runId={runId}
         node={inspected}
-        scope={scopeOf(inspected.id)}
+        scope={scopeOf(definition, item, inspected.id)}
         place={place}
         openItem={openEntry?.index ?? null}
         onOpenItem={openItem}
@@ -322,9 +275,7 @@ function Workspace(props: {
           panel({
             kind: inside ? "inside" : "map",
             picker,
-            summary: scopes.find(
-              (summary) => summary.nodeId === mapId && sameScope(summary.parentScope, parentScope),
-            ),
+            summary: focusSummary(scopes, focus),
             running: mapRunning(mapModel),
           })
         }

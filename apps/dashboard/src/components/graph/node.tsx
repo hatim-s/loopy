@@ -9,7 +9,8 @@ import {
 import type { FocusEvent } from "react";
 import type { GraphNodeModel, NodeState } from "../../lib/graph";
 import { NODE_SIZE, nodeSize } from "../../lib/graph-layout";
-import { isInFlight, statusWord } from "../../lib/status";
+import { nodeTally } from "../../lib/run-marks";
+import { statusWord } from "../../lib/status";
 import { KindGlyph } from "./kind-glyph";
 
 export type FlowNode = Node<{ model: GraphNodeModel }, "loopy">;
@@ -32,35 +33,18 @@ function spokenState(state: NodeState): string {
   return state.kind === "ran" ? statusWord(state.status).toLowerCase() : "saved definition";
 }
 
-// Settled work in a map counts the executions that passed out of those that ran, so skipped arms
-// stay out of the count.
 function StateMark({ model }: { model: GraphNodeModel }) {
-  const { state, executions } = model;
-
-  if (state.kind !== "ran") {
+  if (model.state.kind !== "ran") {
     return null;
   }
 
-  const ran = executions.length - (state.counts.skipped ?? 0);
-  const latest = executions.at(-1);
+  const tally = nodeTally(model);
 
-  if (!isInFlight(state.status) && executions.length > 1 && ran > 0) {
-    return (
-      <span className="node-mark tabular-nums">
-        {state.counts.succeeded ?? 0}/{ran}
-      </span>
-    );
-  }
-
-  if (executions.length === 1 && latest !== undefined && latest.attempt > 1) {
-    return (
-      <span className="node-mark tabular-nums">
-        try {latest.attempt}/{latest.maxAttempts}
-      </span>
-    );
-  }
-
-  return <span className="node-mark">{statusWord(state.status).toLowerCase()}</span>;
+  return tally === null ? (
+    <span className="node-mark">{statusWord(model.state.status).toLowerCase()}</span>
+  ) : (
+    <span className="node-mark tabular-nums">{tally}</span>
+  );
 }
 
 const PLATE_W = NODE_SIZE.control.width;
