@@ -40,8 +40,9 @@ const settled = (store: Pick<DashboardReader, "queryRuns">, count: number) =>
     ),
   );
 
-for (const mode of ["due", "disabled", "stale", "minute-late"] as const) {
-  test(`schedule ${mode} coalesces missed slots into one fire`, async () => {
+// A slot up to a minute late fires once as now; a later one is skipped without a run.
+for (const mode of ["due", "disabled", "missed", "minute-late"] as const) {
+  test(`schedule ${mode} slot fires at most once and resumes on the next slot`, async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -54,8 +55,8 @@ for (const mode of ["due", "disabled", "stale", "minute-late"] as const) {
             schedule(
               mode === "disabled"
                 ? { enabled: false }
-                : mode === "stale"
-                  ? { nextFireAt: new Date(base - 120_000).toISOString(), lastFireKey: "old" }
+                : mode === "missed"
+                  ? { nextFireAt: new Date(base - 61_000).toISOString(), lastFireKey: "old" }
                   : mode === "minute-late"
                     ? { nextFireAt: new Date(base - 60_000).toISOString() }
                     : {},
@@ -71,14 +72,14 @@ for (const mode of ["due", "disabled", "stale", "minute-late"] as const) {
 
           yield* Effect.forkScoped(daemon.run);
 
-          const fired = mode === "disabled" ? 0 : 1;
+          const fired = mode === "disabled" || mode === "missed" ? 0 : 1;
           yield* settled(store, fired);
           yield* nextPass(daemon, passes);
           expect(yield* runs(store)).toHaveLength(fired);
 
-          if (mode === "stale") {
+          if (mode === "missed") {
             expect((yield* store.listSchedules())[0]).toMatchObject({
-              lastFireKey: `test@${new Date(base - 120_000).toISOString()}`,
+              lastFireKey: "old",
               nextFireAt: new Date(base + 60_000).toISOString(),
             });
           }

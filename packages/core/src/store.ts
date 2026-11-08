@@ -101,6 +101,11 @@ export interface Store {
     next: string;
     run: RunRecord;
   }): Effect.Effect<boolean, StorageError>;
+  /** Advances past a missed slot without a run, with the same slot fence as fireSchedule. */
+  skipSchedule(options: {
+    schedule: ScheduleRef & Pick<Schedule, "nextFireAt">;
+    next: string;
+  }): Effect.Effect<boolean, StorageError>;
   /** A null retry disables the schedule; either way the error stays readable until it fires. */
   failSchedule(options: {
     schedule: ScheduleRef;

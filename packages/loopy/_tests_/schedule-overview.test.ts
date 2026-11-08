@@ -110,8 +110,10 @@ for (const version of [13, 14, 15] as const) {
     const db = version === 15 ? new Database(file) : legacyDatabase(file, version);
 
     if (version === 15) {
-      // A schema 15 home predates the tables schema 16 adds.
-      db.exec("DROP TABLE schedule_failures; DROP TABLE run_turns");
+      // A schema 15 home predates the tables schema 16 adds and keeps the column it drops.
+      db.exec(
+        "DROP TABLE schedule_failures; DROP TABLE run_turns; ALTER TABLE runs ADD COLUMN next_retry_at TEXT",
+      );
     }
 
     db.exec("DROP INDEX IF EXISTS schedules_enabled_next");

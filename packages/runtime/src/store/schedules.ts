@@ -19,7 +19,11 @@ function readSchedule(ctx: SqlContext, { workspace, slug }: ScheduleKey) {
   );
 }
 
-function emitSchedule(write: SqlWrite, schedule: ScheduleKey, kind: "saved" | "fired"): void {
+function emitSchedule(
+  write: SqlWrite,
+  schedule: ScheduleKey,
+  kind: "saved" | "fired" | "skipped",
+): void {
   const row = readSchedule(write, schedule);
 
   if (!row) {
@@ -138,27 +142,48 @@ export function deleteSchedule(write: SqlWrite, key: ScheduleKey): void {
   }
 }
 
+type ObservedSlot = Parameters<Store["skipSchedule"]>[0]["schedule"];
+
+function fireKey(schedule: ObservedSlot): string {
+  return `${schedule.slug}@${utc(schedule.nextFireAt)}`;
+}
+
+// The slot fence lets one host advance a schedule once per observed slot. Only a fire records its key.
+function advanceSchedule(
+  write: SqlWrite,
+  schedule: ObservedSlot,
+  next: string,
+  recordedKey: string | null,
+): boolean {
+  if (!readSchedule(write, schedule)) {
+    throw new StoreRejectedError(
+      `Schedule '${schedule.slug}' does not exist. Save the schedule before advancing it.`,
+    );
+  }
+
+  return (
+    write.db
+      .query(
+        `UPDATE schedules SET last_fire_key=COALESCE(?,last_fire_key),next_fire_at=? WHERE workspace=?
+    AND slug=? AND version=? AND enabled=1 AND next_fire_at=? AND (last_fire_key IS NULL OR last_fire_key<>?)`,
+      )
+      .run(
+        recordedKey,
+        utc(next),
+        schedule.workspace,
+        schedule.slug,
+        schedule.version,
+        utc(schedule.nextFireAt),
+        fireKey(schedule),
+      ).changes > 0
+  );
+}
+
 export function fireSchedule(
   write: SqlWrite,
   { schedule, next, run }: Parameters<Store["fireSchedule"]>[0],
 ): boolean {
-  if (!readSchedule(write, schedule)) {
-    throw new StoreRejectedError(
-      `Schedule '${schedule.slug}' does not exist. Save the schedule before firing it.`,
-    );
-  }
-
-  const slot = utc(schedule.nextFireAt);
-  const fireKey = `${schedule.slug}@${slot}`;
-
-  const updated = write.db
-    .query(
-      `UPDATE schedules SET last_fire_key=?,next_fire_at=? WHERE workspace=? AND slug=?
-    AND version=? AND enabled=1 AND next_fire_at=? AND (last_fire_key IS NULL OR last_fire_key<>?)`,
-    )
-    .run(fireKey, utc(next), schedule.workspace, schedule.slug, schedule.version, slot, fireKey);
-
-  if (!updated.changes) {
+  if (!advanceSchedule(write, schedule, next, fireKey(schedule))) {
     return false;
   }
 
@@ -167,6 +192,19 @@ export function fireSchedule(
     .run(schedule.workspace, schedule.slug);
   insertRun(write, run);
   emitSchedule(write, schedule, "fired");
+
+  return true;
+}
+
+export function skipSchedule(
+  write: SqlWrite,
+  { schedule, next }: Parameters<Store["skipSchedule"]>[0],
+): boolean {
+  if (!advanceSchedule(write, schedule, next, null)) {
+    return false;
+  }
+
+  emitSchedule(write, schedule, "skipped");
 
   return true;
 }

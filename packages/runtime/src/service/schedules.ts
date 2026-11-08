@@ -3,7 +3,6 @@ import {
   DEFAULT_TIME_ZONE,
   errorMessage,
   nextFire,
-  parseCron,
   type Schedule,
   validateTimeZone,
 } from "@loopy/core";
@@ -89,7 +88,7 @@ export function makeScheduleOperations(context: ServiceContext) {
     tz: string,
   ) {
     try {
-      return nextFire(parseCron(cron), new Date(context.clock.now()), tz).toISOString();
+      return nextFire(cron, new Date(context.clock.now()), tz).toISOString();
     } catch (error) {
       return yield* Effect.fail(new ServiceError("invalid_cron", errorMessage(error)));
     }

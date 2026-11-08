@@ -529,6 +529,21 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   expect((await f.runs("missing"))[0]?.revision).toBe(restoredRevision);
 });
 
+test("a slot more than a minute late is skipped without a run and the next slot fires", async () => {
+  const f = fixture();
+  await f.schedule(graph("late"));
+  f.at(61_000);
+  await Effect.runPromise(f.scheduler().tick());
+  expect(await f.runs("late")).toEqual([]);
+  expect((await Effect.runPromise(f.store.listSchedules()))[0]?.nextFireAt).toBe(
+    new Date(base + 120_000).toISOString(),
+  );
+  expect(f.registry.reads.get("late")).toBeUndefined();
+  f.at(120_000);
+  await Effect.runPromise(f.scheduler().tick());
+  expect(await f.runs("late")).toHaveLength(1);
+});
+
 for (const failure of ["before", "after"] as const) {
   test(`schedule fire failure ${failure} commit is bounded and does not duplicate a fire`, async () => {
     const f = fixture();

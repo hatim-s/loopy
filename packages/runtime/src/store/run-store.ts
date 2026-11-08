@@ -76,6 +76,7 @@ import {
   readScheduleOverview,
   readSchedules,
   setScheduleEnabled,
+  skipSchedule,
 } from "./schedules";
 import { initializeSchema } from "./schema/fresh";
 import { utc } from "./timestamps";
@@ -258,6 +259,10 @@ export class SqlRunStore implements Store, DurableTurnStore, DashboardReader {
 
   fireSchedule(options: Parameters<Store["fireSchedule"]>[0]) {
     return this.write("fireSchedule", (write) => fireSchedule(write, options));
+  }
+
+  skipSchedule(options: Parameters<Store["skipSchedule"]>[0]) {
+    return this.write("skipSchedule", (write) => skipSchedule(write, options));
   }
 
   failSchedule(options: Parameters<Store["failSchedule"]>[0]) {

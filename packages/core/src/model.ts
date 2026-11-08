@@ -183,7 +183,7 @@ export const runtimeEventSchema = Schema.Union([
   struct({
     ...eventFields,
     entity: Schema.Literal("schedule"),
-    kind: Schema.Literals(["saved", "fired"]),
+    kind: Schema.Literals(["saved", "fired", "skipped"]),
     record: scheduleSchema,
   }),
   struct({
