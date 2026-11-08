@@ -29,16 +29,16 @@ async function fixture() {
   };
 }
 
-async function launch(allowedOrigins?: string[]) {
+async function launch() {
   const options = await fixture();
-  const server = startServer({ ...options, allowedOrigins });
+  const server = startServer(options);
   onCleanup(() => server.stop());
 
   return { ...options, baseUrl: new URL(server.url).origin };
 }
 
 test("remote adapter sends no credentials and maps server auth and missing-run errors", async () => {
-  const f = await launch(["https://dashboard.example"]);
+  const f = await launch();
   const fetchRequest = globalThis.fetch;
   const calls: RequestInit[] = [];
 

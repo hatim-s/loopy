@@ -109,6 +109,12 @@ test("the daemon server requires its token and origin, serves pinned assets and 
     expect(decodeBoundary(errorBodySchema)(await response.json()).error.code).toBe(code);
   }
 
+  const own = await fetch(`${url.origin}/api/runs`, {
+    headers: { ...headers, Origin: url.origin },
+  });
+  expect(own.status).toBe(200);
+  expect(own.headers.has("access-control-allow-origin")).toBe(false);
+
   expect(await (await fetch(`${url.origin}/api/loopies`, { headers })).json()).toMatchObject([
     { slug: "dashboard" },
   ]);

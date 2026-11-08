@@ -4,7 +4,7 @@ import { bearerMatches } from "../../http";
 import { apiRoutes, dispatch, errorResponse, type RouteDependencies } from "../../service";
 import { daemonUrl } from "../daemon/file";
 import { serveAsset, snapshotAssets } from "./assets";
-import { type OriginPolicy, originSecurity } from "./security";
+import { rejectForeign } from "./security";
 
 // The local listener caps bodies itself, so callers never choose the route limit.
 export type ServerOptions = Omit<RouteDependencies, "maxBodyBytes"> & {
@@ -12,17 +12,9 @@ export type ServerOptions = Omit<RouteDependencies, "maxBodyBytes"> & {
   port: number;
   /** The built dashboard directory, which the CLI resolves from its own install layout. */
   assets: string;
-  publicOrigin?: string;
-  allowedOrigins?: readonly string[];
 };
 
 export function startServer(options: ServerOptions) {
-  // Validate configured origins before opening a listener.
-  originSecurity({
-    publicOrigin: options.publicOrigin ?? "http://127.0.0.1",
-    allowedOrigins: options.allowedOrigins,
-  });
-
   let handler: ReturnType<typeof createRequestHandler>;
 
   const server = Bun.serve({
@@ -41,10 +33,7 @@ export function startServer(options: ServerOptions) {
   });
 
   try {
-    handler = createRequestHandler({
-      ...options,
-      publicOrigin: options.publicOrigin ?? `http://127.0.0.1:${server.port}`,
-    });
+    handler = createRequestHandler(options, `http://127.0.0.1:${server.port}`);
   } catch (error) {
     void server.stop(true);
     throw error;
@@ -61,7 +50,7 @@ export function startServer(options: ServerOptions) {
   };
 }
 
-export function createRequestHandler(options: ServerOptions & OriginPolicy) {
+function createRequestHandler(options: ServerOptions, origin: string) {
   if (!options.token) {
     throw new Error("The HTTP server requires a nonempty bearer token.");
   }
@@ -74,22 +63,20 @@ export function createRequestHandler(options: ServerOptions & OriginPolicy) {
     maxBodyBytes: LOCAL_MAX_REQUEST_BYTES,
   });
 
-  const security = originSecurity(options);
-
-  return (request: Request) => respond(request, { assets, table, token: options.token, security });
+  return (request: Request) => respond(request, { assets, table, token: options.token, origin });
 }
 
 type RequestOptions = {
   assets: ReturnType<typeof snapshotAssets>;
   table: ReturnType<typeof apiRoutes>;
   token: string;
-  security: ReturnType<typeof originSecurity>;
+  origin: string;
 };
 
 async function respond(request: Request, options: RequestOptions): Promise<Response> {
   try {
     const url = new URL(request.url);
-    const rejection = options.security.reject(request);
+    const rejection = rejectForeign(request, options.origin);
 
     if (rejection) {
       return rejection;
@@ -101,23 +88,14 @@ async function respond(request: Request, options: RequestOptions): Promise<Respo
       return serveAsset(options.assets, request, path);
     }
 
-    if (request.method === "OPTIONS") {
-      return options.security.preflight(request);
-    }
-
     if (!bearerMatches(request.headers.get("authorization"), options.token)) {
-      return options.security.cors(request, errorResponse("unauthorized"));
+      return errorResponse("unauthorized");
     }
 
-    const response = await dispatch(options.table, request, url);
-
-    return options.security.cors(request, response);
+    return await dispatch(options.table, request, url);
   } catch (error) {
-    return options.security.cors(
-      request,
-      error instanceof URIError
-        ? errorResponse("bad_request", "The request path has invalid percent-encoding.")
-        : errorResponse("internal"),
-    );
+    return error instanceof URIError
+      ? errorResponse("bad_request", "The request path has invalid percent-encoding.")
+      : errorResponse("internal");
   }
 }
