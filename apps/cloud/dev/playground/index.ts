@@ -1,7 +1,10 @@
 import { parseArgs } from "node:util";
-import { Effect } from "effect";
-import { z } from "zod";
+import { decodeBoundary } from "@loopy/contract";
+import { Effect, Schema } from "effect";
+import { PlaygroundClient } from "./client";
 import { cohort, recover } from "./cohort";
+import { profile } from "./config";
+import { groupSchema } from "./journal";
 import { arm, prepare } from "./prepare";
 import { serve, start, status, stop } from "./stack";
 
@@ -17,9 +20,9 @@ const { positionals, values } = parseArgs({
   },
 });
 
-const command = positionals[0];
+const decodeGroup = () => decodeBoundary(groupSchema)(values.group);
 
-switch (command) {
+switch (positionals[0]) {
   case "start":
     await start();
     break;
@@ -40,19 +43,23 @@ switch (command) {
     await Effect.runPromise(prepare());
     break;
   case "arm":
-    await arm(z.string().min(1).parse(values.baseline));
+    await arm({
+      profile,
+      baseline: decodeBoundary(Schema.String.check(Schema.isMinLength(1)))(values.baseline),
+      batch: (await PlaygroundClient.open()).settings.batch,
+    });
     break;
   case "preflight":
-    await cohort(z.enum(["a", "b", "c"]).parse(values.group), "preflight");
+    await cohort(decodeGroup(), "preflight");
     break;
   case "recover":
-    await recover(z.enum(["a", "b", "c"]).parse(values.group));
+    await recover(decodeGroup());
     break;
   case "cohort":
-    await cohort(z.enum(["a", "b", "c"]).parse(values.group));
+    await cohort(decodeGroup());
     break;
   default:
     throw new Error(
-      "Use start, stop, status, prepare, preflight --group a|b|c, arm --baseline <receipt>, or cohort --group a|b|c.",
+      "Use start, stop, status, prepare, preflight --group a|b|c, arm --baseline <receipt>, cohort --group a|b|c or recover --group a|b|c. The supervisor runs serve itself.",
     );
 }

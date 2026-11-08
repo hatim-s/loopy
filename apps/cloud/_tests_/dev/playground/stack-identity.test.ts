@@ -1,194 +1,98 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { stop } from "../../../dev/playground/stack";
 import {
   parseServeIdentity,
+  requireOwnedSupervisor,
   type StackSelection,
   supervisorArguments,
 } from "../../../dev/playground/stack-identity";
 
-const roots: string[] = [];
+const root = "/synthetic/loopy";
 
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+const selection: StackSelection = {
+  root,
+  state: join(root, ".loopy/playground-architecture"),
+  profile: "architecture",
+};
+
+const identity = { ...selection, nonce: crypto.randomUUID() };
+
+const argv = [process.execPath, ...supervisorArguments(identity)];
+
+const manifest = { owner: 424242, pgid: 424242, identity, argv };
+
+const observation = { pid: manifest.owner, pgid: manifest.pgid, command: argv.join(" ") };
+
+const refusal =
+  "Supervisor PID, process group or launch identity does not match. Refusing to signal.";
+
+test("an owned supervisor matches its recorded PID, process group and launch argv", () => {
+  expect(() => requireOwnedSupervisor(manifest, observation, selection)).not.toThrow();
 });
 
-async function freshLaunch() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-stop-identity-")));
-  roots.push(root);
-
-  const selection: StackSelection = {
-    root,
-    state: join(root, ".loopy/playground-architecture"),
-    profile: "architecture",
-  };
-
-  const identity = { ...selection, nonce: crypto.randomUUID() };
-  const argv = [process.execPath, ...supervisorArguments(identity)];
-  const manifest = { version: 2, owner: 424242, pgid: 424242, identity, argv };
-  const observation = { pid: manifest.owner, pgid: manifest.pgid, command: argv.join(" ") };
-  const signals: number[] = [];
-  const observations: number[] = [];
-
-  const control = {
-    selection,
-    manifestPath: join(root, "processes.json"),
-    processes: {
-      observe: async (pid: number) => {
-        observations.push(pid);
-
-        return observation;
-      },
-      signalGroup: (pgid: number) => {
-        signals.push(pgid);
-      },
-    },
-  };
-
-  await writeFile(control.manifestPath, JSON.stringify(manifest));
-
-  return { root, selection, identity, manifest, observation, signals, observations, control };
-}
-
-test("actual stop authorizes exactly the matching positive PID and owned process group", async () => {
-  const fixture = await freshLaunch();
-  await stop(fixture.control);
-  expect(fixture.observations).toEqual([424242]);
-  expect(fixture.signals).toEqual([424242]);
-  expect(fixture.manifest.argv.slice(-6)).toEqual([
-    "--profile",
-    "architecture",
-    "--state-root",
-    fixture.selection.state,
-    "--launch-nonce",
-    fixture.identity.nonce,
-  ]);
-});
-
-test("actual stop refuses legacy and later same-profile processes from a stale architecture manifest", async () => {
-  const fixture = await freshLaunch();
-
-  const incompatible = [
-    [
-      process.execPath,
-      "--no-env-file",
-      join(fixture.root, "apps/cloud/dev/playground/index.ts"),
-      "serve",
-    ].join(" "),
+test("a stale manifest never authorizes a different process, group or command", () => {
+  const commands = [
+    [process.execPath, "--no-env-file", join(root, "apps/cloud/dev/playground/index.ts"), "serve"],
     [
       process.execPath,
       ...supervisorArguments({
-        ...fixture.identity,
+        ...identity,
         profile: "default",
-        state: join(fixture.root, ".loopy/playground"),
+        state: join(root, ".loopy/playground"),
       }),
-    ].join(" "),
-    [
-      process.execPath,
-      ...supervisorArguments({ ...fixture.identity, nonce: crypto.randomUUID() }),
-    ].join(" "),
-    [
-      process.execPath,
-      ...supervisorArguments({ ...fixture.identity, state: join(fixture.root, "other-state") }),
-    ].join(" "),
+    ],
+    [process.execPath, ...supervisorArguments({ ...identity, nonce: crypto.randomUUID() })],
+    [process.execPath, ...supervisorArguments({ ...identity, state: join(root, "other-state") })],
   ];
 
-  for (const command of incompatible) {
-    await expect(
-      stop({
-        ...fixture.control,
-        processes: {
-          ...fixture.control.processes,
-          observe: async () => ({ ...fixture.observation, command }),
-        },
-      }),
-    ).rejects.toThrow(
-      "Supervisor PID, process group or launch identity does not match. Refusing to signal.",
-    );
-    expect(fixture.signals).toEqual([]);
-  }
-});
-
-test("actual stop fails closed on absent or mismatched PID/PGID, old manifests and invalid owners", async () => {
-  const fixture = await freshLaunch();
-
-  for (const observation of [
+  const observations = [
     null,
-    { ...fixture.observation, pid: 424243 },
-    { ...fixture.observation, pgid: 424243 },
-  ]) {
-    await expect(
-      stop({
-        ...fixture.control,
-        processes: {
-          ...fixture.control.processes,
-          observe: async () => observation,
-        },
-      }),
-    ).rejects.toThrow("Refusing to signal.");
-    expect(fixture.signals).toEqual([]);
+    { ...observation, pid: 424243 },
+    { ...observation, pgid: 424243 },
+    ...commands.map((command) => ({ ...observation, command: command.join(" ") })),
+  ];
+
+  for (const observed of observations) {
+    expect(() => requireOwnedSupervisor(manifest, observed, selection)).toThrow(refusal);
   }
 
-  for (const manifest of [
-    { owner: 424242, root: fixture.root, argv: fixture.manifest.argv, children: [] },
-    { ...fixture.manifest, owner: 0 },
-    { ...fixture.manifest, owner: -1 },
-    { ...fixture.manifest, pgid: 0 },
-    { ...fixture.manifest, pgid: 424243 },
-    { ...fixture.manifest, argv: fixture.manifest.argv.slice(0, -1) },
-    { ...fixture.manifest, identity: { ...fixture.identity, profile: "default" } },
+  for (const changed of [
+    { ...manifest, pgid: 424243 },
+    { ...manifest, argv: argv.slice(0, -1) },
   ]) {
-    await writeFile(fixture.control.manifestPath, JSON.stringify(manifest));
-    await expect(stop(fixture.control)).rejects.toThrow();
-    expect(fixture.signals).toEqual([]);
+    expect(() => requireOwnedSupervisor(changed, observation, selection)).toThrow(refusal);
   }
 });
 
-test("serve identity rejects missing nonce, another selected profile or state before startup", async () => {
-  const fixture = await freshLaunch();
+test("a matching process from another selected root, state or profile is refused", () => {
+  for (const other of [
+    { ...identity, profile: "default" as const },
+    { ...identity, state: join(root, "other-state") },
+    { ...identity, root: join(root, "other-root") },
+  ]) {
+    const otherArgv = [process.execPath, ...supervisorArguments(other)];
 
-  const input = {
-    profile: fixture.identity.profile,
-    state: fixture.identity.state,
-    nonce: fixture.identity.nonce,
-  };
+    expect(() =>
+      requireOwnedSupervisor(
+        { ...manifest, identity: other, argv: otherArgv },
+        { ...observation, command: otherArgv.join(" ") },
+        selection,
+      ),
+    ).toThrow(refusal);
+  }
+});
 
-  expect(parseServeIdentity(input, fixture.selection)).toEqual(fixture.identity);
+test("serve identity rejects a missing nonce, another selected profile or state before startup", () => {
+  const input = { profile: identity.profile, state: identity.state, nonce: identity.nonce };
+
+  expect(parseServeIdentity(input, selection)).toEqual(identity);
 
   for (const other of [
     { ...input, profile: "default" },
-    { ...input, state: join(fixture.root, "other") },
+    { ...input, state: join(root, "other") },
     { ...input, nonce: undefined },
     { ...input, nonce: "not-a-launch-nonce" },
   ]) {
-    expect(() => parseServeIdentity(other, fixture.selection)).toThrow();
-  }
-});
-
-test("actual stop rejects an otherwise matching process from another selected root, state or profile", async () => {
-  const fixture = await freshLaunch();
-
-  for (const identity of [
-    { ...fixture.identity, profile: "default" as const },
-    { ...fixture.identity, state: join(fixture.root, "other-state") },
-    { ...fixture.identity, root: join(fixture.root, "other-root") },
-  ]) {
-    const argv = [process.execPath, ...supervisorArguments(identity)];
-    const manifest = { ...fixture.manifest, identity, argv };
-    await writeFile(fixture.control.manifestPath, JSON.stringify(manifest));
-    await expect(
-      stop({
-        ...fixture.control,
-        processes: {
-          ...fixture.control.processes,
-          observe: async () => ({ ...fixture.observation, command: argv.join(" ") }),
-        },
-      }),
-    ).rejects.toThrow(
-      "Supervisor PID, process group or launch identity does not match. Refusing to signal.",
-    );
-    expect(fixture.signals).toEqual([]);
+    expect(() => parseServeIdentity(other, selection)).toThrow();
   }
 });

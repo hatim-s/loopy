@@ -1,15 +1,18 @@
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type RunSnapshotView, sandboxArtifactSchema } from "@loopy/contract";
-import { z } from "zod";
+import { errnoCode } from "@loopy/core";
+import { Schema } from "effect";
+import { sha256Hex } from "../shared/hash";
 import type { PlaygroundClient } from "./client";
+import { profile } from "./config";
 import type { CatalogEntry } from "./repository";
-import { repository } from "./repository";
 
-const envelopeSchema = z
-  .object({ batch: z.string(), ordinal: z.number().int(), slug: z.string() })
-  .passthrough();
+// Fixture artifacts carry their own payload; only the identity fields are checked here.
+const decodeEnvelope = (bytes: Uint8Array) =>
+  Schema.decodeUnknownSync(
+    Schema.Struct({ batch: Schema.String, ordinal: Schema.Int, slug: Schema.String }),
+  )(JSON.parse(Buffer.from(bytes).toString("utf8")));
 
 export async function materialize(
   client: PlaygroundClient,
@@ -39,7 +42,7 @@ export async function materialize(
 
   const artifact = await client.json(sandboxArtifactSchema, `/cloud/artifacts?${query}`);
   const bytes = Buffer.from(artifact.bytes, "base64");
-  const hash = createHash("sha256").update(bytes).digest("hex");
+  const hash = sha256Hex(bytes);
 
   if (
     artifact.size !== bytes.length ||
@@ -49,7 +52,7 @@ export async function materialize(
     throw new Error("Artifact path, size or SHA-256 does not match the authenticated export.");
   }
 
-  const envelope = envelopeSchema.parse(JSON.parse(bytes.toString("utf8")));
+  const envelope = decodeEnvelope(bytes);
 
   if (
     envelope.batch !== input.batch ||
@@ -59,14 +62,14 @@ export async function materialize(
     throw new Error("Exported artifact does not match the expected batch, ordinal and workflow.");
   }
 
-  const directory = resolve(repository, "results", input.batch, fixture.slug);
+  const directory = resolve(profile.repository, "results", input.batch, fixture.slug);
   await mkdir(directory, { recursive: true });
   const destination = resolve(directory, `${snapshot.run.id}.json`);
 
   try {
     await writeFile(destination, bytes, { flag: "wx", mode: 0o600 });
   } catch (cause) {
-    if (!(cause instanceof Error && "code" in cause && cause.code === "EEXIST")) {
+    if (errnoCode(cause) !== "EEXIST") {
       throw cause;
     }
 
@@ -78,7 +81,7 @@ export async function materialize(
       );
     }
 
-    envelopeSchema.parse(JSON.parse(existing.toString("utf8")));
+    decodeEnvelope(existing);
   }
 
   return { expectedPath: fixture.artifactPath, destination, sha256: hash, bytes: bytes.length };
@@ -90,11 +93,11 @@ export async function verifySaved(
   slug: string,
 ) {
   const bytes = await readFile(record.destination);
-  const envelope = envelopeSchema.parse(JSON.parse(bytes.toString("utf8")));
+  const envelope = decodeEnvelope(bytes);
 
   if (
     bytes.length !== record.bytes ||
-    createHash("sha256").update(bytes).digest("hex") !== record.sha256 ||
+    sha256Hex(bytes) !== record.sha256 ||
     envelope.batch !== input.batch ||
     envelope.ordinal !== input.ordinal ||
     envelope.slug !== slug

@@ -1,46 +1,49 @@
-import { createHash } from "node:crypto";
-import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { executionKeyString } from "@loopy/core";
 import { Effect } from "effect";
-import { HttpSandboxAuthority } from "../../../sandbox/src/http-authority";
-import { atomic, config, evidenceDirectory, profile, sandboxState, state } from "./config";
+import { sha256Hex } from "../shared/hash";
+import { config, evidence, sandboxState, state } from "./config";
+import { atomic } from "./files";
+import { journalDirectory } from "./journal";
+import { postloadInventory, readArtifact } from "./metrics/artifacts";
+import { planTotals } from "./plan";
 import { receiptEvidence } from "./receipt/evidence";
 import { receiptInventory } from "./receipt/inventory";
-import { decodeRuntimeQueue } from "./runtime-queue-schema";
+import { receiptAuthority, requireFreshDurableRoot } from "./receipt/selection";
+import { catalogs } from "./repository";
+import { decodeRuntimeQueue, runtimeQueuePath, unresolvedOutcomes } from "./runtime-queue";
 
-if (profile.name !== "architecture") {
-  throw new Error("Receipt verification requires the isolated architecture profile.");
-}
+const QUEUE_LIMIT_BYTES = 16 * 1024 * 1024;
 
 const settings = await config();
 
 if (settings.receiptMode !== "durable-object") {
-  throw new Error("Receipt verification requires the selected durable authority.");
+  throw new Error("Receipt verification requires the architecture profile's durable authority.");
 }
 
 const runIds = await receiptInventory({
-  inventory: await Bun.file(
-    resolve(evidenceDirectory, "playground-performance-postload-inventory.json"),
-  ).json(),
+  inventory: await readArtifact(evidence, postloadInventory),
+  plan: planTotals(await catalogs()),
   batch: settings.batch,
-  journal: resolve(state, "journal"),
+  journal: journalDirectory(state),
 });
 
-const queueFile = Bun.file(resolve(state, "runtime-queue.jsonl"));
+const queueFile = Bun.file(runtimeQueuePath(state));
 
-if (queueFile.size > 16 * 1024 * 1024) {
+if (queueFile.size > QUEUE_LIMIT_BYTES) {
   throw new Error("Runtime receipt inventory exceeds its 16 MiB verification limit.");
 }
 
 const queueBytes = await queueFile.text();
 
-const queueHash = createHash("sha256").update(queueBytes).digest("hex");
+const queueHash = sha256Hex(queueBytes);
 
 const entries = queueBytes
   .trim()
   .split("\n")
   .map((line) => decodeRuntimeQueue(JSON.parse(line)));
+
+const unresolved: readonly string[] = unresolvedOutcomes;
 
 const identities = new Set<string>();
 
@@ -50,7 +53,7 @@ for (const entry of entries) {
   if (
     identities.has(identity) ||
     !runIds.has(entry.executionKey.runId) ||
-    ["uncertain", "transport-exception", "expired-in-queue"].includes(entry.outcome)
+    unresolved.includes(entry.outcome)
   ) {
     throw new Error("Runtime journal contains a duplicate, foreign or unresolved attempt.");
   }
@@ -58,11 +61,7 @@ for (const entry of entries) {
   identities.add(identity);
 }
 
-const authority = new HttpSandboxAuthority({
-  url: settings.api,
-  token: settings.receiptsToken,
-  namespace: profile.batchPrefix,
-});
+const authority = receiptAuthority(settings);
 
 const startedAt = new Date().toISOString();
 
@@ -98,21 +97,13 @@ for (const entry of entries) {
   await Bun.sleep(Math.max(0, 100 - (performance.now() - started)));
 }
 
-for (const directory of ["receipts", "exports"]) {
-  if ((await readdir(resolve(sandboxState, directory))).length !== 0) {
-    throw new Error("Durable mode unexpectedly populated filesystem authority records.");
-  }
-}
+await requireFreshDurableRoot(sandboxState);
 
-if (
-  createHash("sha256")
-    .update(await queueFile.text())
-    .digest("hex") !== queueHash
-) {
+if (sha256Hex(await queueFile.text()) !== queueHash) {
   throw new Error("Runtime journal changed during terminal receipt verification.");
 }
 
-const output = resolve(evidenceDirectory, "playground-durable-receipts.json");
+const output = resolve(evidence, "playground-durable-receipts.json");
 
 await atomic(output, {
   status: "passed",

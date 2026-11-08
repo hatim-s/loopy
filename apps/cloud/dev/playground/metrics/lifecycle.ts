@@ -1,18 +1,29 @@
 import type { Database } from "bun:sqlite";
 import { stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { decodeBoundary, isTerminalRun, runStatusSchema } from "@loopy/contract";
+import { errnoCode } from "@loopy/core";
+import { distribution } from "../../shared/stats";
 import { state } from "../config";
-import { admissionSchema } from "../journal";
-import { distribution } from "./statistics";
+import { journalDirectory, readAdmissions } from "../journal";
+import { countBy, elapsedMs, known } from "./statistics";
 
-function elapsed(from: string | null, to: string | null) {
-  if (from === null || to === null) {
-    return null;
+const decodeStatus = decodeBoundary(runStatusSchema);
+
+// A diagnostic copy can be analyzed before any driver journal exists.
+async function journalAdmissions() {
+  const journal = journalDirectory(state);
+
+  try {
+    await stat(journal);
+  } catch (cause) {
+    if (errnoCode(cause) === "ENOENT") {
+      return [];
+    }
+
+    throw cause;
   }
 
-  const value = Date.parse(to) - Date.parse(from);
-
-  return Number.isFinite(value) && value >= 0 ? value : null;
+  return readAdmissions(journal);
 }
 
 export async function lifecycle(db: Database) {
@@ -34,19 +45,19 @@ export async function lifecycle(db: Database) {
     FROM runs r ORDER BY r.created_at,r.id`)
     .all();
 
-  const runs = rows.map((row) => ({
-    id: row.id,
-    slug: row.slug,
-    status: row.status,
-    queueToClaimMs: elapsed(row.createdAt, row.claimedAt),
-    queueToFirstNodeMs: elapsed(row.createdAt, row.firstNodeAt),
-    terminalFromCreationMs: ["succeeded", "failed", "cancelled"].includes(row.status)
-      ? elapsed(row.createdAt, row.updatedAt)
-      : null,
-    terminalFromClaimMs: ["succeeded", "failed", "cancelled"].includes(row.status)
-      ? elapsed(row.claimedAt, row.updatedAt)
-      : null,
-  }));
+  const runs = rows.map((row) => {
+    const terminal = isTerminalRun(decodeStatus(row.status));
+
+    return {
+      id: row.id,
+      slug: row.slug,
+      status: row.status,
+      queueToClaimMs: elapsedMs(row.createdAt, row.claimedAt),
+      queueToFirstNodeMs: elapsedMs(row.createdAt, row.firstNodeAt),
+      terminalFromCreationMs: terminal ? elapsedMs(row.createdAt, row.updatedAt) : null,
+      terminalFromClaimMs: terminal ? elapsedMs(row.claimedAt, row.updatedAt) : null,
+    };
+  });
 
   const attempts = db
     .query<{ status: string; startedAt: string; endedAt: string | null; receipt: string }, []>(
@@ -60,45 +71,11 @@ export async function lifecycle(db: Database) {
     )
     .all();
 
-  const admission: {
-    runId: string | null;
-    phase: "primary" | "preflight";
-    admissionMs: number | null;
-  }[] = [];
-
-  let invalidJournalFiles = 0;
-  const glob = new Bun.Glob("**/*.json");
-  const journal = resolve(state, "journal");
-
-  const journalExists = await stat(journal).then(
-    (value) => value.isDirectory(),
-    () => false,
-  );
-
-  for await (const path of glob.scan({
-    cwd: journalExists ? journal : resolve(state, "diagnostics"),
-    absolute: true,
-    onlyFiles: true,
-  })) {
-    if (path.endsWith(".progress.json")) {
-      continue;
-    }
-
-    const parsed = admissionSchema.safeParse(await Bun.file(path).json());
-
-    if (!parsed.success) {
-      invalidJournalFiles++;
-      continue;
-    }
-
-    admission.push({
-      runId: parsed.data.runId ?? null,
-      phase: parsed.data.phase,
-      admissionMs: elapsed(parsed.data.intentAt, parsed.data.admittedAt ?? null),
-    });
-  }
-
-  const numeric = (values: (number | null)[]) => values.filter((value) => value !== null);
+  const admission = (await journalAdmissions()).map((value) => ({
+    runId: value.runId,
+    phase: value.phase,
+    admissionMs: elapsedMs(value.intentAt, value.admittedAt),
+  }));
 
   const primaryIds = new Set(
     admission.flatMap((item) =>
@@ -110,31 +87,23 @@ export async function lifecycle(db: Database) {
 
   const summarize = (selected: typeof runs) => ({
     runs: selected.length,
-    statuses: Object.fromEntries(
-      [...new Set(selected.map((run) => run.status))].map((status) => [
-        status,
-        selected.filter((run) => run.status === status).length,
-      ]),
-    ),
-    queueToClaimMs: distribution(numeric(selected.map((run) => run.queueToClaimMs))),
-    queueToFirstNodeMs: distribution(numeric(selected.map((run) => run.queueToFirstNodeMs))),
-    terminalFromCreationMs: distribution(
-      numeric(selected.map((run) => run.terminalFromCreationMs)),
-    ),
-    terminalFromClaimMs: distribution(numeric(selected.map((run) => run.terminalFromClaimMs))),
+    statuses: countBy(selected, (run) => run.status),
+    queueToClaimMs: distribution(known(selected.map((run) => run.queueToClaimMs))),
+    queueToFirstNodeMs: distribution(known(selected.map((run) => run.queueToFirstNodeMs))),
+    terminalFromCreationMs: distribution(known(selected.map((run) => run.terminalFromCreationMs))),
+    terminalFromClaimMs: distribution(known(selected.map((run) => run.terminalFromClaimMs))),
   });
 
   return {
     allRetained: summarize(runs),
     primaryJournalRuns: summarize(primary),
-    admissionMs: distribution(numeric(admission.map((item) => item.admissionMs))),
+    admissionMs: distribution(known(admission.map((item) => item.admissionMs))),
     journalFiles: admission.length,
-    invalidJournalFiles,
     nodeAttemptDurationMs: distribution(
-      numeric(attempts.map((attempt) => elapsed(attempt.startedAt, attempt.endedAt))),
+      known(attempts.map((attempt) => elapsedMs(attempt.startedAt, attempt.endedAt))),
     ),
     completedWaitMs: distribution(
-      numeric(waits.map((wait) => elapsed(wait.createdAt, wait.resolvedAt ?? wait.expiredAt))),
+      known(waits.map((wait) => elapsedMs(wait.createdAt, wait.resolvedAt ?? wait.expiredAt))),
     ),
     pendingWaits: waits.filter((wait) => wait.resolvedAt === null && wait.expiredAt === null)
       .length,

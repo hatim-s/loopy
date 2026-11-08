@@ -1,88 +1,40 @@
 import { resolve } from "node:path";
 import { boundaryOptions } from "@loopy/contract";
 import { Result, Schema } from "effect";
-import { z } from "zod";
-import { atomic, evidenceDirectory, state } from "../config";
-import { runtimeQueueSchema } from "../runtime-queue-schema";
-import { distribution } from "./statistics";
+import { distribution } from "../../shared/stats";
+import { evidence, state } from "../config";
+import { atomic } from "../files";
+import { type RuntimeQueueEntry, runtimeQueuePath, runtimeQueueSchema } from "../runtime-queue";
+import { captureArtifact, readArtifact, segmentsArtifact } from "./artifacts";
+import { countBy } from "./statistics";
 
-const boundary = z
-  .object({ firstIntent: z.string(), lastTerminal: z.string() })
-  .parse(await Bun.file(resolve(evidenceDirectory, "playground-performance-segments.json")).json());
+const { firstIntent, lastTerminal } = await readArtifact(evidence, segmentsArtifact);
 
-const queue: Schema.Schema.Type<typeof runtimeQueueSchema>[] = [];
+const boundary = { firstIntent, lastTerminal };
+
+const decodeQueue = Schema.decodeUnknownResult(runtimeQueueSchema, boundaryOptions);
+
+const queue: RuntimeQueueEntry[] = [];
 
 let invalidQueueLines = 0;
 
-for (const line of (await Bun.file(resolve(state, "runtime-queue.jsonl")).text())
-  .trim()
-  .split("\n")) {
-  const parsed = Schema.decodeUnknownResult(runtimeQueueSchema, boundaryOptions)(JSON.parse(line));
+for (const line of (await Bun.file(runtimeQueuePath(state)).text()).trim().split("\n")) {
+  const parsed = decodeQueue(JSON.parse(line));
 
-  if (Result.isSuccess(parsed)) {
-    if (
-      parsed.success.queuedAt >= boundary.firstIntent &&
-      parsed.success.queuedAt <= boundary.lastTerminal
-    ) {
-      queue.push(parsed.success);
-    }
-  } else {
+  if (Result.isFailure(parsed)) {
     invalidQueueLines++;
+  } else if (parsed.success.queuedAt >= firstIntent && parsed.success.queuedAt <= lastTerminal) {
+    queue.push(parsed.success);
   }
 }
 
-const resourceSchema = z.object({
-  at: z.string(),
-  processes: z.string().nullable(),
-  disk: z.string().nullable(),
-  host: z.object({
-    cpus: z.number(),
-    freeBytes: z.number(),
-    totalBytes: z.number(),
-    load: z.array(z.number()),
-  }),
-});
-
-const continuous = z
-  .object({ resources: z.array(resourceSchema) })
-  .parse(
-    await Bun.file(resolve(evidenceDirectory, "playground-performance-during-load.json")).json(),
-  );
-
-const resources = continuous.resources.filter(
-  (sample) => sample.at >= boundary.firstIntent && sample.at <= boundary.lastTerminal,
+const resources = (await readArtifact(evidence, captureArtifact("during-load"))).resources.filter(
+  (sample) => sample.at >= firstIntent && sample.at <= lastTerminal,
 );
 
-const processSchema = z.object({
-  pid: z.coerce.number().int(),
-  ppid: z.coerce.number().int(),
-  cpuPercent: z.coerce.number().nonnegative(),
-  rssKiB: z.coerce.number().nonnegative(),
-});
-
-const processes: (z.infer<typeof processSchema> & { at: string; command: string })[] = [];
-
-let invalidProcessRows = 0;
-
-for (const sample of resources) {
-  for (const row of sample.processes?.split("\n") ?? []) {
-    const columns = row.trim().split(/\s+/);
-
-    const parsed = processSchema.safeParse({
-      pid: columns[0],
-      ppid: columns[1],
-      cpuPercent: columns[2],
-      rssKiB: columns[3],
-    });
-
-    if (!parsed.success) {
-      invalidProcessRows++;
-      continue;
-    }
-
-    processes.push({ at: sample.at, ...parsed.data, command: columns.slice(6).join(" ") });
-  }
-}
+const processes = resources.flatMap((sample) =>
+  (sample.processes ?? []).map((row) => ({ at: sample.at, ...row })),
+);
 
 const processSummary = [...new Set(processes.map((sample) => sample.command))].map((command) => {
   const selected = processes.filter((sample) => sample.command === command);
@@ -103,14 +55,8 @@ const value = {
   invalidQueueLines,
   backendQueueWaitMs: distribution(queue.map((record) => record.queueWaitMs)),
   backendDurationMs: distribution(queue.map((record) => record.backendDurationMs)),
-  backendOutcomes: Object.fromEntries(
-    [...new Set(queue.map((record) => record.outcome))].map((outcome) => [
-      outcome,
-      queue.filter((record) => record.outcome === outcome).length,
-    ]),
-  ),
+  backendOutcomes: countBy(queue, (record) => record.outcome),
   resourceSamples: resources.length,
-  invalidProcessRows,
   host: {
     cpuCount: resources[0]?.host.cpus ?? null,
     totalBytes: resources[0]?.host.totalBytes ?? null,
@@ -134,8 +80,8 @@ const value = {
   ],
 };
 
-await atomic(resolve(evidenceDirectory, "playground-performance-runtime.json"), value);
+await atomic(resolve(evidence, "playground-performance-runtime.json"), value);
 
 process.stdout.write(
-  `${JSON.stringify({ completedBackendStarts: value.completedBackendStarts, backendQueueWaitMs: value.backendQueueWaitMs, backendDurationMs: value.backendDurationMs, backendOutcomes: value.backendOutcomes, resourceSamples: value.resourceSamples, invalidQueueLines, invalidProcessRows })}\n`,
+  `${JSON.stringify({ completedBackendStarts: value.completedBackendStarts, backendQueueWaitMs: value.backendQueueWaitMs, backendDurationMs: value.backendDurationMs, backendOutcomes: value.backendOutcomes, resourceSamples: value.resourceSamples, invalidQueueLines })}\n`,
 );

@@ -1,71 +1,44 @@
 import { Database } from "bun:sqlite";
-import type { SqlDriver, SqlStatement, SqlValue } from "@loopy/runtime/store/portable";
-import { distribution } from "./statistics";
+import type { SqlValue } from "@loopy/runtime/store/portable";
+import { distribution } from "../../shared/stats";
 
-export class DiagnosticDriver implements SqlDriver {
+type PlanRow = { id: number; parent: number; detail: string };
+
+// Opens the copied snapshot read-only and records timing and the query plan for every read.
+export class DiagnosticReader {
   readonly db: Database;
-  operation = "initialize";
   readonly traces: {
     operation: string;
     sql: string;
     durationMs: number;
     rows: number;
     parameterCount: number;
-    plan: { id: number; parent: number; detail: string }[];
+    plan: PlanRow[];
   }[] = [];
 
   constructor(path: string) {
     this.db = new Database(path, { readonly: true });
   }
 
-  query<Row, Params extends SqlValue[]>(sql: string): SqlStatement<Row, Params> {
-    const statement = this.db.query<Row, SqlValue[]>(sql);
+  all(operation: string, sql: string, bindings: SqlValue[]) {
+    const start = performance.now();
+    const result = this.db.query<unknown, SqlValue[]>(sql).all(...bindings);
+    const durationMs = performance.now() - start;
 
-    const read = (...params: Params) => {
-      const start = performance.now();
-      const result = statement.all(...params);
-      const durationMs = performance.now() - start;
+    const plan =
+      this.traces.find((trace) => trace.operation === operation && trace.sql === sql)?.plan ??
+      this.db.query<PlanRow, SqlValue[]>(`EXPLAIN QUERY PLAN ${sql}`).all(...bindings);
 
-      const previous = this.traces.find(
-        (trace) => trace.operation === this.operation && trace.sql === sql,
-      );
+    this.traces.push({
+      operation,
+      sql,
+      durationMs,
+      rows: result.length,
+      parameterCount: bindings.length,
+      plan,
+    });
 
-      const plan =
-        previous?.plan ??
-        this.db
-          .query<{ id: number; parent: number; detail: string }, SqlValue[]>(
-            `EXPLAIN QUERY PLAN ${sql}`,
-          )
-          .all(...params);
-
-      this.traces.push({
-        operation: this.operation,
-        sql,
-        durationMs,
-        rows: result.length,
-        parameterCount: params.length,
-        plan,
-      });
-
-      return result;
-    };
-
-    return {
-      get: (...params) => read(...params)[0] ?? null,
-      all: read,
-      run: () => {
-        throw new Error("Diagnostic driver rejects writes.");
-      },
-    };
-  }
-
-  exec(): never {
-    throw new Error("Diagnostic driver rejects exec.");
-  }
-
-  transaction<T>(callback: () => T): T {
-    // The copied database is immutable during analysis; no write transaction is needed.
-    return callback();
+    return result;
   }
 
   summary() {

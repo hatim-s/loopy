@@ -1,25 +1,10 @@
 import { Schema } from "effect";
+import type { Capture } from "../../../dev/playground/metrics/artifacts";
 import { createMeasure } from "../../../dev/playground/metrics/request";
-import type { Sample } from "../../../dev/playground/metrics/statistics";
+import { baselineEndpoints } from "../../../dev/playground/metrics/sampler";
+import { type Sample, summarize } from "../../../dev/playground/metrics/statistics";
 
-export const expectedEndpoints = [
-  "runs.latest",
-  "loopies.counts",
-  "runs.waiting",
-  "runs.failed",
-  "overview.counts",
-  "logs.latest",
-  "events.latest",
-  "daemon",
-  "runs.page2",
-  "runs.slug",
-  "logs.text",
-  "events.run-filter",
-  "logs.page2",
-  "events.page2",
-];
-
-export async function baselineReceipt(failure: "none" | "transport" = "none") {
+export async function baselineReceipt(failure: "none" | "transport" = "none"): Promise<Capture> {
   const samples: Sample[] = [];
 
   const measure = createMeasure(async () => {
@@ -30,7 +15,7 @@ export async function baselineReceipt(failure: "none" | "transport" = "none") {
     return Response.json({ ok: true });
   }, samples);
 
-  for (const endpoint of expectedEndpoints) {
+  for (const endpoint of baselineEndpoints) {
     await measure(endpoint, "/synthetic", Schema.Struct({ ok: Schema.Literal(true) }));
   }
 
@@ -42,9 +27,13 @@ export async function baselineReceipt(failure: "none" | "transport" = "none") {
     updatedAt: new Date().toISOString(),
     elapsedMs: 100,
     targetRequestsPerSecond: 2,
+    samples,
+    summaries: summarize(samples),
+    resources: [],
+    limits: [],
     api: "http://127.0.0.1:15270",
+    dashboard: "http://127.0.0.1:15272",
     workspace: "playground",
     workloadControls: { apiSlots: 4, runtimeAttempts: 4 },
-    samples,
   };
 }

@@ -1,27 +1,33 @@
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
-import { z } from "zod";
+import { decodeBoundary } from "@loopy/contract";
+import { Schema } from "effect";
 import { PlaygroundClient } from "../client";
-import { atomic, evidenceDirectory } from "../config";
+import { evidence } from "../config";
+import { CONCURRENCY } from "../plan";
+import { artifactPath, captureArtifact, decodePhaseName, writeArtifact } from "./artifacts";
 import { sampleApi } from "./sampler";
 
-const args = z
-  .tuple([
-    z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
-    z.coerce.number().int().min(18).max(3600).default(90),
-    z.coerce.number().min(1).max(3).default(2),
-  ])
-  .parse([process.argv[2], process.argv[3], process.argv[4]]);
+const decodeSeconds = decodeBoundary(
+  Schema.FiniteFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 18, maximum: 3600 })),
+);
 
-const [phase, seconds, requestsPerSecond] = args;
+const decodeRate = decodeBoundary(
+  Schema.FiniteFromString.check(Schema.isBetween({ minimum: 1, maximum: 3 })),
+);
+
+const phase = decodePhaseName(process.argv[2]);
+
+const seconds = process.argv[3] === undefined ? 90 : decodeSeconds(process.argv[3]);
+
+const requestsPerSecond = process.argv[4] === undefined ? 2 : decodeRate(process.argv[4]);
+
+const artifact = captureArtifact(phase);
 
 const client = await PlaygroundClient.open();
 
-const directory = evidenceDirectory;
+await mkdir(evidence, { recursive: true });
 
-await mkdir(directory, { recursive: true });
-
-const output = resolve(directory, `playground-performance-${phase}.json`);
+const output = artifactPath(evidence, artifact);
 
 if (await Bun.file(output).exists()) {
   throw new Error("Evidence phase already exists. Choose a new phase to preserve measurements.");
@@ -50,16 +56,13 @@ const result = await sampleApi({
   onProgress: (progress) =>
     process.stdout.write(`${JSON.stringify({ status: "progress", ...progress })}\n`),
   save: (value) =>
-    atomic(output, {
+    writeArtifact(evidence, artifact, {
       ...value,
       api: client.settings.api,
       dashboard: client.settings.dashboard,
       batch: client.settings.batch,
       workspace: client.settings.workspace,
-      workloadControls: {
-        apiSlots: client.settings.apiConcurrency,
-        runtimeAttempts: client.settings.runtimeConcurrency,
-      },
+      workloadControls: { apiSlots: CONCURRENCY, runtimeAttempts: CONCURRENCY },
     }),
 });
 

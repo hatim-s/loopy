@@ -1,9 +1,11 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Json, putLoopyBodySchema } from "@loopy/contract";
+import type { Json, PutLoopyBody } from "@loopy/contract";
 import { decodeBoundary } from "@loopy/contract";
+import { errnoCode } from "@loopy/core";
 import type { Schema } from "effect";
 import { type Config, config, state } from "./config";
+import { CONCURRENCY } from "./plan";
 
 export class PlaygroundClient {
   private constructor(readonly settings: Config) {}
@@ -21,13 +23,13 @@ export class PlaygroundClient {
     const deadline = Date.now() + 60_000;
 
     while (Date.now() < deadline) {
-      for (let index = 0; index < this.settings.apiConcurrency; index += 1) {
+      for (let index = 0; index < CONCURRENCY; index += 1) {
         const slot = resolve(state, "api-slots", `${index}`);
 
         try {
           await mkdir(slot);
         } catch (cause) {
-          if (cause instanceof Error && "code" in cause && cause.code === "EEXIST") {
+          if (errnoCode(cause) === "EEXIST") {
             continue;
           }
 
@@ -72,12 +74,13 @@ export class PlaygroundClient {
   async json<T>(
     schema: Schema.Codec<T, unknown, never, never>,
     path: string,
-    body?: Json | Schema.Schema.Type<typeof putLoopyBodySchema>,
-    method = "POST",
+    options: { method?: "POST" | "PUT"; body?: Json | PutLoopyBody } = {},
   ) {
+    const method = options.body === undefined ? "GET" : (options.method ?? "POST");
+
     const response = await this.request(path, undefined, {
-      method: body === undefined ? "GET" : method,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      method,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
 
     if (!response.ok) {

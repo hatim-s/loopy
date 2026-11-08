@@ -1,9 +1,9 @@
-import { appendFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { Effect, Semaphore } from "effect";
 import type { AttemptBackend } from "../../../sandbox/src/docker";
 import { failure, io } from "../../../sandbox/src/operations";
 import { state } from "./config";
+import { writeAbort } from "./journal";
+import { appendRuntimeQueue, type RuntimeQueueEntry } from "./runtime-queue";
 
 export class RuntimeLimit {
   private readonly semaphore;
@@ -58,7 +58,7 @@ export function boundedBackend(backend: AttemptBackend, capacity: number): Attem
         return limit.run(
           Effect.gen(function* () {
             const acquiredAt = Date.now();
-            let outcome = "expired-in-queue";
+            let outcome: RuntimeQueueEntry["outcome"] = "expired-in-queue";
 
             return yield* Effect.gen(function* () {
               if (Date.now() >= receipt.deadline) {
@@ -78,9 +78,9 @@ export function boundedBackend(backend: AttemptBackend, capacity: number): Attem
                   outcome = "transport-exception";
 
                   return io("abort marker", () =>
-                    writeFile(
-                      resolve(state, "ABORT"),
-                      "Docker backend threw. Stop new admissions and reconcile owned containers.\n",
+                    writeAbort(
+                      state,
+                      "Docker backend threw. Stop new admissions and reconcile owned containers.",
                     ),
                   ).pipe(Effect.orDie);
                 }),
@@ -90,9 +90,9 @@ export function boundedBackend(backend: AttemptBackend, capacity: number): Attem
 
               if (result.kind === "failed" && result.error.code === "uncertain") {
                 yield* io("abort marker", () =>
-                  writeFile(
-                    resolve(state, "ABORT"),
-                    "Provider returned an uncertain execution. Reconcile containers and receipts before resuming.\n",
+                  writeAbort(
+                    state,
+                    "Provider returned an uncertain execution. Reconcile containers and receipts before resuming.",
                   ),
                 );
               }
@@ -104,11 +104,16 @@ export function boundedBackend(backend: AttemptBackend, capacity: number): Attem
                   const finishedAt = Date.now();
 
                   return io("queue evidence", () =>
-                    appendFile(
-                      resolve(state, "runtime-queue.jsonl"),
-                      `${JSON.stringify({ executionKey: receipt.executionKey, attempt: receipt.attempt, queuedAt: new Date(queuedAt).toISOString(), acquiredAt: new Date(acquiredAt).toISOString(), finishedAt: new Date(finishedAt).toISOString(), queueWaitMs: acquiredAt - queuedAt, backendDurationMs: finishedAt - acquiredAt, outcome })}\n`,
-                      { mode: 0o600 },
-                    ),
+                    appendRuntimeQueue(state, {
+                      executionKey: receipt.executionKey,
+                      attempt: receipt.attempt,
+                      queuedAt: new Date(queuedAt).toISOString(),
+                      acquiredAt: new Date(acquiredAt).toISOString(),
+                      finishedAt: new Date(finishedAt).toISOString(),
+                      queueWaitMs: acquiredAt - queuedAt,
+                      backendDurationMs: finishedAt - acquiredAt,
+                      outcome,
+                    }),
                   ).pipe(Effect.orDie);
                 }),
               ),

@@ -1,53 +1,55 @@
 import { Database } from "bun:sqlite";
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { z } from "zod";
-import { atomic } from "../playground/config";
+import { Schema } from "effect";
+import { atomic } from "../playground/files";
+import {
+  fileSha256,
+  requireRunInventory,
+  runTables,
+  tableCounts,
+} from "../playground/metrics/sql-probe";
 import { sqlCases } from "../playground/metrics/sql-queries";
-import { evidence as evidenceDirectory, state } from "./config";
+import { evidence, state } from "./config";
+
+const PLANNED_RUNS = 45;
 
 const path = resolve(state, "daemon-readonly.sqlite");
 
-const sha256 = async () =>
-  createHash("sha256")
-    .update(await readFile(path))
-    .digest("hex");
+const beforeHash = await fileSha256(path);
 
-const beforeHash = await sha256();
+// Only the run inventory and interval are read from the daemon playground's own report.
+const daemonReport = Schema.decodeUnknownSync(
+  Schema.Struct({
+    apiRuns: Schema.Array(Schema.Struct({ id: Schema.String, status: Schema.String })),
+    startedAt: Schema.String,
+    endedAt: Schema.String,
+  }),
+)(await Bun.file(resolve(evidence, "playground-daemon.json")).json());
 
-const evidence = z
-  .object({
-    apiRuns: z.array(z.object({ id: z.string(), status: z.string() })),
-    startedAt: z.string(),
-    endedAt: z.string(),
-  })
-  .parse(await Bun.file(resolve(evidenceDirectory, "playground-daemon.json")).json());
+const selected = new Set([
+  "runs.latest",
+  "runs.failed",
+  "counts.all",
+  "logs.candidates",
+  "events.candidates",
+  "executions.page",
+  "execution.attempts",
+]);
 
 const db = new Database(path, { readonly: true });
 
 let report;
 
 try {
-  const actual = db
-    .query<{ id: string; status: string }, []>("SELECT id,status FROM runs ORDER BY id")
-    .all();
-
-  const expected = [...evidence.apiRuns].sort((a, b) => a.id.localeCompare(b.id));
-
-  if (actual.length !== 45 || JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error("Supplied daemon backup does not match all45 API IDs/statuses.");
+  if (daemonReport.apiRuns.length !== PLANNED_RUNS) {
+    throw new Error(`Daemon report must list all ${PLANNED_RUNS} API runs.`);
   }
 
-  const selected = new Set([
-    "runs.latest",
-    "runs.failed",
-    "counts.all",
-    "logs.candidates",
-    "events.candidates",
-    "executions.page",
-    "execution.attempts",
-  ]);
+  const actual = requireRunInventory(
+    db,
+    daemonReport.apiRuns,
+    `Supplied daemon backup does not match all ${PLANNED_RUNS} API IDs/statuses.`,
+  );
 
   const plans = sqlCases(db).flatMap((item) =>
     selected.has(item.name)
@@ -63,20 +65,6 @@ try {
       : [],
   );
 
-  const counts = [
-    "runs",
-    "node_runs",
-    "node_attempts",
-    "node_scopes",
-    "logs",
-    "events",
-    "waits",
-  ].map((table) => ({
-    table,
-    rows:
-      db.query<{ count: number }, []>(`SELECT count(*) AS count FROM ${table}`).get()?.count ?? 0,
-  }));
-
   report = {
     scope: "supplied-stopped-daemon-backup-readonly-identity-and-plans",
     at: new Date().toISOString(),
@@ -89,8 +77,8 @@ try {
       ids: actual.length,
       statuses: db.query("SELECT status,count(*) AS count FROM runs GROUP BY status").all(),
     },
-    daemonInterval: { startedAt: evidence.startedAt, endedAt: evidence.endedAt },
-    counts,
+    daemonInterval: { startedAt: daemonReport.startedAt, endedAt: daemonReport.endedAt },
+    counts: tableCounts(db, runTables),
     plans,
     limits: [
       "Only supplied daemon-readonly.sqlite was opened;no live home DB,API requests,restarts,migrations or writes.",
@@ -103,13 +91,13 @@ try {
   db.close();
 }
 
-const afterHash = await sha256();
+const afterHash = await fileSha256(path);
 
 if (beforeHash !== afterHash) {
   throw new Error("Readonly daemon backup hash changed.");
 }
 
-const output = resolve(evidenceDirectory, "playground-performance-daemon-offline-sql.json");
+const output = resolve(evidence, "playground-performance-daemon-offline-sql.json");
 
 await atomic(output, { ...report, afterHash });
 
