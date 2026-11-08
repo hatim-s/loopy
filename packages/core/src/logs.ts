@@ -1,4 +1,4 @@
-import { MAX_LOG_BYTES, outputBytes } from "./effects";
+import { MAX_LOG_BYTES, outputBytes } from "./json";
 import type { AttemptLog } from "./executor";
 import { isString } from "./validation";
 

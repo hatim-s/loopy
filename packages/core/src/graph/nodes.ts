@@ -89,7 +89,7 @@ export const commandNodeSchema = struct({
   parse: Schema.NullOr(struct({ bundleHash: Schema.NullOr(Schema.String), input: values })),
 });
 
-export const MAP_ERROR_MODES = ["fail", "collect"] as const;
+const MAP_ERROR_MODES = ["fail", "collect"] as const;
 
 // Control and value nodes need no executor, so their wire views equal their stored shape.
 export const otherNodeSchemas = [

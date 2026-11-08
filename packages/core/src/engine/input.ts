@@ -1,4 +1,4 @@
-import { MAX_PREVIEW_BYTES, outputBytes } from "../effects";
+import { MAX_PREVIEW_BYTES, outputBytes } from "../json";
 import type { ExecutionSpec } from "../executor";
 import type { NodeRun } from "../graph/node-run";
 

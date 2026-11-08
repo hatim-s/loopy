@@ -12,7 +12,7 @@ export { describeCron } from "./cron-reading";
 
 export * from "./duration";
 
-export * from "./effects";
+export type { StoreEffect } from "./effects";
 
 export { errnoCode, errorMessage } from "./errors";
 
@@ -26,13 +26,21 @@ export { nodeNames } from "./graph/names";
 
 export { checkPredicate } from "./graph/predicate";
 
-export { isRef, projectValue } from "./graph/ref";
+export { isRef } from "./graph/ref";
 
 export { graphTypeResolver } from "./graph/type";
 
 export { inputValidationIssue, validateGraphInput } from "./input";
 
-export { assertJson, type Json, jsonSchema } from "./json";
+export {
+  assertJson,
+  type Json,
+  jsonSchema,
+  MAX_LOG_BYTES,
+  MAX_OUTPUT_BYTES,
+  MAX_PREVIEW_BYTES,
+  outputBytes,
+} from "./json";
 
 export { limitLogs } from "./logs";
 
@@ -47,7 +55,6 @@ export {
   exceedsInlineLimit,
   type FieldText,
   fieldKey,
-  matchesRecordSpec,
   type OutSchemaIssue,
   outSchemaMessage,
   parseFieldText,

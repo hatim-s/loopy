@@ -9,6 +9,17 @@ export function isScalar(value: Json | undefined): value is string | number | bo
   return isString(value) || isNumber(value) || isBoolean(value);
 }
 
+export const MAX_OUTPUT_BYTES = 1024 * 1024;
+
+export const MAX_LOG_BYTES = 64 * 1024;
+
+// Views inline payloads up to this size and report only the byte count beyond it.
+export const MAX_PREVIEW_BYTES = 16 * 1024;
+
+export function outputBytes(output: Json): number {
+  return new TextEncoder().encode(JSON.stringify(output)).byteLength;
+}
+
 const MAX_DEPTH = 32;
 
 function assertPlainContainer(value: unknown, path: string): asserts value is object {

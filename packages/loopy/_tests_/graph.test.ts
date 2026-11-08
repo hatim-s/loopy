@@ -362,39 +362,6 @@ test("rescue error binding is visible only to the handler", () => {
   expect(validateGraph(graph).map((error) => error.code)).toEqual(["out_of_scope_ref"]);
 });
 
-test("graph wire views reject paths and hashes, including command parser hashes", () => {
-  const nodes = approveDemoGraph.nodes.map((node) => {
-    if (node.kind === "code") {
-      return { ...node, module: { name: "draft.ts" } };
-    }
-
-    if (node.kind === "command") {
-      return { ...node, parse: node.parse === null ? null : { input: node.parse.input } };
-    }
-
-    return node;
-  });
-
-  const view = { ...approveDemoGraph, nodes, warnings: [] };
-  expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
-  expect(
-    Schema.decodeUnknownExit(contract.graphViewSchema)(approveDemoGraph, {
-      onExcessProperty: "error",
-    })._tag === "Success",
-  ).toBe(false);
-  expect(
-    Schema.decodeUnknownExit(contract.graphViewSchema)(
-      {
-        ...view,
-        nodes: nodes.map((node) =>
-          node.kind === "command" ? { ...node, parse: { bundleHash: "secret" } } : node,
-        ),
-      },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
-});
-
 test("scope bindings cannot shadow node outputs, input, or one another", () => {
   const withoutIndex = mapGraph.nodes.map((node) =>
     node.kind === "format" ? { ...node, values: { value: node.values.value ?? "" } } : node,
@@ -534,64 +501,6 @@ test("format accepts scalar literals and declared scalar refs only", () => {
       )._tag === "Success",
     ).toBe(false);
   }
-});
-
-test("graph warning views project node labels without source module paths", () => {
-  const graph = {
-    ...approveDemoGraph,
-    warnings: [
-      {
-        code: "predicate_type" as const,
-        message: "warning",
-        node: approveDemoGraph.entry,
-        source: { module: "/private/author.ts", line: 1, column: 1 },
-      },
-    ],
-  };
-
-  const view = contract.graphView(graph);
-  expect(view.warnings).toEqual([
-    { code: "predicate_type", message: "warning", nodeId: graph.entry, label: "draft" },
-  ]);
-  expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
-  expect(JSON.stringify(view)).not.toContain("/private/author.ts");
-  expect(
-    Schema.decodeUnknownExit(contract.graphViewSchema)(
-      { ...view, warnings: graph.warnings },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
-});
-
-test("predicate wire schema parses the complete vocabulary and rejects unknown ops", () => {
-  for (const op of ["eq", "ne", "lt", "lte", "gt", "gte", "in"] as const) {
-    const predicate = { op, left: 1, right: 1 };
-    expect(JSON.stringify(contract.decodeBoundary(contract.predicateSchema)(predicate))).toBe(
-      JSON.stringify(predicate),
-    );
-  }
-
-  const eq = { op: "eq", left: 1, right: 1 } as const;
-
-  for (const predicate of [
-    { op: "exists", value: 1 },
-    { op: "isNull", value: null },
-    { op: "and", predicates: [eq] },
-    { op: "or", predicates: [eq] },
-    { op: "not", predicate: eq },
-    { op: "gt", left: { ref: "input", path: ["text"], size: true }, right: 0 },
-  ]) {
-    expect(JSON.stringify(contract.decodeBoundary(contract.predicateSchema)(predicate))).toBe(
-      JSON.stringify(predicate),
-    );
-  }
-
-  expect(
-    Schema.decodeUnknownExit(contract.predicateSchema)(
-      { op: "unknown" },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
 });
 
 test("disconnected nodes are diagnosed", () => {

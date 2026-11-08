@@ -101,7 +101,8 @@ function parseField(text: string, spec: FieldSpec): CronField {
   };
 }
 
-export function parseCron(expression: string): CronSchedule {
+/** The five raw fields of an expression, with an alias expanded. */
+export function cronFields(expression: string) {
   const alias = cronAlias(expression);
   const expanded = alias === undefined ? expression : CRON_ALIASES[alias];
   const fields = expanded.trim().split(/\s+/u);
@@ -112,6 +113,12 @@ export function parseCron(expression: string): CronSchedule {
       `Invalid cron expression '${expression}'. Provide five fields: minute hour day-of-month month day-of-week, or a supported alias.`,
     );
   }
+
+  return { minute, hour, dayOfMonth, month, dayOfWeek };
+}
+
+export function parseCron(expression: string): CronSchedule {
+  const { minute, hour, dayOfMonth, month, dayOfWeek } = cronFields(expression);
 
   return {
     minute: parseField(minute, { name: "minute", min: 0, max: 59, names: [] }),
@@ -191,30 +198,34 @@ function* calendarCandidates(schedule: CronSchedule, start: Date, end: Date) {
   }
 }
 
-export function nextFire(schedule: CronSchedule, after: Date, timeZone: string): Date {
-  if (!Number.isFinite(after.getTime())) {
-    throw new Error("Invalid after date. Provide a valid Date to find the next cron fire.");
-  }
-
-  let formatter: Intl.DateTimeFormat;
-
+export function zoneFormatter(
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions = {},
+): Intl.DateTimeFormat {
   try {
-    formatter = new Intl.DateTimeFormat("en-GB", {
-      timeZone,
-      calendar: "gregory",
-      numberingSystem: "latn",
-      hourCycle: "h23",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return new Intl.DateTimeFormat("en-GB", { ...options, timeZone });
   } catch {
     throw new Error(
       `Invalid time zone '${timeZone}'. Provide an IANA time zone such as 'Asia/Kolkata'.`,
     );
   }
+}
+
+export function nextFire(schedule: CronSchedule, after: Date, timeZone: string): Date {
+  if (!Number.isFinite(after.getTime())) {
+    throw new Error("Invalid after date. Provide a valid Date to find the next cron fire.");
+  }
+
+  const formatter = zoneFormatter(timeZone, {
+    calendar: "gregory",
+    numberingSystem: "latn",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const limit = new Date(after);
   limit.setUTCFullYear(limit.getUTCFullYear() + 5);

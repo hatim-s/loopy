@@ -180,13 +180,13 @@ export function validateGraph(graph: Graph): Diagnostic[] {
     resolveType: graphTypeResolver(graph),
   };
 
-  const issues = inputValidation(context);
-
-  if (issues.length > 0) {
-    return issues;
-  }
-
-  return [...structureRules, reservedNames, bindings, references, predicates, formats].flatMap(
-    (rule) => rule(context),
-  );
+  return [
+    inputValidation,
+    ...structureRules,
+    reservedNames,
+    bindings,
+    references,
+    predicates,
+    formats,
+  ].flatMap((rule) => rule(context));
 }

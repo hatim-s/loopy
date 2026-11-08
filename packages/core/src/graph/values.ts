@@ -136,8 +136,6 @@ export const formatOperandSchema = Schema.Union([
   refSchema,
 ]);
 
-export type FormatOperand = Schema.Schema.Type<typeof formatOperandSchema>;
-
 const sizeOperandSchema = struct({ ...refSchema.fields, size: Schema.Literal(true) });
 
 const operandSchema = Schema.Union([sizeOperandSchema, valueSchema]);
