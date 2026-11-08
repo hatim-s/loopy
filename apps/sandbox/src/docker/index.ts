@@ -231,7 +231,6 @@ export class DockerBackend implements AttemptBackend {
 
       const terminal = yield* Effect.gen(function* () {
         const output = yield* docker.required(["logs", plan.container], {
-          timeoutMs: 30_000,
           maxBytes: SANDBOX_MAX_CAPTURE_BYTES,
           signal,
         });

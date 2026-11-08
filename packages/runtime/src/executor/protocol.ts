@@ -14,6 +14,9 @@ import { redactValue } from "./redact";
 
 type Redact = (text: string, truncated?: boolean) => string;
 
+/** Failure messages carry only the end of a stream, where the cause is usually printed. */
+export const DIAGNOSTIC_TAIL_CHARS = 500;
+
 type FailureCode = Extract<ExecutionResult, { kind: "failed" }>["error"]["code"];
 
 /**
@@ -58,7 +61,7 @@ export type CommandStep =
 
 function exitMessage(exitCode: number, stderr: string) {
   return stderr
-    ? `Command exited with code ${exitCode}: ${stderr.slice(-500)}. Inspect stderr and correct the command.`
+    ? `Command exited with code ${exitCode}: ${stderr.slice(-DIAGNOSTIC_TAIL_CHARS)}. Inspect stderr and correct the command.`
     : `Command exited with code ${exitCode}. Correct the command.`;
 }
 
@@ -194,7 +197,7 @@ export function bundleResult(
     const diagnostic = logs
       .map((log) => `${log.message}: ${isString(log.data) ? log.data : JSON.stringify(log.data)}`)
       .join("\n")
-      .slice(-500);
+      .slice(-DIAGNOSTIC_TAIL_CHARS);
 
     return {
       kind: "failed",

@@ -1,13 +1,15 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
+import { MAX_SOURCE_JSON_BYTES } from "@loopy/contract";
+import { SANDBOX_MAX_BUNDLE_BYTES } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { CloudError, platform } from "../operation";
 
 export const ARTIFACT_LIMITS = {
   definitions: 1000,
   graphBytes: 1024 * 1024,
-  bundleBytes: 8 * 1024 * 1024,
+  bundleBytes: SANDBOX_MAX_BUNDLE_BYTES,
   totalBundleBytes: 16 * 1024 * 1024,
-  sourceBytes: 512 * 1024,
+  sourceBytes: MAX_SOURCE_JSON_BYTES,
   listBytes: 32 * 1024 * 1024,
   // Reserve space for SQLite record headers below workerd's 2 MiB row limit.
   metadataRowBytes: 2 * 1024 * 1024 - 1024,
