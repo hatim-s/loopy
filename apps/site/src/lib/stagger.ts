@@ -1,5 +1,10 @@
 import type { CSSProperties } from "react";
 
-/** Sets the `--i` step the reveal keyframes multiply by 140ms. */
-// SAFETY: React forwards custom properties to style untouched, CSSProperties just does not list them
-export const stagger = (i: number) => ({ "--i": i }) as CSSProperties;
+declare module "react" {
+  interface CSSProperties {
+    /** The reveal step that site.css multiplies by 140ms for the animation delay. */
+    "--i"?: number;
+  }
+}
+
+export const stagger = (i: number) => ({ "--i": i }) satisfies CSSProperties;

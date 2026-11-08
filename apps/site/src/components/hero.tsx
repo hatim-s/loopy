@@ -1,9 +1,8 @@
 import { useEffect, useRef } from "react";
+import { COMMANDS, INSTALL } from "../lib/commands";
 import { mountHeroField } from "../lib/hero-field";
 import { stagger } from "../lib/stagger";
 import { CopyButton } from "./copy-button";
-
-const INSTALL = "bun add -g loopy";
 
 const LINES = ["Do the work once.", "Extract the graph.", "Run it with control."];
 
@@ -18,10 +17,9 @@ export function Hero() {
       return;
     }
 
-    // the hero plays on load, once the fonts are in or 400ms has passed, whichever is first
+    // Play once the fonts are in so the lines do not reflow mid-animation, but never wait more than 400ms.
     let alive = true;
-    const fonts = document.fonts ? document.fonts.ready : Promise.resolve();
-    Promise.race([fonts, new Promise((r) => setTimeout(r, 400))]).then(
+    Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 400))]).then(
       () => alive && h.classList.add("in"),
     );
     const unmount = mountHeroField(h, c);
@@ -61,7 +59,7 @@ export function Hero() {
             <CopyButton text={INSTALL} />
           </div>
           <p className="then rv" style={stagger(5)}>
-            Then open <code>loopy ui</code> and point it at a session.
+            Then open <code>{COMMANDS.ui.name}</code> and point it at a session.
           </p>
         </div>
       </div>

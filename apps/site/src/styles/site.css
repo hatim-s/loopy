@@ -784,13 +784,6 @@ section {
   color: var(--muted);
   text-align: right;
 }
-.start .links {
-  grid-column: 2 / 9;
-  margin-top: 32px;
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
 
 /* footer: hairline, the links row, a small lead-in, then the wordmark with its bottom 22% cut off by the page edge */
 footer {

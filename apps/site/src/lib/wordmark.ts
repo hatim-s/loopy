@@ -27,9 +27,8 @@ export function mountWordmark(wm: HTMLElement, clip: HTMLElement, visible = 0.78
     wm.style.fontSize = `${fs.toFixed(2)}px`;
     canvas.font = `600 ${fs}px ${getComputedStyle(wm).fontFamily}`;
     const m = canvas.measureText("lp'd");
-    const fbA = m.fontBoundingBoxAscent ?? fs * 0.95;
-    const fbD = m.fontBoundingBoxDescent ?? fs * 0.25;
-    const baseline = (wm.offsetHeight - (fbA + fbD)) / 2 + fbA;
+    const fbA = m.fontBoundingBoxAscent;
+    const baseline = (wm.offsetHeight - (fbA + m.fontBoundingBoxDescent)) / 2 + fbA;
     const inkTop = baseline - m.actualBoundingBoxAscent;
     const inkBottom = baseline + m.actualBoundingBoxDescent;
     wm.style.marginTop = `${(-inkTop).toFixed(2)}px`;
@@ -46,7 +45,7 @@ export function mountWordmark(wm: HTMLElement, clip: HTMLElement, visible = 0.78
   addEventListener("resize", onResize);
   fit();
   let alive = true;
-  document.fonts?.ready.then(() => alive && fit());
+  document.fonts.ready.then(() => alive && fit());
 
   return () => {
     alive = false;

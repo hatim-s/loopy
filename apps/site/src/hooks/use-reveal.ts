@@ -1,6 +1,5 @@
 import { type RefObject, useEffect, useRef } from "react";
 
-/** Adds the `in` class once, the first time the element enters the viewport. The timing lives in CSS. */
 export function useReveal<T extends HTMLElement>(): RefObject<T | null> {
   const ref = useRef<T>(null);
   useEffect(() => {
