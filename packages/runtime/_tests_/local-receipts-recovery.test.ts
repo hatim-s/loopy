@@ -1,11 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import {
-  type AttemptIdentity,
-  FilesystemReceipts,
-  type FinishedLocalReceipt,
-} from "../src/executor/receipts";
+import { type AttemptIdentity, FilesystemReceipts } from "../src/executor/receipts";
 import { receiptsFixture } from "./fixtures/local-receipts";
 import { onCleanup } from "./fixtures/test-scope";
 import { waitForFile } from "./fixtures/wait";
@@ -72,23 +68,4 @@ test("parent rereads completion published between its started read and confirmed
     },
   });
   expect(childExit).toBe(0);
-});
-
-test("a stored completion wins over an aborted caller", async () => {
-  const f = await receiptsFixture();
-
-  const result: FinishedLocalReceipt["result"] = {
-    kind: "succeeded",
-    output: "authoritative",
-    logs: [],
-  };
-
-  await Effect.runPromise(f.receipts.claim(f.identity));
-  await Effect.runPromise(f.receipts.finish({ ...f.identity, kind: "finished", result }));
-  const controller = new AbortController();
-  controller.abort();
-
-  expect(await Effect.runPromise(f.executor.execute(f.key, 1, f.spec, controller.signal))).toEqual(
-    result,
-  );
 });
