@@ -13,6 +13,16 @@ import { type AuthorValue, RefValue } from "./ref";
 
 export type CommandArguments = CommandOperands<string | RefValue, AuthorValue>;
 
+type RenderedCommand = {
+  key: string;
+  program: string;
+  operands: (string | RefValue)[];
+  flags: Readonly<Record<string, AuthorValue>>;
+  flagSpec: CommandFlagSpec;
+  okExitCodes: readonly number[];
+  parseInput: Record<string, AuthorValue>;
+};
+
 function flagSpec(descriptor: CommandDefinition): CommandFlagSpec {
   return {
     path: [...(descriptor.path ?? [])],
@@ -62,7 +72,7 @@ export function commandArgv(
   original: CommandDescriptor,
   input: CommandArguments,
   mode: { kind: "raw" } | { kind: "parsed"; prepare?: Prepare },
-) {
+): RenderedCommand {
   const descriptor = platformVariant(original, process.platform);
   const key = commandKey(original);
   const flags = mode.kind === "parsed" ? parsedFlags(descriptor, input) : (input.flags ?? {});
