@@ -66,7 +66,7 @@ async function startDaemon(options: { home: string; cwd: string; port: number; a
 test("API returns run records, step traces and cursor logs", async () => {
   const f = fixture("api", `run: () => { log("first"); log("second"); return 2; }`);
   await save(f);
-  const run = object((await runFixture(f)).stdout);
+  const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -130,7 +130,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
 test("API distinguishes invalid cursors from registry failures", async () => {
   const f = fixture("server-errors", "run: () => 1");
   await save(f);
-  const run = object((await runFixture(f)).stdout);
+  const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);
@@ -153,7 +153,7 @@ test("API distinguishes invalid cursors from registry failures", async () => {
 test("API returns the contract snapshot and keeps cursor log reads", async () => {
   const f = fixture("summary", 'run: () => { log("hello"); return 1; }');
   await save(f);
-  const run = object((await runFixture(f)).stdout);
+  const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);

@@ -54,6 +54,7 @@ export async function save(f: ReturnType<typeof fixture>) {
   );
 }
 
+/** Starts the saved fixture loopy, activates it to completion and returns its record. */
 export async function runFixture(f: ReturnType<typeof fixture>) {
   return Effect.runPromise(
     Effect.scoped(
@@ -86,7 +87,13 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
           }),
         });
 
-        return { stdout: JSON.stringify(yield* store.getRun(run.id)), stderr: "", code: 0 };
+        const finished = yield* store.getRun(run.id);
+
+        if (!finished) {
+          throw new Error(`Run '${run.id}' disappeared after activation.`);
+        }
+
+        return finished;
       }),
     ),
   );
