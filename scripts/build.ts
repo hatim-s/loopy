@@ -130,7 +130,11 @@ await Bun.write(
 );
 
 try {
-  const compiled = Bun.spawn([process.execPath, "x", "--no-install", "tsc", "-p", config], {
+  // TypeScript 7 is installed as @typescript/native beside the TypeScript 6 JS API that
+  // typescript-eslint and this script's AST walk need; both packages ship a `tsc` bin.
+  const tsc = resolve(root, "node_modules/@typescript/native/bin/tsc");
+
+  const compiled = Bun.spawn([process.execPath, tsc, "-p", config], {
     cwd: root,
     stdout: "inherit",
     stderr: "inherit",
