@@ -2,14 +2,20 @@
   "name": "loopy-workspace",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
+  "workspaces": {
+    "packages": [
+      "packages/*",
+      "apps/*"
+    ],
+    "catalog": {
+      "effect": "4.1.2",
+      "oxc-parser": "0.154.0"
+    }
+  },
   "packageManager": "bun@1.4.0",
   "scripts": {
-    "dev": "bun packages/loopy/src/cli.ts ui",
-    "loopy": "bun packages/loopy/src/cli.ts",
+    "dev": "bun packages/cli/src/index.ts ui",
+    "loopy": "bun packages/cli/src/index.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.portable.json && bun run diagnostics:effect",
     "diagnostics:effect": "node --preserve-symlinks-main node_modules/@effect/language-service/cli.js diagnostics --project tsconfig.json --format text",
     "test": "bun test --timeout 60000 ./apps/dashboard/_tests_ ./packages/loopy/_tests_ ./apps/cloud/_tests_",
@@ -18,7 +24,7 @@
     "install:global": "bun scripts/install-global.ts",
     "fmt": "biome format --write .",
     "fmt:check": "biome format .",
-    "lint": "biome check . && eslint .",
+    "lint": "biome check . && eslint . && node tools/anti-slop/_tests_/run.mjs",
     "cloud:start": "bun --no-env-file apps/cloud/dev/dev.ts",
     "cloud:build-sandbox": "docker --context colima-loopy-cloud-phase1 build -f apps/sandbox/Dockerfile -t loopy-sandbox:bun-1.4.0 .",
     "acceptance:local": "bun --no-env-file packages/loopy/_tests_/acceptance/run.ts",
@@ -35,7 +41,7 @@
     "@loopy/runtime": "workspace:*",
     "@loopy/sdk": "workspace:*",
     "bun-types": "1.4.0",
-    "effect": "4.1.2",
+    "effect": "catalog:",
     "eslint": "10.8.1",
     "eslint-plugin-sonarjs": "4.2.2",
     "eslint-plugin-unicorn": "77.0.0",
