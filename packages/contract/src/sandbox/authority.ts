@@ -1,7 +1,6 @@
 import { counter, executionResultSchema, hashSchema, positiveInt, struct } from "@loopy/core";
 import { Record as EffectRecord, Schema } from "effect";
 import { boundedToken } from "../codec";
-import { PAGE_LIMIT } from "../dashboard-reader";
 import {
   attemptRecordSchema,
   authorityFailureSchema,
@@ -12,6 +11,9 @@ import {
   resultRefSchema,
   startedAttemptRecordSchema,
 } from "./journal";
+
+/** The most attempts and export guards one journal page returns. */
+export const JOURNAL_PAGE_LIMIT = 200;
 
 const rejected = struct({ kind: Schema.Literal("rejected"), code: authorityFailureSchema });
 
@@ -67,7 +69,7 @@ export const authorityOperations = {
   exportGuards: {
     input: struct({
       after: Schema.NullOr(Schema.String.check(Schema.isMaxLength(256))),
-      limit: positiveInt.check(Schema.isLessThanOrEqualTo(PAGE_LIMIT)),
+      limit: positiveInt.check(Schema.isLessThanOrEqualTo(JOURNAL_PAGE_LIMIT)),
       volume: dockerAttemptPlanSchema.fields.volume,
     }),
     output: struct({
@@ -81,7 +83,7 @@ export const authorityOperations = {
       after: Schema.NullOr(
         Schema.String.check(Schema.isPattern(/^[ae]:/)).check(Schema.isMaxLength(258)),
       ),
-      limit: positiveInt.check(Schema.isLessThanOrEqualTo(PAGE_LIMIT)),
+      limit: positiveInt.check(Schema.isLessThanOrEqualTo(JOURNAL_PAGE_LIMIT)),
     }),
     output: struct({
       attempts: Schema.Array(startedAttemptRecordSchema).pipe(Schema.mutable),
