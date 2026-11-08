@@ -484,12 +484,18 @@ function heldLists(client: QueryClient) {
       server = answer;
     },
     fetches: (status: RunView["status"]) => fetches.get(status) ?? 0,
+    /** Answers every held fetch and waits until the cache has settled each one. */
     async release() {
+      const inflight = client
+        .getQueryCache()
+        .getAll()
+        .flatMap((query) => (query.promise ? [query.promise] : []));
+
       for (const answer of held.splice(0)) {
         answer();
       }
 
-      await Bun.sleep(0);
+      await Promise.allSettled(inflight);
     },
   };
 }
