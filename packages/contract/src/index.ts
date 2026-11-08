@@ -141,8 +141,10 @@ export { canCancelRun, cancelRefusal, canResumeRun, runMatchesQuery } from "./ru
 export {
   MAX_SOURCE_BYTES,
   MAX_SOURCE_FILES,
+  MAX_SOURCE_JSON_BYTES,
   MAX_SOURCE_RANGES,
   type SourceArtifact,
+  sourceArtifactOrUnavailable,
   sourceArtifactSchema,
   unavailableSource,
 } from "./source-artifact";
