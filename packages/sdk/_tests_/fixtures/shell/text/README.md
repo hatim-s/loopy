@@ -15,9 +15,8 @@ Capture commands:
 - `shasum -a 256 words.txt 'space name.txt'`
 - `jq -c '.[]' data.json`
 
-sha256.linux.txt is hand-written from the GNU untagged checksum format, not a
-Linux capture. Its contents match the Darwin output for these ordinary paths.
-GNU documents hash, space, text/binary mode marker, filename and escaped filename
+GNU sha256sum prints the same untagged checksum format as shasum for these
+ordinary paths, so the Darwin capture serves both. GNU documents hash, space, text/binary mode marker, filename and escaped filename
 handling in [checksum output modes](https://www.gnu.org/software/coreutils/manual/html_node/cksum-output-modes.html).
 The Linux wrapper runs sha256sum; Darwin runs shasum -a 256.
 
