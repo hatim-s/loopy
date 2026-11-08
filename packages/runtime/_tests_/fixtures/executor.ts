@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { ExecutionSpec } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
+import { loopy, sh } from "@loopy/sdk/graph";
 import { Schema } from "effect";
-import { loopy, sh } from "loopy/graph";
 import { LocalExecutor } from "../../src/executor";
 import { qualityTestRoot } from "./quality-test-root";
 

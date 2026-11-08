@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { type RunRecord, revision } from "@loopy/core";
 import { Effect } from "effect";
@@ -8,6 +7,7 @@ import { Registry } from "../../src/local/registry";
 import { makeArtifactRegistry } from "../../src/local/save-compiled";
 import { type ArtifactRegistry, makeService, RegistryError } from "../../src/service";
 import { compiledBody } from "./compiled";
+import { qualityTestRoot } from "./quality-test-root";
 import { MemorySqlStore } from "./stores";
 
 export class SummaryCountsStore extends MemorySqlStore {
@@ -22,7 +22,7 @@ export class SummaryCountsStore extends MemorySqlStore {
 }
 
 export async function summaryServiceFixture() {
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), "loopy-summary-service-")));
+  const directory = qualityTestRoot("summary-service");
   const home = join(directory, "home");
   const a = join(directory, "a");
   const b = join(directory, "b");
@@ -47,8 +47,13 @@ export async function summaryServiceFixture() {
     registries.set(workspace, await Effect.runPromise(Registry.make(home, workspace)));
   }
 
-  const registry = (workspace: string) =>
-    registries.get(workspace === "" || workspace === "alias" ? a : workspace)!;
+  // Runs may record a workspace by a name that canonicalizes to project a.
+  const aliases = new Map([
+    ["", a],
+    ["alias", a],
+  ]);
+
+  const registry = (workspace: string) => registries.get(aliases.get(workspace) ?? workspace)!;
 
   const adapter = (workspace: string): Effect.Effect<ArtifactRegistry> => {
     const native = registry(workspace);
@@ -131,6 +136,5 @@ export async function summaryServiceFixture() {
     save,
     run,
     registry,
-    cleanup: () => rmSync(directory, { recursive: true, force: true }),
   };
 }

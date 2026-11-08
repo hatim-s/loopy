@@ -1,6 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import {
@@ -16,22 +15,15 @@ import { Registry } from "../src/local";
 import { saveCompiled } from "../src/local/save-compiled";
 import { SecretStore } from "../src/os";
 import { compiledBody } from "./fixtures/compiled";
-
-const roots: string[] = [];
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const sdk = "loopy";
 
 async function fixture() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-source-")));
-  roots.push(root);
-  await mkdir(join(root, ".loopy", "loopies"), { recursive: true });
+  const root = qualityTestRoot("source");
 
   return { root, file: join(root, "entry.ts"), home: join(root, "home") };
 }
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
 
 function artifact(revision: string, content: string): SourceArtifact {
   return {

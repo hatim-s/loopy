@@ -1,21 +1,15 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { localDaemon, Registry, readDaemonFile } from "@loopy/runtime/local";
 import { openRunStore } from "@loopy/runtime/store";
-import { Effect, Exit, Scope } from "effect";
+import { Effect } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { fixture, object } from "../../runtime/_tests_/fixtures/project";
+import { onCleanup, runScoped } from "../../runtime/_tests_/fixtures/test-scope";
+import { waitForExit } from "../../runtime/_tests_/fixtures/wait";
 import { cli } from "./fixtures/cli";
-
-const daemons: {
-  stop(): Promise<void>;
-}[] = [];
-
-afterEach(async () => {
-  await Promise.all(daemons.splice(0).map((daemon) => daemon.stop()));
-});
 
 async function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
@@ -23,26 +17,13 @@ async function graphFixture(name = "compiled") {
     f.file,
     `import { loopy, log } from "loopy"; export default loopy(${JSON.stringify(name)}, { input: {count: "number"}, run: ({input}) => {log("ready"); return input.get("count");}});`,
   );
-  const scope = Effect.runSync(Scope.make());
-  daemons.push({ stop: () => Effect.runPromise(Scope.close(scope, Exit.void)) });
+  const store = await runScoped(openRunStore(f.home));
 
-  const { store } = await Effect.runPromise(
-    Effect.gen(function* () {
-      const store = yield* openRunStore(f.home);
-
-      const daemon = yield* localDaemon({
-        ...f,
-        store,
-        concurrency: 4,
-        port: 0,
-        assets: join(f.cwd, "assets"),
-      });
-
-      yield* daemon.start;
-
-      return { store };
-    }).pipe(Effect.provideService(Scope.Scope, scope)),
+  const daemon = await runScoped(
+    localDaemon({ ...f, store, concurrency: 4, port: 0, assets: join(f.cwd, "assets") }),
   );
+
+  await runScoped(daemon.start);
 
   return { ...f, store };
 }
@@ -134,14 +115,9 @@ test("save starts the daemon on demand and leaves artifact writes to the service
   const record = readDaemonFile(f.home);
 
   if (record) {
-    daemons.push({
-      async stop() {
-        process.kill(record.pid, "SIGTERM");
-
-        for (let attempt = 0; attempt < 100 && readDaemonFile(f.home); attempt++) {
-          await Bun.sleep(20);
-        }
-      },
+    onCleanup(async () => {
+      process.kill(record.pid, "SIGTERM");
+      await waitForExit(record.pid);
     });
   }
 

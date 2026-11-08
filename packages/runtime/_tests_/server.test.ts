@@ -33,6 +33,7 @@ import { apiRoutes, dispatch, eventStream } from "../src/service";
 import { fixture, object, runFixture, save } from "./fixtures/project";
 import { countPasses, fixtureStore, nextPass, waitUntil } from "./fixtures/service-runtime";
 import { fixtureScope } from "./fixtures/test-scope";
+import { bounded, until } from "./fixtures/wait";
 
 const daemonMetadata = { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 4 };
 
@@ -358,8 +359,9 @@ function captureFrames(body: ReadableStream<Uint8Array>) {
 
   return {
     frames,
-    async finish() {
-      await Bun.sleep(250);
+    /** Waits for `count` frames, stops reading and checks no partial frame was left behind. */
+    async finish(count: number) {
+      await until(`${count} SSE frames`, () => frames.length >= count);
       await reader.cancel();
       await reading;
       expect(buffer).toBe("");
@@ -414,9 +416,8 @@ async function reconnectFrames(
     headers: { ...headers, "Last-Event-ID": String(cursor) },
   });
 
-  expect(await captureFrames(resumed.body!).finish()).toEqual(
-    expectedFrames(events.filter((event) => event.sequence > cursor)),
-  );
+  const expected = expectedFrames(events.filter((event) => event.sequence > cursor));
+  expect(await captureFrames(resumed.body!).finish(expected.length)).toEqual(expected);
 }
 
 test("SSE delivers exact transactions across replay, live commits and Last-Event-ID reconnect", async () => {
@@ -449,7 +450,8 @@ test("SSE delivers exact transactions across replay, live commits and Last-Event
     const capture = captureFrames(fragment(response.body!));
     await Effect.runPromise(store.claim(run.id, "owner"));
     const events = await Effect.runPromise(store.events(0, 100));
-    expect(await capture.finish()).toEqual(expectedFrames(events));
+    const expected = expectedFrames(events);
+    expect(await capture.finish(expected.length)).toEqual(expected);
     await reconnectFrames(endpoint, headers, events);
     await Effect.runPromise(store.pruneEvents("2100-01-01T00:00:00.000Z"));
     await Effect.runPromise(store.createRun({ ...run, id: "retained" }));
@@ -617,7 +619,7 @@ test("SSE keeps a node transaction whole across the replay batch limit", async (
       ),
     );
 
-    const frames = await captureFrames(response.body!).finish();
+    const frames = await captureFrames(response.body!).finish(1);
     const events = await Effect.runPromise(store.events(cursor, 1000));
     expect(events).toHaveLength(505);
     expect(frames).toEqual(expectedFrames(events));
@@ -752,14 +754,6 @@ async function httpEvents(name: string) {
   };
 }
 
-async function waitForFrames(capture: ReturnType<typeof captureFrames>, count: number) {
-  for (let attempt = 0; attempt < 500 && capture.frames.length < count; attempt++) {
-    await Bun.sleep(10);
-  }
-
-  expect(capture.frames).toHaveLength(count);
-}
-
 test("SSE HTTP replay drains 45 large transactions from Last-Event-ID 1 in order", async () => {
   const http = await httpEvents("large-replay");
 
@@ -770,11 +764,9 @@ test("SSE HTTP replay drains 45 large transactions from Last-Event-ID 1 in order
 
     const response = await http.connect(1);
     expect(response.status).toBe(200);
-    const capture = captureFrames(response.body!);
-    await waitForFrames(capture, 45);
-    expect(await capture.finish()).toEqual(
-      expectedFrames(await Effect.runPromise(http.store.events(1, 1000))),
-    );
+    const expected = expectedFrames(await Effect.runPromise(http.store.events(1, 1000)));
+    expect(expected).toHaveLength(45);
+    expect(await captureFrames(response.body!).finish(45)).toEqual(expected);
   } finally {
     await http.close();
   }
@@ -787,10 +779,9 @@ test("SSE HTTP replays a transaction over 1 MiB and live-delivers another whole 
     expect(await http.write(2, 80)).toBeGreaterThan(1024 * 1024);
     const response = await http.connect(1);
     const capture = captureFrames(response.body!);
-    await waitForFrames(capture, 1);
+    await until("the replayed frame", () => capture.frames.length >= 1);
     expect(await http.write(3, 80)).toBeGreaterThan(1024 * 1024);
-    await waitForFrames(capture, 2);
-    expect(await capture.finish()).toEqual(
+    expect(await capture.finish(2)).toEqual(
       expectedFrames(await Effect.runPromise(http.store.events(1, 1000))),
     );
   } finally {
@@ -825,16 +816,12 @@ async function unreadHttp(http: Awaited<ReturnType<typeof httpEvents>>) {
 async function closedCursor(
   slow: Awaited<ReturnType<typeof unreadHttp>>,
   expected: ReturnType<typeof expectedFrames>,
+  subscribers: () => number,
 ) {
-  await Bun.sleep(2300);
+  // The server drops a reader that stops pulling, which ends its store subscription.
+  await until("the stalled reader to be dropped", () => subscribers() === 0);
   slow.response.resume();
-
-  const received = await Promise.race([
-    slow.ended,
-    Bun.sleep(3000).then(() => {
-      throw new Error("Unread HTTP client was not closed.");
-    }),
-  ]);
+  const received = await bounded(slow.ended, "Closing the unread HTTP client", 3000);
 
   expect(slow.response.statusCode).toBe(200);
 
@@ -855,19 +842,32 @@ const PRESSURE_ROWS = 40;
 
 async function stalledHttpReader(name: string) {
   const http = await httpEvents(name);
+  let subscribers = 0;
+  const subscribe = http.store.subscribe.bind(http.store);
+
+  spyOn(http.store, "subscribe").mockImplementation((listener) => {
+    subscribers++;
+    const unsubscribe = subscribe(listener);
+
+    return () => {
+      subscribers--;
+      unsubscribe();
+    };
+  });
+
   const slow = await unreadHttp(http);
 
   try {
     const response = await http.connect(1);
     const capture = captureFrames(response.body!);
-    await Bun.sleep(50);
+    await until("both readers to subscribe", () => subscribers === 2);
     let bytes = 0;
 
     // Exceed macOS loopback buffer autotuning while keeping every output below the preview cap.
     for (let id = 2; id < PRESSURE_TRANSACTIONS + 2; id++) {
       bytes += await http.write(id, PRESSURE_ROWS);
       // Let the active socket drain between synchronous SQLite transactions.
-      await Bun.sleep(0);
+      await new Promise((resolve) => setImmediate(resolve));
     }
 
     expect(bytes).toBeGreaterThan(64 * 1024 * 1024);
@@ -878,9 +878,8 @@ async function stalledHttpReader(name: string) {
 
     expect(expected).toHaveLength(PRESSURE_TRANSACTIONS);
     expect(expected.every((frame) => frame.sequences.length === PRESSURE_ROWS)).toBe(true);
-    await waitForFrames(capture, expected.length);
-    expect(await capture.finish()).toEqual(expected);
-    const lastId = await closedCursor(slow, expected);
+    expect(await capture.finish(expected.length)).toEqual(expected);
+    const lastId = await closedCursor(slow, expected, () => subscribers);
     expect(lastId).toBeLessThan(expected.at(-1)!.id);
     expect([1, ...expected.map((frame) => frame.id)]).toContain(lastId);
 
@@ -893,12 +892,7 @@ async function stalledHttpReader(name: string) {
   }
 }
 
-test("SSE HTTP closes a client that never reads while a concurrent reader gets every transaction", async () => {
-  const { http } = await stalledHttpReader("unread-http");
-  await http.close();
-}, 20000);
-
-test("SSE HTTP reconnect from a closed client's last id has no gap", async () => {
+test("SSE HTTP closes a client that never reads, and reconnecting from its last id has no gap", async () => {
   const { http, lastId } = await stalledHttpReader("unread-reconnect");
 
   try {
@@ -910,8 +904,7 @@ test("SSE HTTP reconnect from a closed client's last id has no gap", async () =>
     );
 
     expect(expected.length).toBeGreaterThan(0);
-    await waitForFrames(capture, expected.length);
-    expect(await capture.finish()).toEqual(expected);
+    expect(await capture.finish(expected.length)).toEqual(expected);
   } finally {
     await http.close();
   }

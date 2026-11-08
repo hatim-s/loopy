@@ -1,47 +1,25 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { NodeRun, Store } from "@loopy/core";
 import { loopy, wait } from "@loopy/sdk/graph";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Effect, Schema, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";
 import { makeSqliteRunStore } from "../src/store";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { runAt } from "./fixtures/stores";
-
-const scopes: Scope.Closeable[] = [];
-
-function fixtureScope() {
-  const scope = Scope.makeUnsafe();
-  scopes.push(scope);
-
-  return scope;
-}
-
-const homes: string[] = [];
+import { fixtureScope } from "./fixtures/test-scope";
 
 const at = "2026-10-20T00:00:00.000Z";
 
 const future = "2026-10-20T00:01:00.000Z";
 
-afterEach(async () => {
-  for (const scope of scopes.splice(0).reverse()) {
-    await run(Scope.close(scope, Exit.void));
-  }
-
-  for (const home of homes.splice(0)) {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
 const run = runAt(() => Date.parse(at));
 
 async function createStore(): Promise<Store> {
-  const home = mkdtempSync(join(tmpdir(), "loopy-wait-race-"));
-  homes.push(home);
+  const home = qualityTestRoot("wait-race");
 
   const store = await run(
     makeSqliteRunStore(join(home, "runs.sqlite")).pipe(

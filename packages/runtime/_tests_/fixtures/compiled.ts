@@ -5,9 +5,12 @@ import { loopy } from "@loopy/sdk/graph";
 export async function compiledBody(
   name: string,
   path: string,
-  meta: Partial<PutLoopyBody["graph"]["meta"]> & Partial<PutLoopyBody["source"]> = {},
+  meta: Partial<PutLoopyBody["graph"]["meta"]> &
+    Partial<PutLoopyBody["source"]> &
+    Partial<Pick<PutLoopyBody["graph"], "input">> = {},
 ): Promise<PutLoopyBody> {
   const graph = loopy(name, { input: {}, run: () => null });
+  graph.input = meta.input ?? {};
 
   graph.meta = {
     description: meta.description ?? null,

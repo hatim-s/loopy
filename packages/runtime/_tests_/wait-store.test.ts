@@ -1,36 +1,15 @@
 import { Database } from "bun:sqlite";
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import { type NodeRun, type Store } from "@loopy/core";
 import { Cause, Effect, Exit, Schema, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { makeSqliteRunStore } from "../src/store";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { memoryStore, runAt } from "./fixtures/stores";
-
-const scopes: Scope.Closeable[] = [];
-
-function fixtureScope() {
-  const scope = Scope.makeUnsafe();
-  scopes.push(scope);
-
-  return scope;
-}
-
-const homes: string[] = [];
-
-afterEach(async () => {
-  for (const scope of scopes.splice(0).reverse()) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-  }
-
-  for (const home of homes.splice(0)) {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
+import { fixtureScope } from "./fixtures/test-scope";
 
 const at = "2026-10-20T00:00:00.000Z";
 
@@ -39,8 +18,7 @@ const deadline = "2026-10-20T00:00:01.000Z";
 const run = runAt(() => Date.parse(at));
 
 async function sqlite() {
-  const home = mkdtempSync(join(tmpdir(), "loopy-wait-"));
-  homes.push(home);
+  const home = qualityTestRoot("wait");
   const file = join(home, "runs.sqlite");
 
   const store = await Effect.runPromise(
@@ -287,8 +265,7 @@ test("sqlite reopen retains accepted payload and wake without a second resolutio
 });
 
 test("schema 13 upgrade preserves records and legacy schema rejection never resets data", async () => {
-  const home = mkdtempSync(join(tmpdir(), "loopy-schema13-"));
-  homes.push(home);
+  const home = qualityTestRoot("schema13");
   const file = join(home, "runs.sqlite");
   const epoch = crypto.randomUUID();
   const db = legacyDatabase(file, 13);
@@ -305,7 +282,7 @@ test("schema 13 upgrade preserves records and legacy schema rejection never rese
   expect(await Effect.runPromise(upgraded.getRun("run"))).toMatchObject({ id: "run" });
   expect(await Effect.runPromise(upgraded.epoch())).toBe(epoch);
   expect(await Effect.runPromise(upgraded.getWaits("run"))).toEqual([]);
-  const legacy = join(homes[0] ?? tmpdir(), "legacy.sqlite");
+  const legacy = join(home, "legacy.sqlite");
   const old = new Database(legacy);
   old.exec(
     "CREATE TABLE sacred (value TEXT); INSERT INTO sacred VALUES ('retain'); PRAGMA user_version=11",

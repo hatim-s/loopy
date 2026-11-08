@@ -1,6 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { runSnapshotViewSchema, runViewSchema } from "@loopy/contract";
 import { type Executor } from "@loopy/core";
@@ -11,26 +10,12 @@ import { activate } from "../src/host";
 import { makeLocalService, Registry } from "../src/local";
 import { apiRoutes, dispatch } from "../src/service";
 import { makeSqliteRunStore } from "../src/store";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { MemorySqlStore, runAt } from "./fixtures/stores";
-
-const homes: string[] = [];
-
-const scopes: Scope.Closeable[] = [];
-
-afterEach(async () => {
-  for (const scope of scopes.splice(0).reverse()) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-  }
-
-  for (const home of homes.splice(0)) {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
+import { fixtureScope } from "./fixtures/test-scope";
 
 async function fixture() {
-  const home = mkdtempSync(join(tmpdir(), "loopy-wait-host-"));
-  homes.push(home);
-  mkdirSync(join(home, ".loopy", "loopies"), { recursive: true });
+  const home = qualityTestRoot("wait-host");
   let now = Date.parse("2026-10-20T00:00:00.000Z");
 
   const clock = { now: () => now };
@@ -38,8 +23,8 @@ async function fixture() {
   const run = runAt(clock.now);
 
   const file = join(home, "runs.sqlite");
-  const scope = Scope.makeUnsafe();
-  scopes.push(scope);
+  // Its own scope, so a test can close the store and reopen the file.
+  const scope = Scope.forkUnsafe(fixtureScope());
 
   const store = await Effect.runPromise(
     makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, scope)),
@@ -119,8 +104,7 @@ test("approval suspends without executing, named HTTP signal wakes once, and res
     await Effect.runPromise(f.service.runSnapshot("run")),
   );
   await Effect.runPromise(Scope.close(f.scope, Exit.void));
-  const reopenScope = Scope.makeUnsafe();
-  scopes.push(reopenScope);
+  const reopenScope = fixtureScope();
 
   const reopened = await Effect.runPromise(
     makeSqliteRunStore(f.file).pipe(Effect.provideService(Scope.Scope, reopenScope)),

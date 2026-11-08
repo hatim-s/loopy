@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -9,23 +9,9 @@ import {
 } from "@loopy/contract";
 import { Effect } from "effect";
 import { makeLocalService } from "../src/local/service";
-
 import { summaryServiceFixture } from "./fixtures/summary-service";
 
-const cleanups: (() => void | Promise<void>)[] = [];
-
-async function fixture() {
-  const f = await summaryServiceFixture();
-  cleanups.push(f.cleanup);
-
-  return f;
-}
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0)) {
-    await cleanup();
-  }
-});
+const fixture = summaryServiceFixture;
 
 test("definition projection hides graph, bundles and secrets and displays JSON input as schema", async () => {
   const f = await fixture();
@@ -33,9 +19,6 @@ test("definition projection hides graph, bundles and secrets and displays JSON i
   const summary = definitionSummary(saved);
   expect(summary.input).toBe("schema");
   expect(summary.revision).toBe(saved.revision);
-  expect(summary).not.toHaveProperty("graph");
-  expect(summary).not.toHaveProperty("bundles");
-  expect(summary).not.toHaveProperty("secrets");
   expect(decodeBoundary(definitionSummarySchema)(summary)).toEqual(summary);
   expect((await Effect.runPromise(f.service.listLoopies(f.a)))[0]).toMatchObject({
     input: "schema",

@@ -1,32 +1,19 @@
 import { Database } from "bun:sqlite";
-import { afterEach, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Scope } from "effect";
 import { makeSqliteRunStore } from "../src/store";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { checkCountHistory } from "./fixtures/readmodel-assertions";
-import { readmodelDirectory } from "./fixtures/readmodel-directory";
 import { countHistory, readmodelAt } from "./fixtures/readmodel-history";
-
-const cleanups: (() => void | Promise<void>)[] = [];
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    await cleanup();
-  }
-});
+import { fixtureScope } from "./fixtures/test-scope";
 
 test("grouped counts match filtered authoritative runs through transitions and rollback", async () => {
-  const directory = readmodelDirectory();
-  const scope = Effect.runSync(Scope.make());
-  cleanups.push(() => {
-    rmSync(directory, { recursive: true, force: true });
-  });
-  cleanups.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const directory = qualityTestRoot("readmodel");
   const file = join(directory, "runs.sqlite");
 
   const sqlite = await Effect.runPromise(
-    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, scope)),
+    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
   );
 
   checkCountHistory(
@@ -48,7 +35,7 @@ test("grouped counts match filtered authoritative runs through transitions and r
   await Effect.runPromise(sqlite.close());
 
   const reopened = await Effect.runPromise(
-    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, scope)),
+    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
   );
 
   try {

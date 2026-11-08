@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import { graphSchema } from "@loopy/contract";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Effect, Schema, Scope } from "effect";
 import { approveDemoGraph } from "../../core/_tests_/fixtures/graphs";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { LocalExecutor } from "../src/executor";
@@ -15,6 +15,7 @@ import { openRunStore } from "../src/store";
 import { fixture } from "./fixtures/executor";
 import { waitUntil } from "./fixtures/service-runtime";
 import { MemorySqlStore } from "./fixtures/stores";
+import { fixtureScope } from "./fixtures/test-scope";
 
 test("compiled command parser gets only the command result, then code runs through service and daemon", async () => {
   const f = await fixture();
@@ -40,77 +41,70 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
   }
 
   const home = join(f.root, "home");
-  const scope = Scope.makeUnsafe();
+  const scope = fixtureScope();
 
-  try {
-    const store = await Effect.runPromise(
-      openRunStore(home).pipe(Effect.provideService(Scope.Scope, scope)),
-    );
+  const store = await Effect.runPromise(
+    openRunStore(home).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
 
-    const service = makeLocalService({ home, store, clock: { now: Date.now } });
+  const service = makeLocalService({ home, store, clock: { now: Date.now } });
 
-    const daemon = await Effect.runPromise(
-      localDaemon({
-        home,
-        cwd: f.workspace,
-        store,
-        concurrency: 1,
-        port: 0,
-        assets: join(f.workspace, "assets"),
-      }).pipe(Effect.provideService(Scope.Scope, scope)),
-    );
+  const daemon = await Effect.runPromise(
+    localDaemon({
+      home,
+      cwd: f.workspace,
+      store,
+      concurrency: 1,
+      port: 0,
+      assets: join(f.workspace, "assets"),
+    }).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
 
-    await Effect.runPromise(
-      service.putLoopy("sequence", {
-        graph: compiled.graph,
-        revision: compiled.revision,
-        bundles: compiled.bundles,
-        replace: false,
-        source: { path: source, workspace: f.workspace },
-      }),
-    );
-    const run = await Effect.runPromise(service.startRun("sequence", {}, f.workspace));
-    await writeFile(
-      join(f.workspace, "code.ts"),
-      'export default () => ({message: "replacement"});',
-    );
-    const replacement = await Effect.runPromise(compile(source));
+  await Effect.runPromise(
+    service.putLoopy("sequence", {
+      graph: compiled.graph,
+      revision: compiled.revision,
+      bundles: compiled.bundles,
+      replace: false,
+      source: { path: source, workspace: f.workspace },
+    }),
+  );
+  const run = await Effect.runPromise(service.startRun("sequence", {}, f.workspace));
+  await writeFile(join(f.workspace, "code.ts"), 'export default () => ({message: "replacement"});');
+  const replacement = await Effect.runPromise(compile(source));
 
-    if (!replacement.ok) {
-      throw new Error(JSON.stringify(replacement.diagnostics));
-    }
-
-    await Effect.runPromise(
-      service.putLoopy("sequence", {
-        graph: replacement.graph,
-        revision: replacement.revision,
-        bundles: replacement.bundles,
-        replace: false,
-        source: { path: source, workspace: f.workspace },
-      }),
-    );
-    expect(replacement.revision).not.toBe(compiled.revision);
-    expect((await Effect.runPromise(store.getRun(run.id)))?.revision).toBe(compiled.revision);
-    await Effect.runPromise(Effect.forkIn(daemon.run, scope));
-    await Effect.runPromise(
-      waitUntil(Effect.map(store.getRun(run.id), (stored) => stored?.status === "succeeded")),
-    );
-    const snapshot = await Effect.runPromise(service.runSnapshot(run.id));
-    expect(snapshot.run).toMatchObject({ status: "succeeded", output: { message: "hello!" } });
-    expect(snapshot.nodeRuns.map((node) => node.status)).toEqual([
-      "succeeded",
-      "succeeded",
-      "succeeded",
-      "succeeded",
-    ]);
-    expect(snapshot.nodeRuns.map((node) => node.attempt)).toEqual([1, 1, 1, 1]);
-    expect(snapshot.nodeRuns.every((node) => node.key.scope.length === 0)).toBe(true);
-    expect(await Effect.runPromise(store.getLogs(run.id, 0, 200))).toContainEqual(
-      expect.objectContaining({ message: "code", data: { word: "hello" } }),
-    );
-  } finally {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
+  if (!replacement.ok) {
+    throw new Error(JSON.stringify(replacement.diagnostics));
   }
+
+  await Effect.runPromise(
+    service.putLoopy("sequence", {
+      graph: replacement.graph,
+      revision: replacement.revision,
+      bundles: replacement.bundles,
+      replace: false,
+      source: { path: source, workspace: f.workspace },
+    }),
+  );
+  expect(replacement.revision).not.toBe(compiled.revision);
+  expect((await Effect.runPromise(store.getRun(run.id)))?.revision).toBe(compiled.revision);
+  await Effect.runPromise(Effect.forkIn(daemon.run, scope));
+  await Effect.runPromise(
+    waitUntil(Effect.map(store.getRun(run.id), (stored) => stored?.status === "succeeded")),
+  );
+  const snapshot = await Effect.runPromise(service.runSnapshot(run.id));
+  expect(snapshot.run).toMatchObject({ status: "succeeded", output: { message: "hello!" } });
+  expect(snapshot.nodeRuns.map((node) => node.status)).toEqual([
+    "succeeded",
+    "succeeded",
+    "succeeded",
+    "succeeded",
+  ]);
+  expect(snapshot.nodeRuns.map((node) => node.attempt)).toEqual([1, 1, 1, 1]);
+  expect(snapshot.nodeRuns.every((node) => node.key.scope.length === 0)).toBe(true);
+  expect(await Effect.runPromise(store.getLogs(run.id, 0, 200))).toContainEqual(
+    expect.objectContaining({ message: "code", data: { word: "hello" } }),
+  );
 });
 
 // A bundle that kills itself after synchronous writes stops mid-record with its output already in

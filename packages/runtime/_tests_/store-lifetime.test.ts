@@ -1,12 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { StorageError } from "../../core/src/store";
 import { makeSqliteRunStore } from "../src/store/open";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const nodeId = Schema.decodeUnknownSync(nodeIdSchema)("0:code");
 
@@ -151,29 +150,25 @@ test("invariant failures die and roll back their complete batch", async () => {
 });
 
 test("a closed store reports unavailable storage", async () => {
-  const root = mkdtempSync(join(tmpdir(), "loopy-store-closed-"));
+  const root = qualityTestRoot("store-closed");
 
-  try {
-    const store = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const store = yield* makeSqliteRunStore(join(root, "runs.sqlite"));
-          yield* store.createRun(newRun());
+  const store = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const store = yield* makeSqliteRunStore(join(root, "runs.sqlite"));
+        yield* store.createRun(newRun());
 
-          return store;
-        }),
-      ),
-    );
+        return store;
+      }),
+    ),
+  );
 
-    const closed = await Effect.runPromise(Effect.result(store.getRun("run")));
-    expect(closed._tag).toBe("Failure");
+  const closed = await Effect.runPromise(Effect.result(store.getRun("run")));
+  expect(closed._tag).toBe("Failure");
 
-    if (closed._tag === "Failure") {
-      expect(closed.failure).toBeInstanceOf(StorageError);
-      expect(closed.failure.reason).toBe("unavailable");
-      expect(closed.failure.cause).toBeInstanceOf(RangeError);
-    }
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  if (closed._tag === "Failure") {
+    expect(closed.failure).toBeInstanceOf(StorageError);
+    expect(closed.failure.reason).toBe("unavailable");
+    expect(closed.failure.cause).toBeInstanceOf(RangeError);
   }
 });

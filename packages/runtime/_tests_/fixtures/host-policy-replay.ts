@@ -1,6 +1,4 @@
 import { expect } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OwnershipError } from "@loopy/core";
 import { Effect } from "effect";
@@ -9,22 +7,19 @@ import { activateDurable, type DurableActivationResult } from "../../src/host";
 import { makeSqliteRunStore, type SqlRunStore } from "../../src/store";
 import { PolicyProvider, policyGraph, policyRetry, policySuccess } from "./host-policy";
 import { initialModel, type ModelAction, modelStep } from "./host-policy-model";
+import { qualityTestRoot } from "./quality-test-root";
 import { runAt } from "./stores";
 
 export async function withFilePolicyStore(use: (store: SqlRunStore) => Promise<void>) {
-  const root = mkdtempSync(join(tmpdir(), "loopy-host-model-"));
+  const root = qualityTestRoot("host-model");
 
-  try {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.flatMap(makeSqliteRunStore(join(root, "runs.sqlite"), { leaseMs: 3000 }), (store) =>
-          Effect.promise(() => use(store)),
-        ),
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.flatMap(makeSqliteRunStore(join(root, "runs.sqlite"), { leaseMs: 3000 }), (store) =>
+        Effect.promise(() => use(store)),
       ),
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+    ),
+  );
 }
 
 // Each trace replays as its own run, so one store serves every trace of a search.

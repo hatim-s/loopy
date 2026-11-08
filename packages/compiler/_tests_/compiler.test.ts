@@ -1,11 +1,12 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseModuleOutput } from "@loopy/contract";
 import { type Json, validateGraph } from "@loopy/core";
 import { Effect } from "effect";
 import { compiledBody } from "../../runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
+import { onCleanup } from "../../runtime/_tests_/fixtures/test-scope";
 import { compile as compileEffect } from "../src";
 import { evaluate as evaluateEffect } from "../src/evaluate";
 
@@ -13,15 +14,8 @@ const sdk = "loopy";
 
 const fixtureRoot = resolve(import.meta.dir, "fixtures");
 
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
-
 async function project(source: string) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-compile-test-")));
-  roots.push(root);
+  const root = qualityTestRoot("compile-test");
   const file = join(root, "entry.ts");
   await writeFile(file, source.replaceAll("__SDK__", sdk));
   await writeFile(join(root, "not-function.ts"), "export default 1;");
@@ -164,7 +158,7 @@ for (const effect of ["network", "write"]) {
   test(`evaluation sandbox denies ${effect} even if AST validation is bypassed`, async () => {
     const { root, file } = await project("export default {};");
     const outside = `${root}-outside`;
-    roots.push(outside);
+    onCleanup(() => rm(outside, { force: true }));
 
     const server = Bun.serve({
       hostname: "127.0.0.1",

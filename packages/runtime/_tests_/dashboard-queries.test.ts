@@ -1,30 +1,19 @@
 import { Database } from "bun:sqlite";
-import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema, routes } from "@loopy/contract";
 import { executionKeyString, type LogRecord, type NodeRun } from "@loopy/core";
 import { Effect } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { makeLocalService } from "../src/local";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { fixtureStore } from "./fixtures/service-runtime";
 import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { memoryStore } from "./fixtures/stores";
 
-const cleanups: (() => void | Promise<void>)[] = [];
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    await cleanup();
-  }
-});
-
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "loopy-query-"));
-  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
+  const root = qualityTestRoot("query");
   const store = memoryStore();
-  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
 
   const service = makeLocalService({
     store,
@@ -203,8 +192,7 @@ test("SQLite bounded scans continue through no-match pages and full log text sea
 });
 
 test("schema 14 upgrade preserves epoch, outbox, log identity, output and exact log cap", async () => {
-  const root = mkdtempSync(join(tmpdir(), "loopy-v14-"));
-  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+  const root = qualityTestRoot("v14");
   const file = join(root, "runs.sqlite");
   const db = legacyDatabase(file, 14);
   db.query("INSERT INTO meta VALUES ('epoch','retained')").run();
@@ -242,7 +230,6 @@ test("schema 14 upgrade preserves epoch, outbox, log identity, output and exact 
   ).run(record.startedAt, JSON.stringify(record));
   db.close();
   const store = await fixtureStore(root);
-  cleanups.push(() => Effect.runPromise(store.close()));
   expect(await Effect.runPromise(store.epoch())).toBe("retained");
   expect((await Effect.runPromise(store.logDetail(1)))?.log).toEqual(log);
   expect((await Effect.runPromise(store.events(0, 10)))[0]?.txn).toBe("retained-txn");
@@ -364,8 +351,7 @@ test("failed transactional batches roll back retained attempts and log usage wit
 });
 
 test("a rejected schema migration preserves the old records, epoch and version", async () => {
-  const root = mkdtempSync(join(tmpdir(), "loopy-bad-migration-"));
-  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+  const root = qualityTestRoot("bad-migration");
   const file = join(root, "runs.sqlite");
   const db = legacyDatabase(file, 14);
   db.query("INSERT INTO meta VALUES ('epoch','keep-me')").run();
@@ -388,8 +374,7 @@ test("a rejected schema migration preserves the old records, epoch and version",
 
 for (const version of [13, 14] as const) {
   test(`schema ${version} log events retain node filtering after migration and agree with new log events`, async () => {
-    const root = mkdtempSync(join(tmpdir(), `loopy-v${version}-log-event-`));
-    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    const root = qualityTestRoot(`v${version}-log-event`);
     const file = join(root, "runs.sqlite");
     const db = legacyDatabase(file, version);
     db.query("INSERT INTO meta VALUES ('epoch','retained-epoch')").run();
@@ -433,7 +418,6 @@ for (const version of [13, 14] as const) {
     );
     db.close();
     const store = await fixtureStore(root);
-    cleanups.push(() => Effect.runPromise(store.close()));
     expect(await Effect.runPromise(store.epoch())).toBe("retained-epoch");
     const migrated = await Effect.runPromise(store.eventPage({ nodeId: "work", limit: 50 }));
     expect(migrated.items).toMatchObject([{ txn: "old-txn", nodeId: "work", entity: "log" }]);

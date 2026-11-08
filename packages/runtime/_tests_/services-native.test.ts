@@ -1,9 +1,9 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { StorageError } from "@loopy/core";
-import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { Registry } from "../src/local/registry";
 import { startServer } from "../src/local/server/start-server";
 import { makeLocalService } from "../src/local/service";
@@ -12,30 +12,17 @@ import { makeService, ServiceError } from "../src/service";
 import { makeSqliteRunStore } from "../src/store";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-
-const cleanups: (() => Promise<void>)[] = [];
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    await cleanup();
-  }
-});
+import { onCleanup, runScoped } from "./fixtures/test-scope";
 
 async function fixture(options: { concurrency?: number } = {}) {
   const causes: Cause.Cause<unknown>[] = [];
-  const root = await qualityTestRoot("services-effect");
-  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const root = qualityTestRoot("services-effect");
   const home = join(root, "home");
   await mkdir(home);
   const source = join(root, "workflow.ts");
   await writeFile(source, "export default null;");
   const registry = await Effect.runPromise(Registry.make(home, root));
-  const scope = Scope.makeUnsafe();
-  cleanups.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-
-  const store = await Effect.runPromise(
-    makeSqliteRunStore(join(home, "runs.sqlite")).pipe(Effect.provideService(Scope.Scope, scope)),
-  );
+  const store = await runScoped(makeSqliteRunStore(join(home, "runs.sqlite")));
 
   const body = await compiledBody("workflow", source);
   await Effect.runPromise(registry.save(body));
@@ -61,7 +48,7 @@ async function fixture(options: { concurrency?: number } = {}) {
     onError: (cause) => causes.push(cause),
   });
 
-  cleanups.push(() => server.stop());
+  onCleanup(() => server.stop());
 
   const request = (path: string, init: RequestInit = {}) =>
     fetch(`http://127.0.0.1:${server.port}/api${path}`, {
@@ -411,7 +398,7 @@ test("typed unsupported secret and type-generation operations preserve HTTP501",
     daemon: { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 4 },
   });
 
-  cleanups.push(() => server.stop());
+  onCleanup(() => server.stop());
 
   for (const [path, method, body] of [
     ["/secrets", "GET", undefined],

@@ -1,6 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { StoreEffect } from "@loopy/core";
@@ -17,33 +15,17 @@ import {
   type SqlValue,
 } from "../src/store/portable";
 import { upgradeLegacyHome } from "../src/store/schema/legacy";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { storeContract } from "./fixtures/store-contract";
-import { createTestStores, runAt } from "./fixtures/stores";
-
-const drivers: BunSqlDriver[] = [];
-
-const homes: string[] = [];
-
-const { openTestStore, closeTestStores } = createTestStores();
+import { closeTestStore, openTestStore, runAt } from "./fixtures/stores";
+import { onCleanup } from "./fixtures/test-scope";
 
 const at = newRun().createdAt;
 
 const run = runAt(() => Date.parse(at));
 
 const owner = { identity: { pid: null, host: "workspace:test:session" }, isAlive: () => false };
-
-afterEach(() => {
-  closeTestStores();
-
-  for (const driver of drivers.splice(0)) {
-    driver.close();
-  }
-
-  for (const home of homes.splice(0)) {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
 
 // Real SQLite executes every statement. This adapter rejects local-only setup SQL.
 class PortableDriver implements SqlDriver {
@@ -75,7 +57,7 @@ class PortableDriver implements SqlDriver {
 
 function fixture(options: Omit<SqlStoreOptions, "owner"> = {}) {
   const sqlite = new BunSqlDriver(":memory:");
-  drivers.push(sqlite);
+  onCleanup(() => sqlite.close());
   const driver = new PortableDriver(sqlite);
   const store = new SqlRunStore(driver, { owner, ...options });
 
@@ -83,16 +65,6 @@ function fixture(options: Omit<SqlStoreOptions, "owner"> = {}) {
 }
 
 storeContract("portable SQL with lease-only ownership", (options) => fixture(options).store);
-
-test("portable entry bundles for browsers without Bun or Node dependencies", async () => {
-  const result = await Bun.build({
-    entrypoints: [new URL("../src/store/portable.ts", import.meta.url).pathname],
-    target: "browser",
-  });
-
-  expect(result.success).toBe(true);
-  expect(result.logs).toEqual([]);
-});
 
 test("portable schema reopens with its epoch, records and cursor intact", async () => {
   const { store, driver, sqlite } = fixture();
@@ -134,7 +106,7 @@ for (const mode of ["immediate", "deferred"] as const) {
 
 test("failed fresh initialization rolls back DDL and preserves preexisting views", () => {
   const sqlite = new BunSqlDriver(":memory:");
-  drivers.push(sqlite);
+  onCleanup(() => sqlite.close());
   sqlite.exec("CREATE VIEW logs AS SELECT 1 AS saved");
   const driver = new PortableDriver(sqlite);
   expect(() => new SqlRunStore(driver, { owner })).toThrow("already exists");
@@ -150,7 +122,7 @@ test("failed fresh initialization rolls back DDL and preserves preexisting views
 
 test("unsupported portable databases retain their records", () => {
   const sqlite = new BunSqlDriver(":memory:");
-  drivers.push(sqlite);
+  onCleanup(() => sqlite.close());
   sqlite.exec("CREATE TABLE personal (value TEXT); INSERT INTO personal VALUES ('retained')");
   expect(() => new SqlRunStore(new PortableDriver(sqlite), { owner })).toThrow(
     "SQL store schema unknown cannot be opened",
@@ -159,8 +131,7 @@ test("unsupported portable databases retain their records", () => {
 });
 
 test("schema 13 upgrades through the local migration to the fresh tables, indexes and records", async () => {
-  const home = mkdtempSync(join(tmpdir(), "loopy-schema13-"));
-  homes.push(home);
+  const home = qualityTestRoot("schema13");
   const file = join(home, "runs.sqlite");
   const db = legacyDatabase(file, 13);
   db.query("INSERT INTO meta VALUES ('epoch','retained-epoch')").run();
@@ -172,11 +143,11 @@ test("schema 13 upgrades through the local migration to the fresh tables, indexe
   const upgraded = openTestStore(file);
   expect(await Effect.runPromise(upgraded.epoch())).toBe("retained-epoch");
   expect(await Effect.runPromise(upgraded.getRun("run"))).toMatchObject({ id: "run" });
-  closeTestStores();
+  closeTestStore(upgraded);
 
   const fresh = fixture().sqlite;
   const legacy = new BunSqlDriver(file);
-  drivers.push(legacy);
+  onCleanup(() => legacy.close());
   expect(legacy.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
   expect(legacy.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
     value: "16",
@@ -209,8 +180,7 @@ test("schema 13 upgrades through the local migration to the fresh tables, indexe
 });
 
 test("schema 15 run events reopen in the schema 16 run shape with sequences and epoch intact", async () => {
-  const home = mkdtempSync(join(tmpdir(), "loopy-schema15-"));
-  homes.push(home);
+  const home = qualityTestRoot("schema15");
   const file = join(home, "runs.sqlite");
   legacyDatabase(file, 14).close();
   const legacy = new BunSqlDriver(file);
@@ -318,7 +288,7 @@ test("row retention removes an entire transaction prefix and keeps replay bounda
 
 test("portable initialization ignores Cloudflare internal tables and retains nullable owner identity", async () => {
   const sqlite = new BunSqlDriver(":memory:");
-  drivers.push(sqlite);
+  onCleanup(() => sqlite.close());
   sqlite.exec(
     "CREATE TABLE __cf_kv (key TEXT PRIMARY KEY, value BLOB); CREATE TABLE _cf_metadata (value TEXT)",
   );

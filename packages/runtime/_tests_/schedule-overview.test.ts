@@ -1,40 +1,16 @@
 import { Database } from "bun:sqlite";
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Scope } from "effect";
 import { makeSqliteRunStore } from "../src/store";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { memoryStore } from "./fixtures/stores";
-
-const scopes: Scope.Closeable[] = [];
-
-function fixtureScope() {
-  const scope = Scope.makeUnsafe();
-  scopes.push(scope);
-
-  return scope;
-}
-
-const cleanups: (() => void)[] = [];
-
-afterEach(async () => {
-  for (const scope of scopes.splice(0).reverse()) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-  }
-
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    cleanup();
-  }
-});
+import { fixtureScope } from "./fixtures/test-scope";
 
 for (const kind of ["portable", "local"] as const) {
   test(`${kind} schedule overview counts all workspaces and caps ordered summaries without input`, async () => {
-    const root = mkdtempSync(join(tmpdir(), "loopy-schedule-overview-"));
-    cleanups.push(() => {
-      rmSync(root, { recursive: true, force: true });
-    });
+    const root = qualityTestRoot("schedule-overview");
 
     const sqlite =
       kind === "local"
@@ -95,8 +71,7 @@ for (const kind of ["portable", "local"] as const) {
 
 for (const version of [13, 14, 15] as const) {
   test(`schema ${version} retains schedule payload, version, event and epoch while adding the overview index`, async () => {
-    const root = mkdtempSync(join(tmpdir(), `loopy-schedule-v${version}-`));
-    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    const root = qualityTestRoot("schedule-v");
     const file = join(root, "runs.sqlite");
 
     if (version === 15) {

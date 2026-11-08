@@ -1,36 +1,21 @@
 import { Database } from "bun:sqlite";
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { hostname, tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { NodeRun } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { StorageError } from "../../core/src/store";
-import { createTestStores, runAt } from "./fixtures/stores";
-
-const { openTestStore, closeTestStore, closeTestStores } = createTestStores();
-
-const cleanups: (() => void)[] = [];
-
-afterEach(() => {
-  closeTestStores();
-
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    cleanup();
-  }
-});
+import { qualityTestRoot } from "./fixtures/quality-test-root";
+import { closeTestStore, openTestStore, runAt } from "./fixtures/stores";
+import { onCleanup } from "./fixtures/test-scope";
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "loopy-durable-"));
-  const file = join(root, "runs.sqlite");
+  const file = join(qualityTestRoot("durable"), "runs.sqlite");
   const store = openTestStore(file);
   const db = new Database(file);
-  cleanups.push(() => {
-    db.close();
-    rmSync(root, { recursive: true, force: true });
-  });
+  onCleanup(() => db.close());
 
   return { store, db, file };
 }

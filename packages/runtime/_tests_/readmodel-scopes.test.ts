@@ -1,31 +1,18 @@
-import { afterEach, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Scope } from "effect";
 import { makeSqliteRunStore } from "../src/store";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { checkScopePages } from "./fixtures/readmodel-assertions";
-import { readmodelDirectory } from "./fixtures/readmodel-directory";
 import { seedScopes } from "./fixtures/readmodel-scopes";
-
-const cleanups: (() => void | Promise<void>)[] = [];
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    await cleanup();
-  }
-});
+import { fixtureScope } from "./fixtures/test-scope";
 
 test("scope items preserve membership, counts and cursors", async () => {
-  const directory = readmodelDirectory();
-  const scope = Effect.runSync(Scope.make());
-  cleanups.push(() => {
-    rmSync(directory, { recursive: true, force: true });
-  });
-  cleanups.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const directory = qualityTestRoot("readmodel");
 
   const store = await Effect.runPromise(
     makeSqliteRunStore(join(directory, "runs.sqlite")).pipe(
-      Effect.provideService(Scope.Scope, scope),
+      Effect.provideService(Scope.Scope, fixtureScope()),
     ),
   );
 

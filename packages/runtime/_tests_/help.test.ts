@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { compile } from "@loopy/compiler";
 import { Effect } from "effect";
@@ -46,36 +45,32 @@ describe("CLI help generation", () => {
   });
 
   test("a generated wrapper compiles into a saved graph's command node", async () => {
-    const directory = await realpath(await mkdtemp(join(tmpdir(), "loopy-generated-")));
+    const directory = qualityTestRoot("generated");
 
-    try {
-      await writeFile(
-        join(directory, "codex.ts"),
-        renderCommandSource("codexExec", parseCliHelp("codex", ["exec"], help).descriptor),
-      );
-      await writeFile(
-        join(directory, "entry.ts"),
-        'import {loopy} from "loopy"; import {codexExec} from "./codex.ts"; export default loopy("generated", {input:{}, run:()=>codexExec({args:["hi"], flags:{json:true}})});',
-      );
-      const result = await Effect.runPromise(compile(join(directory, "entry.ts")));
+    await writeFile(
+      join(directory, "codex.ts"),
+      renderCommandSource("codexExec", parseCliHelp("codex", ["exec"], help).descriptor),
+    );
+    await writeFile(
+      join(directory, "entry.ts"),
+      'import {loopy} from "loopy"; import {codexExec} from "./codex.ts"; export default loopy("generated", {input:{}, run:()=>codexExec({args:["hi"], flags:{json:true}})});',
+    );
+    const result = await Effect.runPromise(compile(join(directory, "entry.ts")));
 
-      if (!result.ok) {
-        throw new Error(JSON.stringify(result.diagnostics));
-      }
-
-      expect(result.graph.nodes[0]).toMatchObject({
-        kind: "command",
-        key: "codex.exec",
-        argv: ["codex", "hi"],
-        flags: { json: true },
-      });
-    } finally {
-      await rm(directory, { recursive: true, force: true });
+    if (!result.ok) {
+      throw new Error(JSON.stringify(result.diagnostics));
     }
+
+    expect(result.graph.nodes[0]).toMatchObject({
+      kind: "command",
+      key: "codex.exec",
+      argv: ["codex", "hi"],
+      flags: { json: true },
+    });
   });
 
   test("emitted source typechecks against the SDK with typed flags and arity", async () => {
-    const directory = await qualityTestRoot("generated-types");
+    const directory = qualityTestRoot("generated-types");
     const gitHelp = await Bun.file(resolve(import.meta.dir, "fixtures/help/git-log.txt")).text();
 
     const noFlagsHelp =
@@ -87,51 +82,47 @@ describe("CLI help generation", () => {
       tool: renderCommandSource("noFlags", parseCliHelp("tool", [], noFlagsHelp).descriptor),
     };
 
-    try {
-      for (const [name, source] of Object.entries(modules)) {
-        await writeFile(join(directory, `${name}.ts`), source);
-      }
-
-      await writeFile(
-        join(directory, "usage.ts"),
-        `import { codexExec } from "./codex";
-      import { gitLog } from "./git";
-      import { noFlags } from "./tool";
-      gitLog({ args: ["HEAD"], flags: { oneline: true, maxCount: 1 } });
-      gitLog({ revisions: ["HEAD"], paths: ["src"] });
-      // @ts-expect-error Generated boolean flags retain their type.
-      gitLog({ args: ["HEAD"], flags: { oneline: "yes" } });
-      // @ts-expect-error Empty flag maps reject excess flags.
-      noFlags({ flags: { typo: true } });
-      codexExec({ args: ["hi"], flags: { json: true, config: ["model=test"] } });
-      // @ts-expect-error Unknown flags must fail compilation.
-      codexExec({ flags: { typo: true } });
-      // @ts-expect-error Boolean flags retain their type.
-      codexExec({ flags: { json: "true" } });
-      // @ts-expect-error The descriptor declares at most one positional.
-      codexExec({ args: ["one", "two"] });
-      `,
-      );
-      await writeFile(
-        join(directory, "tsconfig.json"),
-        JSON.stringify({ extends: join(repository, "tsconfig.json"), include: ["usage.ts"] }),
-      );
-
-      const checker = Bun.spawn(
-        [join(repository, "node_modules/.bin/effect-tsgo"), "tsc", "--noEmit", "-p", directory],
-        { cwd: directory, stdout: "pipe", stderr: "pipe" },
-      );
-
-      const [stdout, stderr, code] = await Promise.all([
-        new Response(checker.stdout).text(),
-        new Response(checker.stderr).text(),
-        checker.exited,
-      ]);
-
-      expect({ code, output: `${stdout}${stderr}`.trim() }).toEqual({ code: 0, output: "" });
-    } finally {
-      await rm(directory, { recursive: true, force: true });
+    for (const [name, source] of Object.entries(modules)) {
+      await writeFile(join(directory, `${name}.ts`), source);
     }
+
+    await writeFile(
+      join(directory, "usage.ts"),
+      `import { codexExec } from "./codex";
+    import { gitLog } from "./git";
+    import { noFlags } from "./tool";
+    gitLog({ args: ["HEAD"], flags: { oneline: true, maxCount: 1 } });
+    gitLog({ revisions: ["HEAD"], paths: ["src"] });
+    // @ts-expect-error Generated boolean flags retain their type.
+    gitLog({ args: ["HEAD"], flags: { oneline: "yes" } });
+    // @ts-expect-error Empty flag maps reject excess flags.
+    noFlags({ flags: { typo: true } });
+    codexExec({ args: ["hi"], flags: { json: true, config: ["model=test"] } });
+    // @ts-expect-error Unknown flags must fail compilation.
+    codexExec({ flags: { typo: true } });
+    // @ts-expect-error Boolean flags retain their type.
+    codexExec({ flags: { json: "true" } });
+    // @ts-expect-error The descriptor declares at most one positional.
+    codexExec({ args: ["one", "two"] });
+    `,
+    );
+    await writeFile(
+      join(directory, "tsconfig.json"),
+      JSON.stringify({ extends: join(repository, "tsconfig.json"), include: ["usage.ts"] }),
+    );
+
+    const checker = Bun.spawn(
+      [join(repository, "node_modules/.bin/effect-tsgo"), "tsc", "--noEmit", "-p", directory],
+      { cwd: directory, stdout: "pipe", stderr: "pipe" },
+    );
+
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(checker.stdout).text(),
+      new Response(checker.stderr).text(),
+      checker.exited,
+    ]);
+
+    expect({ code, output: `${stdout}${stderr}`.trim() }).toEqual({ code: 0, output: "" });
   });
 
   test("reports option lines it cannot parse", () => {

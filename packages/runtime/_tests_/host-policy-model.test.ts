@@ -35,9 +35,6 @@ for (const budget of [1, 2]) {
     }
 
     await Effect.runPromise(store.close());
-    console.log(
-      `host model budget=${budget} depth=8 states=${seen.size} transitions=${transitions} shortest counterexample=none`,
-    );
   }, 180_000);
 }
 

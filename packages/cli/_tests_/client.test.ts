@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { routes } from "@loopy/contract";
 import type { Json } from "@loopy/core";
 import { Effect } from "effect";
+import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
+import { onCleanup } from "../../runtime/_tests_/fixtures/test-scope";
 import { writeDaemonFile } from "../../runtime/src/local/daemon/file";
 import { HttpError, request, TransportError } from "../src/client";
 
@@ -13,7 +12,7 @@ async function withHttp(
   status: number,
   use: (context: { home: string; cwd: string }, requests: () => string[]) => Promise<void>,
 ) {
-  const root = mkdtempSync(join(tmpdir(), "loopy-cli-http-"));
+  const root = qualityTestRoot("cli-http");
   const authorizations: (string | null)[] = [];
   const requests: string[] = [];
 
@@ -28,19 +27,15 @@ async function withHttp(
     },
   });
 
-  try {
-    writeDaemonFile(root, {
-      pid: process.pid,
-      port: server.port!,
-      token: "fixture-token",
-      startedAt: new Date().toISOString(),
-    });
-    await use({ home: root, cwd: root }, () => requests);
-    expect(authorizations.every((value) => value === "Bearer fixture-token")).toBe(true);
-  } finally {
-    await server.stop(true);
-    rmSync(root, { recursive: true, force: true });
-  }
+  onCleanup(() => server.stop(true));
+  writeDaemonFile(root, {
+    pid: process.pid,
+    port: server.port!,
+    token: "fixture-token",
+    startedAt: new Date().toISOString(),
+  });
+  await use({ home: root, cwd: root }, () => requests);
+  expect(authorizations.every((value) => value === "Bearer fixture-token")).toBe(true);
 }
 
 test("HTTP client fills the contract route, decodes the response and keeps error identity without retry", async () => {

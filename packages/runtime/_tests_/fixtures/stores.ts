@@ -2,6 +2,7 @@ import { Clock, Effect, Exit, Scope } from "effect";
 import { makeSqliteRunStore } from "../../src/store";
 import { BunSqlDriver } from "../../src/store/bun-driver";
 import { type SqlOwnerPolicy, SqlRunStore } from "../../src/store/portable";
+import { fixtureScope } from "./test-scope";
 
 // No owner is alive, so a lease expires on time alone, as it does for cloud owners.
 export const NEVER_ALIVE: SqlOwnerPolicy = {
@@ -47,39 +48,26 @@ export function runAt(now: () => number) {
     Effect.runPromise(effect.pipe(Effect.provideService(Clock.Clock, clock)));
 }
 
-/**
- * Local stores as the daemon opens them. Bun evaluates a shared module once per process, so each
- * test file calls this itself and registers closeTestStores in its own afterEach.
- */
-export function createTestStores() {
-  const scopes = new Map<SqlRunStore, Scope.Closeable>();
+const scopes = new WeakMap<SqlRunStore, Scope.Closeable>();
 
-  const closeTestStore = (store: SqlRunStore) => {
-    const scope = scopes.get(store);
+/** A local store as the daemon opens it. It closes with the test unless closeTestStore runs first. */
+export function openTestStore(file: string, options: { leaseMs?: number } = {}) {
+  const scope = Scope.forkUnsafe(fixtureScope());
 
-    if (scope) {
-      scopes.delete(store);
-      Effect.runSync(Scope.close(scope, Exit.void));
-    }
-  };
+  const store = Effect.runSync(
+    makeSqliteRunStore(file, options).pipe(Effect.provideService(Scope.Scope, scope)),
+  );
 
-  const closeTestStores = () => {
-    for (const store of [...scopes.keys()].reverse()) {
-      closeTestStore(store);
-    }
-  };
+  scopes.set(store, scope);
 
-  const openTestStore = (file: string, options: { leaseMs?: number } = {}) => {
-    const scope = Scope.makeUnsafe();
+  return store;
+}
 
-    const store = Effect.runSync(
-      makeSqliteRunStore(file, options).pipe(Effect.provideService(Scope.Scope, scope)),
-    );
+/** Closes a store early, so the test can reopen its file. */
+export function closeTestStore(store: SqlRunStore) {
+  const scope = scopes.get(store);
 
-    scopes.set(store, scope);
-
-    return store;
-  };
-
-  return { openTestStore, closeTestStore, closeTestStores };
+  if (scope) {
+    Effect.runSync(Scope.close(scope, Exit.void));
+  }
 }

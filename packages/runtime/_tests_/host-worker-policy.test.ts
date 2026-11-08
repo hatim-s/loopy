@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ExecutionKey, OwnershipError, StorageError } from "@loopy/core";
 import { code, loopy, sh } from "@loopy/sdk/graph";
@@ -9,26 +8,14 @@ import { newRun } from "../../core/_tests_/fixtures/run";
 import { LocalExecutor } from "../src/executor";
 import { FilesystemReceipts } from "../src/executor/receipts";
 import { activate, makeDaemon } from "../src/host";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { MemorySqlStore } from "./fixtures/stores";
-
-function waitForMarker(path: string) {
-  return Effect.gen(function* () {
-    for (let index = 0; index < 400; index++) {
-      if (yield* Effect.promise(() => Bun.file(path).exists())) {
-        return;
-      }
-
-      yield* Effect.sleep(10);
-    }
-
-    return yield* Effect.die(new Error("Isolated worker did not reach its marker."));
-  });
-}
+import { waitForFile } from "./fixtures/wait";
 
 for (const kind of ["command", "code"] as const) {
   for (const stop of ["ownership", "root"] as const) {
     test(`${stop} interruption preserves started ${kind} receipt and resumes as uncertain without replay`, async () => {
-      const root = await mkdtemp(join(tmpdir(), "loopy-host-worker-"));
+      const root = qualityTestRoot("host-worker", { outsideCheckout: true });
       const workspace = join(root, "workspace");
       const home = join(root, "home");
       await mkdir(join(workspace, ".loopy", "loopies"), { recursive: true });
@@ -73,79 +60,75 @@ for (const kind of ["command", "code"] as const) {
         }
       }
 
-      try {
-        await Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              yield* store.createRun({ ...newRun(), input: {} });
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* store.createRun({ ...newRun(), input: {} });
 
-              const running = yield* Effect.forkChild(
-                activate({ store, executor, graph, runId: "run" }),
-              );
+            const running = yield* Effect.forkChild(
+              activate({ store, executor, graph, runId: "run" }),
+            );
 
-              yield* waitForMarker(join(workspace, "started"));
+            yield* Effect.promise(() => waitForFile(join(workspace, "started")));
 
-              const node = (yield* store.getNodeRuns("run")).find(
-                (node) => node.status === "running",
-              );
+            const node = (yield* store.getNodeRuns("run")).find(
+              (node) => node.status === "running",
+            );
 
-              if (!node) {
-                throw new Error("Worker started before its node was persisted.");
-              }
+            if (!node) {
+              throw new Error("Worker started before its node was persisted.");
+            }
 
-              const key: ExecutionKey = node.key;
-              const before = yield* receipts.read({ executionKey: key, attempt: 1 });
-              expect(before?.kind).toBe("started");
+            const key: ExecutionKey = node.key;
+            const before = yield* receipts.read({ executionKey: key, attempt: 1 });
+            expect(before?.kind).toBe("started");
 
-              if (stop === "ownership") {
-                owned = false;
-              } else {
-                yield* Fiber.interrupt(running);
-              }
+            if (stop === "ownership") {
+              owned = false;
+            } else {
+              yield* Fiber.interrupt(running);
+            }
 
-              const exit = yield* Fiber.await(running);
-              expect(
-                exit._tag === "Failure" &&
-                  (stop === "root"
-                    ? Cause.hasInterrupts(exit.cause)
-                    : exit.cause.reasons.some(
-                        (reason) =>
-                          Cause.isFailReason(reason) && reason.error instanceof OwnershipError,
-                      )),
-              ).toBe(true);
-              const interrupted = yield* receipts.read({ executionKey: key, attempt: 1 });
-              expect(interrupted?.kind).toBe("started");
+            const exit = yield* Fiber.await(running);
+            expect(
+              exit._tag === "Failure" &&
+                (stop === "root"
+                  ? Cause.hasInterrupts(exit.cause)
+                  : exit.cause.reasons.some(
+                      (reason) =>
+                        Cause.isFailReason(reason) && reason.error instanceof OwnershipError,
+                    )),
+            ).toBe(true);
+            const interrupted = yield* receipts.read({ executionKey: key, attempt: 1 });
+            expect(interrupted?.kind).toBe("started");
 
-              if (interrupted?.kind !== "started") {
-                throw new Error("Interrupted receipt was replaced.");
-              }
+            if (interrupted?.kind !== "started") {
+              throw new Error("Interrupted receipt was replaced.");
+            }
 
-              expect(() => process.kill(interrupted.pid, 0)).toThrow();
-              owned = true;
-              const result = yield* activate({ store, executor, graph, runId: "run" });
-              expect(result.status).toBe("failed");
-              expect(yield* executor.lookup(key, 1)).toMatchObject({
-                kind: "finished",
-                result: { kind: "failed", error: { code: "uncertain" } },
-              });
-              expect(
-                (yield* store.getNodeRuns("run")).find((node) => node.key.nodeId === key.nodeId),
-              ).toMatchObject({ status: "failed", attempt: 1, error: { code: "uncertain" } });
-              expect(
-                yield* Effect.promise(() => readFile(join(workspace, "started"), "utf8")),
-              ).toBe("once\n");
-            }),
-          ),
-        );
-      } finally {
-        await rm(root, { recursive: true, force: true });
-      }
+            expect(() => process.kill(interrupted.pid, 0)).toThrow();
+            owned = true;
+            const result = yield* activate({ store, executor, graph, runId: "run" });
+            expect(result.status).toBe("failed");
+            expect(yield* executor.lookup(key, 1)).toMatchObject({
+              kind: "finished",
+              result: { kind: "failed", error: { code: "uncertain" } },
+            });
+            expect(
+              (yield* store.getNodeRuns("run")).find((node) => node.key.nodeId === key.nodeId),
+            ).toMatchObject({ status: "failed", attempt: 1, error: { code: "uncertain" } });
+            expect(yield* Effect.promise(() => readFile(join(workspace, "started"), "utf8"))).toBe(
+              "once\n",
+            );
+          }),
+        ),
+      );
     }, 20_000);
   }
 }
 
 test("a completed real worker receipt wins after completion apply fails", async () => {
-  const root = await mkdtemp(join(tmpdir(), "loopy-host-finished-"));
+  const root = qualityTestRoot("host-finished", { outsideCheckout: true });
   const workspace = join(root, "workspace");
   const home = join(root, "home");
   await mkdir(join(workspace, ".loopy", "loopies"), { recursive: true });
@@ -198,22 +181,18 @@ test("a completed real worker receipt wins after completion apply fails", async 
       ]),
   });
 
-  try {
-    await Effect.runPromise(store.createRun({ ...newRun(), input: {} }));
-    const failed = await Effect.runPromiseExit(activate({ store, executor, graph, runId: "run" }));
-    expect(failed._tag).toBe("Failure");
-    expect((await Effect.runPromise(store.getRun("run")))?.status).toBe("suspended");
-    expect(
-      await Effect.runPromise(activate({ store, executor, graph, runId: "run" })),
-    ).toMatchObject({ status: "succeeded" });
-    expect(await readFile(join(workspace, "count"), "utf8")).toBe("1");
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+  await Effect.runPromise(store.createRun({ ...newRun(), input: {} }));
+  const failed = await Effect.runPromiseExit(activate({ store, executor, graph, runId: "run" }));
+  expect(failed._tag).toBe("Failure");
+  expect((await Effect.runPromise(store.getRun("run")))?.status).toBe("suspended");
+  expect(await Effect.runPromise(activate({ store, executor, graph, runId: "run" }))).toMatchObject(
+    { status: "succeeded" },
+  );
+  expect(await readFile(join(workspace, "count"), "utf8")).toBe("1");
 }, 20_000);
 
 test("graceful daemon stop drains a real worker and retains its finished success", async () => {
-  const root = await mkdtemp(join(tmpdir(), "loopy-host-drain-"));
+  const root = qualityTestRoot("host-drain", { outsideCheckout: true });
   const workspace = join(root, "workspace");
   const home = join(root, "home");
   await mkdir(join(workspace, ".loopy", "loopies"), { recursive: true });
@@ -241,53 +220,49 @@ test("graceful daemon stop drains a real worker and retains its finished success
       ]),
   });
 
-  try {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const daemon = yield* makeDaemon({
-            store,
-            concurrency: 1,
-            prepare: () => Effect.succeed({ graph, executor }),
-            definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
-          });
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const daemon = yield* makeDaemon({
+          store,
+          concurrency: 1,
+          prepare: () => Effect.succeed({ graph, executor }),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
+        });
 
-          yield* store.createRun({ ...newRun(), input: {} });
-          const running = yield* Effect.forkChild(daemon.run);
-          yield* waitForMarker(join(workspace, "started"));
-          let stopped = false;
+        yield* store.createRun({ ...newRun(), input: {} });
+        const running = yield* Effect.forkChild(daemon.run);
+        yield* Effect.promise(() => waitForFile(join(workspace, "started")));
+        let stopped = false;
 
-          const stopping = yield* Effect.forkChild(
-            daemon.stop.pipe(
-              Effect.tap(() =>
-                Effect.sync(() => {
-                  stopped = true;
-                }),
-              ),
+        const stopping = yield* Effect.forkChild(
+          daemon.stop.pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                stopped = true;
+              }),
             ),
-          );
+          ),
+        );
 
-          yield* Effect.yieldNow;
-          expect(stopped).toBe(false);
-          yield* Effect.promise(() => writeFile(join(workspace, "release"), "release"));
-          yield* Fiber.join(stopping);
-          yield* Fiber.join(running);
-          expect((yield* store.getRun("run"))?.status).toBe("succeeded");
-          const node = (yield* store.getNodeRuns("run"))[0];
+        yield* Effect.yieldNow;
+        expect(stopped).toBe(false);
+        yield* Effect.promise(() => writeFile(join(workspace, "release"), "release"));
+        yield* Fiber.join(stopping);
+        yield* Fiber.join(running);
+        expect((yield* store.getRun("run"))?.status).toBe("succeeded");
+        const node = (yield* store.getNodeRuns("run"))[0];
 
-          if (!node) {
-            throw new Error("Missing completed node");
-          }
+        if (!node) {
+          throw new Error("Missing completed node");
+        }
 
-          expect(yield* executor.lookup(node.key, 1)).toMatchObject({
-            kind: "finished",
-            result: { kind: "succeeded" },
-          });
-          expect(node.attempt).toBe(1);
-        }),
-      ),
-    );
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+        expect(yield* executor.lookup(node.key, 1)).toMatchObject({
+          kind: "finished",
+          result: { kind: "succeeded" },
+        });
+        expect(node.attempt).toBe(1);
+      }),
+    ),
+  );
 }, 20_000);

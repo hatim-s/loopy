@@ -1,7 +1,7 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { hostname, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { expect, test } from "bun:test";
+import { mkdirSync } from "node:fs";
+import { hostname } from "node:os";
+import { join } from "node:path";
 import { decodeBoundary, encodeRunCursor, graphView, routes } from "@loopy/contract";
 import type { Graph } from "@loopy/core";
 import { revision } from "@loopy/core";
@@ -12,41 +12,22 @@ import { makeLocalService, Registry } from "../src/local";
 import { makeArtifactRegistry } from "../src/local/save-compiled";
 import { makeService } from "../src/service";
 import { compiledBody } from "./fixtures/compiled";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { fixtureDaemon, fixtureStore, waitUntil } from "./fixtures/service-runtime";
 
 const serviceGraph = loopy("test", { input: { name: "string" }, run: ({ input }) => input });
 
-const cleanups: (() => void | Promise<void>)[] = [];
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0)) {
-    await cleanup();
-  }
-});
-
-async function fixture(definition = "") {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-service-")));
-  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
+async function fixture(meta: Partial<Pick<Graph["meta"], "scope" | "schedule">> = {}) {
+  const root = qualityTestRoot("service");
   const home = join(root, "home");
-  const source = join(root, "service.ts");
-  await Bun.write(
-    source,
-    `import { loopy } from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/index.ts"))};
-  export default loopy("service", { ${definition} input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
-  );
-
-  const { default: definitionValue }: { default: Graph } = await import(source);
-
   const registry = await Effect.runPromise(Registry.make(home, root));
 
-  const body = await compiledBody("service", source, {
-    scope: definitionValue.meta.scope,
-    schedule: definitionValue.meta.schedule ?? null,
+  const body = await compiledBody("service", join(root, "service.ts"), {
+    ...meta,
+    input: { name: "string" },
     secrets: ["PRIVATE"],
   });
 
-  body.graph.input = { name: "string" };
-  body.revision = await revision(body.graph);
   await Effect.runPromise(registry.save(body));
   let now = Date.parse("2026-10-17T00:00:00.000Z");
   const clock = { now: () => now };
@@ -56,11 +37,6 @@ async function fixture(definition = "") {
     store,
     clock,
     home: home,
-  });
-
-  cleanups.push(async () => {
-    await Effect.runPromise(store.close());
-    rmSync(root, { recursive: true, force: true });
   });
 
   return {
@@ -302,9 +278,9 @@ test("service rejects invalid schedule semantics before writing", async () => {
 });
 
 test("definition defaults apply and workspace schedule mutations stay isolated", async () => {
-  const { service, store, root } = await fixture(
-    'schedule: { cron: "*/5 * * * *", tz: "Asia/Kolkata" },',
-  );
+  const { service, store, root } = await fixture({
+    schedule: { cron: "*/5 * * * *", tz: "Asia/Kolkata" },
+  });
 
   expect((await Effect.runPromise(service.listLoopies(root)))[0]?.schedule).toEqual({
     cron: "*/5 * * * *",
@@ -393,7 +369,7 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
 });
 
 test("global schedules use the service workspace and preserve other workspaces", async () => {
-  const { service, store, root } = await fixture('scope: "global",');
+  const { service, store, root } = await fixture({ scope: "global" });
   const other = join(root, "other");
   mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
 
@@ -627,14 +603,9 @@ test("listLoopies reads each workspace registry once per call", async () => {
 });
 
 test("loopy views are keyed by workspace and slug so graph and start reach that project's save", async () => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-workspaces-")));
-  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
+  const root = qualityTestRoot("workspaces");
   const home = join(root, "home");
   const store = await fixtureStore(home);
-  cleanups.push(async () => {
-    await Effect.runPromise(store.close());
-    rmSync(root, { recursive: true, force: true });
-  });
 
   const service = makeLocalService({
     store,
