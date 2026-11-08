@@ -93,6 +93,7 @@ test("run views read no registry, including runs of deleted definitions", async 
     ["canonical", "chosen"],
     ["missing", "removed"],
   ]);
+  expect(f.calls.registries).toBe(0);
   expect(f.calls.lists.size).toBe(0);
   expect(f.calls.graphs).toEqual([]);
 });

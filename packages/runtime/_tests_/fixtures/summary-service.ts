@@ -34,6 +34,7 @@ export async function summaryServiceFixture() {
   const graphs: string[] = [];
 
   const calls = {
+    registries: 0,
     lists: new Map<string, number>(),
     graphs,
   };
@@ -55,6 +56,7 @@ export async function summaryServiceFixture() {
   const registry = (workspace: string) => registries.get(aliases.get(workspace) ?? workspace)!;
 
   const adapter = (workspace: string): Effect.Effect<ArtifactRegistry> => {
+    calls.registries += 1;
     const native = registry(workspace);
     const base = makeArtifactRegistry(native);
 
