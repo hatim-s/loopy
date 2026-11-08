@@ -1,20 +1,13 @@
 import { expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import {
-  decodeRouteResponse,
-  type RouteInput,
-  type RouteName,
-  routeRequest,
-  routes,
-} from "@loopy/contract";
 import { Effect } from "effect";
 import { makeLocalService } from "../src/local";
-import { startServer } from "../src/local/server/start-server";
 import { openRunStore } from "../src/store";
 import { compiledBody } from "./fixtures/compiled";
+import { serveHttp } from "./fixtures/http-server";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { onCleanup, runScoped } from "./fixtures/test-scope";
+import { runScoped } from "./fixtures/test-scope";
 
 const SLUG = "same-slug";
 
@@ -37,38 +30,7 @@ async function fixture() {
     await Effect.runPromise(service.putLoopy(SLUG, body));
   }
 
-  const token = "isolated-workspace-test";
-
-  const server = startServer({
-    service,
-    store,
-    cwd: workspaceA,
-    token,
-    port: 0,
-    assets: join(root, "assets"),
-    daemon: { pid: process.pid, startedAt: new Date().toISOString(), concurrency: 1 },
-  });
-
-  onCleanup(() => server.stop());
-  const baseUrl = new URL(server.url).origin;
-
-  const call = async <K extends RouteName>(name: K, input: RouteInput<(typeof routes)[K]>) => {
-    const request = routeRequest(routes[name], input);
-
-    const response = await fetch(`${baseUrl}${request.url}`, {
-      method: request.method,
-      headers: { ...request.headers, Authorization: `Bearer ${token}` },
-      body: request.body,
-    });
-
-    const outcome = decodeRouteResponse(routes[name], response.status, await response.text());
-
-    if (outcome.kind !== "ok") {
-      throw new Error(`${name} answered ${response.status}: ${JSON.stringify(outcome)}`);
-    }
-
-    return outcome.value;
-  };
+  const { call, origin: baseUrl } = serveHttp({ service, store, cwd: workspaceA });
 
   return { baseUrl, call, service, store, workspaceA, workspaceB };
 }
