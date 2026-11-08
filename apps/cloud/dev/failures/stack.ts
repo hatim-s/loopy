@@ -1,163 +1,112 @@
-import { chmod, mkdir } from "node:fs/promises";
-import { createServer } from "node:net";
+import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { assert } from "../journey/client";
-import { api, environment, owner, root, runtime, sandbox, sandboxState, state } from "./config";
+import { assert } from "../shared/assert";
+import { root, SANDBOX_IMAGE } from "../stack/constants";
+import {
+  type Child,
+  launch,
+  requireSandboxImage,
+  sandboxArgv,
+  wranglerArgv,
+} from "../stack/launch";
+import { requireFreePorts } from "../stack/ports";
+import { respondsOk, waitUntilReady } from "../stack/readiness";
+import { writeDevVars, writeWorkerConfig } from "../stack/worker-config";
+import { api, environment, owner, ports, runtime, sandbox, sandboxState, state } from "./config";
 import { docker, ownedContainer, stop } from "./resources";
+
+const manifestPath = resolve(state, "processes.json");
+
+const workerConfig = resolve(state, "wrangler.json");
+
+const devVars = resolve(state, "worker.dev.vars");
 
 export class FailureStack {
   readonly token = crypto.randomUUID() + crypto.randomUUID();
   readonly sandboxToken = crypto.randomUUID() + crypto.randomUUID();
-  private worker?: ReturnType<typeof Bun.spawn>;
-  private provider?: ReturnType<typeof Bun.spawn>;
+  private children: { worker: Child; provider: Child } | null = null;
   private generation = 0;
   private started = false;
 
   async start() {
     await mkdir(runtime, { recursive: true, mode: 0o700 });
-    assert(
-      !(await Bun.file(resolve(state, "processes.json")).exists()),
-      "failure_stack_manifest_exists",
-    );
+    assert(!(await Bun.file(manifestPath).exists()), "failure_stack_manifest_exists");
+    await requireFreePorts([ports.api, ports.sandbox, ports.inspector]);
+    await requireSandboxImage(SANDBOX_IMAGE, environment);
+    await writeWorkerConfig({
+      path: workerConfig,
+      name: "loopy-cloud-failures-local",
+      vars: { SANDBOX_URL: sandbox },
+      apiPort: ports.api,
+      inspectorPort: ports.inspector,
+    });
+    await writeDevVars(devVars, {
+      principals: [{ workspace: "fixtures", token: this.token }],
+      sandboxToken: this.sandboxToken,
+    });
+    this.started = true;
+    await this.launch();
+  }
 
-    for (const port of [14970, 14971, 14973]) {
-      await new Promise<void>((done, reject) => {
-        const listener = createServer();
-        listener.once("error", () => reject(new Error(`Port ${port} is occupied.`)));
-        listener.listen(port, "127.0.0.1", () => listener.close(() => done()));
-      });
-    }
+  // Restarts write new logs so the evidence keeps every generation's output.
+  private async launch() {
+    const log = (name: string) => `${name}-${this.generation}`;
 
-    await docker(["image", "inspect", "loopy-sandbox:bun-1.4.0", "--format", "{{.Id}}"]);
-    const config = await Bun.file(resolve(root, "apps/cloud/wrangler.jsonc")).json();
+    const provider = launch({
+      argv: sandboxArgv({ worktree: runtime, stateRoot: sandboxState, port: ports.sandbox }),
+      env: { ...environment, LOOPY_SANDBOX_TOKEN: this.sandboxToken },
+      logs: state,
+      log: log("sandbox"),
+    });
+
+    const worker = launch({
+      argv: wranglerArgv({
+        config: workerConfig,
+        persistTo: resolve(state, "wrangler"),
+        envFile: devVars,
+      }),
+      env: environment,
+      logs: state,
+      log: log("worker"),
+    });
+
+    this.children = { worker, provider };
+    await waitUntilReady({
+      children: [worker, provider],
+      probes: [
+        () => respondsOk(`${api}/api/runs`, { headers: { Authorization: `Bearer ${this.token}` } }),
+        () => respondsOk(`${sandbox}/health`),
+      ],
+      timeoutMs: 45_000,
+      intervalMs: 250,
+      timeoutMessage: "Isolated stack readiness timed out. Inspect its local logs.",
+    });
     await Bun.write(
-      resolve(state, "wrangler.json"),
+      manifestPath,
       JSON.stringify({
-        ...config,
-        name: "loopy-cloud-failures-local",
-        main: resolve(root, "apps/cloud/src/worker.ts"),
-        vars: { ...config.vars, SANDBOX_URL: sandbox },
-        dev: { ip: "127.0.0.1", port: 14970, inspector_port: 14973 },
+        owner: process.pid,
+        worker: worker.pid,
+        provider: provider.pid,
+        root,
+        sandboxState,
       }),
     );
-    const vars = resolve(state, "worker.dev.vars");
-    await Bun.write(
-      vars,
-      `LOCAL_AUTH='${JSON.stringify([{ workspace: "fixtures", token: this.token }])}'\nSANDBOX_TOKEN=${JSON.stringify(this.sandboxToken)}\n`,
-    );
-    await chmod(vars, 0o600);
-    this.started = true;
-    this.launchProvider();
-    this.launchWorker();
-    await this.ready();
-  }
-
-  private launch(name: string, argv: string[], extra: Record<string, string> = {}) {
-    return Bun.spawn(argv, {
-      cwd: root,
-      env: { ...environment, ...extra },
-      stdin: "ignore",
-      stdout: Bun.file(resolve(state, `${name}-${this.generation}.log`)),
-      stderr: Bun.file(resolve(state, `${name}-${this.generation}.error.log`)),
-    });
-  }
-
-  private launchProvider() {
-    this.provider = this.launch(
-      "sandbox",
-      [
-        process.execPath,
-        "--no-env-file",
-        resolve(root, "apps/sandbox/src/index.ts"),
-        "--worktree",
-        runtime,
-        "--state-root",
-        sandboxState,
-        "--docker-context",
-        "colima-loopy-cloud-phase1",
-        "--image",
-        "loopy-sandbox:bun-1.4.0",
-        "--port",
-        "14971",
-      ],
-      { LOOPY_SANDBOX_TOKEN: this.sandboxToken },
-    );
-  }
-
-  private launchWorker() {
-    this.worker = this.launch("worker", [
-      process.execPath,
-      "x",
-      "--no-install",
-      "wrangler",
-      "dev",
-      "--local",
-      "--config",
-      resolve(state, "wrangler.json"),
-      "--persist-to",
-      resolve(state, "wrangler"),
-      "--env-file",
-      resolve(state, "worker.dev.vars"),
-    ]);
-  }
-
-  async ready() {
-    const deadline = Date.now() + 45_000;
-
-    while (Date.now() < deadline) {
-      assert(
-        this.worker?.exitCode === null && this.provider?.exitCode === null,
-        "stack_child_exited",
-      );
-
-      try {
-        const responses = await Promise.all([
-          fetch(`${api}/api/runs`, {
-            headers: { Authorization: `Bearer ${this.token}` },
-            signal: AbortSignal.timeout(1000),
-          }),
-          fetch(`${sandbox}/health`, { signal: AbortSignal.timeout(1000) }),
-        ]);
-
-        const healthy = responses.every((response) => response.ok);
-        await Promise.all(responses.map((response) => response.body?.cancel()));
-
-        if (healthy) {
-          await Bun.write(
-            resolve(state, "processes.json"),
-            JSON.stringify({
-              owner: process.pid,
-              worker: this.worker?.pid,
-              provider: this.provider?.pid,
-              root,
-              sandboxState,
-            }),
-          );
-
-          return;
-        }
-      } catch {
-        // The owned services may still be binding their loopback ports.
-      }
-
-      await Bun.sleep(250);
-    }
-
-    throw new Error("Isolated stack readiness timed out. Inspect its local logs.");
   }
 
   async restart(downtimeMs = 0) {
-    assert(this.worker && this.provider, "stack_not_started");
-    const before = { worker: this.worker.pid, provider: this.provider.pid };
-    await stop(this.worker, "SIGKILL");
-    await stop(this.provider, "SIGKILL");
+    assert(this.children, "stack_not_started");
+    const { worker, provider } = this.children;
+    const before = { worker: worker.pid, provider: provider.pid };
+    await stop(worker, "SIGKILL");
+    await stop(provider, "SIGKILL");
     await Bun.sleep(downtimeMs);
     this.generation += 1;
-    this.launchProvider();
-    this.launchWorker();
-    await this.ready();
+    await this.launch();
 
-    return { before, after: { worker: this.worker?.pid, provider: this.provider?.pid } };
+    return {
+      before,
+      after: { worker: this.children.worker.pid, provider: this.children.provider.pid },
+    };
   }
 
   async close() {
@@ -165,29 +114,13 @@ export class FailureStack {
       return { containersRemoved: 0, volumesRemoved: 0, ownedContainersRemaining: 0 };
     }
 
-    if (this.worker) {
-      await stop(this.worker, "SIGTERM");
-    }
-
-    if (this.provider) {
-      await stop(this.provider, "SIGTERM");
+    if (this.children) {
+      await stop(this.children.worker, "SIGTERM");
+      await stop(this.children.provider, "SIGTERM");
     }
 
     const volumes = new Set<string>();
-
-    const names = (
-      await docker([
-        "ps",
-        "-a",
-        "--filter",
-        `label=loopy.sandbox.owner=${owner}`,
-        "--format",
-        "{{.Names}}",
-      ])
-    )
-      .trim()
-      .split("\n")
-      .filter(Boolean);
+    const names = await this.ownedContainerNames();
 
     for (const name of names) {
       const container = await ownedContainer(name);
@@ -209,7 +142,18 @@ export class FailureStack {
       await docker(["volume", "rm", volume]);
     }
 
-    const remaining = await docker([
+    assert((await this.ownedContainerNames()).length === 0, "owned_containers_remain");
+    await rm(manifestPath, { force: true });
+
+    return {
+      containersRemoved: names.length,
+      volumesRemoved: volumes.size,
+      ownedContainersRemaining: 0,
+    };
+  }
+
+  private async ownedContainerNames() {
+    const listed = await docker([
       "ps",
       "-a",
       "--filter",
@@ -218,14 +162,6 @@ export class FailureStack {
       "{{.Names}}",
     ]);
 
-    assert(remaining.trim() === "", "owned_containers_remain");
-    const { unlink } = await import("node:fs/promises");
-    await unlink(resolve(state, "processes.json")).catch(() => undefined);
-
-    return {
-      containersRemoved: names.length,
-      volumesRemoved: volumes.size,
-      ownedContainersRemaining: 0,
-    };
+    return listed.trim().split("\n").filter(Boolean);
   }
 }

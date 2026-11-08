@@ -1,10 +1,11 @@
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import { fixtureIO } from "../fixture-effect";
-import { assert, equal } from "../journey/client";
-import { command, context, docker, fixture, image, root } from "./resources";
-import { scenario } from "./scenario";
+import { assert, equal } from "../shared/assert";
+import { sourceHashes } from "../shared/hash";
+import { DOCKER_CONTEXT, root, SANDBOX_IMAGE } from "../stack/constants";
+import { fixtureIO } from "./fixture-effect";
+import { command, docker, fixture } from "./resources";
+import { maxTimeoutMs, scenario } from "./scenario";
 
 await Effect.runPromise(
   Effect.gen(function* () {
@@ -24,39 +25,28 @@ await Effect.runPromise(
       ),
     ];
 
-    async function sourceHashes() {
-      return Object.fromEntries(
-        await Promise.all(
-          sourcePaths.map(async (path) => [
-            path,
-            createHash("sha256")
-              .update(new Uint8Array(await Bun.file(resolve(root, path)).arrayBuffer()))
-              .digest("hex"),
-          ]),
-        ),
-      );
-    }
-
     const head = (yield* command(["git", "rev-parse", "HEAD"])).stdout.trim();
 
     const branch = (yield* command(["git", "branch", "--show-current"])).stdout.trim();
 
     equal(process.cwd(), root, "wrong_worktree_directory");
 
-    equal(root, "/Users/hatim.shakir/projects/loopy/cloud-integration", "wrong_worktree");
+    const before = yield* fixtureIO("script evidence", () => sourceHashes(root, sourcePaths));
 
-    equal(branch, "cloud-integration", "wrong_branch");
-
-    const before = yield* fixtureIO("script evidence", () => sourceHashes());
-
-    const imageId = (yield* docker(["image", "inspect", image, "--format", "{{.Id}}"])).trim();
+    const imageId = (yield* docker([
+      "image",
+      "inspect",
+      SANDBOX_IMAGE,
+      "--format",
+      "{{.Id}}",
+    ])).trim();
 
     assert(/^sha256:[a-f0-9]{64}$/.test(imageId), "image_missing");
 
     const results: Effect.Success<ReturnType<typeof scenario>>[] = [];
 
     for (const mode of ["kill_wait_client", "unavailable_inspect_socket"] as const) {
-      const config = yield* fixture();
+      const config = yield* fixture(maxTimeoutMs[mode]);
       const result = yield* scenario(config, mode);
       results.push(result);
       process.stdout.write(
@@ -64,12 +54,12 @@ await Effect.runPromise(
       );
     }
 
-    const after = yield* fixtureIO("script evidence", () => sourceHashes());
+    const after = yield* fixtureIO("script evidence", () => sourceHashes(root, sourcePaths));
 
     equal(after, before, "source_changed_during_transport_proof");
 
     equal(
-      (yield* docker(["image", "inspect", image, "--format", "{{.Id}}"])).trim(),
+      (yield* docker(["image", "inspect", SANDBOX_IMAGE, "--format", "{{.Id}}"])).trim(),
       imageId,
       "image_changed_during_proof",
     );
@@ -92,8 +82,8 @@ await Effect.runPromise(
               branch,
               head,
               bun: Bun.version,
-              dockerContext: context,
-              image,
+              dockerContext: DOCKER_CONTEXT,
+              image: SANDBOX_IMAGE,
               imageId,
             },
             boundaries: {

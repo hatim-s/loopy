@@ -1,22 +1,20 @@
 import { spawn } from "node:child_process";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
+import { decodeBoundary } from "@loopy/contract";
 import { PlaygroundClient } from "./client";
 import { api, dashboard, initialize, profile, root, state } from "./config";
-import { cleanEnvironment, manifestPath, requireFreePorts } from "./stack-config";
-
+import { cleanEnvironment, manifestPath, requireFreeStackPorts } from "./stack-config";
 import {
+  observeProcess,
   requireOwnedSupervisor,
-  type StackSelection,
-  type SupervisorProcesses,
   supervisorArguments,
   supervisorManifestSchema,
-  supervisorProcesses,
 } from "./stack-identity";
 
 export { serve } from "./supervisor";
 
-const selection: StackSelection = { root, state, profile: profile.name ?? "default" };
+const selection = { root, state, profile: profile.label };
 
 export async function start() {
   await initialize();
@@ -27,7 +25,7 @@ export async function start() {
     );
   }
 
-  await requireFreePorts();
+  await requireFreeStackPorts();
 
   const identity = { ...selection, nonce: crypto.randomUUID() };
   const log = await open(resolve(state, "supervisor.log"), "a", 0o600);
@@ -47,7 +45,7 @@ export async function start() {
         supervisor: child.pid,
         api,
         dashboard,
-        stop: `${profile.name ? "LOOPY_PLAYGROUND_PROFILE=architecture " : ""}bun --no-env-file apps/cloud/dev/playground/index.ts stop`,
+        stop: profile.stopCommand,
       }),
     );
   } finally {
@@ -55,17 +53,10 @@ export async function start() {
   }
 }
 
-export async function stop(
-  control: { selection: StackSelection; manifestPath: string; processes: SupervisorProcesses } = {
-    selection,
-    manifestPath,
-    processes: supervisorProcesses,
-  },
-) {
-  const manifest = supervisorManifestSchema.parse(await Bun.file(control.manifestPath).json());
-  const observation = await control.processes.observe(manifest.owner);
-  requireOwnedSupervisor(manifest, observation, control.selection);
-  control.processes.signalGroup(manifest.pgid);
+export async function stop() {
+  const manifest = decodeBoundary(supervisorManifestSchema)(await Bun.file(manifestPath).json());
+  requireOwnedSupervisor(manifest, await observeProcess(manifest.owner), selection);
+  process.kill(-manifest.pgid, "SIGTERM");
   console.log(
     "Sent SIGTERM to the verified playground process group. Data and Docker volumes are retained.",
   );

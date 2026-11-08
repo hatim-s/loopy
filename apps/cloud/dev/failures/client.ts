@@ -1,10 +1,6 @@
-import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { compile } from "@loopy/compiler";
 import {
   decodeBoundary,
-  type Json,
-  putLoopyBodySchema,
   type RunSnapshotView,
   routes,
   type SandboxAttemptIdentity,
@@ -13,157 +9,85 @@ import {
   sandboxExecutionSpecSchema,
   sandboxReceiptSchema,
 } from "@loopy/contract";
-import type { Schema } from "effect";
-import { Effect } from "effect";
-import { assert, JourneyFailure } from "../journey/client";
-import { api, root, sandbox, state } from "./config";
+import { assert, JourneyFailure } from "../shared/assert";
+import { ApiClient, EvidenceLog } from "../shared/fixture-client";
+import { until } from "../shared/poll";
+import { DOCKER_CONTEXT, root, SANDBOX_IMAGE } from "../stack/constants";
+import { api, sandbox, state } from "./config";
 import { docker, ownedContainer, receipts } from "./resources";
 import { FailureStack } from "./stack";
 
-type Evidence = Record<string, Json>;
-
-type Result = { name: string; status: "passed" | "failed"; durationMs: number; evidence: Evidence };
-
 export class FailureJourney {
   readonly stack = new FailureStack();
-  readonly results: Result[] = [];
-  readonly runs: string[] = [];
-  readonly startedAt = new Date().toISOString();
-
-  async json<T>(
-    schema: Schema.Codec<T, unknown, never, never>,
-    path: string,
-    body?: Json | Schema.Schema.Type<typeof putLoopyBodySchema>,
-    method = "POST",
-  ): Promise<T> {
-    const response = await fetch(`${api}/api${path}`, {
-      method: body === undefined ? "GET" : method,
-      headers: { Authorization: `Bearer ${this.stack.token}`, "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    assert(response.ok, "failure_journey_http_error", { path, httpStatus: response.status });
-
-    return decodeBoundary(schema)(await response.json());
-  }
-
-  async provider<T>(
-    schema: Schema.Codec<T, unknown, never, never>,
-    path: string,
-    body?: SandboxAttemptRequest,
-  ) {
-    const response = await fetch(`${sandbox}${path}`, {
-      method: body === undefined ? "GET" : "POST",
-      headers: {
-        Authorization: `Bearer ${this.stack.sandboxToken}`,
-        "Content-Type": "application/json",
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    assert(response.ok, "provider_http_error", { httpStatus: response.status });
-
-    return decodeBoundary(schema)(await response.json());
-  }
-
-  compiled(name: string) {
-    return Effect.gen({ self: this }, function* () {
-      const path = resolve(root, "packages/loopy/_tests_/fixtures/cloud", name);
-      const compiled = yield* compile(path);
-      assert(compiled.ok, "failure_fixture_compile_failed", {
-        fixture: name,
-        diagnostics: compiled.ok
-          ? []
-          : compiled.diagnostics.map((value) => `${value.code}:${value.line}:${value.column}`),
-      });
-
-      const body = decodeBoundary(putLoopyBodySchema)({
-        graph: compiled.graph,
-        revision: compiled.revision,
-        sourceArtifact: compiled.sourceArtifact,
-        bundles: compiled.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: Buffer.from(bundle.bytes).toString("base64"),
-        })),
-        source: { path, workspace: "fixtures" },
-        replace: true,
-      });
-
-      return body;
-    });
-  }
+  readonly api = new ApiClient({ base: `${api}/api`, token: this.stack.token, timeoutMs: 10_000 });
+  private readonly provider = new ApiClient({
+    base: sandbox,
+    token: this.stack.sandboxToken,
+    timeoutMs: 10_000,
+  });
+  readonly evidence = new EvidenceLog(resolve(root, ".notes/cloud/evidence/failures.json"), {
+    scope: "actual-local-wrangler-and-docker-only",
+    command: "bun --no-env-file apps/cloud/dev/failures/index.ts",
+    api,
+    sandbox,
+    stateRoot: state,
+    dockerContext: DOCKER_CONTEXT,
+    image: SANDBOX_IMAGE,
+    gaps: [
+      "No remote deployment or provider tested.",
+      "No Docker CLI transport fault injected in the real Docker journey.",
+      "No completion push endpoint exists. Late completion is exercised by recovery of the durable finished provider receipt.",
+    ],
+  });
 
   async start(slug: string) {
-    const run = await this.json(routes.startRun.response, `/loopies/${slug}/runs`, {
-      input: {},
-      workspace: "fixtures",
+    const run = await this.api.json(routes.startRun.response, `/loopies/${slug}/runs`, {
+      body: { input: {}, workspace: "fixtures" },
     });
 
-    this.runs.push(run.id);
+    this.evidence.runs.push(run.id);
 
     return run;
   }
 
   snapshot(id: string) {
-    return this.json(routes.run.response, `/runs/${id}`);
+    return this.api.json(routes.run.response, `/runs/${id}`);
   }
 
-  async until<T>(
+  until<T>(
     read: () => Promise<T>,
     accept: (value: T) => boolean,
     failure: string,
     timeoutMs = 50_000,
   ) {
-    const deadline = Date.now() + timeoutMs;
-
-    while (Date.now() < deadline) {
-      const value = await read();
-
-      if (accept(value)) {
-        return value;
-      }
-
-      await Bun.sleep(250);
-    }
-
-    throw new JourneyFailure({ failure });
+    return until(read, accept, {
+      timeoutMs,
+      intervalMs: 250,
+      timeout: () => new JourneyFailure({ failure }),
+    });
   }
 
   wait(id: string) {
-    return this.until(
-      () => this.snapshot(id),
-      (snapshot) => ["succeeded", "failed", "cancelled"].includes(snapshot.run.status),
-      "failure_run_did_not_finish",
-    );
+    return this.api.waitForRun(id, { timeoutMs: 50_000, intervalMs: 250 });
   }
 
   async running(id: string, effect = "started\n") {
+    const isStarted = (value: StoredReceiptView) =>
+      value.executionKey.runId === id && value.kind === "started";
+
     const saved = await this.until(
-      () => receipts(),
-      (values) =>
-        values.some((value) => value.executionKey.runId === id && value.kind === "started"),
+      receipts,
+      (values) => values.some(isStarted),
       "started_receipt_missing",
     );
 
-    const receipt = saved.find(
-      (value) => value.executionKey.runId === id && value.kind === "started",
-    );
-
+    const receipt = saved.find(isStarted);
     assert(receipt, "started_receipt_missing");
     await this.until(
-      async () => {
-        const result = await docker([
-          "ps",
-          "--filter",
-          `name=^/${receipt.container}$`,
-          "--format",
-          "{{.Names}}",
-        ]);
-
-        return result.trim();
-      },
+      async () =>
+        (
+          await docker(["ps", "--filter", `name=^/${receipt.container}$`, "--format", "{{.Names}}"])
+        ).trim(),
       (value) => value === receipt.container,
       "worker_not_running",
     );
@@ -218,7 +142,7 @@ export class FailureJourney {
       path: "effects",
     });
 
-    const result = await this.provider(sandboxArtifactSchema, `/artifacts?${query}`);
+    const result = await this.provider.json(sandboxArtifactSchema, `/artifacts?${query}`);
 
     return Buffer.from(result.bytes, "base64").toString("utf8");
   }
@@ -240,79 +164,14 @@ export class FailureJourney {
   }
 
   async duplicate(request: SandboxAttemptRequest, kind: "started" | "finished") {
-    const responses = await Promise.all([
-      this.provider(sandboxReceiptSchema, "/attempts", request),
-      this.provider(sandboxReceiptSchema, "/attempts", request),
-    ]);
+    const admit = () => this.provider.json(sandboxReceiptSchema, "/attempts", { body: request });
+    const responses = await Promise.all([admit(), admit()]);
 
     assert(
       responses.every((response) => response.kind === kind),
       "duplicate_admission_changed_receipt",
     );
   }
-
-  async check(name: string, action: () => Promise<Evidence>) {
-    const start = Date.now();
-
-    try {
-      this.results.push({
-        name,
-        status: "passed",
-        durationMs: Date.now() - start,
-        evidence: await action(),
-      });
-      const result = this.results.at(-1);
-
-      if (result) {
-        result.durationMs = Date.now() - start;
-      }
-    } catch (cause) {
-      this.results.push({
-        name,
-        status: "failed",
-        durationMs: Date.now() - start,
-        evidence:
-          cause instanceof JourneyFailure
-            ? cause.evidence
-            : {
-                failure: "unexpected_test_error",
-                errorType: cause instanceof Error ? cause.name : "non_error",
-              },
-      });
-    }
-
-    await this.save();
-    process.stdout.write(`${JSON.stringify(this.results.at(-1))}\n`);
-  }
-
-  async save(extra: Evidence = {}) {
-    await mkdir(resolve(root, ".notes/cloud/evidence"), { recursive: true });
-    await Bun.write(
-      resolve(root, ".notes/cloud/evidence/failures.json"),
-      `${JSON.stringify(
-        {
-          status: this.results.some((result) => result.status === "failed") ? "failed" : "passed",
-          scope: "actual-local-wrangler-and-docker-only",
-          command: "bun --no-env-file apps/cloud/dev/failures/index.ts",
-          api,
-          sandbox,
-          stateRoot: state,
-          dockerContext: "colima-loopy-cloud-phase1",
-          image: "loopy-sandbox:bun-1.4.0",
-          startedAt: this.startedAt,
-          updatedAt: new Date().toISOString(),
-          runIds: this.runs,
-          results: this.results,
-          gaps: [
-            "No remote deployment or provider tested.",
-            "No Docker CLI transport fault injected in the real Docker journey.",
-            "No completion push endpoint exists. Late completion is exercised by recovery of the durable finished provider receipt.",
-          ],
-          ...extra,
-        },
-        null,
-        2,
-      )}\n`,
-    );
-  }
 }
+
+type StoredReceiptView = Awaited<ReturnType<typeof receipts>>[number];

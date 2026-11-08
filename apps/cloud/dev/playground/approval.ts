@@ -1,29 +1,37 @@
+import { isDeepStrictEqual } from "node:util";
 import { type RunSnapshotView, routes } from "@loopy/contract";
 import type { PlaygroundClient } from "./client";
-import { atomic } from "./config";
+import { state } from "./config";
+import { atomic } from "./files";
 import { guard } from "./guard";
 import { type Admission, event, type Progress } from "./journal";
 
 export async function updateApproval(options: {
   client: PlaygroundClient;
   admission: Admission;
+  runId: string;
   snapshot: RunSnapshotView;
   progress: Progress;
   path: string;
-}) {
-  const { client, admission, snapshot, progress, path: progressPath } = options;
-  const { group, phase, runId } = admission;
+}): Promise<Progress> {
+  const { client, admission, runId, snapshot, path } = options;
+  const { group, phase } = admission;
   const holdMs = (10 + ((admission.input.ordinal * 7) % 36)) * 1000;
-  let wait = progress.wait;
+  let progress = options.progress;
 
-  if (wait && wait.resolvedAt === null && progress.approvalIntentAt) {
-    const hook = snapshot.hooks.find((entry) => entry.name === wait?.hook && entry.resolvedAt);
+  const save = async (next: Progress) => {
+    progress = next;
+    await atomic(path, progress);
+  };
 
-    if (hook?.resolvedAt && JSON.stringify(hook.payload) === JSON.stringify({ approved: true })) {
-      wait.resolvedAt = hook.resolvedAt;
-      progress.wait = wait;
-      await atomic(progressPath, progress);
-      await event(group, {
+  const pending = progress.wait;
+
+  if (pending && pending.resolvedAt === null && progress.approvalIntentAt) {
+    const hook = snapshot.hooks.find((entry) => entry.name === pending.hook && entry.resolvedAt);
+
+    if (hook?.resolvedAt && isDeepStrictEqual(hook.payload, { approved: true })) {
+      await save({ ...progress, wait: { ...pending, resolvedAt: hook.resolvedAt } });
+      await event(state, group, {
         kind: "approval-reconciled",
         runId,
         phase,
@@ -34,17 +42,19 @@ export async function updateApproval(options: {
 
   const waiting = snapshot.run.waitingOn;
 
-  if (waiting && wait === null) {
-    wait = {
+  if (waiting && progress.wait === null) {
+    const wait = {
       hook: waiting.hook,
       observedAt: new Date().toISOString(),
       dueAt: Date.now() + holdMs,
       resolvedAt: null,
     };
-    progress.wait = wait;
-    await atomic(progressPath, progress);
-    await event(group, { kind: "wait-observed", runId, phase, delayMs: holdMs, ...wait });
+
+    await save({ ...progress, wait });
+    await event(state, group, { kind: "wait-observed", runId, phase, delayMs: holdMs, ...wait });
   }
+
+  const wait = progress.wait;
 
   if (waiting && wait && wait.resolvedAt === null && Date.now() >= wait.dueAt) {
     await guard();
@@ -55,24 +65,25 @@ export async function updateApproval(options: {
       );
     }
 
-    progress.approvalIntentAt = new Date().toISOString();
-    await atomic(progressPath, progress);
-    await event(group, { kind: "approval-intent", runId, phase, hook: waiting.hook });
+    // Persist the intent before resolving so a crash never resolves the same hook twice.
+    await save({ ...progress, approvalIntentAt: new Date().toISOString() });
+    await event(state, group, { kind: "approval-intent", runId, phase, hook: waiting.hook });
     await client.json(
       routes.resolveNamedHook.response,
       `/runs/${runId}/hooks/${encodeURIComponent(waiting.hook)}`,
-      { payload: { approved: true } },
+      { body: { payload: { approved: true } } },
     );
-    wait.resolvedAt = new Date().toISOString();
-    progress.wait = wait;
-    await atomic(progressPath, progress);
-    await event(group, {
+    const resolvedAt = new Date().toISOString();
+    await save({ ...progress, wait: { ...wait, resolvedAt } });
+    await event(state, group, {
       kind: "approval-resolved",
       runId,
       phase,
       observedAt: wait.observedAt,
       delayMs: Date.now() - Date.parse(wait.observedAt),
-      resolvedAt: wait.resolvedAt,
+      resolvedAt,
     });
   }
+
+  return progress;
 }

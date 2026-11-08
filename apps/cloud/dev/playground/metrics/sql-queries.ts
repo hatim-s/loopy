@@ -141,7 +141,7 @@ export function sqlCases(db: Database) {
     add(
       "execution.attempts",
       nodeSource,
-      "SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>16384 THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201",
+      `SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>${PREVIEW_BYTES} THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201`,
       [run.id, key, 0],
     );
   }

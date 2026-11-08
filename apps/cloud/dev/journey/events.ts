@@ -1,6 +1,7 @@
 import { boundaryOptions, routes } from "@loopy/contract";
 import { Result, Schema } from "effect";
-import { assert, equal, type Journey, JourneyFailure } from "./client";
+import { assert, equal, JourneyFailure } from "../shared/assert";
+import type { Journey } from "./client";
 
 export async function frame(journey: Journey, after: number, epoch: string, lastEventId?: number) {
   const aborter = new AbortController();

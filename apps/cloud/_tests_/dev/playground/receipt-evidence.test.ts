@@ -9,9 +9,7 @@ import {
 import { Effect } from "effect";
 import { attemptHash } from "../../../../sandbox/src/admission";
 import { receiptEvidence } from "../../../dev/playground/receipt/evidence";
-import { decodeRuntimeQueue } from "../../../dev/playground/runtime-queue-schema";
 
-// These are synthetic typed inputs. No receipt authority or workload is started.
 const identity = decodeBoundary(sandboxAttemptIdentitySchema)({
   workspace: "playground",
   executionKey: { runId: "synthetic-run", nodeId: "0:code", scope: [] },
@@ -63,31 +61,7 @@ function options(value = result) {
 }
 
 test("receipt evidence verifies immutable bytes and rejects wrong identities, inline and corrupt results", async () => {
-  const queue = decodeRuntimeQueue(
-    JSON.parse(
-      JSON.stringify({
-        executionKey: identity.executionKey,
-        attempt: identity.attempt,
-        queuedAt: "2026-11-05T00:00:00.000Z",
-        acquiredAt: "2026-11-05T00:00:00.001Z",
-        finishedAt: "2026-11-05T00:00:00.002Z",
-        queueWaitMs: 1,
-        backendDurationMs: 1,
-        outcome: "succeeded",
-      }),
-    ),
-  );
-
-  const evidence = await Effect.runPromise(
-    receiptEvidence({
-      ...options(),
-      identity: {
-        workspace: identity.workspace,
-        executionKey: queue.executionKey,
-        attempt: queue.attempt,
-      },
-    }),
-  );
+  const evidence = await Effect.runPromise(receiptEvidence(options()));
 
   expect(evidence.id).toBe(id);
   expect(evidence.resultRef).toEqual(ref);

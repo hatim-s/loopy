@@ -1,18 +1,36 @@
 import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { z } from "zod";
+import { decodeBoundary, encodeBoundary } from "@loopy/contract";
+import { errnoCode, errorMessage } from "@loopy/core";
+import { Schema } from "effect";
 import { PlaygroundClient } from "./client";
-import { atomic, evidenceDirectory, state } from "./config";
+import { evidence, state } from "./config";
+import { atomic } from "./files";
 import { guard } from "./guard";
-import type { Admission, Group } from "./journal";
+import {
+  type Group,
+  gatePath,
+  gateSchema,
+  type Phase,
+  readSummary,
+  summaryPath,
+  summarySchema,
+  writeAbort,
+} from "./journal";
+import { CONCURRENCY, cohortJobs } from "./plan";
 import { catalog } from "./repository";
 import { execute } from "./run";
 
-export async function cohort(group: Group, phase: Admission["phase"] = "primary") {
+const ownerSchema = Schema.Struct({ pid: Schema.Number });
+
+// Lock owner files may carry extra diagnostics; only the PID decides liveness.
+const decodeOwner = Schema.decodeUnknownSync(ownerSchema, { onExcessProperty: "ignore" });
+
+export async function cohort(group: Group, phase: Phase = "primary") {
   const client = await PlaygroundClient.open();
 
   if (phase === "primary") {
-    const gate = await Bun.file(resolve(state, "load-enabled.json")).json();
+    const gate = decodeBoundary(gateSchema)(await Bun.file(gatePath(state)).json());
 
     if (gate.batch !== client.settings.batch) {
       throw new Error("Load gate batch differs from persistent config.");
@@ -21,15 +39,13 @@ export async function cohort(group: Group, phase: Admission["phase"] = "primary"
 
   await mkdir(resolve(state, "cohorts"), { recursive: true });
 
-  const summaryPath = resolve(evidenceDirectory, `playground-driver-${phase}-${group}.json`);
+  const summary = summaryPath(evidence, phase, group);
 
-  if (await Bun.file(summaryPath).exists()) {
-    const saved = z
-      .object({ status: z.enum(["passed", "failed"]), batch: z.string() })
-      .parse(await Bun.file(summaryPath).json());
+  if (await Bun.file(summary).exists()) {
+    const saved = await readSummary(summary);
 
     if (saved.status === "passed" && saved.batch === client.settings.batch) {
-      console.log(JSON.stringify({ status: "already-complete", summaryPath }));
+      console.log(JSON.stringify({ status: "already-complete", summaryPath: summary }));
 
       return;
     }
@@ -40,26 +56,13 @@ export async function cohort(group: Group, phase: Admission["phase"] = "primary"
     flag: "wx",
     mode: 0o600,
   });
-  const fixtures = await catalog(group);
-
-  const jobs =
-    phase === "preflight"
-      ? [{ fixture: fixtures[0]!, ordinal: 0 }]
-      : fixtures
-          .flatMap((fixture) =>
-            [...Array.from({ length: fixture.burst ? 100 : 25 }).keys()].map((ordinal) => ({
-              fixture,
-              ordinal,
-            })),
-          )
-          .sort((a, b) => a.ordinal - b.ordinal);
-
+  const jobs = cohortJobs(phase, await catalog(group));
   const results: Awaited<ReturnType<typeof execute>>[] = [];
   const startedAt = new Date().toISOString();
   let next = 0;
   let failed = false;
 
-  const workers = Array.from({ length: phase === "preflight" ? 1 : 4 }, async () => {
+  const workers = Array.from({ length: phase === "preflight" ? 1 : CONCURRENCY }, async () => {
     while (!failed && next < jobs.length) {
       const job = jobs[next++];
 
@@ -78,9 +81,9 @@ export async function cohort(group: Group, phase: Admission["phase"] = "primary"
           );
         } catch (cause) {
           failed = true;
-          await writeFile(
-            resolve(state, "ABORT"),
-            `Cohort ${group} failed. Reconcile journal and API state before continuing.\n`,
+          await writeAbort(
+            state,
+            `Cohort ${group} failed. Reconcile journal and API state before continuing.`,
           );
           throw cause;
         }
@@ -89,41 +92,41 @@ export async function cohort(group: Group, phase: Admission["phase"] = "primary"
   });
 
   const outcomes = await Promise.allSettled(workers);
-  await mkdir(evidenceDirectory, { recursive: true });
-  await atomic(summaryPath, {
-    status: failed ? "failed" : "passed",
-    scope: "local-wrangler-docker",
-    batch: client.settings.batch,
-    group,
-    phase,
-    startedAt,
-    endedAt: new Date().toISOString(),
-    planned: jobs.length,
-    completed: results.length,
-    results,
-  });
+  await mkdir(evidence, { recursive: true });
+  await atomic(
+    summary,
+    encodeBoundary(summarySchema)({
+      status: failed ? "failed" : "passed",
+      scope: "local-wrangler-docker",
+      batch: client.settings.batch,
+      group,
+      phase,
+      startedAt,
+      endedAt: new Date().toISOString(),
+      planned: jobs.length,
+      completed: results.length,
+      results,
+    }),
+  );
 
   if (failed) {
     const rejected = outcomes.find((outcome) => outcome.status === "rejected");
     throw new Error(
-      `Cohort stopped. ${rejected?.status === "rejected" && rejected.reason instanceof Error ? rejected.reason.message : "Inspect durable journal."}`,
+      `Cohort stopped. ${rejected?.status === "rejected" ? errorMessage(rejected.reason) : "Inspect durable journal."}`,
     );
   }
 }
 
 export async function recover(group: Group) {
   const lock = resolve(state, "cohorts", `primary-${group}.lock`);
-  const owner = z.object({ pid: z.number() }).parse(await Bun.file(lock).json());
+  const owner = decodeOwner(await Bun.file(lock).json());
   assertDead(owner.pid);
   await rename(lock, `${lock}.recovered-${Date.now()}`);
   const slots = resolve(state, "api-slots");
 
   for (const name of await readdir(slots)) {
     const slot = resolve(slots, name);
-
-    const entry = z
-      .object({ pid: z.number() })
-      .parse(await Bun.file(resolve(slot, "owner.json")).json());
+    const entry = decodeOwner(await Bun.file(resolve(slot, "owner.json")).json());
 
     try {
       assertDead(entry.pid);
@@ -143,7 +146,7 @@ function assertDead(pid: number) {
   try {
     process.kill(pid, 0);
   } catch (cause) {
-    if (cause instanceof Error && "code" in cause && cause.code === "ESRCH") {
+    if (errnoCode(cause) === "ESRCH") {
       return;
     }
 

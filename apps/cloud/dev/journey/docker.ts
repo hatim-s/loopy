@@ -1,18 +1,20 @@
-import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { routes } from "@loopy/contract";
 import { canonicalJson, type ExecutionKey } from "@loopy/core";
-import { Effect } from "effect";
-import { z } from "zod";
+import { Effect, Schema } from "effect";
 import { filesystemReceipt } from "../filesystem-receipt";
-import { assert, equal, type Journey } from "./client";
+import { assert, equal } from "../shared/assert";
+import { sha256Hex } from "../shared/hash";
+import { docker as runDocker } from "../shared/process";
+import { localState } from "../stack/credentials";
+import type { Journey } from "./client";
 
-const stateRoot = resolve(import.meta.dir, "../../../../.loopy/cloud/sandbox");
+const stateRoot = resolve(localState, "sandbox");
 
 async function receipt(key: ExecutionKey, attempt: number) {
-  const id = createHash("sha256")
-    .update(canonicalJson({ root: stateRoot, workspace: "fixtures", executionKey: key, attempt }))
-    .digest("hex");
+  const id = sha256Hex(
+    canonicalJson({ root: stateRoot, workspace: "fixtures", executionKey: key, attempt }),
+  );
 
   const saved = await Effect.runPromise(filesystemReceipt(stateRoot, id));
   assert(
@@ -23,56 +25,44 @@ async function receipt(key: ExecutionKey, attempt: number) {
   return saved;
 }
 
-const isolationSchema = z.object({
-  network: z.string(),
-  user: z.string(),
-  readOnly: z.boolean(),
-  privileged: z.boolean(),
-  capDrop: z.array(z.string()),
-  security: z.array(z.string()),
-  mounts: z.array(z.object({ Type: z.string(), Destination: z.string(), RW: z.boolean() })),
+const isolationSchema = Schema.Struct({
+  network: Schema.String,
+  user: Schema.String,
+  readOnly: Schema.Boolean,
+  privileged: Schema.Boolean,
+  capDrop: Schema.Array(Schema.String),
+  security: Schema.Array(Schema.String),
+  mounts: Schema.Array(
+    Schema.Struct({ Type: Schema.String, Destination: Schema.String, RW: Schema.Boolean }),
+  ),
 });
+
+const decodeIsolation = Schema.decodeUnknownOption(isolationSchema);
 
 async function inspect(container: string) {
   const format =
     '{"network":{{json .HostConfig.NetworkMode}},"user":{{json .Config.User}},"readOnly":{{json .HostConfig.ReadonlyRootfs}},"privileged":{{json .HostConfig.Privileged}},"capDrop":{{json .HostConfig.CapDrop}},"security":{{json .HostConfig.SecurityOpt}},"mounts":{{json .Mounts}}}';
 
-  const child = Bun.spawn(
-    [
-      "docker",
-      "--context",
-      "colima-loopy-cloud-phase1",
-      "container",
-      "inspect",
-      "--format",
-      format,
-      container,
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const stdout = await runDocker(["container", "inspect", "--format", format, container], {
+    env: process.env,
+  });
 
-  const [exitCode, stdout] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-
-  assert(exitCode === 0, "owned_container_inspection_failed", { exitCode });
-  const parsed = isolationSchema.safeParse(JSON.parse(stdout));
-  assert(parsed.success, "container_inspection_schema_failed");
-  equal(parsed.data.network, "none", "container_network_enabled");
-  equal(parsed.data.user, "1000:1000", "container_user_not_restricted");
-  assert(parsed.data.readOnly && !parsed.data.privileged, "container_root_not_restricted");
+  const parsed = decodeIsolation(JSON.parse(stdout));
+  assert(parsed._tag === "Some", "container_inspection_schema_failed");
+  const isolation = parsed.value;
+  equal(isolation.network, "none", "container_network_enabled");
+  equal(isolation.user, "1000:1000", "container_user_not_restricted");
+  assert(isolation.readOnly && !isolation.privileged, "container_root_not_restricted");
   assert(
-    parsed.data.capDrop.includes("ALL") && parsed.data.security.includes("no-new-privileges:true"),
+    isolation.capDrop.includes("ALL") && isolation.security.includes("no-new-privileges:true"),
     "container_privileges_not_dropped",
   );
   assert(
-    parsed.data.mounts.every((mount) => mount.Type === "volume"),
+    isolation.mounts.every((mount) => mount.Type === "volume"),
     "container_has_host_bind_mount",
   );
   assert(
-    parsed.data.mounts.some((mount) => mount.Destination === "/input" && !mount.RW),
+    isolation.mounts.some((mount) => mount.Destination === "/input" && !mount.RW),
     "container_input_not_readonly",
   );
 }

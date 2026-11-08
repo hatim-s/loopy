@@ -1,5 +1,6 @@
 import { executionKeyString, routes } from "@loopy/contract";
-import { assert, equal, type Journey } from "./client";
+import { assert, equal } from "../shared/assert";
+import type { Journey } from "./client";
 
 export async function execution(journey: Journey, runId: string, chooseYes: boolean) {
   const snapshot = await journey.wait(runId);

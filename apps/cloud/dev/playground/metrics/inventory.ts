@@ -1,14 +1,20 @@
-import { resolve } from "node:path";
-import { decodeBoundary, encodeRunCursor, type RunView, routes } from "@loopy/contract";
+import { decodeBoundary, encodeRunCursor, routes } from "@loopy/contract";
 import { PlaygroundClient } from "../client";
-import { atomic, evidenceDirectory, state } from "../config";
-import { admissionSchema } from "../journal";
+import { evidence, state } from "../config";
+import { journalDirectory, readAdmissions } from "../journal";
+import {
+  artifactPath,
+  type PostloadInventory,
+  postloadInventory,
+  writeArtifact,
+} from "./artifacts";
+import { countBy } from "./statistics";
 
 const client = await PlaygroundClient.open();
 
-const runs: Pick<RunView, "id" | "slug" | "status" | "createdAt" | "updatedAt">[] = [];
+const runs: PostloadInventory["runs"][number][] = [];
 
-const pages = [];
+const pages: PostloadInventory["pages"][number][] = [];
 
 const startedAt = new Date().toISOString();
 
@@ -26,8 +32,8 @@ for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
   const text = await response.text();
   const bytes = Buffer.byteLength(text);
 
-  if (!response.ok || bytes > 8 * 1024 * 1024) {
-    throw new Error("Post-load inventory request failed or exceeded8MiB.");
+  if (!response.ok) {
+    throw new Error(`Post-load inventory request returned HTTP ${response.status}.`);
   }
 
   const page = decodeBoundary(routes.runs.response)(JSON.parse(text));
@@ -63,16 +69,7 @@ for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
   await Bun.sleep(Math.max(0, 1000 - (performance.now() - start)));
 }
 
-const primary = [];
-
-for await (const path of new Bun.Glob("primary/*/*.json").scan({
-  cwd: resolve(state, "journal"),
-  absolute: true,
-})) {
-  if (!path.endsWith(".progress.json")) {
-    primary.push(admissionSchema.parse(await Bun.file(path).json()));
-  }
-}
+const primary = await readAdmissions(journalDirectory(state), "primary");
 
 const identities = new Set(runs.map((run) => run.id));
 
@@ -88,9 +85,9 @@ const statusMismatches = primary.flatMap((admission) => {
     : [];
 });
 
-const output = resolve(evidenceDirectory, "playground-performance-postload-inventory.json");
+const output = artifactPath(evidence, postloadInventory);
 
-const value = {
+const value: PostloadInventory = {
   scope: "post-load-paginated-api-identity-inventory",
   startedAt,
   endedAt: new Date().toISOString(),
@@ -102,12 +99,7 @@ const value = {
   primaryJournal: primary.length,
   missing,
   statusMismatches,
-  statuses: Object.fromEntries(
-    [...new Set(runs.map((run) => run.status))].map((status) => [
-      status,
-      runs.filter((run) => run.status === status).length,
-    ]),
-  ),
+  statuses: countBy(runs, (run) => run.status),
   pages,
   runs,
   limits: [
@@ -117,7 +109,7 @@ const value = {
   ],
 };
 
-await atomic(output, value);
+await writeArtifact(evidence, postloadInventory, value);
 
 process.stdout.write(
   `${JSON.stringify({ output, count: value.count, statuses: value.statuses, missing: missing.length, statusMismatches: statusMismatches.length })}\n`,

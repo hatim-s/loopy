@@ -6,11 +6,12 @@ import { sandboxConfigSchema } from "../../../sandbox/src/config";
 import { DockerBackend } from "../../../sandbox/src/docker";
 import { DockerClient } from "../../../sandbox/src/docker/client";
 import { filesystemStorage } from "../../../sandbox/src/filesystem";
-import { HttpSandboxAuthority } from "../../../sandbox/src/http-authority";
 import { io } from "../../../sandbox/src/operations";
 import { startSandbox } from "../../../sandbox/src/server";
-import { config, dockerContext, image, profile, runtime, sandboxState } from "./config";
-import { requireFreshDurableRoot } from "./receipt/selection";
+import { DOCKER_CONTEXT } from "../stack/constants";
+import { config, profile, runtime, sandboxState } from "./config";
+import { CONCURRENCY } from "./plan";
+import { receiptAuthority, requireFreshDurableRoot } from "./receipt/selection";
 import { boundedBackend } from "./runtime-limit";
 
 const settings = await config();
@@ -19,50 +20,45 @@ const providerConfig = decodeBoundary(sandboxConfigSchema)({
   worktree: runtime,
   stateRoot: sandboxState,
   token: settings.sandboxToken,
-  dockerContext,
-  image,
+  dockerContext: DOCKER_CONTEXT,
+  image: profile.image,
   port: profile.sandboxPort,
 });
 
 const client = new DockerClient(providerConfig);
 
-const docker = new DockerBackend(providerConfig, client);
+const backend = boundedBackend(new DockerBackend(providerConfig, client), CONCURRENCY);
 
-const backend = boundedBackend(docker, settings.runtimeConcurrency);
+function dependencies(): AttemptDependenciesFactory {
+  if (settings.receiptMode === "filesystem") {
+    return () =>
+      Effect.sync(() => ({
+        ...filesystemStorage(providerConfig.stateRoot),
+        backend,
+        artifactReader: new DockerArtifacts(providerConfig, client),
+      }));
+  }
 
-const dependencies: AttemptDependenciesFactory =
-  settings.receiptMode === "durable-object"
-    ? () =>
-        Effect.gen(function* () {
-          yield* io("fresh durable root", () => requireFreshDurableRoot(providerConfig.stateRoot));
+  return () =>
+    Effect.gen(function* () {
+      yield* io("fresh durable root", () => requireFreshDurableRoot(providerConfig.stateRoot));
+      const authority = receiptAuthority(settings);
 
-          const authority = new HttpSandboxAuthority({
-            url: profile.api,
-            token: settings.receiptsToken,
-            namespace: profile.batchPrefix,
-          });
+      return {
+        authority,
+        resultsFor: (workspace) => authority.resultsFor(workspace),
+        backend,
+        artifactReader: new DockerArtifacts(providerConfig, client),
+      };
+    });
+}
 
-          return {
-            authority,
-            resultsFor: (workspace) => authority.resultsFor(workspace),
-            backend,
-            artifactReader: new DockerArtifacts(providerConfig, client),
-          };
-        })
-    : () =>
-        Effect.sync(() => ({
-          ...filesystemStorage(providerConfig.stateRoot),
-          backend,
-          artifactReader: new DockerArtifacts(providerConfig, client),
-        }));
-
-// The script scope owns the server until a process shutdown signal arrives.
 await Effect.runPromise(
   Effect.scoped(
     Effect.gen(function* () {
-      yield* startSandbox(providerConfig, dependencies);
+      yield* startSandbox(providerConfig, dependencies());
       console.log(
-        `Playground sandbox listening on ${profile.sandbox}; receipt mode ${profile.receiptMode}; Docker backend operation limit 4.`,
+        `Playground sandbox listening on ${profile.sandbox}; receipt mode ${settings.receiptMode}; Docker backend operation limit ${CONCURRENCY}.`,
       );
       yield* Effect.callback<void>((resume) => {
         const stop = () => resume(Effect.void);

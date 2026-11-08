@@ -1,40 +1,32 @@
-import { z } from "zod";
-import { admissionSchema } from "../journal";
-
-const inventorySchema = z.object({
-  batch: z.string(),
-  runs: z.array(z.object({ id: z.string(), status: z.enum(["succeeded", "failed"]) })).length(528),
-});
+import { phases, readAdmissions } from "../journal";
+import type { PostloadInventory } from "../metrics/artifacts";
+import type { PlanTotals } from "../plan";
 
 export async function receiptInventory(options: {
-  inventory: unknown;
+  inventory: Pick<PostloadInventory, "batch" | "runs">;
+  plan: PlanTotals;
   batch: string;
   journal: string;
 }) {
-  const inventory = inventorySchema.parse(options.inventory);
+  const { inventory, plan } = options;
   const runs = new Map(inventory.runs.map((run) => [run.id, run.status]));
 
-  if (inventory.batch !== options.batch || runs.size !== 528) {
-    throw new Error("Receipt inventory requires 528 unique current-batch runs.");
+  if (
+    inventory.batch !== options.batch ||
+    inventory.runs.length !== plan.runs ||
+    runs.size !== plan.runs
+  ) {
+    throw new Error(`Receipt inventory requires ${plan.runs} unique current-batch runs.`);
   }
 
   const admitted = new Set<string>();
 
-  for (const phase of ["primary", "preflight"] as const) {
-    let count = 0;
+  for (const phase of phases) {
+    const batch = phase === "primary" ? options.batch : `${options.batch}-preflight`;
     let successes = 0;
+    const admissions = await readAdmissions(options.journal, phase);
 
-    for await (const file of new Bun.Glob(`${phase}/*/*.json`).scan({
-      cwd: options.journal,
-      absolute: true,
-    })) {
-      if (file.endsWith(".progress.json")) {
-        continue;
-      }
-
-      const admission = admissionSchema.parse(await Bun.file(file).json());
-      const batch = phase === "primary" ? options.batch : `${options.batch}-preflight`;
-
+    for (const admission of admissions) {
       if (
         admission.phase !== phase ||
         admission.input.batch !== batch ||
@@ -47,14 +39,10 @@ export async function receiptInventory(options: {
       }
 
       admitted.add(admission.runId);
-      count++;
       successes += Number(admission.expected === "succeeded");
     }
 
-    if (
-      count !== (phase === "primary" ? 525 : 3) ||
-      successes !== (phase === "primary" ? 461 : 3)
-    ) {
+    if (admissions.length !== plan[phase].runs || successes !== plan[phase].successes) {
       throw new Error(`Receipt inventory has incomplete ${phase} admission evidence.`);
     }
   }

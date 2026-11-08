@@ -1,6 +1,8 @@
-import { boundaryOptions, jsonSchema, routes } from "@loopy/contract";
-import { Effect, Schema, SchemaGetter } from "effect";
+import { runStatusSchema } from "@loopy/contract";
+import { Schema } from "effect";
+import { PLANNED_RUNS } from "./plan";
 
+// Analysis reads only these fields; node runs come from the verified closed backup instead.
 const recordSchema = Schema.Struct({
   slug: Schema.String,
   input: Schema.Struct({
@@ -9,33 +11,17 @@ const recordSchema = Schema.Struct({
     fail: Schema.Boolean,
     items: Schema.Array(Schema.Number),
   }),
-  run: Schema.Record(Schema.String, jsonSchema).pipe(
-    Schema.decodeTo(routes.startRun.response, {
-      decode: SchemaGetter.transformEffect((value) =>
-        Schema.decodeUnknownEffect(
-          routes.startRun.response,
-          boundaryOptions,
-        )({ ...value, waitingOn: null }).pipe(Effect.mapError((error) => error.issue)),
-      ),
-      encode: SchemaGetter.passthrough(),
-    }),
-  ),
-  nodeRuns: Schema.Unknown.pipe(
-    Schema.decodeTo(routes.run.response.fields.nodeRuns, {
-      decode: SchemaGetter.transformEffect((value) =>
-        Schema.decodeUnknownEffect(
-          routes.run.response.fields.nodeRuns,
-          boundaryOptions,
-        )(value).pipe(Effect.mapError((error) => error.issue)),
-      ),
-      encode: SchemaGetter.passthrough(),
-    }),
-  ),
+  run: Schema.Struct({
+    id: Schema.String,
+    status: runStatusSchema,
+    createdAt: Schema.String,
+    updatedAt: Schema.String,
+  }),
   receipts: Schema.Array(
     Schema.Struct({
       path: Schema.String,
       sha256: Schema.String,
-      kind: Schema.String,
+      kind: Schema.Literals(["started", "finished"]),
       attempt: Schema.Number,
     }),
   ),
@@ -53,16 +39,16 @@ const recordSchema = Schema.Struct({
 export const reportSchema = Schema.Struct({
   startedAt: Schema.String,
   endedAt: Schema.String,
-  completed: Schema.Literal(45),
-  matched: Schema.Literal(45),
-  records: Schema.Array(recordSchema).check(Schema.isBetweenLength(45, 45)),
+  completed: Schema.Literal(PLANNED_RUNS),
+  matched: Schema.Literal(PLANNED_RUNS),
+  records: Schema.Array(recordSchema).check(Schema.isBetweenLength(PLANNED_RUNS, PLANNED_RUNS)),
   restartProof: Schema.Struct({
     runId: Schema.String,
     before: Schema.Array(Schema.Struct({ path: Schema.String, sha256: Schema.String })),
   }),
 });
 
-export type DaemonRunRecord = Schema.Schema.Type<typeof recordSchema>;
+export type DaemonRunRecord = typeof recordSchema.Type;
 
 export const preflightSchema = Schema.Struct({
   revisions: Schema.Array(Schema.Struct({ slug: Schema.String, revision: Schema.String })),

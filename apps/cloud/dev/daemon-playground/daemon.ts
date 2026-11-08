@@ -1,29 +1,16 @@
 import { mkdir, open } from "node:fs/promises";
-import { createServer } from "node:net";
 import { resolve } from "node:path";
-import type { routes } from "@loopy/contract";
-import { decodeBoundary } from "@loopy/contract";
+import { decodeBoundary, errorBodySchema, type routes } from "@loopy/contract";
+import { readDaemonFile } from "@loopy/runtime/local";
 import type { Schema } from "effect";
+import { requireFreePorts } from "../stack/ports";
+import { cli, environment, home, port, source, state } from "./config";
+import { DAEMON } from "./plan";
+import { runtimeSource } from "./source";
 
 type Mutation =
   | Schema.Schema.Type<typeof routes.startRun.body>
   | Schema.Schema.Type<typeof routes.resolveNamedHook.body>;
-
-import { errorBodySchema } from "@loopy/contract";
-import { readDaemonFile } from "@loopy/runtime/local";
-import { cli, environment, home, port, source, state } from "./config";
-import { runtimeSource } from "./source";
-
-export async function requireFreePort() {
-  const probe = createServer();
-  await new Promise<void>((accept, reject) => {
-    probe.once("error", reject);
-    probe.listen(port, "127.0.0.1", accept);
-  });
-  await new Promise<void>((accept, reject) =>
-    probe.close((error) => (error ? reject(error) : accept())),
-  );
-}
 
 export class OwnedDaemon {
   private child?: ReturnType<typeof Bun.spawn>;
@@ -40,7 +27,7 @@ export class OwnedDaemon {
       throw new Error("This runner already owns a daemon process.");
     }
 
-    await requireFreePort();
+    await requireFreePorts([port]);
 
     if (readDaemonFile(home)) {
       throw new Error("The isolated home already has a live daemon. Refusing to adopt it.");
@@ -94,13 +81,13 @@ export class OwnedDaemon {
       "--cwd",
       source,
       "--lease-ms",
-      "2000",
+      String(DAEMON.leaseMs),
       "daemon",
       "run",
       "--port",
       String(port),
       "--concurrency",
-      "4",
+      String(DAEMON.concurrency),
     ];
   }
 

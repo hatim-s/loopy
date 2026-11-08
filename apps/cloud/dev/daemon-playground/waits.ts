@@ -1,27 +1,24 @@
-import { type RunSnapshotView, routes } from "@loopy/contract";
+import { isDeepStrictEqual } from "node:util";
+import { isTerminalRun, type RunSnapshotView, routes } from "@loopy/contract";
+import { until } from "../shared/poll";
 import { receiptInventory } from "./capture";
 import type { OwnedDaemon } from "./daemon";
+import { approves, holdMs } from "./plan";
 
-export const terminal = new Set(["succeeded", "failed", "cancelled"]);
-
-export async function waitSnapshot(
+export function waitSnapshot(
   daemon: OwnedDaemon,
   id: string,
-  predicate: (snapshot: RunSnapshotView) => boolean,
+  accept: (snapshot: RunSnapshotView) => boolean,
 ) {
-  const deadline = Date.now() + 90_000;
+  return until(() => daemon.request(`/runs/${id}`, routes.run.response), accept, {
+    timeoutMs: 90_000,
+    intervalMs: 200,
+    timeout: () => new Error(`Run ${id} did not reach the requested state within ninety seconds.`),
+  });
+}
 
-  while (Date.now() < deadline) {
-    const snapshot = await daemon.request(`/runs/${id}`, routes.run.response);
-
-    if (predicate(snapshot)) {
-      return snapshot;
-    }
-
-    await Bun.sleep(200);
-  }
-
-  throw new Error(`Run ${id} did not reach the requested state within ninety seconds.`);
+export function waitTerminal(daemon: OwnedDaemon, id: string) {
+  return waitSnapshot(daemon, id, (snapshot) => isTerminalRun(snapshot.run.status));
 }
 
 export async function restartWhileWaiting(daemon: OwnedDaemon, snapshot: RunSnapshotView) {
@@ -49,7 +46,7 @@ export async function restartWhileWaiting(daemon: OwnedDaemon, snapshot: RunSnap
   const after = await daemon.request(`/runs/${id}`, routes.run.response);
   const receipts = await receiptInventory(id);
   const hookPreserved = after.run.waitingOn?.token === snapshot.run.waitingOn?.token;
-  const receiptsUnchanged = JSON.stringify(before) === JSON.stringify(receipts);
+  const receiptsUnchanged = isDeepStrictEqual(before, receipts);
 
   if (!hookPreserved || !receiptsUnchanged || after.run.status !== "suspended") {
     throw new Error("Restart changed the suspended wait or its completed execution receipts.");
@@ -71,54 +68,30 @@ export async function restartWhileWaiting(daemon: OwnedDaemon, snapshot: RunSnap
   };
 }
 
-interface HoldOptions {
-  daemon: OwnedDaemon;
-  first: RunSnapshotView;
-  ordinal: number;
-  restartProof: Awaited<ReturnType<typeof restartWhileWaiting>> | null;
-}
+export async function holdApproval(daemon: OwnedDaemon, waiting: RunSnapshotView, ordinal: number) {
+  const id = waiting.run.id;
+  const approved = approves(ordinal);
+  const observed = Date.now();
+  const target = observed + holdMs(ordinal);
 
-export async function holdApproval({ daemon, first, ordinal, restartProof }: HoldOptions) {
-  const admitted = first.run;
-  const approved = ordinal !== 8;
-  let proof = restartProof;
-
-  let hold: {
-    observedAt: string;
-    resolvedAt: string;
-    heldMs: number;
-    approved: boolean;
-  } | null = null;
-
-  if (first.run.waitingOn) {
-    const observed = Date.now();
-
-    if (!proof) {
-      proof = await restartWhileWaiting(daemon, first);
-    }
-
-    const target = observed + 10_000 + (ordinal % 3) * 1000;
-
-    while (Date.now() < target) {
-      await Bun.sleep(Math.min(250, target - Date.now()));
-    }
-
-    const stillWaiting = await daemon.request(`/runs/${admitted.id}`, routes.run.response);
-
-    if (!stillWaiting.run.waitingOn) {
-      throw new Error("Approval stopped waiting before this driver resolved it.");
-    }
-
-    await daemon.request(`/runs/${admitted.id}/hooks/approval`, routes.resolveNamedHook.response, {
-      payload: { approved },
-    });
-    hold = {
-      observedAt: new Date(observed).toISOString(),
-      resolvedAt: new Date().toISOString(),
-      heldMs: Date.now() - observed,
-      approved,
-    };
+  while (Date.now() < target) {
+    await Bun.sleep(Math.min(250, target - Date.now()));
   }
 
-  return { hold, restartProof: proof };
+  const stillWaiting = await daemon.request(`/runs/${id}`, routes.run.response);
+
+  if (!stillWaiting.run.waitingOn) {
+    throw new Error("Approval stopped waiting before this driver resolved it.");
+  }
+
+  await daemon.request(`/runs/${id}/hooks/approval`, routes.resolveNamedHook.response, {
+    payload: { approved },
+  });
+
+  return {
+    observedAt: new Date(observed).toISOString(),
+    resolvedAt: new Date().toISOString(),
+    heldMs: Date.now() - observed,
+    approved,
+  };
 }

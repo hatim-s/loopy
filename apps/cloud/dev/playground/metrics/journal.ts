@@ -1,77 +1,65 @@
 import { resolve } from "node:path";
-import { z } from "zod";
-import { atomic, evidenceDirectory, state } from "../config";
-import { admissionSchema } from "../journal";
-import { distribution } from "./statistics";
+import { boundaryOptions } from "@loopy/contract";
+import { Result, Schema } from "effect";
+import { distribution } from "../../shared/stats";
+import { evidence, state } from "../config";
+import { atomic } from "../files";
+import {
+  eventsPath,
+  groups,
+  type JournalEvent,
+  journalDirectory,
+  journalEventSchema,
+  readAdmissions,
+} from "../journal";
+import { decodePhaseName } from "./artifacts";
+import { countBy, elapsedMs, known } from "./statistics";
 
-const eventSchema = z.object({
-  kind: z.string(),
-  runId: z.string().optional(),
-  phase: z.enum(["primary", "preflight"]).optional(),
-  actual: z.string().optional(),
-  unexpected: z.boolean().optional(),
-  terminalAt: z.string().optional(),
-  wait: z
-    .object({ observedAt: z.string(), resolvedAt: z.string().nullable() })
-    .nullable()
-    .optional(),
-});
+type Terminal = Extract<JournalEvent, { kind: "terminal" }>;
 
-export async function journalMetrics(phase: string) {
-  const admissions = [];
-  let invalidFiles = 0;
-  const directory = resolve(state, "journal");
+const decodeEvent = Schema.decodeUnknownResult(journalEventSchema, boundaryOptions);
 
-  for await (const path of new Bun.Glob("**/*.json").scan({
-    cwd: directory,
-    absolute: true,
-    onlyFiles: true,
-  })) {
-    if (path.endsWith(".progress.json")) {
-      continue;
-    }
-
-    const parsed = admissionSchema.safeParse(await Bun.file(path).json());
-
-    if (!parsed.success) {
-      invalidFiles++;
-      continue;
-    }
-
-    admissions.push(parsed.data);
-  }
-
-  const terminals = new Map<string, z.infer<typeof eventSchema>>();
+async function terminalEvents() {
+  const terminals = new Map<string, Terminal>();
   let invalidEvents = 0;
 
-  for (const group of ["a", "b", "c"]) {
-    const file = Bun.file(resolve(directory, `${group}.jsonl`));
+  for (const group of groups) {
+    const file = Bun.file(eventsPath(state, group));
 
     if (!(await file.exists())) {
       continue;
     }
 
-    for (const line of (await file.text()).split("\n").filter((line) => line.trim().length > 0)) {
-      try {
-        const parsed = eventSchema.safeParse(JSON.parse(line));
+    for (const line of (await file.text()).split("\n").filter((value) => value.trim().length > 0)) {
+      let parsed: unknown;
 
-        if (parsed.success && parsed.data.kind === "terminal" && parsed.data.runId) {
-          terminals.set(parsed.data.runId, parsed.data);
-        } else if (!parsed.success) {
-          invalidEvents++;
-        }
+      try {
+        parsed = JSON.parse(line);
       } catch {
         // A concurrently appended final line can be incomplete. Preserve the count and retry next capture.
         invalidEvents++;
+        continue;
+      }
+
+      const decoded = decodeEvent(parsed);
+
+      if (Result.isFailure(decoded)) {
+        invalidEvents++;
+      } else if (decoded.success.kind === "terminal") {
+        terminals.set(decoded.success.runId, decoded.success);
       }
     }
   }
 
+  return { terminals, invalidEvents };
+}
+
+export async function journalMetrics(phase: string) {
+  const admissions = await readAdmissions(journalDirectory(state));
+  const { terminals, invalidEvents } = await terminalEvents();
+
   const records = admissions.map((admission) => {
     const terminal = admission.runId === null ? undefined : terminals.get(admission.runId);
-
-    const difference = (start: string | null | undefined, end: string | null | undefined) =>
-      start && end ? Math.max(0, Date.parse(end) - Date.parse(start)) : null;
 
     return {
       runId: admission.runId,
@@ -81,39 +69,37 @@ export async function journalMetrics(phase: string) {
       expected: admission.expected,
       actual: terminal?.actual ?? null,
       unexpected: terminal?.unexpected ?? null,
-      admissionMs: difference(admission.intentAt, admission.admittedAt),
-      terminalFromIntentMs: difference(admission.intentAt, terminal?.terminalAt),
-      terminalFromAdmissionMs: difference(admission.admittedAt, terminal?.terminalAt),
-      observedApprovalHoldMs: difference(terminal?.wait?.observedAt, terminal?.wait?.resolvedAt),
+      admissionMs: elapsedMs(admission.intentAt, admission.admittedAt),
+      terminalFromIntentMs: elapsedMs(admission.intentAt, terminal?.terminalAt),
+      terminalFromAdmissionMs: elapsedMs(admission.admittedAt, terminal?.terminalAt),
+      observedApprovalHoldMs: elapsedMs(terminal?.wait?.observedAt, terminal?.wait?.resolvedAt),
     };
   });
 
-  const summarize = (selected: typeof records) => {
-    const durations = (values: (number | null)[]) =>
-      distribution(values.filter((value) => value !== null));
-
-    return {
-      admitted: selected.filter((record) => record.runId !== null).length,
-      terminal: selected.filter((record) => record.actual !== null).length,
-      unexpected: selected.filter((record) => record.unexpected === true).length,
-      actual: Object.fromEntries(
-        ["succeeded", "failed", "cancelled"].map((status) => [
-          status,
-          selected.filter((record) => record.actual === status).length,
-        ]),
-      ),
-      admissionMs: durations(selected.map((record) => record.admissionMs)),
-      terminalFromIntentMs: durations(selected.map((record) => record.terminalFromIntentMs)),
-      terminalFromAdmissionMs: durations(selected.map((record) => record.terminalFromAdmissionMs)),
-      observedApprovalHoldMs: durations(selected.map((record) => record.observedApprovalHoldMs)),
-    };
-  };
+  const summarize = (selected: typeof records) => ({
+    admitted: selected.filter((record) => record.runId !== null).length,
+    terminal: selected.filter((record) => record.actual !== null).length,
+    unexpected: selected.filter((record) => record.unexpected === true).length,
+    actual: countBy(
+      selected.flatMap((record) => (record.actual === null ? [] : [record.actual])),
+      (actual) => actual,
+    ),
+    admissionMs: distribution(known(selected.map((record) => record.admissionMs))),
+    terminalFromIntentMs: distribution(
+      known(selected.map((record) => record.terminalFromIntentMs)),
+    ),
+    terminalFromAdmissionMs: distribution(
+      known(selected.map((record) => record.terminalFromAdmissionMs)),
+    ),
+    observedApprovalHoldMs: distribution(
+      known(selected.map((record) => record.observedApprovalHoldMs)),
+    ),
+  });
 
   const value = {
     phase,
     scope: "local-driver-journals-only",
     at: new Date().toISOString(),
-    invalidFiles,
     invalidEvents,
     primary: summarize(records.filter((record) => record.phase === "primary")),
     preflight: summarize(records.filter((record) => record.phase === "preflight")),
@@ -126,16 +112,13 @@ export async function journalMetrics(phase: string) {
     ],
   };
 
-  await atomic(resolve(evidenceDirectory, `playground-performance-${phase}-lifecycle.json`), value);
+  await atomic(resolve(evidence, `playground-performance-${phase}-lifecycle.json`), value);
 
-  return { primary: value.primary, preflight: value.preflight, invalidFiles, invalidEvents };
+  return { primary: value.primary, preflight: value.preflight, invalidEvents };
 }
 
 if (import.meta.main) {
-  const phase = z
-    .string()
-    .regex(/^[a-z][a-z0-9-]{0,63}$/)
-    .parse(process.argv[2]);
-
-  process.stdout.write(`${JSON.stringify(await journalMetrics(phase))}\n`);
+  process.stdout.write(
+    `${JSON.stringify(await journalMetrics(decodePhaseName(process.argv[2])))}\n`,
+  );
 }

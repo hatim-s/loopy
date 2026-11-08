@@ -1,80 +1,112 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Admission } from "../../../dev/playground/journal";
+import { qualityTestRoot } from "../../../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { type Admission, groups, phases } from "../../../dev/playground/journal";
+import { cohortJobs, failsAt, planTotals } from "../../../dev/playground/plan";
 import { receiptInventory } from "../../../dev/playground/receipt/inventory";
 
 const batch = "synthetic-architecture";
 
-function admission(index: number): Admission {
-  const phase = index < 525 ? "primary" : "preflight";
-
-  return {
-    group: "a",
-    slug: `fixture-${index}`,
-    phase,
-    input: {
-      batch: phase === "primary" ? batch : `${batch}-preflight`,
-      ordinal: index,
-      fail: index >= 461 && index < 525,
-      items: [],
-    },
-    expected: index >= 461 && index < 525 ? "failed" : "succeeded",
-    intentAt: "2026-10-23T00:00:00Z",
-    admittedAt: "2026-10-23T00:00:01Z",
-    runId: `run-${index}`,
-  };
+function fixtures(group: string, burst: boolean, approvals: number) {
+  return [...Array(5).keys()].map((index) => ({
+    slug: `${group}-fixture-${index}`,
+    burst: burst && index === 0,
+    approval: index >= 5 - approvals,
+  }));
 }
 
-test("receipt inventory derives identities and outcomes from all admission records", async () => {
-  const base = resolve(".loopy/architecture-tests");
-  await mkdir(base, { recursive: true });
-  const journal = await mkdtemp(resolve(base, "receipt-inventory-"));
+const catalogs = {
+  a: fixtures("a", true, 0),
+  b: fixtures("b", true, 1),
+  c: fixtures("c", false, 3),
+};
+
+const plan = planTotals(catalogs);
+
+const admissions: Admission[] = groups.flatMap((group) =>
+  phases.flatMap((phase) =>
+    cohortJobs(phase, catalogs[group]).map(({ fixture, ordinal }) => {
+      const fail = failsAt(phase, fixture, ordinal);
+
+      return {
+        slug: fixture.slug,
+        group,
+        phase,
+        input: {
+          batch: phase === "primary" ? batch : `${batch}-preflight`,
+          ordinal,
+          fail,
+          items: [],
+        },
+        expected: fail ? "failed" : "succeeded",
+        intentAt: "2026-10-23T00:00:00Z",
+        admittedAt: "2026-10-23T00:00:01Z",
+        runId: `${phase}-${fixture.slug}-${ordinal}`,
+      };
+    }),
+  ),
+);
+
+const file = (admission: Admission) =>
+  `${admission.phase}/${admission.group}/${admission.slug}-${admission.input.ordinal}.json`;
+
+test("receipt inventory derives identities and outcomes from every planned admission", async () => {
+  const journal = await qualityTestRoot("receipt-inventory");
 
   try {
-    const admissions = [...Array.from({ length: 528 }).keys()].map(admission);
-
     for (const value of admissions) {
-      await Bun.write(
-        resolve(journal, value.phase, "a", `${value.slug}.json`),
-        JSON.stringify(value),
-      );
+      await Bun.write(resolve(journal, file(value)), JSON.stringify(value));
     }
 
-    const runs = admissions.map((value) => ({ id: value.runId, status: value.expected }));
-    const inventory = { batch, count: 528, unique: 528, primaryJournal: 525, runs };
-    const options = { inventory, batch, journal };
-    expect((await receiptInventory(options)).size).toBe(528);
+    const runs = admissions.map((value) => ({
+      id: value.runId ?? "",
+      slug: value.slug,
+      status: value.expected,
+      createdAt: value.intentAt,
+      updatedAt: value.intentAt,
+    }));
+
+    const options = { inventory: { batch, runs }, plan, batch, journal };
+    expect((await receiptInventory(options)).size).toBe(plan.runs);
     await expect(
-      receiptInventory({ ...options, inventory: { ...inventory, runs: runs.slice(0, 1) } }),
-    ).rejects.toThrow();
+      receiptInventory({ ...options, inventory: { batch, runs: runs.slice(0, 1) } }),
+    ).rejects.toThrow(`${plan.runs} unique`);
     await expect(
       receiptInventory({
         ...options,
-        inventory: { ...inventory, runs: runs.map((run, index) => (index === 1 ? runs[0] : run)) },
+        inventory: {
+          batch,
+          runs: runs.map((run, index) => (index === 1 ? { ...run, id: runs[0]?.id ?? "" } : run)),
+        },
       }),
-    ).rejects.toThrow("528 unique");
+    ).rejects.toThrow(`${plan.runs} unique`);
     await expect(receiptInventory({ ...options, batch: "foreign" })).rejects.toThrow(
       "current-batch",
     );
-    const original = admission(0);
-    const file = resolve(journal, "primary/a/fixture-0.json");
+
+    const original = admissions.find((value) => value.phase === "primary");
+    const preflight = admissions.find((value) => value.phase === "preflight");
+
+    if (!original || !preflight) {
+      throw new Error("The plan must produce primary and preflight admissions.");
+    }
 
     for (const changed of [
       { ...original, runId: null },
-      { ...original, runId: "run-1" },
+      { ...original, runId: preflight.runId },
       { ...original, admittedAt: null },
-      { ...original, expected: "failed" },
+      { ...original, expected: original.expected === "failed" ? "succeeded" : "failed" },
       { ...original, input: { ...original.input, batch: "foreign" } },
     ]) {
-      await Bun.write(file, JSON.stringify(changed));
+      await Bun.write(resolve(journal, file(original)), JSON.stringify(changed));
       await expect(receiptInventory(options)).rejects.toThrow("mismatched admission");
     }
 
-    await rm(file);
+    await rm(resolve(journal, file(original)));
     await expect(receiptInventory(options)).rejects.toThrow("incomplete primary");
-    await Bun.write(file, JSON.stringify(original));
-    await rm(resolve(journal, "preflight/a/fixture-527.json"));
+    await Bun.write(resolve(journal, file(original)), JSON.stringify(original));
+    await rm(resolve(journal, file(preflight)));
     await expect(receiptInventory(options)).rejects.toThrow("incomplete preflight");
   } finally {
     await rm(journal, { recursive: true, force: true });

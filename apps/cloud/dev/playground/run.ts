@@ -1,86 +1,89 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { routes } from "@loopy/contract";
+import { writeFile } from "node:fs/promises";
+import { decodeBoundary, routes } from "@loopy/contract";
 import { updateApproval } from "./approval";
 import { materialize, verifySaved } from "./artifacts";
 import type { PlaygroundClient } from "./client";
-import { atomic, state } from "./config";
+import { state } from "./config";
+import { atomic } from "./files";
 import { guard } from "./guard";
 import {
   type Admission,
-  admissionSchema,
+  admissionPath,
   event,
   type Group,
+  type Phase,
   type Progress,
+  progressPath,
   progressSchema,
-  record,
-  resultSchema,
+  readAdmission,
+  recordAdmission,
+  writeAbort,
 } from "./journal";
 import { classification } from "./outcomes";
-import { type CatalogEntry } from "./repository";
+import { failsAt, type Job } from "./plan";
+import type { CatalogEntry } from "./repository";
 
-export type Job = { fixture: CatalogEntry; ordinal: number };
-
-async function admit(client: PlaygroundClient, group: Group, job: Job, phase: Admission["phase"]) {
+async function admit(client: PlaygroundClient, group: Group, job: Job<CatalogEntry>, phase: Phase) {
   const { fixture, ordinal } = job;
-  const directory = resolve(state, "journal", phase, group);
-  await mkdir(directory, { recursive: true });
-  const file = resolve(directory, `${fixture.slug}-${ordinal}.json`);
-  let admission: Admission;
+  const file = await admissionPath(state, { phase, group, slug: fixture.slug, ordinal });
 
   if (await Bun.file(file).exists()) {
-    admission = admissionSchema.parse(await Bun.file(file).json());
+    const admission = await readAdmission(file);
 
     if (admission.runId === null) {
       throw new Error(
         `Ambiguous admission ${file}. Reconcile via API input identity before assigning a run ID; never resubmit blindly.`,
       );
     }
-  } else {
-    await guard();
-    const fail = phase === "primary" && !fixture.approval && ordinal % 6 === 5;
-    admission = {
-      slug: fixture.slug,
-      group,
-      phase,
-      input: {
-        batch: phase === "preflight" ? `${client.settings.batch}-preflight` : client.settings.batch,
-        ordinal,
-        fail,
-        items: [(ordinal % 5) + 1, (ordinal % 7) + 2],
-      },
-      expected: fail ? "failed" : "succeeded",
-      intentAt: new Date().toISOString(),
-      admittedAt: null,
-      runId: null,
-    };
-    await writeFile(file, `${JSON.stringify(admission, null, 2)}\n`, { flag: "wx", mode: 0o600 });
 
-    const run = await client.json(routes.startRun.response, `/loopies/${fixture.slug}/runs`, {
-      input: admission.input,
-      workspace: "playground",
-    });
-
-    admission = { ...admission, runId: run.id, admittedAt: new Date().toISOString() };
-    await record(file, admission);
-    await event(group, { kind: "admitted", ...admission });
+    return { admission, runId: admission.runId, file };
   }
 
-  return { admission, file };
+  await guard();
+  const fail = failsAt(phase, fixture, ordinal);
+
+  const intent: Admission = {
+    slug: fixture.slug,
+    group,
+    phase,
+    input: {
+      batch: phase === "preflight" ? `${client.settings.batch}-preflight` : client.settings.batch,
+      ordinal,
+      fail,
+      items: [(ordinal % 5) + 1, (ordinal % 7) + 2],
+    },
+    expected: fail ? "failed" : "succeeded",
+    intentAt: new Date().toISOString(),
+    admittedAt: null,
+    runId: null,
+  };
+
+  // The intent is durable before the request so a crash leaves an ambiguous record, never a repeat.
+  await writeFile(file, `${JSON.stringify(intent, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+
+  const run = await client.json(routes.startRun.response, `/loopies/${fixture.slug}/runs`, {
+    body: { input: { ...intent.input, items: [...intent.input.items] }, workspace: "playground" },
+  });
+
+  const admission = { ...intent, runId: run.id, admittedAt: new Date().toISOString() };
+  await recordAdmission(file, admission);
+  await event(state, group, { kind: "admitted", ...admission });
+
+  return { admission, runId: run.id, file };
 }
 
 export async function execute(
   client: PlaygroundClient,
   group: Group,
-  job: Job,
-  phase: Admission["phase"],
+  job: Job<CatalogEntry>,
+  phase: Phase,
 ) {
   const { fixture } = job;
-  const { admission, file } = await admit(client, group, job, phase);
-  const progressPath = `${file}.progress.json`;
+  const { admission, runId, file } = await admit(client, group, job, phase);
+  const path = progressPath(file);
 
-  const progress: Progress = (await Bun.file(progressPath).exists())
-    ? progressSchema.parse(await Bun.file(progressPath).json())
+  let progress: Progress = (await Bun.file(path).exists())
+    ? decodeBoundary(progressSchema)(await Bun.file(path).json())
     : { wait: null, approvalIntentAt: null, result: null };
 
   if (progress.result) {
@@ -91,29 +94,30 @@ export async function execute(
     return progress.result;
   }
 
-  const runId = admission.runId;
   const deadline = Date.now() + 40 * 60_000;
 
   while (Date.now() < deadline) {
     const snapshot = await client.json(routes.run.response, `/runs/${runId}`);
 
-    await updateApproval({ client, admission, snapshot, progress, path: progressPath });
+    progress = await updateApproval({ client, admission, runId, snapshot, progress, path });
 
-    if (["succeeded", "failed", "cancelled"].includes(snapshot.run.status)) {
+    const actual = snapshot.run.status;
+
+    // Spelled out so the terminal status narrows for the journal and result records.
+    if (actual === "succeeded" || actual === "failed" || actual === "cancelled") {
       const outcome = await classification(client, admission, snapshot);
 
-      const unexpected =
-        outcome === null ||
-        (fixture.approval && (progress.wait === null || progress.wait.resolvedAt === null));
+      const approvalMissing =
+        fixture.approval && (progress.wait === null || progress.wait.resolvedAt === null);
 
-      await event(group, {
+      await event(state, group, {
         kind: "terminal",
         runId,
         slug: fixture.slug,
         phase,
         expected: admission.expected,
-        actual: snapshot.run.status,
-        unexpected,
+        actual,
+        unexpected: outcome === null || actual === "cancelled" || approvalMissing,
         classification: outcome,
         error: snapshot.run.status === "failed" ? snapshot.run.error : null,
         wait: progress.wait,
@@ -122,10 +126,10 @@ export async function execute(
         terminalAt: snapshot.run.updatedAt,
       });
 
-      if (unexpected) {
-        await writeFile(
-          resolve(state, "ABORT"),
-          `Unexpected ${snapshot.run.status} for ${fixture.slug} ${runId}; expected ${admission.expected}.\n`,
+      if (outcome === null || actual === "cancelled" || approvalMissing) {
+        await writeAbort(
+          state,
+          `Unexpected ${actual} for ${fixture.slug} ${runId}; expected ${admission.expected}.`,
         );
         throw new Error(
           `Unexpected terminal outcome for ${runId}. Admission guard set; inspect journal and run snapshot.`,
@@ -133,20 +137,20 @@ export async function execute(
       }
 
       const artifact = await materialize(client, snapshot, fixture, admission.input);
-      await event(group, { kind: "artifact", runId, phase, artifact });
+      await event(state, group, { kind: "artifact", runId, phase, artifact });
 
-      const result = resultSchema.parse({
+      const result = {
         runId,
         slug: fixture.slug,
         expected: admission.expected,
-        actual: snapshot.run.status,
+        actual,
         classification: outcome,
         wait: progress.wait,
         artifact,
-      });
+      };
 
-      progress.result = result;
-      await atomic(progressPath, progress);
+      progress = { ...progress, result };
+      await atomic(path, progress);
 
       return result;
     }

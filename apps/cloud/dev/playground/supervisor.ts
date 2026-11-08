@@ -1,71 +1,75 @@
 import { mkdir, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
+import { Schema } from "effect";
+import { DOCKER_CONTEXT } from "../stack/constants";
 import {
-  api,
-  atomic,
-  dashboard,
-  dockerContext,
-  image,
-  initialize,
-  profile,
-  root,
-  runtime,
-  sandboxState,
-  state,
-} from "./config";
-import { waitForWorker } from "./readiness";
-import { cleanEnvironment, manifestPath, requireFreePorts, writeStackConfig } from "./stack-config";
+  type Child,
+  dashboardArgv,
+  launch,
+  requireSandboxImage,
+  wranglerArgv,
+} from "../stack/launch";
+import { waitUntilReady } from "../stack/readiness";
+import { api, dashboard, initialize, profile, root, runtime, sandboxState, state } from "./config";
+import { atomic } from "./files";
 import {
+  cleanEnvironment,
+  manifestPath,
+  requireFreeStackPorts,
+  writeStackConfig,
+} from "./stack-config";
+import {
+  observeProcess,
   parseServeIdentity,
   requireOwnedSupervisor,
   supervisorArguments,
-  supervisorProcesses,
 } from "./stack-identity";
 
+const healthSchema = Schema.Struct({
+  service: Schema.Literal("loopy-cloud"),
+  stage: Schema.Literal("local"),
+});
+
+const isHealthy = Schema.is(healthSchema);
+
+async function workerHealthy() {
+  const response = await fetch(`${api}/health`, { signal: AbortSignal.timeout(1000) });
+
+  return response.ok && isHealthy(await response.json());
+}
+
 export async function serve(input: Parameters<typeof parseServeIdentity>[0]) {
-  const selection = { root, state, profile: profile.name ?? "default" } as const;
+  const selection = { root, state, profile: profile.label };
   const identity = parseServeIdentity(input, selection);
   const argv = [process.execPath, ...supervisorArguments(identity)];
-  const owner = await supervisorProcesses.observe(process.pid);
   const ownership = { version: 2 as const, owner: process.pid, pgid: process.pid, identity, argv };
-  requireOwnedSupervisor(ownership, owner, selection);
-  await requireFreePorts();
+  requireOwnedSupervisor(ownership, await observeProcess(process.pid), selection);
+  await requireFreeStackPorts();
   const settings = await initialize();
   await mkdir(runtime, { recursive: true, mode: 0o700 });
-
-  const inspection = Bun.spawn(
-    ["docker", "--context", dockerContext, "image", "inspect", image, "--format", "{{.Id}}"],
-    { stdout: "ignore", stderr: "ignore" },
-  );
-
-  if ((await inspection.exited) !== 0) {
-    throw new Error("Required local Docker image is unavailable. No services started.");
-  }
-
+  await requireSandboxImage(profile.image, cleanEnvironment());
   const vars = await writeStackConfig(settings);
-  const children: { name: string; process: ReturnType<typeof Bun.spawn> }[] = [];
+  const children: { name: string; process: Child }[] = [];
 
-  function launch(name: string, command: string[], extra: Record<string, string> = {}) {
-    const child = Bun.spawn(command, {
-      cwd: root,
+  const start = (name: string, command: string[], extra: Record<string, string> = {}) => {
+    const child = launch({
+      argv: command,
       env: { ...cleanEnvironment(), ...extra },
-      stdin: "ignore",
-      stdout: Bun.file(resolve(state, `${name}.log`)),
-      stderr: Bun.file(resolve(state, `${name}.error.log`)),
+      logs: state,
+      log: name,
     });
 
     children.push({ name, process: child });
 
     return child;
-  }
+  };
 
-  const launchSandbox = () => {
-    launch("sandbox", [
+  const startSandbox = () =>
+    start("sandbox", [
       process.execPath,
       "--no-env-file",
       resolve(root, "apps/cloud/dev/playground/provider.ts"),
     ]);
-  };
 
   let closing = false;
   let registered = false;
@@ -82,51 +86,38 @@ export async function serve(input: Parameters<typeof parseServeIdentity>[0]) {
   process.on("SIGINT", stopChildren);
 
   try {
-    if (!profile.name) {
-      launchSandbox();
+    // The Durable Object authority lives in the Worker, so its sandbox starts only after health.
+    if (settings.receiptMode === "filesystem") {
+      startSandbox();
     }
 
-    const worker = launch("worker", [
-      process.execPath,
-      "x",
-      "--no-install",
-      "wrangler",
-      "dev",
-      "--local",
-      "--config",
-      resolve(state, "wrangler.json"),
-      "--persist-to",
-      resolve(state, "wrangler"),
-      "--env-file",
-      vars,
-    ]);
+    const worker = start(
+      "worker",
+      wranglerArgv({
+        config: resolve(state, "wrangler.json"),
+        persistTo: resolve(state, "wrangler"),
+        envFile: vars,
+      }),
+    );
 
-    if (profile.name) {
-      await waitForWorker(api, worker);
+    if (settings.receiptMode === "durable-object") {
+      await waitUntilReady({
+        children: [worker],
+        probes: [workerHealthy],
+        timeoutMs: 15_000,
+        intervalMs: 200,
+        timeoutMessage:
+          "Owned Worker health did not become ready within fifteen seconds. Sandbox was not started.",
+      });
 
       if (closing) {
         return;
       }
 
-      launchSandbox();
+      startSandbox();
     }
 
-    launch(
-      "dashboard",
-      [
-        process.execPath,
-        "run",
-        "--cwd",
-        "apps/dashboard",
-        "dev",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(profile.dashboardPort),
-        "--strictPort",
-      ],
-      { LOOPY_API_ORIGIN: api },
-    );
+    start("dashboard", dashboardArgv(profile.dashboardPort), { LOOPY_API_ORIGIN: api });
     await atomic(manifestPath, {
       ...ownership,
       root,
@@ -134,9 +125,9 @@ export async function serve(input: Parameters<typeof parseServeIdentity>[0]) {
       dashboard,
       state,
       sandboxState,
-      dockerContext,
+      dockerContext: DOCKER_CONTEXT,
       createdAt: new Date().toISOString(),
-      stopCommand: `${profile.name ? "LOOPY_PLAYGROUND_PROFILE=architecture " : ""}bun --no-env-file apps/cloud/dev/playground/index.ts stop`,
+      stopCommand: profile.stopCommand,
       children: children.map((child) => ({ name: child.name, pid: child.process.pid })),
     });
     registered = true;

@@ -1,17 +1,15 @@
 import { resolve } from "node:path";
-import { routes } from "@loopy/contract";
-import { z } from "zod";
+import { isTerminalRun, routes } from "@loopy/contract";
 import { PlaygroundClient } from "../client";
-import { atomic, evidenceDirectory } from "../config";
+import { evidence } from "../config";
+import { atomic } from "../files";
+import { decodePhaseName } from "./artifacts";
 import { createMeasure } from "./request";
 import { type Sample, summarize } from "./statistics";
 
-const phase = z
-  .string()
-  .regex(/^[a-z][a-z0-9-]{0,63}$/)
-  .parse(process.argv[2]);
+const phase = decodePhaseName(process.argv[2]);
 
-const output = resolve(evidenceDirectory, `playground-performance-${phase}.json`);
+const output = resolve(evidence, `playground-performance-${phase}.json`);
 
 if (await Bun.file(output).exists()) {
   throw new Error("Matched evidence exists. Choose a new phase to preserve the earlier segment.");
@@ -55,8 +53,7 @@ async function probe(route: "runs" | "loopies" | "events", mode: "direct" | "sha
       items: value.length,
       queued: value.filter((run) => run.status === "queued").length,
       running: value.filter((run) => run.status === "running").length,
-      terminal: value.filter((run) => ["succeeded", "failed", "cancelled"].includes(run.status))
-        .length,
+      terminal: value.filter((run) => isTerminalRun(run.status)).length,
     }));
   } else if (route === "loopies") {
     await measure(label, "/loopies", routes.loopies.response, (value) => ({

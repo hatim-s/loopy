@@ -1,6 +1,6 @@
 # Modal provider probe preparation
 
-Status: locally implemented and tested; all round 1 fixes passed fresh independent review with no blockers. Not approved or executed. Phase 1's accepted runtime checkpoint is `b02de1b`. The full staging rollout remains a separate later approval.
+Status: superseded. The probe implementation and its test were deleted from the repository on 2026-11-08 by owner decision; commit 844c871 still holds them. Earlier status: locally implemented and tested; all round 1 fixes passed fresh independent review with no blockers. Not approved or executed. Phase 1's accepted runtime checkpoint is `b02de1b`. The full staging rollout remains a separate later approval.
 
 ## Why this comes first
 

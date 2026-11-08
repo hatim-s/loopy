@@ -10,58 +10,63 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
-import { z } from "zod";
+import { decodeBoundary } from "@loopy/contract";
+import { errnoCode } from "@loopy/core";
+import { Schema } from "effect";
+import { within } from "../../../../packages/runtime/src/local/sandbox/paths";
 import { profile, root as workspace } from "./config";
+import { type Group, groups } from "./journal";
+import { burstGroups, FIXTURES_PER_GROUP } from "./plan";
 
 const execFileAsync = promisify(execFile);
 
 const sourceRoot = join(workspace, "packages/loopy/_tests_/fixtures/playground");
 
-export const repository = profile.repository;
+const repository = profile.repository;
 
-const catalogEntrySchema = z
-  .strictObject({
-    slug: z.string(),
-    file: z.string(),
-    description: z.string(),
-    approval: z.boolean(),
-    artifactPath: z.string().nullable(),
-    burst: z.boolean(),
-  })
-  .superRefine((entry, context) => {
-    if (
-      entry.file.length === 0 ||
-      isAbsolute(entry.file) ||
-      entry.file.split(/[\\/]/).some((part) => part === ".." || part === "." || part.length === 0)
-    ) {
-      context.addIssue({ code: "custom", message: "file must be a normalized relative path" });
-    }
-  });
+const relativeFile = Schema.String.check(
+  Schema.makeFilter(
+    (file) =>
+      file.length > 0 &&
+      !isAbsolute(file) &&
+      !file.split(/[\\/]/).some((part) => part === ".." || part === "." || part.length === 0),
+    { message: "file must be a normalized relative path" },
+  ),
+);
 
-export const catalogSchema = z.array(catalogEntrySchema);
+export const catalogSchema = Schema.Array(
+  Schema.Struct({
+    slug: Schema.String,
+    file: relativeFile,
+    description: Schema.String,
+    approval: Schema.Boolean,
+    artifactPath: Schema.NullOr(Schema.String),
+    burst: Schema.Boolean,
+  }),
+);
 
-export type CatalogEntry = z.infer<typeof catalogSchema>[number];
-
-type Group = "a" | "b" | "c";
-
-const groups: readonly Group[] = ["a", "b", "c"];
+export type CatalogEntry = (typeof catalogSchema.Type)[number];
 
 const sourceMarker = ".playground-source-sha256";
 
 const modulesPath = "modules/catalog.json";
 
-function inside(root: string, path: string): boolean {
-  const fromRoot = relative(root, path);
+// Only a missing path counts as absent; permission errors must surface.
+async function lstatOrAbsent(path: string) {
+  try {
+    return await lstat(path);
+  } catch (cause) {
+    if (errnoCode(cause) === "ENOENT") {
+      return undefined;
+    }
 
-  return (
-    fromRoot === "" ||
-    (!isAbsolute(fromRoot) && fromRoot !== ".." && !fromRoot.startsWith(`..${sep}`))
-  );
+    throw cause;
+  }
 }
 
-async function regularFiles(root: string): Promise<string[]> {
+export async function regularFiles(root: string): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true });
   const paths: string[] = [];
 
@@ -85,19 +90,22 @@ async function regularFiles(root: string): Promise<string[]> {
   return paths;
 }
 
-async function readCatalog(group: Group, root: string): Promise<CatalogEntry[]> {
+async function readCatalog(group: Group, root: string): Promise<readonly CatalogEntry[]> {
   const data = await readFile(join(root, modulesPath), "utf8");
-  const entries = catalogSchema.parse(JSON.parse(data));
+  const entries = decodeBoundary(catalogSchema)(JSON.parse(data));
 
-  if (entries.length !== 5) {
-    throw new Error(`Playground group ${group} must define exactly five catalog entries.`);
+  if (entries.length !== FIXTURES_PER_GROUP) {
+    throw new Error(
+      `Playground group ${group} must define exactly ${FIXTURES_PER_GROUP} catalog entries.`,
+    );
   }
 
   const burstEntries = entries.filter((entry) => entry.burst);
+  const burst = burstGroups[group];
 
   if (
-    (group === "c" && burstEntries.length !== 0) ||
-    (group !== "c" && (burstEntries.length !== 1 || entries[0]?.burst !== true))
+    (!burst && burstEntries.length !== 0) ||
+    (burst && (burstEntries.length !== 1 || entries[0]?.burst !== true))
   ) {
     throw new Error(`Playground group ${group} has an invalid burst fixture selection.`);
   }
@@ -105,11 +113,11 @@ async function readCatalog(group: Group, root: string): Promise<CatalogEntry[]> 
   for (const entry of entries) {
     const file = resolve(root, entry.file);
 
-    if (!inside(root, file)) {
+    if (!within(root, file)) {
       throw new Error(`Catalog file escapes fixture group ${group}: ${entry.file}`);
     }
 
-    const fileInfo = await lstat(file).catch(() => undefined);
+    const fileInfo = await lstatOrAbsent(file);
 
     if (!fileInfo?.isFile() || fileInfo.isSymbolicLink()) {
       throw new Error(`Catalog file is missing or is not a regular file: ${entry.file}`);
@@ -182,7 +190,13 @@ async function git(args: string[]): Promise<string> {
     ],
     {
       cwd: repository,
-      env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+      env: {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        LANG: "C.UTF-8",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+      },
     },
   );
 
@@ -191,7 +205,7 @@ async function git(args: string[]): Promise<string> {
 
 export async function prepareRepository(): Promise<{ commit: string; files: number }> {
   const snapshot = await sourceSnapshot();
-  const existing = await lstat(repository).catch(() => undefined);
+  const existing = await lstatOrAbsent(repository);
 
   if (existing?.isSymbolicLink() || (existing && !existing.isDirectory())) {
     throw new Error(`Playground repository path must be a real directory: ${repository}`);
@@ -223,7 +237,7 @@ export async function prepareRepository(): Promise<{ commit: string; files: numb
     for (const { source, target } of snapshot.files) {
       const destination = join(repository, target);
 
-      if (!inside(repository, resolve(destination))) {
+      if (!within(repository, resolve(destination))) {
         throw new Error(`Playground fixture path escapes repository: ${target}`);
       }
 
@@ -244,7 +258,7 @@ export async function prepareRepository(): Promise<{ commit: string; files: numb
 
     await git(["init", "--initial-branch=playground"]);
     const dependencyDirectory = join(workspace, "node_modules");
-    const dependencyInfo = await lstat(dependencyDirectory).catch(() => undefined);
+    const dependencyInfo = await lstatOrAbsent(dependencyDirectory);
 
     if (dependencyInfo?.isDirectory() && !dependencyInfo.isSymbolicLink()) {
       await symlink(dependencyDirectory, join(repository, "node_modules"), "dir");
@@ -262,7 +276,7 @@ export async function prepareRepository(): Promise<{ commit: string; files: numb
   }
 }
 
-export async function catalog(group: Group): Promise<CatalogEntry[]> {
+export async function catalog(group: Group): Promise<readonly CatalogEntry[]> {
   const snapshot = await sourceSnapshot();
   const markerPath = join(repository, sourceMarker);
 
@@ -277,4 +291,8 @@ export async function catalog(group: Group): Promise<CatalogEntry[]> {
   }
 
   return readCatalog(group, join(repository, "fixtures", group));
+}
+
+export async function catalogs(): Promise<Record<Group, readonly CatalogEntry[]>> {
+  return { a: await catalog("a"), b: await catalog("b"), c: await catalog("c") };
 }

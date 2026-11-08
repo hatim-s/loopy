@@ -1,51 +1,37 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type RunView, routes } from "@loopy/contract";
+import { isTerminalRun, type RunView, routes } from "@loopy/contract";
+import { errorMessage } from "@loopy/core";
 import { readDaemonFile } from "@loopy/runtime/local";
-import { z } from "zod";
+import { Schema } from "effect";
 import { backupClosedDatabase } from "./backup";
 import { capture } from "./capture";
 import { home, source, state, writeEvidence } from "./config";
 import { OwnedDaemon } from "./daemon";
 import { expectedFailure, matchOutcome } from "./outcomes";
+import { DAEMON, loadPlan, PLANNED_RUNS, runInput } from "./plan";
 import { frozenHash, selections } from "./prepare";
-import type { restartWhileWaiting } from "./waits";
-import { holdApproval, terminal, waitSnapshot } from "./waits";
+import { holdApproval, restartWhileWaiting, waitSnapshot, waitTerminal } from "./waits";
 
-const manifestSchema = z.object({ sourceHash: z.string(), plannedRuns: z.literal(45) });
-
-async function loadPlan() {
-  const entries = await selections();
-  const approval = entries.find((entry) => entry.approval);
-
-  if (!approval) {
-    throw new Error("The selected catalog has no approval workflow.");
-  }
-
-  const plan = [
-    { entry: approval, ordinal: 1 },
-    ...entries
-      .flatMap((entry) => [1, 2, 3, 4, 5, 6, 7, 8, 9].map((ordinal) => ({ entry, ordinal })))
-      .filter(({ entry, ordinal }) => entry.slug !== approval.slug || ordinal !== 1),
-  ];
-
-  return plan;
-}
+// The manifest holds more preflight fields than the load needs.
+const decodeManifest = Schema.decodeUnknownSync(
+  Schema.Struct({ sourceHash: Schema.String, plannedRuns: Schema.Literal(PLANNED_RUNS) }),
+);
 
 export async function run() {
   if (!process.argv.includes("--root-load-gate")) {
-    throw new Error("The 45-run load requires --root-load-gate after explicit root authorization.");
+    throw new Error(
+      `The ${PLANNED_RUNS}-run load requires --root-load-gate after explicit root authorization.`,
+    );
   }
 
-  const manifest = manifestSchema.parse(
-    JSON.parse(await readFile(join(state, "manifest.json"), "utf8")),
-  );
+  const manifest = decodeManifest(JSON.parse(await readFile(join(state, "manifest.json"), "utf8")));
 
   if (manifest.sourceHash !== (await frozenHash(source))) {
     throw new Error("Frozen daemon source changed after preflight.");
   }
 
-  const plan = await loadPlan();
+  const plan = loadPlan(await selections());
 
   await writeFile(
     join(state, "load-started.json"),
@@ -67,12 +53,7 @@ export async function run() {
       // Each workflow is serial because its repository paths are fixed by the frozen source.
       await rm(join(entry.workspace, "loopies-playground"), { recursive: true, force: true });
 
-      const input = {
-        batch: "playground-daemon-45",
-        ordinal,
-        fail: ordinal === 5,
-        items: [3, 7, 11, ordinal],
-      };
+      const input = runInput(ordinal);
 
       const marker = expectedFailure(entry.slug, ordinal);
       const expectedStatus = marker === null ? "succeeded" : "failed";
@@ -98,15 +79,18 @@ export async function run() {
       const first = await waitSnapshot(
         daemon,
         admitted.id,
-        (snapshot) => snapshot.run.waitingOn !== null || terminal.has(snapshot.run.status),
+        (snapshot) => snapshot.run.waitingOn !== null || isTerminalRun(snapshot.run.status),
       );
 
-      const held = await holdApproval({ daemon, first, ordinal, restartProof });
-      restartProof = held.restartProof;
+      let hold: Awaited<ReturnType<typeof holdApproval>> | null = null;
 
-      const final = await waitSnapshot(daemon, admitted.id, (snapshot) =>
-        terminal.has(snapshot.run.status),
-      );
+      if (first.run.waitingOn) {
+        // The first approval wait doubles as the one restart proof for the whole load.
+        restartProof ??= await restartWhileWaiting(daemon, first);
+        hold = await holdApproval(daemon, first, ordinal);
+      }
+
+      const final = await waitTerminal(daemon, admitted.id);
 
       const captured = await capture(daemon, final, entry.workspace);
 
@@ -120,7 +104,7 @@ export async function run() {
         admissionMs,
         terminalAt: new Date().toISOString(),
         observedMs: Date.now() - Date.parse(intentAt),
-        hold: held.hold,
+        hold,
         matched: await matchOutcome(daemon, final, marker),
         ...captured,
       };
@@ -135,24 +119,21 @@ export async function run() {
       }
 
       console.log(
-        `${records.length}/45 ${entry.slug} #${ordinal} ${final.run.status} expected=${expectedStatus} attempts=${captured.attemptCount}`,
+        `${records.length}/${PLANNED_RUNS} ${entry.slug} #${ordinal} ${final.run.status} expected=${expectedStatus} attempts=${captured.attemptCount}`,
       );
     }
 
     const census = await daemon.request("/runs?limit=200", routes.runs.response);
     apiRuns = census.map(({ id, status }) => ({ id, status }));
   } catch (cause) {
-    failure = cause instanceof Error ? cause.message : String(cause);
+    failure = errorMessage(cause);
     throw cause;
   } finally {
     await daemon.stop();
 
     const backup = await backupClosedDatabase(apiRuns)
       .then((result) => ({ status: "captured" as const, ...result }))
-      .catch((cause: unknown) => ({
-        status: "failed" as const,
-        error: cause instanceof Error ? cause.message : String(cause),
-      }));
+      .catch((cause: unknown) => ({ status: "failed" as const, error: errorMessage(cause) }));
 
     await writeEvidence("", {
       startedAt,
@@ -167,13 +148,18 @@ export async function run() {
       cleanup: { daemonStopped: readDaemonFile(home) === undefined, dataRetained: true, backup },
       limits: {
         runConcurrency: 1,
-        daemonConcurrency: 4,
-        leaseMs: 2000,
+        daemonConcurrency: DAEMON.concurrency,
+        leaseMs: DAEMON.leaseMs,
         host: process.platform,
         cloudComparison:
           "Host Bun sandbox workers and local SQLite differ from Cloudflare DO scheduling and Docker resource caps. Latencies are not hardware-equivalent.",
       },
     });
+
+    // A run failure is already propagating; otherwise a missing backup must fail the load.
+    if (failure === null && backup.status === "failed") {
+      throw new Error(`Closed diagnostic backup failed: ${backup.error}`);
+    }
   }
 }
 
