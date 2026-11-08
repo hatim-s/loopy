@@ -1,5 +1,6 @@
 import { CLOUD_MAX_REQUEST_BYTES } from "@loopy/contract";
-import { bearerMatches, errorResponse, json, readBoundedBody } from "@loopy/runtime/service";
+import { bearerMatches, readBoundedBody } from "@loopy/runtime/http";
+import { errorResponse, json } from "@loopy/runtime/service";
 import { Effect } from "effect";
 import { cloudConfig, type Environment, servesLocally } from "./environment";
 import { acceptsOrigin, mebibytes } from "./http";

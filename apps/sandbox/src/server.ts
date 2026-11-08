@@ -8,7 +8,7 @@ import {
   sandboxErrorStatus,
 } from "@loopy/contract/sandbox";
 import { struct } from "@loopy/core";
-import { bearerMatches, readBoundedBody } from "@loopy/runtime/service";
+import { bearerMatches, readBoundedBody } from "@loopy/runtime/http";
 import { Cause, Effect, Result, Schema } from "effect";
 import { DockerArtifacts } from "./artifacts";
 import { Attempts } from "./attempt";

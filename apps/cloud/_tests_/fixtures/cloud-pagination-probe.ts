@@ -1,5 +1,5 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
-import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
+import { CLOUD_MAX_REQUEST_BYTES, decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { apiRoutes, dispatch, makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect } from "effect";
@@ -116,6 +116,7 @@ export async function paginationResponse(
     store,
     cwd: "pagination",
     daemon: { pid: null, startedAt: at, concurrency: 1 },
+    maxBodyBytes: CLOUD_MAX_REQUEST_BYTES,
   });
 
   url.pathname = "/api/runs";

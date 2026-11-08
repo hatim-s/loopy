@@ -8,7 +8,7 @@ Read this before changing code. `bun run check` builds the package and dashboard
 packages/core/src/       graph contracts, validation and pure engine/ reducer.
 packages/contract/src/   browser-safe wire schemas, routes and views.
 packages/sdk/src/        compile-only graph builder, descriptors and parsers.
-packages/runtime/src/    os/, host/, store/, executor/, service/ and local/ adapters.
+packages/runtime/src/    os/, http/, host/, store/, executor/, service/ and local/ adapters.
 packages/compiler/src/   restricted author evaluation and artifact compilation.
 packages/cli/src/        HTTP commands and daemon control.
 packages/loopy/src/      thin public re-exports and executable entrypoint.
@@ -30,7 +30,7 @@ Within each package, imports are relative and extensionless without `/index`. Ac
 
 Core has no workspace dependencies. Contract and SDK depend on core. Runtime depends on core, contract and SDK. Compiler depends on runtime and SDK as well as core and contract. CLI composes those owners. The public distribution re-exports supported APIs and starts the CLI; it owns no business logic. The build vendors private implementation modules and declarations into the published tarball and rewrites private specifiers so installation needs no unpublished packages.
 
-Inside runtime, host depends on core and engine, service on core and contract, store and executor on core, contract and os/, and os/ on core only. Os owns processes, sandbox profiles, secret files and durable files and is exported to apps as `@loopy/runtime/os`. Local composes these modules. Runtime layers use their target's public barrel. SDK host and graph-host are explicit trusted exports. Author definitions import `loopy` or `loopy/graph`; private package names are not supported author imports. Architecture tests enforce package exports, declared dependencies, the package DAG, runtime layer imports and browser portability.
+Inside runtime, host depends on core and engine, service on core, contract and http/, store and executor on core, contract and os/, os/ on core only, and http/ on nothing. Os owns processes, sandbox profiles, secret files and durable files and is exported to apps as `@loopy/runtime/os`. Http owns bounded body reads and bearer comparison and is exported to apps as `@loopy/runtime/http`. Local composes these modules. Runtime layers use their target's public barrel. SDK host and graph-host are explicit trusted exports. Author definitions import `loopy` or `loopy/graph`; private package names are not supported author imports. Architecture tests enforce package exports, declared dependencies, the package DAG, runtime layer imports and browser portability.
 
 Ownership paths below are relative to their named package source. The runtime sections use the os/host/store/executor/service/local subdirectory names; engine lives under core/src/engine.
 

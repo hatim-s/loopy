@@ -10,6 +10,7 @@ import {
 } from "@loopy/contract";
 import type { Store } from "@loopy/core";
 import { Cause, Effect, Exit, Schema } from "effect";
+import { readBoundedBody } from "../http";
 import { ServiceError } from "./error";
 import type { EventReader } from "./events";
 import { eventStream } from "./events";
@@ -33,6 +34,8 @@ export type RouteDependencies = {
   store: Pick<Store, "nextWakeAt"> & Pick<DashboardReader, "runningCount"> & EventReader;
   /** The workspace a request means when it names none. */
   cwd: string;
+  /** The largest request body a route reads. */
+  maxBodyBytes: number;
   daemon: Pick<DaemonView, "pid" | "startedAt" | "concurrency">;
 };
 
@@ -68,7 +71,7 @@ type Handler<P, Q, B, R, E> = (context: {
 function makeEndpoint<P, Q, B, R, E>(
   route: Schemas<P, Q, B, R>,
   handle: Handler<P, Q, B, R, E>,
-  onError: RouteDependencies["onError"],
+  { onError, maxBodyBytes }: Pick<RouteDependencies, "onError" | "maxBodyBytes">,
   search: Search,
 ) {
   const encode = encodeBoundary(route.response);
@@ -77,7 +80,7 @@ function makeEndpoint<P, Q, B, R, E>(
     ...route,
     async handle(params: Record<string, string>, request: Request, url: URL) {
       const exit = await Effect.runPromiseExit(
-        parseRequest(route, params, search(url, request), request).pipe(
+        parseRequest(route, params, search(url, request), request, maxBodyBytes).pipe(
           Effect.flatMap((parsed) => handle({ ...parsed, request })),
           Effect.map((result) => (result instanceof Response ? result : json(encode(result)))),
         ),
@@ -111,12 +114,19 @@ const parseRequest = Effect.fn("Http.decodeRequest")(function* <P, Q, B>(
   params: Record<string, string>,
   query: Record<string, string>,
   request: Request,
+  maxBodyBytes: number,
 ) {
   const badRequest = () => new ServiceError("bad_request");
 
   const text =
     ["POST", "PUT"].includes(request.method) && request.body
-      ? yield* Effect.promise(() => request.text())
+      ? new TextDecoder().decode(
+          yield* readBoundedBody(request.body, maxBodyBytes).pipe(
+            Effect.catchTag("BodyLimitError", (error) =>
+              Effect.fail(new ServiceError("bad_request", error.message)),
+            ),
+          ),
+        )
       : undefined;
 
   const body: unknown =
@@ -140,12 +150,19 @@ const parseRequest = Effect.fn("Http.decodeRequest")(function* <P, Q, B>(
   };
 });
 
-export function apiRoutes({ service, store, cwd, daemon, onError }: RouteDependencies) {
+export function apiRoutes({
+  service,
+  store,
+  cwd,
+  daemon,
+  onError,
+  maxBodyBytes,
+}: RouteDependencies) {
   const endpoint = <P, Q, B, R, E>(
     route: Schemas<P, Q, B, R>,
     handle: Handler<P, Q, B, R, E>,
     search = searchParams,
-  ) => makeEndpoint(route, handle, onError, search);
+  ) => makeEndpoint(route, handle, { onError, maxBodyBytes }, search);
 
   return [
     endpoint(routes.scheduleOverview, () => service.scheduleOverview()),

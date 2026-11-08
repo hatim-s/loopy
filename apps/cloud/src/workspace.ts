@@ -1,4 +1,5 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
+import { CLOUD_MAX_REQUEST_BYTES } from "@loopy/contract";
 import {
   apiRoutes,
   dispatch,
@@ -93,6 +94,7 @@ export class Workspace {
         store: this.store,
         cwd: workspace,
         daemon: { pid: null, startedAt: this.startedAt, concurrency: this.config.concurrency },
+        maxBodyBytes: CLOUD_MAX_REQUEST_BYTES,
       }),
       scheduler: new WorkspaceScheduler({
         storage: this.ctx.storage,

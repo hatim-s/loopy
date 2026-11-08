@@ -22,22 +22,24 @@ const ALLOWED: Record<Package, readonly Package[]> = {
   loopy: ["core", "contract", "sdk", "runtime", "compiler", "cli"],
 };
 
-const RUNTIME_LAYERS = ["os", "host", "store", "executor", "service", "local"] as const;
+const RUNTIME_LAYERS = ["os", "http", "host", "store", "executor", "service", "local"] as const;
 
 type RuntimeLayer = (typeof RUNTIME_LAYERS)[number];
 
 const RUNTIME_IMPORTS: Record<RuntimeLayer, readonly RuntimeLayer[]> = {
   os: [],
+  http: [],
   host: [],
   store: ["os"],
   executor: ["os"],
-  service: [],
-  local: ["os", "host", "store", "executor", "service"],
+  service: ["http"],
+  local: ["os", "http", "host", "store", "executor", "service"],
 };
 
 // Engine lives in core, so host needs no other package; only local composes the SDK.
 const RUNTIME_PACKAGES: Record<RuntimeLayer, readonly Package[]> = {
   os: ["core"],
+  http: [],
   host: ["core"],
   store: ["core", "contract"],
   executor: ["core", "contract"],
@@ -192,6 +194,18 @@ function runtimeViolations(file: string, target: string): string[] {
 
   return [];
 }
+
+// The build publishes every package directory, so a package or runtime layer missing here would skip every check.
+test("every package and runtime layer directory has an import rule", () => {
+  const directories = (path: string) =>
+    readdirSync(path, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+  expect(directories(join(ROOT, "packages"))).toEqual([...PACKAGES].sort());
+  expect(directories(sourceRoot("runtime"))).toEqual([...RUNTIME_LAYERS].sort());
+});
 
 test("workspace source imports follow package ownership and explicit exports", () => {
   const violations: string[] = [];

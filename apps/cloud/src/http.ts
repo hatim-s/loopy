@@ -1,4 +1,4 @@
-import { type BodyLimitError, type BodyReadError, readBoundedBody } from "@loopy/runtime/service";
+import { type BodyLimitError, type BodyReadError, readBoundedBody } from "@loopy/runtime/http";
 import { Effect } from "effect";
 import { CloudError } from "./operation";
 

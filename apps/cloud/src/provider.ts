@@ -9,7 +9,7 @@ import {
 } from "@loopy/contract/sandbox";
 import { type ExecutionKey, type ExecutionSpec, specBundles } from "@loopy/core";
 import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
-import type { BodyLimitError, BodyReadError } from "@loopy/runtime/service";
+import type { BodyLimitError, BodyReadError } from "@loopy/runtime/http";
 import { Effect } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
 import type { CloudConfig } from "./environment";

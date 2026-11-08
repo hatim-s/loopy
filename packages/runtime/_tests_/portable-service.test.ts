@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  CLOUD_MAX_REQUEST_BYTES,
   decodeBoundary,
   definitionSummary,
   graphView,
@@ -207,6 +208,7 @@ test("portable routes use explicit daemon identity", async () => {
     store,
     cwd: "cloud-workspace",
     daemon: { pid: 0, startedAt: new Date(now).toISOString(), concurrency: 4 },
+    maxBodyBytes: CLOUD_MAX_REQUEST_BYTES,
   });
 
   const daemonRequest = new Request("https://loopy.example/api/daemon");
@@ -323,4 +325,27 @@ test("portable SSE rejects partial transaction cursors, epoch changes and pruned
       eventStream(store, service, { after: before.cursor, epoch: before.epoch }, signal),
     ),
   ).rejects.toMatchObject({ code: "stale_cursor" });
+});
+
+test("portable routes refuse a request body over their limit before parsing it", async () => {
+  const { service, store } = fixture();
+
+  const table = apiRoutes({
+    service,
+    store,
+    cwd: "cloud-workspace",
+    daemon: { pid: 0, startedAt: new Date(now).toISOString(), concurrency: 4 },
+    maxBodyBytes: 64,
+  });
+
+  const request = new Request("https://loopy.example/api/loopies/absent/schedule", {
+    method: "PUT",
+    body: JSON.stringify({ cron: "* * * * *", input: { padding: "x".repeat(100) } }),
+  });
+
+  const response = await dispatch(table, request, new URL(request.url));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "bad_request", message: "Body exceeds its 64 byte limit. Send a smaller body." },
+  });
 });

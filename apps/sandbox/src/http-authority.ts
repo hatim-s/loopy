@@ -9,7 +9,7 @@ import {
   operationOutput,
   SANDBOX_MAX_REQUEST_BYTES,
 } from "@loopy/contract/sandbox";
-import { readBoundedBody } from "@loopy/runtime/service";
+import { readBoundedBody } from "@loopy/runtime/http";
 import { Effect } from "effect";
 import type { ImmutableResults, SandboxAttemptAuthority } from "./authority";
 import { failure } from "./operations";

@@ -1,5 +1,5 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
-import { decodeBoundary, putLoopyBodySchema } from "@loopy/contract";
+import { CLOUD_MAX_REQUEST_BYTES, decodeBoundary, putLoopyBodySchema } from "@loopy/contract";
 import { errorMessage } from "@loopy/core";
 import { apiRoutes, dispatch, eventStream, makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
@@ -194,6 +194,7 @@ export class RegistryProbe {
         store: this.store,
         cwd: workspace,
         daemon: { pid: null, startedAt: new Date().toISOString(), concurrency: 1 },
+        maxBodyBytes: CLOUD_MAX_REQUEST_BYTES,
       }),
       request,
       url,
