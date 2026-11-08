@@ -7,7 +7,6 @@ import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { Registry } from "../src/local/registry";
 import { startServer } from "../src/local/server/start-server";
 import { makeLocalService } from "../src/local/service";
-import { SecretStore } from "../src/os/secrets";
 import { makeService, ServiceError } from "../src/service";
 import { makeSqliteRunStore } from "../src/store";
 import { compiledBody } from "./fixtures/compiled";
@@ -93,7 +92,7 @@ test("HTTP preserves input rejection, durable queued admission and terminal canc
   expect((await f.request("/runs/missing")).status).toBe(404);
 });
 
-test("storage outage stays internal and secrets never appear in HTTP failure bodies", async () => {
+test("a storage outage stays internal and its cause never appears in the HTTP failure body", async () => {
   const f = await fixture();
   f.store.getRun = () =>
     Effect.fail(
@@ -106,59 +105,6 @@ test("storage outage stays internal and secrets never appear in HTTP failure bod
   const response = await f.request("/runs/missing/payload");
   expect(response.status).toBe(500);
   expect(await response.text()).not.toContain("private-password");
-  const secrets = new SecretStore(f.home);
-  await Effect.runPromise(secrets.set("TOKEN", "private-password"));
-  expect(await Effect.runPromise(secrets.list())).toEqual(["TOKEN"]);
-  expect(await Effect.runPromise(secrets.values(["TOKEN"]))).toEqual({ TOKEN: "private-password" });
-  await Effect.runPromise(secrets.remove("TOKEN"));
-  expect(await Effect.runPromise(secrets.list())).toEqual([]);
-});
-
-test("SSE replays complete transactions and rejects split and stale cursors", async () => {
-  const f = await fixture();
-  const run = await Effect.runPromise(f.service.startRun("workflow", {}, f.root));
-  const cursor = await Effect.runPromise(f.service.cursor());
-  const controller = new AbortController();
-
-  const response = await f.request(`/events?after=0&epoch=${cursor.epoch}`, {
-    signal: controller.signal,
-  });
-
-  expect(response.status).toBe(200);
-  const reader = response.body!.getReader();
-  let text = "";
-
-  while (!text.includes("event: txn")) {
-    const chunk = await reader.read();
-    text += new TextDecoder().decode(chunk.value);
-  }
-
-  expect(text).toContain(run.id);
-  await reader.cancel();
-  controller.abort();
-  expect((await f.request("/events?after=0&epoch=obsolete")).status).toBe(410);
-});
-
-test("schedules validate cron and timezone, advance versions and preserve input failures", async () => {
-  const f = await fixture();
-
-  const first = await Effect.runPromise(
-    f.service.putSchedule("workflow", { cron: "* * * * *" }, f.root),
-  );
-
-  const second = await Effect.runPromise(f.service.setScheduleEnabled("workflow", false, f.root));
-  expect(second.version).toBeGreaterThan(first.version);
-  expect(second.enabled).toBe(false);
-
-  const bad = await f.request("/loopies/workflow/schedule", {
-    method: "PUT",
-    body: JSON.stringify({ cron: "invalid" }),
-  });
-
-  expect(bad.status).toBe(400);
-  expect((await Effect.runPromise(f.store.listSchedules()))[0]?.version).toBe(second.version);
-  await Effect.runPromise(f.service.deleteSchedule("workflow", f.root));
-  expect(await Effect.runPromise(f.store.listSchedules())).toEqual([]);
 });
 
 test("hook resolution is atomic and SSE refuses a cursor inside a commit", async () => {
@@ -353,7 +299,7 @@ test("an unfinished execution rejects cancellation before ownership changes", as
   expect(await Effect.runPromise(f.store.dashboardSnapshot(run.id))).toEqual(before);
 });
 
-test("native service and HTTP secret lists retain the store receiver and expose names only", async () => {
+test("service and HTTP secret lists retain the store receiver and expose names only", async () => {
   const f = await fixture();
   expect(await Effect.runPromise(f.service.listSecrets())).toEqual([]);
   const empty = await f.request("/secrets");

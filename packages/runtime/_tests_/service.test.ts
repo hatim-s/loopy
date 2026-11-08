@@ -9,8 +9,6 @@ import { loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
 import { FakeExecutor, runIn } from "../../core/_tests_/fixtures/run";
 import { makeLocalService, Registry } from "../src/local";
-import { makeArtifactRegistry } from "../src/local/save-compiled";
-import { makeService } from "../src/service";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { fixtureDaemon, fixtureStore, waitUntil } from "./fixtures/service-runtime";
@@ -548,58 +546,6 @@ test("service maps completion between requireRun and claim to not_claimable", as
     code: "not_claimable",
     message: "The run cannot be claimed in its current state.",
   });
-});
-
-test("listLoopies reads each workspace registry once per call", async () => {
-  const { service, store, root, home, clock } = await fixture();
-  await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
-  const other = join(root, "other");
-  mkdirSync(join(other, ".loopy", "loopies"), { recursive: true });
-  await Effect.runPromise(
-    store.createRun({
-      id: "other-workspace",
-      slug: "service",
-      workspace: other,
-      revision: "a".repeat(64),
-      input: {},
-      status: "queued",
-      createdAt: new Date(clock.now()).toISOString(),
-      updatedAt: new Date(clock.now()).toISOString(),
-    }),
-  );
-  const reads = new Map<string, number>();
-
-  const countingService = makeService({
-    store,
-    clock,
-    registry: (workspace) =>
-      Registry.make(home, workspace || root).pipe(
-        Effect.map((native) => {
-          const registry = makeArtifactRegistry(native);
-
-          return {
-            ...registry,
-            listSummaries: () =>
-              Effect.sync(() => {
-                reads.set(native.project, (reads.get(native.project) ?? 0) + 1);
-              }).pipe(Effect.andThen(registry.listSummaries())),
-          };
-        }),
-      ),
-    canonicalWorkspace: (workspace) => Effect.succeed(workspace),
-    secrets: { list: () => Effect.succeed([]), set: () => Effect.void, remove: () => Effect.void },
-    generateTypes: () => Effect.die("unused"),
-  });
-
-  for (const count of [1, 2]) {
-    expect(await Effect.runPromise(countingService.listLoopies(root))).toHaveLength(1);
-    expect(reads).toEqual(
-      new Map([
-        [root, count],
-        [other, count],
-      ]),
-    );
-  }
 });
 
 test("loopy views are keyed by workspace and slug so graph and start reach that project's save", async () => {

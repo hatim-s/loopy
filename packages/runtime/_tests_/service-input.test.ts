@@ -51,7 +51,7 @@ const invalidInputs: Json[] = [
 ];
 
 for (const input of invalidInputs) {
-  test("invalid graph input leaves no queued run", async () => {
+  test(`invalid graph input ${JSON.stringify(input)} leaves no queued run`, async () => {
     const f = await setup();
     await expect(
       Effect.runPromise(f.service.startRun("input", input, f.workspace)),
@@ -68,7 +68,7 @@ const validInputs: Json[] = [
 ];
 
 for (const input of validInputs) {
-  test("required and optional primitive inputs persist and resolve through the graph", async () => {
+  test(`input ${JSON.stringify(input)} persists and resolves through the graph`, async () => {
     const f = await setup();
     const run = await Effect.runPromise(f.service.startRun("input", input, f.workspace));
     expect((await Effect.runPromise(f.store.getRun(run.id)))?.input).toEqual(input);
