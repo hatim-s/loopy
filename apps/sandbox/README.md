@@ -2,11 +2,10 @@
 
 This Bun service accepts asynchronous execution attempts. It uses an explicitly selected Docker context and never changes the default context. There is no Modal integration.
 
-From the repository root, build the worker image in the dedicated daemon:
+From the repository root, build the worker image in the dedicated daemon. The script takes the context and tag from `src/docker/identity.ts`:
 
 ```sh
-docker --context colima-loopy-cloud-phase1 build \
-  --file apps/sandbox/Dockerfile --tag loopy-sandbox:bun-1.4.0 .
+bun run cloud:build-sandbox
 ```
 
 The image uses the official `oven/bun:1.4.0` image for its build and runtime stages. Its build stage installs from the repository `bun.lock` with `--frozen-lockfile`, and `Dockerfile.dockerignore` limits the context to package manifests, the lockfile and package sources. The runtime stage includes Bun, the base image's commands and the two bundled workers. In-container paths are defined in `src/container-layout.ts`. Build a derived image when a workflow needs other executables, then pass its tag through `--image`.
@@ -30,7 +29,7 @@ Execution flags are `--max-timeout-ms 600000`, `--memory 256m`, `--cpus 1` and `
 
 The CLI above and `cloud:start` use filesystem authority. It serializes writes under the state-root process lock and a process-local session. Its epoch is not persistent. New attempt records live in `receipts/`, immutable terminal result files in `results/`, and active guards plus released-token records in `exports/`. `src/state-root.ts` owns this layout, its validation and the process lock. A terminal record points to result bytes by SHA-256 and size instead of embedding the result.
 
-The architecture playground injects `HttpSandboxAuthority` backed by the Worker's `SANDBOX_RECEIPTS` DO and `RECEIPT_RESULTS` R2 bucket. The default playground profile remains filesystem-backed. DO sessions persist epoch and nonce, fencing writers from earlier bridge processes. Receipt SQL owns admission, terminal pointers and export guards; R2 owns immutable result bytes. The sandbox CLI has no DO-mode flag.
+The architecture playground injects `HttpSandboxAuthority` backed by the Worker's `SANDBOX_RECEIPTS` DO and `RECEIPT_RESULTS` R2 bucket. The default playground profile remains filesystem-backed. DO sessions persist epoch and nonce, fencing writers from earlier bridge processes. Receipt SQL owns admission, terminal pointers and export guards; R2 owns immutable result bytes. Both authorities derive attempt identity with `packages/contract/src/sandbox/identity.ts` and decide admission, completion and export with the transitions in `transitions.ts`, each inside its own transaction. Both reject a result whose canonical bytes exceed 2 MiB as `invalid_state`. The sandbox CLI has no DO-mode flag.
 
 The dependency factory in `startSandbox(config, createDependencies)` is optional; omitting it selects filesystem authority. DO-backed callers pass a custom factory supplying authority, matching result storage, execution backend and artifact reader together. The coordinator validates the state root and acquires its process lock before invoking the selected factory, then opens a session and reconciles persisted work. A durable harness rejects populated filesystem receipts/exports when selecting DO authority; use a fresh root rather than switch an existing dataset in place.
 
@@ -64,9 +63,9 @@ Both routes return the shared `Receipt` union:
 { kind: "finished", result: ExecutionResult }
 ```
 
-`none` occurs only on lookup. Duplicate POSTs return the existing receipt. Changed content for the same workspace, execution key and attempt returns HTTP 409, including after completion. Other errors have `{error:{code,message}}`, with 400 for invalid requests, 401 for authentication, 404 for unknown routes, 413 for oversized requests and 500 for storage failures.
+`none` occurs only on lookup. Duplicate POSTs return the existing receipt. Changed content for the same workspace, execution key and attempt returns HTTP 409, including after completion. Other errors have `{error:{code,message}}`, with 400 for invalid requests, 401 for authentication, 404 for unknown routes, 413 for oversized requests and 500 for storage failures. `sandboxErrorStatus` fixes the status for each code, and the cloud provider rejects a response whose status disagrees.
 
-The exported Effect schemas and inferred types live in `loopy/contract`: `sandboxAttemptRequestSchema`, `sandboxAttemptIdentitySchema`, `executionSpecSchema`, `executionResultSchema`, `receiptSchema`, `sandboxArtifactRequestSchema`, `sandboxArtifactSchema` and `sandboxErrorSchema`. These imports remain browser-safe.
+The Effect schemas and inferred types are browser-safe. `@loopy/contract/sandbox` exports `sandboxAttemptRequestSchema`, `sandboxAttemptIdentitySchema`, `sandboxArtifactRequestSchema`, `sandboxArtifactSchema` and `sandboxErrorSchema`. `@loopy/contract` exports `executionSpecSchema`, `executionResultSchema` and `receiptSchema`. The main contract entry, which the dashboard imports, carries no sandbox protocol.
 
 ## Workspace artifact export
 
@@ -105,8 +104,9 @@ Legacy flat filesystem receipts with inline results remain readable because acce
 The support to delete together is:
 
 - `src/filesystem/legacy.ts` and its fallback call in `FilesystemJournal.read` (`src/filesystem/journal.ts`).
-- The `inline` result variant of `attemptRecordSchema` in `packages/contract/src/sandbox-journal.ts`.
-- The inline branches in `resolveResult` (`src/receipt-view.ts`) and `FilesystemAuthority.complete` (`src/filesystem/authority.ts`).
+- The `inline` result variant of `attemptRecordSchema` in `packages/contract/src/sandbox/journal.ts`.
+- The `inlineRef` fact of `completeTransition` in `packages/contract/src/sandbox/transitions.ts`.
+- The inline branches in `resolveResult` (`src/receipt-view.ts`) and `inlineRef` (`src/filesystem/authority.ts`).
 - The tests that write flat or inline receipts: the retained-receipt case in `packages/loopy/_tests_/sandbox-authority-contract.test.ts` and the historical scan in `packages/loopy/_tests_/sandbox-authority-publication.test.ts`.
 
 ## Tests

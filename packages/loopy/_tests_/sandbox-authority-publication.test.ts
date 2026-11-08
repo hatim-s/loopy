@@ -1,13 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { Effect, Exit } from "effect";
 import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
 import { Attempts } from "../../../apps/sandbox/src/attempt";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
 import { stateLayout } from "../../../apps/sandbox/src/state-root";
-import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
 import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
 import { run } from "./fixtures/sandbox-run";
@@ -263,13 +263,14 @@ test("artifact export uses terminal authority without reading unavailable result
   await expect(run(service.lookup(request))).rejects.toThrow("Terminal result storage unavailable");
   expect(reads).toBe(1);
   expect(await run(service.artifact({ ...request, path: "out.txt" }))).toEqual(
-    await run(artifactReader.read(plan(), "out.txt")),
+    await run(artifactReader.read(await plan(), "out.txt")),
   );
   expect(reads).toBe(1);
   expect(exports).toBe(1);
   expect(cleanups).toBe(1);
   expect(
-    (await run(authority.exportGuards({ after: null, limit: 1, volume: plan().volume }))).exports,
+    (await run(authority.exportGuards({ after: null, limit: 1, volume: (await plan()).volume })))
+      .exports,
   ).toHaveLength(0);
 });
 
@@ -321,7 +322,7 @@ test("new admission reconciles only export metadata despite multiple pages of un
 
   // Populate after startup so startup recovery keeps its separate combined scan.
   for (let index = 0; index < 402; index++) {
-    const historical = plan(1, `history-${index}`);
+    const historical = await plan(1, `history-${index}`);
 
     const record =
       index < 201
@@ -346,5 +347,7 @@ test("new admission reconciles only export metadata despite multiple pages of un
   await run(service.drain());
   expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: successful });
   expect(authority.recoveryQueries).toBe(before);
-  expect(authority.exportQueries).toEqual([{ after: null, limit: 200, volume: plan().volume }]);
+  expect(authority.exportQueries).toEqual([
+    { after: null, limit: 200, volume: (await plan()).volume },
+  ]);
 });

@@ -2,29 +2,33 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { decodeBoundary } from "@loopy/contract";
 import {
   artifactHelperName,
-  decodeBoundary,
+  attemptId,
+  type DockerAttemptPlan,
+  inputHelperName,
   type SandboxAttemptRequest,
   sandboxAttemptRequestSchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Exit, Scope } from "effect";
 import { z } from "zod";
-import { attemptHash } from "../../../../apps/sandbox/src/admission";
 import { DockerArtifacts } from "../../../../apps/sandbox/src/artifacts";
 import { sandboxConfigSchema } from "../../../../apps/sandbox/src/config";
 import { type AttemptBackend, DockerBackend } from "../../../../apps/sandbox/src/docker";
 import { DockerClient } from "../../../../apps/sandbox/src/docker/client";
-import { ownerOf, SANDBOX_LABELS } from "../../../../apps/sandbox/src/docker/identity";
-import { inputHelperName } from "../../../../apps/sandbox/src/docker/plan";
+import {
+  ownerOf,
+  SANDBOX_DOCKER_CONTEXT,
+  SANDBOX_LABELS,
+} from "../../../../apps/sandbox/src/docker/identity";
 import { SandboxOperationError } from "../../../../apps/sandbox/src/operations";
 import { type CommandRunner, runCommand } from "../../../../apps/sandbox/src/process";
 import { startSandbox } from "../../../../apps/sandbox/src/server";
-import type { DockerAttemptPlan } from "../../../contract/src/sandbox-journal";
 import { bounded, type DockerRuntime } from "./architecture-docker-runtime";
 
-export const context = "colima-loopy-cloud-phase1";
+export const context = SANDBOX_DOCKER_CONTEXT;
 
 const labelsSchema = z
   .array(
@@ -176,16 +180,11 @@ export function resources(
   };
 
   function id(request: SandboxAttemptRequest) {
-    return attemptHash({
-      root: config.stateRoot,
-      workspace: request.workspace,
-      executionKey: request.executionKey,
-      attempt: request.attempt,
-    });
+    return attemptId(config.stateRoot, request);
   }
 
   async function plan(request: SandboxAttemptRequest) {
-    const record = await Effect.runPromise(runtime.direct.read(id(request)));
+    const record = await Effect.runPromise(runtime.direct.read({ id: await id(request) }));
     assert(record, "Expected an authoritative durable attempt record.");
     plans.set(record.plan.id, record.plan);
 

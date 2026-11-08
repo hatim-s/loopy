@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { decodeBoundary, receiptSchema } from "@loopy/contract";
 import {
-  decodeBoundary,
-  receiptSchema,
+  artifactHelperName,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { type Bridge, type DockerResources, input } from "./architecture-docker-resources";
 import { bounded, type DockerRuntime, eventually } from "./architecture-docker-runtime";
@@ -109,7 +109,7 @@ export async function durableAndGuard(
 
   owned.blockCleanup();
   assert.equal((await http.artifact(first, "count.txt")).status, 409);
-  const helper = `loopy-artifact-${saved.plan.id}`;
+  const helper = artifactHelperName(saved.plan.id);
   assert(
     await owned.inspect(helper),
     "An actual helper must remain after injected cleanup failure.",
@@ -118,7 +118,7 @@ export async function durableAndGuard(
   assert.equal(guards.exports.length, 1);
   assert.equal(guards.exports[0]?.helper, helper);
   await http.post(second, 409);
-  assert.equal(owned.starts.get(owned.id(second)) ?? 0, 0);
+  assert.equal(owned.starts.get(await owned.id(second)) ?? 0, 0);
 
   await owned.stop(service);
   await runtime.reopen();
@@ -150,7 +150,7 @@ export async function durableAndGuard(
     kind: "finished",
     result: { kind: "succeeded", output: { proof: "B" }, logs: [] },
   });
-  assert.equal(owned.starts.get(owned.id(second)), 1);
+  assert.equal(owned.starts.get(await owned.id(second)), 1);
   assert.equal(runtime.faults.admissionRepliesDropped, 1);
   assert.equal(runtime.faults.readsBlocked, 3);
   assert.equal(await owned.inspect(helper), null);
@@ -249,7 +249,8 @@ export async function shutdownOutage(
     );
 
   await eventually(
-    async () => (await Effect.runPromise(runtime.direct.read(owned.id(request)))) !== null,
+    async () =>
+      (await Effect.runPromise(runtime.direct.read({ id: await owned.id(request) }))) !== null,
     "Shutdown admission committed",
   );
   await eventually(

@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type {
-  AttemptRecord,
   AuthoritySession,
   ExportRecord,
+  FinishedAttemptRecord,
   SandboxArtifactRequest,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { Effect, Result, Semaphore } from "effect";
 import type { ArtifactReader } from "../artifacts";
-import type { SandboxAttemptAuthority, SandboxFailure } from "../operations";
+import type { SandboxAttemptAuthority } from "../authority";
+import type { SandboxFailure } from "../operations";
 import { ExportCleanupError, SandboxRequestError } from "../request-error";
 
 function collectPages<Page extends { next: string | null }>(
@@ -46,7 +47,7 @@ export class AttemptExports {
   ) {}
   private release(guard: ExportRecord) {
     return Effect.gen({ self: this }, function* () {
-      const record = yield* this.authority.read(guard.attemptId);
+      const record = yield* this.authority.read({ id: guard.attemptId });
 
       if (!record || record.plan.volume !== guard.volume) {
         return yield* Effect.fail(
@@ -100,7 +101,7 @@ export class AttemptExports {
       }),
     );
   }
-  read(record: Extract<AttemptRecord, { kind: "finished" }>, request: SandboxArtifactRequest) {
+  read(record: FinishedAttemptRecord, request: SandboxArtifactRequest) {
     return Effect.gen({ self: this }, function* () {
       yield* this.reconcile(record.plan.volume);
       const token = randomUUID();

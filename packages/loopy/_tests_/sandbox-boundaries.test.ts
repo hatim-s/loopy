@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdir, rm } from "node:fs/promises";
+import type { AuthorityInput } from "@loopy/contract/sandbox";
+import { AuthorityError } from "@loopy/contract/sandbox";
 import { Cause, Deferred, Effect, Exit, Fiber, Result } from "effect";
 import { DockerBackend } from "../../../apps/sandbox/src/docker";
 import { DockerClient } from "../../../apps/sandbox/src/docker/client";
@@ -9,8 +11,6 @@ import { failure, SandboxOperationError } from "../../../apps/sandbox/src/operat
 import { SandboxRequestError } from "../../../apps/sandbox/src/request-error";
 import { startSandbox } from "../../../apps/sandbox/src/server";
 import { stateLayout } from "../../../apps/sandbox/src/state-root";
-import { AuthorityError } from "../../contract/src/sandbox-journal";
-import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import {
   artifactReader,
   authorityFixture,
@@ -33,7 +33,7 @@ async function boundaryFixture() {
 
   return {
     ...value,
-    plan: value.plan(),
+    plan: await value.plan(),
     dependencies: {
       authority: value.authority,
       resultsFor: value.resultsFor,
@@ -126,9 +126,9 @@ test("loopback authority HTTP keeps exact command and rejection envelopes", asyn
       namespace: "fixture",
     });
 
-    expect(await Effect.runPromise(authority.status())).toEqual({ epoch: 0 });
+    expect(await Effect.runPromise(authority.status({}))).toEqual({ epoch: 0 });
     reject = true;
-    const result = await Effect.runPromise(authority.status().pipe(Effect.result));
+    const result = await Effect.runPromise(authority.status({}).pipe(Effect.result));
     expect(
       Result.isFailure(result) && result.failure instanceof AuthorityError && result.failure.code,
     ).toBe("stale_session");

@@ -2,17 +2,17 @@ import { afterEach, expect, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { decodeBoundary, type ExecutionResult, nodeIdSchema } from "@loopy/contract";
 import {
   artifactHelperName,
+  attemptRecordSchema,
   type DockerAttemptPlan,
-  decodeBoundary,
-  type ExecutionResult,
-  nodeIdSchema,
+  inputHelperName,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
   sandboxAttemptRequestSchema,
   sandboxErrorSchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { canonicalJson } from "@loopy/core";
 import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Result, Schema } from "effect";
@@ -22,15 +22,17 @@ import type { AttemptDependenciesFactory } from "../../../apps/sandbox/src/attem
 import { sandboxConfigSchema } from "../../../apps/sandbox/src/config";
 import { type AttemptBackend, DockerBackend } from "../../../apps/sandbox/src/docker";
 import { DockerClient } from "../../../apps/sandbox/src/docker/client";
-import { ownerOf } from "../../../apps/sandbox/src/docker/identity";
-import { inputHelperName } from "../../../apps/sandbox/src/docker/plan";
+import {
+  ownerOf,
+  SANDBOX_DOCKER_CONTEXT,
+  SANDBOX_IMAGE,
+} from "../../../apps/sandbox/src/docker/identity";
 import { filesystemStorage } from "../../../apps/sandbox/src/filesystem";
 import { FilesystemJournal } from "../../../apps/sandbox/src/filesystem/journal";
 import { failure } from "../../../apps/sandbox/src/operations";
 import { type CommandRunner, runCommand } from "../../../apps/sandbox/src/process";
 import { attemptHandler } from "../../../apps/sandbox/src/server";
 import { stateLayout, validateStateRoot } from "../../../apps/sandbox/src/state-root";
-import { attemptRecordSchema } from "../../contract/src/sandbox-journal";
 import { commandSpec } from "./fixtures/executor";
 import {
   artifactReader as idleArtifactReader,
@@ -64,8 +66,8 @@ async function fixture() {
     worktree,
     stateRoot: join(worktree, ".loopy/cloud/sandbox"),
     token,
-    dockerContext: "colima-loopy-cloud-phase1",
-    image: "loopy-sandbox:bun-1.4.0",
+    dockerContext: SANDBOX_DOCKER_CONTEXT,
+    image: SANDBOX_IMAGE,
     port: 0,
   });
 
@@ -837,7 +839,7 @@ async function cleanupDocker(config: Awaited<ReturnType<typeof fixture>>) {
 
 const dockerContext = process.env.LOOPY_SANDBOX_DOCKER_CONTEXT;
 
-test.skipIf(dockerContext !== "colima-loopy-cloud-phase1")(
+test.skipIf(dockerContext !== SANDBOX_DOCKER_CONTEXT)(
   "real Docker preserves files, bounds execution, reconciles results and never repeats killed workers",
   async () => {
     const config = await fixture();

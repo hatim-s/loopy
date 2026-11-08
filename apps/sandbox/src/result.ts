@@ -1,4 +1,5 @@
-import { type ExecutionResult, SANDBOX_MAX_CAPTURE_BYTES } from "@loopy/contract";
+import { type ExecutionResult } from "@loopy/contract";
+import { SANDBOX_MAX_CAPTURE_BYTES } from "@loopy/contract/sandbox";
 import { limitLogs, MAX_OUTPUT_BYTES, outputBytes } from "@loopy/core";
 
 export function failed(

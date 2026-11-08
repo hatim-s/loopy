@@ -1,37 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
 import { link, open, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import type { ResultRef } from "@loopy/contract";
+import { decodeBoundary, type ExecutionResult, executionResultSchema } from "@loopy/contract";
 import {
-  decodeBoundary,
-  type ExecutionResult,
-  executionResultSchema,
-  SANDBOX_MAX_CAPTURE_BYTES,
-} from "@loopy/contract";
-import { canonicalJson, errnoCode } from "@loopy/core";
+  AuthorityError,
+  type ResultRef,
+  resultBytes,
+  resultRef,
+  sameRef,
+} from "@loopy/contract/sandbox";
+import { errnoCode } from "@loopy/core";
 import { Effect } from "effect";
+import type { ImmutableResults } from "../authority";
 import { readBytes, syncDirectory } from "../journal-files";
-import type { ImmutableResults } from "../operations";
 import { checked, failure, io } from "../operations";
 import { stateLayout } from "../state-root";
-
-export function resultBytes(result: ExecutionResult) {
-  const bytes = Buffer.from(canonicalJson(result));
-
-  if (bytes.byteLength > SANDBOX_MAX_CAPTURE_BYTES) {
-    throw new Error("Sandbox terminal result exceeds its serialized byte limit.");
-  }
-
-  return bytes;
-}
-
-function bytesReference(bytes: Buffer): ResultRef {
-  return { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.byteLength };
-}
-
-export function resultReference(result: ExecutionResult): ResultRef {
-  return bytesReference(resultBytes(result));
-}
 
 export class FilesystemResults implements ImmutableResults {
   private readonly prefix: string;
@@ -47,13 +30,10 @@ export class FilesystemResults implements ImmutableResults {
 
   get(ref: ResultRef) {
     return Effect.gen({ self: this }, function* () {
-      const bytes = yield* io("immutable-results", () => readBytes(this.path(ref)));
+      const read = yield* io("immutable-results", () => readBytes(this.path(ref)));
+      const bytes = read && Uint8Array.from(read);
 
-      if (
-        !bytes ||
-        bytes.byteLength !== ref.size ||
-        createHash("sha256").update(bytes).digest("hex") !== ref.sha256
-      ) {
+      if (!bytes || !sameRef(yield* Effect.promise(() => resultRef(bytes)), ref)) {
         return yield* Effect.fail(
           failure(
             "immutable-results",
@@ -65,15 +45,20 @@ export class FilesystemResults implements ImmutableResults {
       }
 
       return yield* checked("decode", () =>
-        decodeBoundary(executionResultSchema)(JSON.parse(bytes.toString("utf8"))),
+        decodeBoundary(executionResultSchema)(JSON.parse(new TextDecoder().decode(bytes))),
       );
     }).pipe(Effect.uninterruptible);
   }
 
   put(result: ExecutionResult) {
     return Effect.gen({ self: this }, function* () {
-      const bytes = yield* checked("result bytes", () => resultBytes(result));
-      const ref = bytesReference(bytes);
+      const bytes = resultBytes(result);
+
+      if (bytes === null) {
+        return yield* Effect.fail(new AuthorityError("invalid_state"));
+      }
+
+      const ref = yield* Effect.promise(() => resultRef(bytes));
       const temporary = join(this.directory, `${randomUUID()}.tmp`);
 
       return yield* Effect.acquireUseRelease(

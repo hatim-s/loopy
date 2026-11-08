@@ -1,13 +1,36 @@
 import { unlink } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { AuthorityInput, AuthorityOutput } from "@loopy/contract";
-import { AuthorityError, type AuthoritySession, artifactHelperName } from "@loopy/contract";
+import {
+  type AttemptRecord,
+  AuthorityError,
+  type AuthorityInput,
+  type AuthorityOutput,
+  type AuthoritySession,
+  admitTransition,
+  beginExportTransition,
+  completeTransition,
+  resultBytes,
+  resultRef,
+  sameSession,
+} from "@loopy/contract/sandbox";
 import { Effect, Semaphore } from "effect";
+import type { SandboxAttemptAuthority } from "../authority";
 import { ignoreMissing, syncDirectory, writeAtomic } from "../journal-files";
-import type { SandboxAttemptAuthority, SandboxOperationError } from "../operations";
+import type { SandboxOperationError } from "../operations";
 import { io } from "../operations";
 import { FilesystemJournal } from "./journal";
-import { FilesystemResults, resultReference } from "./results";
+import { FilesystemResults } from "./results";
+
+// Retained legacy receipts embed their result; see the README exit condition.
+function inlineRef(record: AttemptRecord | null) {
+  if (record?.kind !== "finished" || record.result.kind !== "inline") {
+    return Effect.succeed(null);
+  }
+
+  const bytes = resultBytes(record.result.value);
+
+  return bytes === null ? Effect.succeed(null) : Effect.promise(() => resultRef(bytes));
+}
 
 function byteOrder(left: string, right: string) {
   return Buffer.compare(Buffer.from(left), Buffer.from(right));
@@ -30,10 +53,6 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         ),
       )
       .pipe(Effect.uninterruptible);
-  }
-
-  private current(session: AuthoritySession) {
-    return this.session?.epoch === session.epoch && this.session.nonce === session.nonce;
   }
 
   // The OS lock supplies exclusion. This adapter makes no persistent epoch claim.
@@ -61,159 +80,99 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
     });
   }
 
-  read(id: string) {
-    return this.journal.read(id);
+  read(input: AuthorityInput<"read">) {
+    return this.journal.read(input.id);
   }
 
-  admit(
-    input: AuthorityInput<"admit">,
-  ): Effect.Effect<AuthorityOutput<"admit">, SandboxOperationError | AuthorityError> {
-    return this.serial(() => {
-      return Effect.gen({ self: this }, function* () {
-        if (!this.current(input.session)) {
-          return { kind: "rejected", code: "stale_session" };
+  admit(input: AuthorityInput<"admit">) {
+    return this.serial(() =>
+      Effect.gen({ self: this }, function* () {
+        const decision = admitTransition(input, {
+          current: this.session,
+          validPlan: yield* this.journal.validPlan(input.plan),
+          existing: yield* this.journal.read(input.plan.id),
+          workspaceBusy: (yield* this.journal.guards()).some(
+            (guard) => guard.volume === input.plan.volume,
+          ),
+        });
+
+        if (decision.kind === "created") {
+          yield* io("filesystem-authority", () =>
+            writeAtomic(this.journal.receiptPath(input.plan.id), decision.record),
+          );
         }
 
-        if (!this.journal.validPlan(input.plan)) {
-          return { kind: "rejected", code: "invalid_state" };
-        }
-
-        const existing = yield* this.read(input.plan.id);
-
-        if (existing) {
-          return existing.plan.requestHash === input.plan.requestHash
-            ? { kind: "existing", record: existing }
-            : { kind: "rejected", code: "request_conflict" };
-        }
-
-        if ((yield* this.journal.guards()).some((guard) => guard.volume === input.plan.volume)) {
-          return { kind: "rejected", code: "workspace_busy" };
-        }
-
-        const record = { kind: "started", plan: input.plan, session: input.session } as const;
-        yield* io("filesystem-authority", () =>
-          writeAtomic(this.journal.receiptPath(input.plan.id), record),
-        );
-
-        return { kind: "created", record };
-      });
-    });
+        return decision;
+      }),
+    );
   }
 
   complete(
     input: AuthorityInput<"complete">,
   ): Effect.Effect<AuthorityOutput<"complete">, SandboxOperationError | AuthorityError> {
-    return this.serial(() => {
-      return Effect.gen({ self: this }, function* () {
-        if (!this.current(input.session)) {
-          return { kind: "rejected", code: "stale_session" };
+    return this.serial(() =>
+      Effect.gen({ self: this }, function* () {
+        const existing = yield* this.journal.read(input.id);
+
+        const decision = completeTransition(input, {
+          current: this.session,
+          existing,
+          inlineRef: yield* inlineRef(existing),
+        });
+
+        if (decision.kind !== "publish") {
+          return decision;
         }
 
-        const existing = yield* this.read(input.id);
-
-        if (!existing) {
-          return { kind: "rejected", code: "missing" };
-        }
-
-        if (existing.plan.requestHash !== input.requestHash) {
-          return { kind: "rejected", code: "request_conflict" };
-        }
-
-        if (existing.kind === "finished") {
-          const ref =
-            existing.result.kind === "blob"
-              ? existing.result.ref
-              : resultReference(existing.result.value);
-
-          return ref.sha256 === input.result.sha256 && ref.size === input.result.size
-            ? { kind: "finished", record: existing }
-            : { kind: "rejected", code: "request_conflict" };
-        }
-
-        yield* new FilesystemResults(this.root, existing.plan.workspace).get(input.result);
-
-        const record = {
-          ...existing,
-          kind: "finished",
-          result: { kind: "blob", ref: input.result },
-        } as const;
-
+        yield* new FilesystemResults(this.root, decision.record.plan.workspace).get(input.result);
         yield* io("filesystem-authority", () =>
-          writeAtomic(this.journal.receiptPath(input.id), record),
+          writeAtomic(this.journal.receiptPath(input.id), decision.record),
         );
 
-        return { kind: "finished", record };
-      });
-    });
+        return { kind: "finished", record: decision.record };
+      }),
+    );
   }
 
   beginExport(
     input: AuthorityInput<"beginExport">,
   ): Effect.Effect<AuthorityOutput<"beginExport">, SandboxOperationError | AuthorityError> {
-    return this.serial(() => {
-      return Effect.gen({ self: this }, function* () {
-        if (!this.current(input.session)) {
-          return { kind: "rejected", code: "stale_session" };
-        }
-
+    return this.serial(() =>
+      Effect.gen({ self: this }, function* () {
         const guards = yield* this.journal.guards();
         const released = yield* this.journal.released(input.token);
+        const token = released ?? guards.find((guard) => guard.token === input.token);
 
-        if (released) {
-          return {
-            kind: "rejected",
-            code: released.attemptId === input.attemptId ? "invalid_state" : "request_conflict",
-          };
-        }
-
-        const same = guards.find((guard) => guard.token === input.token);
-
-        if (same) {
-          return same.attemptId === input.attemptId
-            ? { kind: "granted", record: same }
-            : { kind: "rejected", code: "request_conflict" };
-        }
-
-        const receipt = yield* this.read(input.attemptId);
-
-        if (!receipt) {
-          return { kind: "rejected", code: "missing" };
-        }
-
-        if (receipt.kind !== "finished") {
-          return { kind: "rejected", code: "invalid_state" };
-        }
-
-        if (
-          guards.some((guard) => guard.volume === receipt.plan.volume) ||
-          (yield* this.journal.records()).some(
-            (record) => record.kind === "started" && record.plan.volume === receipt.plan.volume,
-          )
-        ) {
-          return { kind: "rejected", code: "workspace_busy" };
-        }
-
-        const record = {
-          token: input.token,
-          session: input.session,
-          attemptId: input.attemptId,
-          volume: receipt.plan.volume,
-          helper: artifactHelperName(input.attemptId),
-        };
-
-        yield* io("filesystem-authority", () =>
-          writeAtomic(this.journal.guardPath(input.attemptId), record),
+        const started = (yield* this.journal.records()).filter(
+          (record) => record.kind === "started",
         );
 
-        return { kind: "granted", record };
-      });
-    });
+        const decision = beginExportTransition(input, {
+          current: this.session,
+          token: token ? { record: token, active: released === null } : null,
+          attempt: yield* this.journal.read(input.attemptId),
+          workspaceBusy: (volume) =>
+            guards.some((guard) => guard.volume === volume) ||
+            started.some((record) => record.plan.volume === volume),
+        });
+
+        if (decision.kind !== "create") {
+          return decision;
+        }
+
+        yield* io("filesystem-authority", () =>
+          writeAtomic(this.journal.guardPath(input.attemptId), decision.record),
+        );
+
+        return { kind: "granted", record: decision.record };
+      }),
+    );
   }
 
   endExport(input: AuthorityInput<"endExport">) {
     return this.serial(() => {
       return Effect.gen({ self: this }, function* () {
-        if (!this.current(input.session)) {
+        if (!sameSession(input.session, this.session)) {
           return yield* Effect.fail(new AuthorityError("stale_session"));
         }
 
@@ -227,6 +186,8 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
           yield* io("filesystem-authority", () => ignoreMissing(unlink(path)));
           yield* io("filesystem-authority", () => syncDirectory(dirname(path)));
         }
+
+        return null;
       });
     });
   }

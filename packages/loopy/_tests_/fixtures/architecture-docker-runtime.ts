@@ -3,9 +3,9 @@ import { mkdir, mkdtemp, readdir, readFile, realpath, writeFile } from "node:fs/
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { decodeBoundary } from "@loopy/contract";
+import { authorityCommandSchema } from "@loopy/contract/sandbox";
 import { Miniflare } from "miniflare";
 import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority";
-import { authorityCommandSchema } from "../../../contract/src/sandbox-journal-rpc";
 
 export const repository = resolve(import.meta.dir, "../../../..");
 

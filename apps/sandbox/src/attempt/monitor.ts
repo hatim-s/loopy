@@ -1,8 +1,13 @@
 import type { ExecutionResult } from "@loopy/contract";
-import { type AttemptRecord, AuthorityError, type AuthoritySession } from "@loopy/contract";
+import {
+  AuthorityError,
+  type AuthoritySession,
+  type StartedAttemptRecord,
+} from "@loopy/contract/sandbox";
 import { Effect, FiberMap } from "effect";
+import type { ResultsFor, SandboxAttemptAuthority } from "../authority";
 import type { AttemptBackend } from "../docker";
-import type { ResultsFor, SandboxAttemptAuthority, SandboxFailure } from "../operations";
+import type { SandboxFailure } from "../operations";
 import { boundedResult } from "../result";
 import type { Stopping } from "../stopping";
 
@@ -21,7 +26,7 @@ export class AttemptMonitors {
     return FiberMap.hasUnsafe(this.options.active, id);
   }
   launch(
-    record: Extract<AttemptRecord, { kind: "started" }>,
+    record: StartedAttemptRecord,
     perform: () => Effect.Effect<ExecutionResult, SandboxFailure>,
   ) {
     return Effect.gen({ self: this }, function* () {
@@ -35,7 +40,7 @@ export class AttemptMonitors {
     });
   }
   private monitor(
-    record: Extract<AttemptRecord, { kind: "started" }>,
+    record: StartedAttemptRecord,
     perform: () => Effect.Effect<ExecutionResult, SandboxFailure>,
   ) {
     const { authority, backend, resultsFor, stopping, session } = this.options;

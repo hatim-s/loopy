@@ -2,10 +2,12 @@ import { timingSafeEqual } from "node:crypto";
 import {
   SANDBOX_MAX_REQUEST_BYTES,
   type SandboxError,
+  type SandboxErrorCode,
   sandboxArtifactRequestSchema,
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
-} from "@loopy/contract";
+  sandboxErrorStatus,
+} from "@loopy/contract/sandbox";
 import { struct } from "@loopy/core";
 import { Cause, Effect, Result, Schema } from "effect";
 import { DockerArtifacts } from "./artifacts";
@@ -17,15 +19,10 @@ import { DockerClient } from "./docker/client";
 import { filesystemStorage } from "./filesystem";
 import { readBounded } from "./http-body";
 import { checked, io, type SandboxFailure } from "./operations";
-import {
-  ExportCleanupError,
-  type SandboxErrorCode,
-  SandboxRequestError,
-  statusFor,
-} from "./request-error";
+import { ExportCleanupError, SandboxRequestError } from "./request-error";
 import { closeableScope } from "./scope";
 
-function error(code: SandboxErrorCode, message: string, status: number = statusFor[code]) {
+function error(code: SandboxErrorCode, message: string, status: number = sandboxErrorStatus[code]) {
   return Response.json({ error: { code, message } } satisfies SandboxError, { status });
 }
 

@@ -1,4 +1,4 @@
-import type { DockerAttemptPlan } from "@loopy/contract";
+import { type DockerAttemptPlan, inputHelperName } from "@loopy/contract/sandbox";
 import type { SandboxConfig } from "../config";
 import { CONTAINER, containerEnvironment } from "../container-layout";
 
@@ -16,10 +16,6 @@ const hardened = [
 
 function create(name: string, labels: string[]) {
   return ["create", "--name", name, ...labels, ...hardened];
-}
-
-export function inputHelperName(plan: DockerAttemptPlan) {
-  return `${plan.container}-input`;
 }
 
 export function inputContainerArgs(

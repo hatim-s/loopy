@@ -1,21 +1,20 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { decodeBoundary, type ExecutionResult, nodeIdSchema } from "@loopy/contract";
 import {
-  decodeBoundary,
-  type ExecutionResult,
-  nodeIdSchema,
+  attemptRequestHash,
+  attemptResources,
+  type DockerAttemptPlan,
   sandboxAttemptRequestSchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { Effect } from "effect";
-import { attemptHash } from "../../../../apps/sandbox/src/admission";
 import type { ArtifactReader } from "../../../../apps/sandbox/src/artifacts";
 import { sandboxConfigSchema } from "../../../../apps/sandbox/src/config";
 import type { AttemptBackend } from "../../../../apps/sandbox/src/docker";
 import { FilesystemAuthority } from "../../../../apps/sandbox/src/filesystem/authority";
 import { FilesystemResults } from "../../../../apps/sandbox/src/filesystem/results";
 import { validateStateRoot } from "../../../../apps/sandbox/src/state-root";
-import type { DockerAttemptPlan } from "../../../contract/src/sandbox-journal";
 
 export const successful: ExecutionResult = {
   kind: "succeeded",
@@ -78,22 +77,17 @@ export async function authorityFixture() {
     bundles: [{ hash, bytes: bytes.toString("base64") }],
   });
 
-  function plan(attempt = 1, runId = "run"): DockerAttemptPlan {
+  async function plan(attempt = 1, runId = "run"): Promise<DockerAttemptPlan> {
     const identity = {
       workspace: request.workspace,
       executionKey: { ...request.executionKey, runId },
       attempt,
     };
 
-    const id = attemptHash({ ...identity, root: config.stateRoot });
-
     return {
       ...identity,
-      id,
-      requestHash: attemptHash({ ...request, ...identity }),
-      container: `loopy-attempt-${id}`,
-      inputVolume: `loopy-input-${id}`,
-      volume: `loopy-workspace-${attemptHash({ root: config.stateRoot, workspace: identity.workspace, runId })}`,
+      ...(await attemptResources(config.stateRoot, identity)),
+      requestHash: await attemptRequestHash({ ...request, ...identity }),
       deadline: 123456789,
     };
   }

@@ -92,7 +92,7 @@ export async function proxySanityProbe() {
           namespace: "proxy-sanity",
         });
 
-        assert.deepEqual(await Effect.runPromise(authority.status()), { epoch: 0 });
+        assert.deepEqual(await Effect.runPromise(authority.status({})), { epoch: 0 });
 
         const direct = decodedProxyResponse(
           new Response(bytes, {

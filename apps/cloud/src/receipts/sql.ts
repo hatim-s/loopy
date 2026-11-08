@@ -1,4 +1,5 @@
 import type { DurableObjectStorage } from "@cloudflare/workers-types";
+import { decodeBoundary } from "@loopy/contract";
 import {
   type AttemptRecord,
   AuthorityError,
@@ -7,10 +8,9 @@ import {
   type AuthoritySession,
   attemptRecordSchema,
   authoritySessionSchema,
-  decodeBoundary,
   type ExportRecord,
   exportRecordSchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 
 export class ReceiptSql {
   constructor(
@@ -26,7 +26,7 @@ export class ReceiptSql {
         CREATE TABLE IF NOT EXISTS receipt_attempts (id TEXT PRIMARY KEY, kind TEXT NOT NULL, volume TEXT NOT NULL, record TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS receipt_attempt_volume ON receipt_attempts(volume,kind);
         CREATE INDEX IF NOT EXISTS receipt_attempt_recovery ON receipt_attempts(kind,id);
-        CREATE TABLE IF NOT EXISTS receipt_exports (token TEXT PRIMARY KEY, volume TEXT NOT NULL, active INTEGER NOT NULL, record TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS receipt_exports (token TEXT PRIMARY KEY, volume TEXT NOT NULL, active INTEGER NOT NULL CHECK(active IN (0,1)), record TEXT NOT NULL);
         CREATE UNIQUE INDEX IF NOT EXISTS receipt_export_volume ON receipt_exports(volume) WHERE active=1;
         CREATE INDEX IF NOT EXISTS receipt_export_recovery ON receipt_exports(token) WHERE active=1;
       `)
@@ -144,11 +144,7 @@ export class ReceiptSql {
 
     const record = decodeBoundary(exportRecordSchema)(JSON.parse(row.record));
 
-    if (
-      record.token !== row.token ||
-      record.volume !== row.volume ||
-      ![0, 1].includes(row.active)
-    ) {
+    if (record.token !== row.token || record.volume !== row.volume) {
       throw new Error("Durable export record does not match its SQL identity.");
     }
 
@@ -161,6 +157,29 @@ export class ReceiptSql {
         .exec("SELECT token FROM receipt_exports WHERE volume=? AND active=1 LIMIT 1", volume)
         .toArray().length > 0
     );
+  }
+
+  pendingStarted(volume: string): boolean {
+    return (
+      this.storage.sql
+        .exec("SELECT id FROM receipt_attempts WHERE volume=? AND kind='started' LIMIT 1", volume)
+        .toArray().length > 0
+    );
+  }
+
+  insertExport(record: ExportRecord): void {
+    this.storage.sql
+      .exec(
+        "INSERT INTO receipt_exports VALUES (?,?,1,?)",
+        record.token,
+        record.volume,
+        JSON.stringify(record),
+      )
+      .toArray();
+  }
+
+  releaseExport(token: string): void {
+    this.storage.sql.exec("UPDATE receipt_exports SET active=0 WHERE token=?", token).toArray();
   }
 
   exportGuards(input: AuthorityInput<"exportGuards">): AuthorityOutput<"exportGuards"> {
@@ -190,10 +209,6 @@ export class ReceiptSql {
 
   recoverable(input: AuthorityInput<"recoverable">): AuthorityOutput<"recoverable"> {
     return this.storage.transactionSync(() => {
-      if (input.after !== null && (!/^[ae]:/.test(input.after) || input.after.length > 258)) {
-        throw new AuthorityError("invalid_state");
-      }
-
       const afterExport = input.after?.startsWith("e:") ?? false;
 
       const attempts = afterExport

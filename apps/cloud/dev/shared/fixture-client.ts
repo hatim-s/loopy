@@ -9,8 +9,8 @@ import {
   putLoopyBodySchema,
   type RunSnapshotView,
   routes,
-  type SandboxAttemptRequest,
 } from "@loopy/contract";
+import { type SandboxAttemptRequest } from "@loopy/contract/sandbox";
 import { Effect, type Schema } from "effect";
 import { root } from "../stack/constants";
 import { assert, type Evidence, failureEvidence, JourneyFailure } from "./assert";

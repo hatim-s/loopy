@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
+import { decodeBoundary } from "@loopy/contract";
 import {
-  decodeBoundary,
   SANDBOX_MAX_ARTIFACT_BYTES,
   type SandboxArtifact,
   type SandboxArtifactRead,
   sandboxArtifactPathSchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { errnoCode } from "@loopy/core";
 import { CONTAINER } from "./container-layout";
 import { SandboxRequestError } from "./request-error";

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type {
-  AuthoritySession,
-  SandboxArtifactRequest,
-  SandboxAttemptIdentity,
-  SandboxAttemptRequest,
-} from "@loopy/contract";
+import {
+  type AuthoritySession,
+  attemptId,
+  type SandboxArtifactRequest,
+  type SandboxAttemptIdentity,
+  type SandboxAttemptRequest,
+} from "@loopy/contract/sandbox";
 import { Cause, Effect, Exit, Fiber, FiberMap, FiberSet, Scope } from "effect";
-import { attemptId } from "../admission";
 import type { SandboxConfig } from "../config";
 import { io, type SandboxFailure, type SandboxOperationError } from "../operations";
 import { publicReceipt } from "../receipt-view";
@@ -67,7 +67,7 @@ export class Attempts {
             (value.close?.() ?? Effect.void).pipe(Effect.orDie),
           );
 
-          const { epoch } = yield* dependencies.authority.status();
+          const { epoch } = yield* dependencies.authority.status({});
 
           const session = yield* dependencies.authority.openSession({
             expectedEpoch: epoch,
@@ -135,14 +135,14 @@ export class Attempts {
     return this.supervise(
       Effect.gen({ self: this }, function* () {
         const { config, dependencies } = this.options;
-        const id = attemptId(config.stateRoot, identity);
+        const id = yield* Effect.promise(() => attemptId(config.stateRoot, identity));
         yield* this.admissions.wait(id);
 
         if (this.monitors.has(id)) {
           return { kind: "started" } as const;
         }
 
-        const record = yield* dependencies.authority.read(id);
+        const record = yield* dependencies.authority.read({ id });
 
         if (record) {
           yield* this.admissions.observe(record);
@@ -159,9 +159,9 @@ export class Attempts {
     return this.supervise(
       Effect.gen({ self: this }, function* () {
         const { config, dependencies } = this.options;
-        const id = attemptId(config.stateRoot, request);
+        const id = yield* Effect.promise(() => attemptId(config.stateRoot, request));
         yield* this.admissions.wait(id);
-        const record = yield* dependencies.authority.read(id);
+        const record = yield* dependencies.authority.read({ id });
 
         if (!record) {
           return yield* Effect.fail(

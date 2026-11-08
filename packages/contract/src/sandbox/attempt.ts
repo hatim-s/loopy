@@ -7,7 +7,7 @@ import {
   struct,
 } from "@loopy/core";
 import { Schema } from "effect";
-import { boundedBase64, boundedToken } from "./codec";
+import { boundedBase64, boundedToken } from "../codec";
 
 export const SANDBOX_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 
@@ -31,18 +31,28 @@ export const sandboxAttemptRequestSchema = struct({
     .check(Schema.isMaxLength(2)),
 });
 
+const SANDBOX_ERROR_CODES = [
+  "unauthorized",
+  "invalid_request",
+  "conflict",
+  "not_found",
+  "output_limit",
+  "internal",
+] as const;
+
+export type SandboxErrorCode = (typeof SANDBOX_ERROR_CODES)[number];
+
+export const sandboxErrorStatus = {
+  unauthorized: 401,
+  invalid_request: 400,
+  conflict: 409,
+  not_found: 404,
+  output_limit: 413,
+  internal: 500,
+} as const satisfies Record<SandboxErrorCode, number>;
+
 export const sandboxErrorSchema = struct({
-  error: struct({
-    code: Schema.Literals([
-      "unauthorized",
-      "invalid_request",
-      "conflict",
-      "not_found",
-      "output_limit",
-      "internal",
-    ]),
-    message: Schema.String,
-  }),
+  error: struct({ code: Schema.Literals(SANDBOX_ERROR_CODES), message: Schema.String }),
 });
 
 export type SandboxAttemptIdentity = Schema.Schema.Type<typeof sandboxAttemptIdentitySchema>;

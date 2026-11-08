@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
-import { AuthorityError, type AuthoritySession } from "../../contract/src/sandbox-journal";
+import { AuthorityError, type AuthoritySession } from "@loopy/contract/sandbox";
 import { authorityFixture, successful, uncertain } from "./fixtures/sandbox-authority";
 import {
   enumerateAuthorityModel,
@@ -18,7 +18,7 @@ async function replay(trace: ModelAction[]) {
   let model = initialModel();
   const a = await run(resultsFor("fixture").put(successful));
   const b = await run(resultsFor("fixture").put(uncertain));
-  const plans = [plan(), plan(2), plan(1, "other")] as const;
+  const plans = [await plan(), await plan(2), await plan(1, "other")] as const;
 
   async function apply(action: ModelAction): Promise<string> {
     const session = action.startsWith("stale") ? first : current;
@@ -120,7 +120,7 @@ async function replay(trace: ModelAction[]) {
           throw new Error("Missing plan");
         }
 
-        const record = await run(authority.read(target.id));
+        const record = await run(authority.read({ id: target.id }));
         const expectedAttempt = model.attempts[attempt];
 
         if (!expectedAttempt) {

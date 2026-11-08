@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type RunSnapshotView, sandboxArtifactSchema } from "@loopy/contract";
+import { type RunSnapshotView } from "@loopy/contract";
+import { sandboxArtifactSchema } from "@loopy/contract/sandbox";
 import { errnoCode } from "@loopy/core";
 import { Schema } from "effect";
 import { sha256Hex } from "../shared/hash";

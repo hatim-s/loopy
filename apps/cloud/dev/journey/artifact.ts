@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { routes, sandboxArtifactSchema } from "@loopy/contract";
+import { routes } from "@loopy/contract";
+import { sandboxArtifactSchema } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { assert, equal } from "../shared/assert";
 import { compileFixture } from "../shared/fixture-client";
