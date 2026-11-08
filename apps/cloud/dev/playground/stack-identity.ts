@@ -2,6 +2,7 @@ import { isAbsolute, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
+import { processFields } from "../stack/processes";
 
 const pidSchema = Schema.Int.check(Schema.isGreaterThan(0));
 
@@ -42,18 +43,8 @@ export type SupervisorManifest = typeof supervisorManifestSchema.Type;
 export type ProcessObservation = { pid: number; pgid: number; command: string } | null;
 
 export async function observeProcess(pid: number): Promise<ProcessObservation> {
-  const child = Bun.spawn(["ps", "-p", String(pid), "-o", "pid=,pgid=,command="], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-
-  const output = await new Response(child.stdout).text();
-
-  if ((await child.exited) !== 0) {
-    return null;
-  }
-
-  const [, observed, group, command] = /^\s*(\d+)\s+(\d+)\s+([^\r\n]+)\s*$/.exec(output) ?? [];
+  const output = await processFields(pid, "pid=,pgid=,command=");
+  const [, observed, group, command] = /^(\d+)\s+(\d+)\s+([^\r\n]+)$/.exec(output ?? "") ?? [];
 
   if (observed === undefined || group === undefined || command === undefined) {
     return null;

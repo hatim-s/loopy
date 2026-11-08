@@ -5,8 +5,9 @@ import { SANDBOX_LABELS } from "../../../sandbox/src/docker/identity";
 import { stateLayout } from "../../../sandbox/src/state-root";
 import { filesystemReceipt } from "../filesystem-receipt";
 import { assert } from "../shared/assert";
-import { command, docker as runDocker } from "../shared/process";
+import { docker as runDocker } from "../shared/process";
 import { root } from "../stack/constants";
+import { processFields, processTree } from "../stack/processes";
 import { environment, owner, sandboxState } from "./config";
 
 export const docker = (args: string[]) => runDocker(args, { env: environment });
@@ -43,29 +44,7 @@ export async function receipts() {
   );
 }
 
-async function identity(pid: number) {
-  const child = Bun.spawn(["/bin/ps", "-p", String(pid), "-o", "lstart=,command="], {
-    stdout: "pipe",
-    stderr: "ignore",
-    env: environment,
-  });
-
-  const value = await new Response(child.stdout).text();
-
-  return (await child.exited) === 0 ? value.trim() : null;
-}
-
-async function processTable() {
-  const rows = (await command(["/bin/ps", "-axo", "pid=,ppid="], { env: environment }))
-    .trim()
-    .split("\n");
-
-  return rows.flatMap((row) => {
-    const match = /^\s*(\d+)\s+(\d+)\s*$/.exec(row);
-
-    return match ? [{ pid: Number(match[1]), parent: Number(match[2]) }] : [];
-  });
-}
+const identity = (pid: number) => processFields(pid, "lstart=,command=", environment);
 
 // Each pid is re-read before signalling so a recycled pid never receives the signal.
 export async function stop(child: ReturnType<typeof Bun.spawn>, signal: "SIGTERM" | "SIGKILL") {
@@ -73,19 +52,7 @@ export async function stop(child: ReturnType<typeof Bun.spawn>, signal: "SIGTERM
     return;
   }
 
-  const rows = await processTable();
-  const descendants = new Set([child.pid]);
-
-  for (let added = true; added; ) {
-    added = false;
-
-    for (const row of rows) {
-      if (descendants.has(row.parent) && !descendants.has(row.pid)) {
-        descendants.add(row.pid);
-        added = true;
-      }
-    }
-  }
+  const descendants = await processTree([child.pid], environment);
 
   const pinned = await Promise.all(
     [...descendants].map(async (pid) => ({ pid, value: await identity(pid) })),
