@@ -1,5 +1,5 @@
 import { type Graph, type InputValidation, UNKNOWN_KEY_MODES } from "./graph";
-import type { RecordSpec } from "./graph/values";
+import { elementType, type RecordSpec } from "./graph/values";
 import type { Json } from "./json";
 import { matchesRecordSpec, recordField, recordFields } from "./record-spec";
 import { isNumber, isRecord, requireOneOf, requireRecord } from "./validation";
@@ -12,7 +12,7 @@ function minimumIssue(key: string) {
 export function inputValidationIssue(validation: InputValidation, fields: RecordSpec) {
   for (const [key, minimum] of Object.entries(validation.minItems)) {
     if (
-      !recordField(fields, key)?.endsWith("[]") ||
+      elementType(recordField(fields, key) ?? null) === null ||
       !Number.isSafeInteger(minimum) ||
       minimum < 0
     ) {

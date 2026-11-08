@@ -5,6 +5,10 @@ export const jsonSchema = Schema.MutableJson;
 
 export type Json = Schema.Schema.Type<typeof jsonSchema>;
 
+export function isScalar(value: Json | undefined): value is string | number | boolean {
+  return isString(value) || isNumber(value) || isBoolean(value);
+}
+
 const MAX_DEPTH = 32;
 
 function assertPlainContainer(value: unknown, path: string): asserts value is object {

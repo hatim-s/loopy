@@ -1,4 +1,4 @@
-import { type Diagnostic, INPUT_REF, type NodeId } from ".";
+import type { Diagnostic } from ".";
 import {
   ancestors,
   continuationTargets,
@@ -9,6 +9,7 @@ import {
   targets,
 } from "./context";
 import { type ValidationContext as Context, diagnostic } from "./validation";
+import { INPUT_REF, type NodeId } from "./values";
 
 function identity({ graph, nodes }: Context): Diagnostic[] {
   const seen = new Set<string>([INPUT_REF]);

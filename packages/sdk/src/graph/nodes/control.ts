@@ -72,9 +72,7 @@ export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
     const index = builder.binding(owner, "index");
 
     return {
-      arms: [
-        { name: "body", run: () => body(builder.ref(item), builder.ref(index)) },
-      ],
+      arms: [{ name: "body", run: () => body(builder.ref(item), builder.ref(index)) }],
       node: (entry) => ({
         kind: "map",
         over: items,

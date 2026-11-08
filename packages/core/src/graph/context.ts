@@ -1,6 +1,8 @@
 import { isRecord } from "../validation";
-import type { ComparisonOperand, Edge, Graph, Node, NodeId, Predicate, Ref, Value } from ".";
+import type { Edge, Graph } from ".";
+import type { Node } from "./nodes";
 import { isRef } from "./ref";
+import type { ComparisonOperand, NodeId, Predicate, Ref, RefLookup, Value } from "./values";
 
 export type Context = {
   graph: Pick<Graph, "input" | "nodes" | "edges">;
@@ -212,7 +214,7 @@ export function reaches(context: Context, from: NodeId, to: NodeId): boolean {
   return visit(from);
 }
 
-export function binding(context: Context, ref: { ref: string; path: string[] }): Node | undefined {
+export function binding(context: Context, ref: RefLookup): Node | undefined {
   return context.graph.nodes.find(
     (node) =>
       (node.kind === "map" && (node.item === ref.ref || node.index === ref.ref)) ||

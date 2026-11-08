@@ -22,7 +22,7 @@ export * from "./graph";
 
 export { validateGraph } from "./graph/check";
 
-export { isReservedGraphName, nodeNames } from "./graph/names";
+export { nodeNames } from "./graph/names";
 
 export { checkPredicate } from "./graph/predicate";
 

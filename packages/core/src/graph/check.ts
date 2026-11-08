@@ -1,12 +1,14 @@
 import { inputValidationIssue } from "../input";
-import { type Diagnostic, type Graph, INPUT_REF, type Node, type Ref } from ".";
+import type { Diagnostic, Graph } from ".";
 import { ancestors, binding, bodyEntries, refs, sameBody, scopeReaches, values } from "./context";
-import { isReservedGraphName, nodeNames } from "./names";
+import { nodeNames } from "./names";
+import type { Node } from "./nodes";
 import { checkPredicate, hasSize } from "./predicate";
 import { isRef } from "./ref";
 import { structureRules } from "./structure";
 import { graphTypeResolver } from "./type";
 import { type ValidationContext as Context, diagnostic } from "./validation";
+import { INPUT_REF, isReservedGraphName, isScalarType, type Ref, type RefLookup } from "./values";
 
 function visible(context: Context, producer: Node, consumer: Node): boolean {
   const chain = [consumer, ...ancestors(consumer, context.nodes)];
@@ -24,7 +26,7 @@ function visible(context: Context, producer: Node, consumer: Node): boolean {
   );
 }
 
-function validPath(context: Context, ref: { ref: string; path: string[] }): boolean {
+function validPath(context: Context, ref: RefLookup): boolean {
   if (context.resolveType(ref) === "never") {
     return false;
   }
@@ -118,8 +120,7 @@ function formats(context: Context): Diagnostic[] {
   return context.graph.nodes.flatMap((node) =>
     node.kind === "format" &&
     Object.values(node.values).some(
-      (value) =>
-        isRef(value) && !["string", "number", "boolean"].includes(context.resolveType(value) ?? ""),
+      (value) => isRef(value) && !isScalarType(context.resolveType(value)),
     )
       ? [diagnostic("format_type", node.id, "Format operands must have a declared scalar type.")]
       : [],

@@ -1,7 +1,7 @@
 import { durationMs } from "../duration";
 import type { NodeRun } from "../graph/node-run";
 import type { Node } from "../graph/nodes";
-import { isBoolean, isNumber, isString } from "../validation";
+import { isScalar } from "../json";
 import type { ControlNode } from "./control";
 import { captureInput } from "./input";
 import { write } from "./node-run";
@@ -124,7 +124,7 @@ function formatted(
 
     const value = values.get(name);
 
-    if (!isString(value) && !isNumber(value) && !isBoolean(value)) {
+    if (!isScalar(value)) {
       throw new Error(`Format value '${name}' must be a scalar.`);
     }
 

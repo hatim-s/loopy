@@ -1,13 +1,7 @@
-import { fieldKey } from "../record-spec";
 import { isRecord } from "../validation";
-import type { Node, Value } from ".";
 import { values } from "./context";
-
-const RESERVED_GRAPH_NAMES = ["__proto__", "constructor", "prototype"] as const;
-
-export function isReservedGraphName(name: string): boolean {
-  return RESERVED_GRAPH_NAMES.some((reserved) => reserved === fieldKey(name));
-}
+import { declaredOutput, type Node } from "./nodes";
+import type { Value } from "./values";
 
 function valueNames(value: Value): string[] {
   if (Array.isArray(value)) {
@@ -20,12 +14,7 @@ function valueNames(value: Value): string[] {
 }
 
 export function nodeNames(node: Node): string[] {
-  const schema =
-    node.kind === "code" || node.kind === "command"
-      ? node.out
-      : node.kind === "wait"
-        ? node.payload
-        : null;
+  const schema = declaredOutput(node);
 
   return [
     ...(node.label === null ? [] : [node.label]),

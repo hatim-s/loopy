@@ -1,6 +1,7 @@
-import type { Diagnostic, DiagnosticCode, Graph, NodeId } from ".";
+import type { Diagnostic, DiagnosticCode, Graph } from ".";
 import type { Context } from "./context";
 import type { ResolveType } from "./predicate";
+import type { NodeId } from "./values";
 
 export type ValidationContext = Context & { graph: Graph; resolveType: ResolveType };
 

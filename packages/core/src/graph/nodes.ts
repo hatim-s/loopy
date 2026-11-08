@@ -7,6 +7,7 @@ import {
   graphRecord,
   labelSchema,
   nodeIdSchema,
+  type OutSchema,
   outputSchema,
   predicateSchema,
   refIdSchema,
@@ -167,4 +168,20 @@ export const nodeSchema = Schema.Union([codeNodeSchema, commandNodeSchema, ...ot
 
 export type Node = Schema.Schema.Type<typeof nodeSchema>;
 
-export type NodeKind = Node["kind"];
+export type ExecutableNode = Extract<Node, { kind: "code" | "command" }>;
+
+export function isExecutable(node: Node): node is ExecutableNode {
+  return node.kind === "code" || node.kind === "command";
+}
+
+export function declaredOutput(node: Node): OutSchema | null {
+  switch (node.kind) {
+    case "code":
+    case "command":
+      return node.out;
+    case "wait":
+      return node.payload;
+    default:
+      return null;
+  }
+}
