@@ -4,22 +4,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { ExecutionKey, NodeRun, Store } from "@loopy/core";
-import { MemoryStore, makeSqliteRunStore } from "@loopy/runtime/store";
+import { activateDurable } from "@loopy/runtime/host";
+import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { code, loopy, parallel, sh, wait } from "@loopy/sdk/graph";
 import { Effect, Exit, Schema, Scope } from "effect";
-import { activateDurable } from "../../runtime/src/host/durable";
 import { newRun } from "./fixture";
 import { PolicyProvider, policyGraph, policySuccess } from "./host-policy-fixture";
+import { MemorySqlStore, memoryStore, runAt } from "./store-fixture";
 
-for (const backend of ["memory", "sqlite"] as const) {
+for (const backend of ["portable", "local"] as const) {
   test(`${backend} targeted node reads preserve ordered scopes and detach nested data`, async () => {
     const root = mkdtempSync(join(tmpdir(), "loopy-host-node-"));
 
     const scope = Scope.makeUnsafe();
 
     const store =
-      backend === "memory"
-        ? new MemoryStore()
+      backend === "portable"
+        ? memoryStore()
         : await Effect.runPromise(
             makeSqliteRunStore(join(root, "runs.sqlite")).pipe(
               Effect.provideService(Scope.Scope, scope),
@@ -93,7 +94,7 @@ for (const backend of ["memory", "sqlite"] as const) {
 }
 
 test("started-only turns use two full reads plus B targeted reads without extra receipt writes", async () => {
-  class CountingStore extends MemoryStore {
+  class CountingStore extends MemorySqlStore {
     full = 0;
     targeted = 0;
     batches: Parameters<Store["apply"]>[0][] = [];
@@ -130,7 +131,8 @@ test("started-only turns use two full reads plus B targeted reads without extra 
   }
 
   let now = Date.parse(newRun().createdAt);
-  const store = new CountingStore(() => now, 3000);
+  const run = runAt(() => now);
+  const store = new CountingStore({ leaseMs: 4000 });
   const provider = new PolicyProvider();
 
   const graph = loopy("wide", {
@@ -157,10 +159,10 @@ test("started-only turns use two full reads plus B targeted reads without extra 
     }
   }
 
-  await Effect.runPromise(store.createRun(newRun()));
+  await run(store.createRun(newRun()));
 
   const turn = (cursor: string | null, maxWork = 3) =>
-    Effect.runPromise(
+    run(
       activateDurable({
         store,
         provider,
@@ -194,21 +196,17 @@ test("started-only turns use two full reads plus B targeted reads without extra 
     // The reconstruction batch remains. Receipt polls must add no second batch.
     expect(store.batches).toHaveLength(1);
     expect(result.nextWakeAt).toBe(new Date(now + 1000).toISOString());
-    expect((await Effect.runPromise(store.getRun("run")))?.owner?.heartbeatAt).toBe(
-      new Date(now).toISOString(),
-    );
+    expect((await run(store.getRun("run")))?.owner?.heartbeatAt).toBe(new Date(now).toISOString());
   }
 
   expect(new Set(provider.lookups).size).toBe(9);
   expect(provider.starts).toHaveLength(9);
-  await expect(Effect.runPromise(store.claim("run", "foreign"))).rejects.toThrow(
-    "not owned by this token",
-  );
+  await expect(run(store.claim("run", "foreign"))).rejects.toThrow("not owned by this token");
 });
 
 for (const observation of ["completion", "denial"] as const) {
   test(`a signal during ${observation} is read before reduction`, async () => {
-    const store = new MemoryStore();
+    const store = memoryStore();
     const provider = new PolicyProvider();
 
     const graph =
@@ -240,7 +238,16 @@ for (const observation of ["completion", "denial"] as const) {
       });
     };
 
-    const options = { store, provider, graph, at, runId: "run", token: "owner" };
+    const options = {
+      store,
+      provider,
+      graph,
+      at,
+      runId: "run",
+      token: "owner",
+      maxWork: 32,
+      pollMs: 1000,
+    };
 
     if (observation === "completion") {
       await Effect.runPromise(activateDurable(options));

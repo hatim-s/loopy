@@ -143,7 +143,7 @@ test("cleanup failure takes precedence and rescue catches failures from immediat
   ).toContain("body failed");
 });
 
-test("a retry and an indefinite wait suspend until the retry deadline", () => {
+test("a retry beside an indefinite wait keeps the run leased until the retry deadline", () => {
   const graph = loopy("retry-wait", {
     input: {},
     run: () =>
@@ -161,11 +161,8 @@ test("a retry and an indefinite wait suspend until the retry deadline", () => {
   }
 
   const result = failed(graph, first.state, dispatch.executionKey);
-  expect(result.effects).toContainEqual({
-    kind: "suspend_run",
-    wakeAt: "2026-10-20T00:00:01.000Z",
-    at,
-  });
+  expect(result.effects).toContainEqual({ kind: "schedule_retry", at: "2026-10-20T00:00:01.000Z" });
+  expect(result.effects.some((effect) => effect.kind === "suspend_run")).toBe(false);
 
   const resumed = step(graph, initialState("run", {}, result.state.nodeRuns), {
     kind: "run_started",

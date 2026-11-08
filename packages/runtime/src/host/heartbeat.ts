@@ -7,9 +7,15 @@ export class DriverCleanupFailed extends Data.TaggedError("DriverCleanupFailed")
   driver: Exit.Exit<unknown, unknown>;
 }> {}
 
-/** Heartbeat outlives driver cleanup. A lost lease stops the driver, never restores ownership. */
+// Several renewals fit in one lease, so a single failed write never loses ownership.
+export function leaseRenewalMs(leaseMs: number): number {
+  return Math.max(1, Math.floor(leaseMs / 4));
+}
+
+type Beat = "renewed" | "lost" | "storage_unavailable";
+
 export function withHeartbeat<A, E, R>(
-  store: Store,
+  store: Pick<Store, "heartbeat" | "leaseMs">,
   runId: string,
   token: string,
   work: Effect.Effect<A, E, R>,
@@ -18,40 +24,41 @@ export function withHeartbeat<A, E, R>(
     Effect.gen(function* () {
       const lost = yield* Deferred.make<never, StorageError | OwnershipError>();
       let renewedAt = yield* Clock.currentTimeMillis;
-      // Small fixture/provider leases need renewal below the old 250ms timer floor.
-      const interval = Math.max(1, store.leaseMs / 4);
+
+      const beat = Effect.suspend(() => store.heartbeat(runId, token)).pipe(
+        Effect.map((owned): Beat => (owned ? "renewed" : "lost")),
+        Effect.catchCause((cause) => {
+          const recoverable =
+            cause.reasons.length > 0 &&
+            cause.reasons.every(
+              (reason) => Cause.isFailReason(reason) && reason.error instanceof StorageError,
+            );
+
+          if (!recoverable) {
+            return Effect.failCause(cause);
+          }
+
+          return Clock.currentTimeMillis.pipe(
+            Effect.flatMap((now) =>
+              now - renewedAt >= store.leaseMs
+                ? Effect.failCause(cause)
+                : Effect.succeed<Beat>("storage_unavailable"),
+            ),
+          );
+        }),
+      );
 
       const heartbeat = Effect.gen(function* () {
         while (true) {
-          yield* Effect.sleep(interval);
+          yield* Effect.sleep(leaseRenewalMs(store.leaseMs));
 
-          const owned = yield* store.heartbeat(runId, token).pipe(
-            Effect.catchCause((cause) => {
-              const recoverable =
-                cause.reasons.length > 0 &&
-                cause.reasons.every(
-                  (reason) => Cause.isFailReason(reason) && reason.error instanceof StorageError,
-                );
+          const result = yield* beat;
 
-              if (!recoverable) {
-                return Effect.failCause(cause);
-              }
-
-              return Clock.currentTimeMillis.pipe(
-                Effect.flatMap((now) =>
-                  now - renewedAt >= store.leaseMs
-                    ? Effect.failCause(cause)
-                    : Effect.succeed(undefined),
-                ),
-              );
-            }),
-          );
-
-          if (owned === false) {
+          if (result === "lost") {
             return yield* Effect.fail(new OwnershipError(runId));
           }
 
-          if (owned) {
+          if (result === "renewed") {
             renewedAt = yield* Clock.currentTimeMillis;
           }
         }
@@ -68,7 +75,6 @@ export function withHeartbeat<A, E, R>(
         Effect.forkScoped(Effect.interruptible(work)),
         (driver) =>
           Effect.gen(function* () {
-            // Race observations only. The bracket owns interruption and captures the driver's final Exit.
             const winner = yield* Effect.raceFirst(
               Fiber.await(driver).pipe(Effect.map((exit) => ({ kind: "driver" as const, exit }))),
               Deferred.await(lost).pipe(
@@ -86,7 +92,6 @@ export function withHeartbeat<A, E, R>(
             yield* Fiber.interrupt(driver);
             const stopped = yield* Fiber.await(driver);
 
-            // Pure interruption is the requested stop. A mixed Cause contains cleanup failures we must retain.
             if (
               !observedDriver &&
               Exit.isFailure(stopped) &&

@@ -112,8 +112,18 @@ function sampled(
   return true;
 }
 
+// A retrying or rate-limited node keeps the run leased until its retry is due.
 function suspend(transition: Transition, at: string) {
   if (transition.effects.some((effect) => effect.kind === "dispatch" || effect.kind === "sample")) {
+    return;
+  }
+
+  if (
+    transition.state.nodeRuns.some(
+      (run) =>
+        run.status === "running" || run.status === "retrying" || run.status === "rate_limited",
+    )
+  ) {
     return;
   }
 
@@ -121,23 +131,19 @@ function suspend(transition: Transition, at: string) {
     (run) => run.status === "waiting" || run.status === "sleeping",
   );
 
-  const executing = transition.state.nodeRuns.some((run) => run.status === "running");
-
-  if (pending.length === 0 || executing) {
+  if (pending.length === 0) {
     return;
   }
 
-  const deadlines = pending.flatMap((run) =>
-    (run.status === "waiting" || run.status === "sleeping") && run.wakeAt !== null
-      ? [run.wakeAt]
-      : [],
-  );
+  const wakeAt =
+    pending
+      .flatMap((run) =>
+        (run.status === "waiting" || run.status === "sleeping") && run.wakeAt !== null
+          ? [run.wakeAt]
+          : [],
+      )
+      .sort()[0] ?? null;
 
-  const retry = transition.effects
-    .filter((effect) => effect.kind === "schedule_retry")
-    .map((effect) => effect.at);
-
-  const wakeAt = [...deadlines, ...retry].sort()[0] ?? null;
   transition.effects.push({ kind: "suspend_run", wakeAt, at });
 }
 

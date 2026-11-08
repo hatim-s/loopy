@@ -1,15 +1,7 @@
-import { executionKeyString, type Graph, type Store } from "@loopy/core";
-import type { Effect as EngineEffect } from "@loopy/core/engine";
+import type { Graph, Store } from "@loopy/core";
 import { Effect } from "effect";
-import { completionEvent } from "../completion-event";
-import { acquireDispatch } from "../rate-limit";
-import { type DurableExecutionProvider, DurableProviderError } from ".";
-
-export type DurableWork = Extract<EngineEffect, { kind: "dispatch" | "sample" }>;
-
-export function durableWorkId(work: DurableWork): string {
-  return `${executionKeyString(work.executionKey)}/${work.kind === "dispatch" ? work.attempt : "sample"}`;
-}
+import { admitDispatch, completionEvent, type HostWork, sampleEvent } from "../turn";
+import { type DurableExecutionProvider, DurableProviderError } from "./provider";
 
 export function reconcileDurableWork(options: {
   store: Store;
@@ -17,19 +9,14 @@ export function reconcileDurableWork(options: {
   runId: string;
   token: string;
   provider: DurableExecutionProvider;
-  work: DurableWork;
+  work: HostWork;
   at: string;
 }) {
   return Effect.gen(function* () {
     const { store, graph, runId, token, provider, work, at } = options;
 
     if (work.kind === "sample") {
-      return {
-        kind: "value_sampled" as const,
-        executionKey: work.executionKey,
-        value: work.valueKind === "uuid" ? crypto.randomUUID() : Math.random(),
-        at,
-      };
+      return sampleEvent(work, at);
     }
 
     const previous = yield* store.getNodeRun(work.executionKey);
@@ -56,13 +43,7 @@ export function reconcileDurableWork(options: {
     }
 
     if (receipt.kind === "none") {
-      const denial = yield* acquireDispatch({
-        graph,
-        store,
-        lookup: () => Effect.succeed(receipt),
-        dispatch: work,
-        at,
-      });
+      const denial = yield* admitDispatch({ graph, store, dispatch: work, at });
 
       if (denial) {
         return denial;

@@ -6,13 +6,13 @@ import { initialState, step } from "@loopy/core/engine";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { activate } from "@loopy/runtime/host";
 import { SecretStore } from "@loopy/runtime/local";
-import { MemoryStore } from "@loopy/runtime/store";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Effect, Schema } from "effect";
 import { receiptPath } from "../../runtime/src/executor/receipts";
 import { prepareLaunch } from "../../runtime/src/local/process";
 import { newRun } from "./fixture";
 import { commandSpec, fixture } from "./fixtures/executor";
+import { MemorySqlStore } from "./store-fixture";
 
 test("full inherited environment stays out of sandbox launcher arguments", async () => {
   const f = await fixture();
@@ -324,7 +324,7 @@ test("parser execution failures propagate to the stored graph node and run", asy
   }
 
   node.parse = { bundleHash: "a".repeat(64), input: {} };
-  const store = new MemoryStore();
+  const store = new MemorySqlStore();
   await Effect.runPromise(store.createRun(newRun()));
   expect(
     await Effect.runPromise(activate({ store, executor: f.executor, graph, runId: "run" })),

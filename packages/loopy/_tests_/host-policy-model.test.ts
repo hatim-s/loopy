@@ -1,6 +1,7 @@
 import { test } from "bun:test";
+import { Effect } from "effect";
 import { actions, initialModel, type ModelAction, modelStep } from "./host-policy-model";
-import { replayPolicy } from "./host-policy-replay";
+import { policyStore, replayPolicy, withFilePolicyStore } from "./host-policy-replay";
 
 for (const budget of [1, 2]) {
   test(`bounded independent host model, depth eight, budget ${budget}`, async () => {
@@ -9,6 +10,7 @@ for (const budget of [1, 2]) {
     const queue = [{ state: initial, trace: firstTrace }];
     const seen = new Set([JSON.stringify(initial)]);
     let transitions = 0;
+    const store = policyStore();
 
     for (let index = 0; index < queue.length; index++) {
       const current = queue[index];
@@ -20,7 +22,7 @@ for (const budget of [1, 2]) {
       for (const action of actions(current.state)) {
         const trace = [...current.trace, action];
         const next = modelStep(current.state, action).state;
-        await replayPolicy(trace, "memory", budget);
+        await replayPolicy(trace, store, `run-${transitions}`, budget);
         transitions++;
         const key = JSON.stringify(next);
 
@@ -31,13 +33,14 @@ for (const budget of [1, 2]) {
       }
     }
 
+    await Effect.runPromise(store.close());
     console.log(
       `host model budget=${budget} depth=8 states=${seen.size} transitions=${transitions} shortest counterexample=none`,
     );
-  }, 60_000);
+  }, 180_000);
 }
 
-const sqlTraces: ModelAction[][] = [
+const fileTraces: ModelAction[][] = [
   ["start_loss", "turn", "finish", "signal", "turn", "turn"],
   ["turn", "lookup_loss", "turn", "vanish", "turn", "turn"],
   [
@@ -69,8 +72,8 @@ const sqlTraces: ModelAction[][] = [
   ],
 ];
 
-for (const [index, trace] of sqlTraces.entries()) {
-  test(`representative SQL host model trace ${index + 1}`, async () => {
-    await replayPolicy(trace, "sqlite", (index % 2) + 1);
+for (const [index, trace] of fileTraces.entries()) {
+  test(`representative file-backed host model trace ${index + 1}`, async () => {
+    await withFilePolicyStore((store) => replayPolicy(trace, store, "run", (index % 2) + 1));
   });
 }

@@ -3,44 +3,50 @@ import {
   OwnershipError,
   type RunOutcome,
   type RunRecord,
-  type StorageError,
   type Store,
 } from "@loopy/core";
-import { Cause, Data, Effect, type Exit } from "effect";
-import { type ActivationOptions, activate, LEASE_RELEASE_TIMEOUT_MS } from "./activation";
+import { Cause, Clock, Data, Effect } from "effect";
+import { type ActivationOptions, activate } from "./activation";
+import { withLease } from "./lease";
 
 export class PreparationError extends Data.TaggedError("PreparationError")<{ cause: unknown }> {}
 
-export class PreparationReleaseFailed extends Data.TaggedError("PreparationReleaseFailed")<{
-  runId: string;
-  preparation: PreparationError;
-  primary: Exit.Exit<RunOutcome, StorageError | OwnershipError>;
-  cause: StorageError | OwnershipError;
-}> {}
-
-export class PreparationReleaseUnknown extends Data.TaggedError("PreparationReleaseUnknown")<{
-  runId: string;
-  preparation: PreparationError;
-  primary: Exit.Exit<RunOutcome, StorageError | OwnershipError>;
-}> {}
+export type Prepare = (
+  run: RunRecord,
+) => Effect.Effect<Pick<ActivationOptions, "graph" | "executor">, PreparationError>;
 
 type Options = {
   store: Store;
-  prepare: (
-    run: RunRecord,
-  ) => Effect.Effect<Pick<ActivationOptions, "graph" | "executor">, PreparationError>;
+  prepare: Prepare;
   stopped: () => boolean;
-  onError: (cause: Cause.Cause<unknown>, run: RunRecord) => void;
+  report: (cause: Cause.Cause<unknown>, run: RunRecord) => Effect.Effect<void>;
 };
 
+// A run that cannot be prepared fails durably, so the daemon does not retry it forever.
+function failPreparation(store: Store, run: RunRecord, preparation: PreparationError) {
+  const outcome: RunOutcome = { status: "failed", error: errorMessage(preparation.cause) };
+
+  return withLease(store, run.id, (token) =>
+    Effect.flatMap(Clock.currentTimeMillis, (now) =>
+      store.apply({
+        runId: run.id,
+        token,
+        effects: [{ kind: "finish_run", outcome, at: new Date(now).toISOString() }],
+      }),
+    ),
+  );
+}
+
+/** Returns whether the activation made progress. Claim contention between daemons is expected. */
 export function activateRun(options: Options, run: RunRecord) {
-  const report = (cause: Cause.Cause<unknown>) => Effect.sync(() => options.onError(cause, run));
+  const report = (cause: Cause.Cause<unknown>) => options.report(cause, run);
 
   return Effect.gen(function* () {
     if (options.stopped()) {
       return false;
     }
 
+    // Only a lone preparation failure is a business failure. Interruption and defects propagate.
     const prepared = yield* options.prepare(run).pipe(
       Effect.catchCause((cause) =>
         Effect.gen(function* () {
@@ -50,50 +56,16 @@ export function activateRun(options: Options, run: RunRecord) {
             return yield* Effect.failCause(cause);
           }
 
-          const preparation = reason.error;
-
-          return yield* Effect.suspend(() => {
-            const token = crypto.randomUUID();
-
-            const outcome: RunOutcome = {
-              status: "failed",
-              error: errorMessage(preparation.cause),
-            };
-
-            return Effect.acquireUseRelease(
-              options.store.claim(run.id, token),
-              () => options.store.finishRun(run.id, token, outcome).pipe(Effect.as(outcome)),
-              (claimed, primary) =>
-                options.store.release(run.id, token).pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new PreparationReleaseFailed({
-                        runId: claimed.id,
-                        preparation,
-                        primary,
-                        cause,
-                      }),
-                  ),
-                  Effect.interruptible,
-                  Effect.timeoutOrElse({
-                    duration: LEASE_RELEASE_TIMEOUT_MS,
-                    orElse: () =>
-                      Effect.fail(
-                        new PreparationReleaseUnknown({ runId: claimed.id, preparation, primary }),
-                      ),
-                  }),
-                ),
-            );
-          }).pipe(Effect.andThen(report(Cause.fail(preparation))), Effect.as(undefined));
+          yield* failPreparation(options.store, run, reason.error).pipe(
+            Effect.ensuring(report(Cause.fail(reason.error))),
+          );
         }),
       ),
     );
 
-    if (!prepared) {
-      return true;
+    if (prepared) {
+      yield* activate({ ...prepared, store: options.store, runId: run.id });
     }
-
-    yield* activate({ ...prepared, store: options.store, runId: run.id });
 
     return true;
   }).pipe(

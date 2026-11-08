@@ -1,17 +1,15 @@
 import type { RunRecord } from "@loopy/core";
 import { Effect, Fiber, type Scope } from "effect";
 
-/** The caller's scope owns every admitted activation. Membership outlives completion until cleanup. */
-export class ActivationPool<E = never> {
-  private readonly pending = new Map<string, Fiber.Fiber<boolean, E>>();
-  private progress = 0;
+export class ActivationPool {
+  private readonly pending = new Map<string, Fiber.Fiber<unknown, unknown>>();
+
   constructor(
     private readonly concurrency: number,
-    private readonly activate: (run: RunRecord) => Effect.Effect<boolean, E>,
-    private readonly onProgress: () => void,
+    private readonly activate: (run: RunRecord) => Effect.Effect<unknown, unknown>,
   ) {}
 
-  start(run: RunRecord): Effect.Effect<Fiber.Fiber<boolean, E> | undefined, never, Scope.Scope> {
+  start(run: RunRecord): Effect.Effect<void, never, Scope.Scope> {
     return Effect.gen({ self: this }, function* () {
       if (this.pending.has(run.id) || this.pending.size >= this.concurrency) {
         return;
@@ -23,40 +21,20 @@ export class ActivationPool<E = never> {
             this.pending.delete(run.id);
           }),
         ),
-        Effect.tap((progress) =>
-          Effect.sync(() => {
-            if (progress) {
-              this.progress++;
-              this.onProgress();
-            }
-          }),
-        ),
         Effect.forkScoped({ startImmediately: false }),
       );
 
       this.pending.set(run.id, fiber);
-
-      return fiber;
     });
   }
 
-  has(runId: string) {
-    return this.pending.has(runId);
-  }
-  fibers() {
-    return [...this.pending.values()];
-  }
   get active() {
     return this.pending.size;
   }
-  takeProgress() {
-    const progress = this.progress;
-    this.progress = 0;
 
-    return progress;
-  }
+  // Waits for every admitted activation to end. Each activation reports its own failures.
   drain() {
-    return Effect.forEach([...this.pending.values()], Fiber.join, {
+    return Effect.forEach([...this.pending.values()], Fiber.await, {
       concurrency: "unbounded",
       discard: true,
     });

@@ -161,8 +161,12 @@ await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     replace: false, source: {path: ${JSON.stringify(join(fixture, "entry.ts"))}, workspace: cwd},
   });
   const run = yield* service.startRun("packed", {}, cwd);
-  yield* daemon.tick;
-  const snapshot = yield* service.runSnapshot(run.id);
+  yield* Effect.forkScoped(daemon.run);
+  let snapshot = yield* service.runSnapshot(run.id);
+  for (let attempt = 0; attempt < 600 && (snapshot.run.status === "queued" || snapshot.run.status === "running"); attempt++) {
+    yield* Effect.sleep(50);
+    snapshot = yield* service.runSnapshot(run.id);
+  }
   if (snapshot.run.status !== "succeeded" || snapshot.run.output !== 42) {
     throw new Error(JSON.stringify(snapshot));
   }
