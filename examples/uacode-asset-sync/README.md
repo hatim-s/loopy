@@ -35,4 +35,4 @@ The worktree and its local branch are removed in `finally`, including after ordi
 
 `request.ts` defines the Standard Schema, request defaults and refinements. `prompt.ts` contains prompt text, allowed-path checks and PR body formatting. Neither spawns commands or reads files.
 
-Tests live in `packages/loopy/_tests_/examples.test.ts` and `examples-helpers.test.ts`. Run `bun test packages/loopy/_tests_/examples`. They use recording executors and bundled definitions, never UAT or real PR publication.
+Helper tests live in `examples/_tests_/summary.test.ts` and `helpers.test.ts`. Run `bun test ./examples/_tests_`. They cover request validation and summary parsing. They never touch UAT or publish a real PR.

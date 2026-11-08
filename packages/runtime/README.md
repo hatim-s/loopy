@@ -1,6 +1,6 @@
 # @loopy/runtime
 
-Private implementation package for hosts, stores, executors, the portable service and local adapters. See [AGENTS.md](../../AGENTS.md) for layer rules and ownership.
+Private implementation package for OS adapters, the HTTP edge, hosts, stores, executors, the portable service and local adapters. See [AGENTS.md](../../AGENTS.md) for layer rules and ownership.
 
 ## Retained data
 

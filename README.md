@@ -87,14 +87,15 @@ Graph failures are outcome values. Infrastructure errors use tagged Effect error
 
 ## Architecture
 
-Public entries are `loopy` and `loopy/graph` for authoring, `loopy/engine` for the reducer, `loopy/local` for local composition and `loopy/contract` for browser-safe wire schemas. There is no `loopy/runtime` entry.
+Public entries are `loopy` for authoring, `loopy/engine` for the reducer, `loopy/local` for local composition and `loopy/contract` for browser-safe wire schemas. There is no `loopy/runtime` entry.
 
 ```mermaid
 flowchart TD
   CLI[CLI] --> Local[Local composition]
   CLI --> Compiler[Restricted compiler]
   Compiler --> SDK[Compile-only graph builder]
-  Compiler --> Local
+  Compiler --> OS[OS processes, sandbox profiles and durable files]
+  Compiler --> Executor
   Compiler --> Core
   Compiler --> Contract
   SDK --> Core
@@ -103,34 +104,37 @@ flowchart TD
   Local --> Host[Activation and scheduling]
   Local --> Store[Atomic persistence]
   Local --> Executor[Workers and receipts]
+  Local --> OS
   Cloud[Cloud Worker and Durable Objects] --> Service
   Cloud --> Host
   Host --> Engine[Pure graph reducer]
   Engine --> Core[Graph and execution contracts]
   Store --> Core
   Store --> Contract
+  Store --> OS
   Executor --> Core
   Executor --> Contract
-  Executor --> Bridge[Local execution OS bridge]
+  Executor --> OS
   Service --> Core
   Service --> Contract
+  Service --> HTTP[Bounded HTTP edge]
 ```
 
-The implementation lives in private workspace packages. `packages/loopy` is the public distribution: its source only re-exports supported APIs and starts the CLI. The build includes compiled implementation modules, declarations and dashboard assets in the tarball, so consumers do not install private workspace packages.
+The implementation lives in private workspace packages. `packages/loopy` is the public distribution: its source only re-exports supported APIs, and its bin is the vendored CLI entry. The build includes compiled implementation modules, declarations and dashboard assets in the tarball, so consumers do not install private workspace packages.
 
 | Package | Owns |
 | --- | --- |
 | `@loopy/core` | Graph contracts, validation and the pure engine |
 | `@loopy/contract` | Browser-safe wire schemas, routes and views |
 | `@loopy/sdk` | Authoring API, command descriptors and parsers |
-| `@loopy/runtime` | Host, store, executor, service and local adapters |
+| `@loopy/runtime` | OS, HTTP edge, host, store, executor, service and local adapters |
 | `@loopy/compiler` | Restricted evaluation and executable artifact compilation |
 | `@loopy/cli` | HTTP commands and daemon control |
 | `loopy` | Public exports, executable and packaged assets |
 
-Use relative extensionless imports within a package and declared workspace exports across packages. SDK stays separate from compiler because runtime uses command rendering while compiler uses runtime resources.
+Use relative extensionless imports within a package and declared workspace exports across packages. SDK stays separate from compiler because runtime needs only SDK descriptor types for type generation, while compiler uses runtime resources: os sandboxing and the executor protocol.
 
-Arrows point from a consumer to its dependency. The runtime keeps host, store, executor, service and local as internal modules.
+Arrows point from a consumer to its dependency. The runtime keeps os, http, host, store, executor, service and local as internal modules.
 
 ```mermaid
 flowchart TD
@@ -183,10 +187,12 @@ flowchart LR
 | `executor` | Worker dispatch, bounded protocol and durable receipts |
 | `compiler`, `sdk` | Restricted graph construction and executable artifact production |
 | `service` | Portable operations over injected persistence and registries |
-| `local`, `cli` | Files, processes, scoped daemon composition and HTTP commands |
+| `os` | Processes, sandbox profiles, secret files, durable files and pid locks |
+| `http` | Bounded request bodies and bearer comparison for every HTTP edge |
+| `local`, `cli` | Registry paths, scoped daemon composition and HTTP commands |
 | `apps/cloud`, `apps/sandbox` | Provider adapters, durable turns and sandbox attempt supervision |
 
-Modules expose operations that hide their transaction, resource or protocol details. Effect factories and layers acquire resources at composition boundaries. Memory stores, fake executors and injected clocks exercise the same contracts as production adapters. Architecture tests enforce explicit package exports, dependency direction and runtime module boundaries.
+Modules expose operations that hide their transaction, resource or protocol details. Effect factories and layers acquire resources at composition boundaries. In-memory SQLite stores, fake executors and injected clocks exercise the same contracts as production adapters. Architecture tests enforce explicit package exports, dependency direction and runtime module boundaries.
 
 ```mermaid
 sequenceDiagram
@@ -250,11 +256,13 @@ Sandbox mode denies network and restricts filesystem access using platform sandb
 
 ## Development
 
-Run `bun run check` before pushing. It builds the package and dashboard, checks lint and types, then runs package, dashboard and workload tests. Tests use temporary homes, explicit registry markers and injected dependencies. Real Docker acceptance is opt-in; local workerd coverage does not establish deployed-provider acceptance.
+Run `bun run check` before pushing. It builds the package and dashboard, checks lint and types, then runs every package, app and `examples/_tests_` test root. Tests use temporary homes, explicit registry markers and injected dependencies. No gated test runs Docker; the manual `apps/cloud/dev` journeys do. Local workerd coverage does not prove a deployed provider works.
 
 After changing the core or runtime, also run `bun run acceptance:local`. This executes checked-in loopies through the real CLI and an isolated daemon, verifies their results, and retains evidence under `.loopy/acceptance`. It is a separate acceptance run, not part of `bun test`. See [the local acceptance suite](packages/loopy/_tests_/acceptance/README.md) for cases, reports and coverage limits.
 
 See [AGENTS.md](AGENTS.md) for module ownership, [the cloud README](apps/cloud/README.md) for provider boundaries and [the sandbox README](apps/sandbox/README.md) for retained receipt rules.
+
+For dashboard work, `bun run --cwd apps/dashboard demo` seeds a throwaway daemon and prints its port. Then run `LOOPY_API_ORIGIN=http://127.0.0.1:<port> bun run --cwd apps/dashboard dev`, which proxies `/api` to that daemon. `VITE_API_BASE_URL` sets the API origin of a built dashboard.
 
 Cloud development tooling lives under `apps/cloud/dev`, with its tests under `apps/cloud/_tests_/dev`. It includes reusable fixture journeys, workload comparisons and approval-gated provider probes. The frozen-source and provider approval guards still apply. Root `scripts/` contains only build and global-install orchestration.
 
