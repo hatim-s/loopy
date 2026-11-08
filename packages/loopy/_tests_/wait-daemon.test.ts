@@ -37,7 +37,7 @@ test("daemon leaves an indefinite sleep when a durable approval signal wakes its
         const daemon = yield* makeDaemon({
           store,
           concurrency: 1,
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
           prepare: () => Effect.succeed({ graph, executor: new FakeExecutor() }),
           onError: (cause) => {
             errors.push(cause);

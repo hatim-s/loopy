@@ -1,15 +1,15 @@
-import type { RunRecord, Schedule, Store } from "@loopy/core";
+import type { RunRecord, Store } from "@loopy/core";
 import { Cause, Clock, Deferred, Effect, Queue, Scope, Semaphore } from "effect";
 import { activateRun, type Prepare } from "./daemon-activation";
 import { ActivationPool } from "./pool";
-import { type ScheduleRevisionError, ScheduleScheduler } from "./schedules";
+import { fireDueSchedules, type ScheduleFiringOptions } from "./schedules";
 import { subscribeStore } from "./subscription";
 
 export type DaemonOptions = {
   store: Store;
   prepare: Prepare;
   concurrency: number;
-  revisionFor: (schedule: Schedule) => Effect.Effect<string, ScheduleRevisionError>;
+  definitionFor: ScheduleFiringOptions["definitionFor"];
   onError?: (cause: Cause.Cause<unknown>, run?: RunRecord) => void;
 };
 
@@ -52,12 +52,12 @@ export const makeDaemon = (options: DaemonOptions) =>
       ),
     );
 
-    const schedules = new ScheduleScheduler({
+    const schedules: ScheduleFiringOptions = {
       store,
-      revisionFor: options.revisionFor,
+      definitionFor: options.definitionFor,
       stopped: () => stopped,
       report,
-    });
+    };
 
     yield* subscribeStore(store, (events) => {
       if (
@@ -85,7 +85,7 @@ export const makeDaemon = (options: DaemonOptions) =>
         nextPruneAt = time + PRUNE_INTERVAL_MS;
       }
 
-      const fired = yield* schedules.tick(now);
+      const fired = yield* fireDueSchedules(schedules, now);
 
       for (const run of yield* store.dueRuns(now)) {
         yield* pool.start(run);

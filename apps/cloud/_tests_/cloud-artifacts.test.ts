@@ -14,8 +14,8 @@ import { revision } from "@loopy/core";
 import { code, loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
 import { Miniflare } from "miniflare";
-import { ARTIFACT_LIMITS } from "../../../apps/cloud/src/artifacts";
-import { compiledBody } from "./compiled-fixture";
+import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import { ARTIFACT_LIMITS } from "../src/artifacts";
 
 let runtime: Miniflare;
 
@@ -33,16 +33,16 @@ beforeAll(async () => {
   // Give the artifact entry a distinct output name from the service barrel.
   await writeFile(
     join(directory, "artifacts.ts"),
-    `export * from ${JSON.stringify(relative(directory, new URL("../../../apps/cloud/src/artifacts", import.meta.url).pathname))};`,
+    `export * from ${JSON.stringify(relative(directory, new URL("../src/artifacts", import.meta.url).pathname))};`,
   );
 
   const built = await Bun.build({
     entrypoints: [
       join(directory, "effect.ts"),
       join(directory, "artifacts.ts"),
-      new URL("../../../apps/cloud/src/sql-driver.ts", import.meta.url).pathname,
-      new URL("../../runtime/src/service/index.ts", import.meta.url).pathname,
-      new URL("../../runtime/src/store/portable.ts", import.meta.url).pathname,
+      new URL("../src/sql-driver.ts", import.meta.url).pathname,
+      new URL("../../../packages/runtime/src/service/index.ts", import.meta.url).pathname,
+      new URL("../../../packages/runtime/src/store/portable.ts", import.meta.url).pathname,
     ],
     target: "browser",
     splitting: true,
@@ -100,8 +100,6 @@ beforeAll(async () => {
                 try { await Effect.runPromise(registry.save(body)); return "saved"; }
                 catch (error) { return error.message; }
               }));
-            } else if (operation === "forgetSizes") {
-              this.state.storage.sql.exec("DELETE FROM artifact_graph_sizes WHERE workspace = ?", workspace);
             } else if (operation === "listSizes") {
               const entries = await Effect.runPromise(registry.listSummaries());
               value = {
@@ -401,9 +399,6 @@ test("aggregate capacity rejects new and replacement pointers while existing ope
     status: 200,
     body: { value: { revision: first.revision } },
   });
-
-  // Discard only the additive metadata to exercise already published pointers after reopening.
-  expect(await call(workspace, "forgetSizes")).toMatchObject({ status: 200 });
 
   const oversizedReplacement = await compiledBody("definition-0", "/entry.ts", {
     workspace,

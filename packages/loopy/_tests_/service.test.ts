@@ -14,6 +14,8 @@ import { compiledBody } from "./compiled-fixture";
 import { FakeExecutor } from "./fixture";
 import { fixtureDaemon, fixtureStore, waitUntil } from "./fixtures/service-runtime";
 
+const serviceGraph = loopy("test", { input: { name: "string" }, run: ({ input }) => input });
+
 const cleanups: (() => void | Promise<void>)[] = [];
 
 afterEach(async () => {
@@ -351,12 +353,8 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     concurrency: 4,
     store,
     clock,
-    revisionFor: () => Effect.succeed("bundle"),
-    prepare: () =>
-      Effect.succeed({
-        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }),
-        executor: new FakeExecutor(),
-      }),
+    definitionFor: () => Effect.succeed({ revision: "bundle", graph: serviceGraph }),
+    prepare: () => Effect.succeed({ graph: serviceGraph, executor: new FakeExecutor() }),
   });
 
   await Effect.runPromise(
@@ -429,16 +427,14 @@ async function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
     concurrency: 4,
     store: f.store,
     clock: f.clock,
-    revisionFor: () => {
+    definitionFor: () => {
       entered.resolve();
 
-      return Effect.promise(() => bundle.promise);
+      return Effect.promise(() => bundle.promise).pipe(
+        Effect.map((revision) => ({ revision, graph: serviceGraph })),
+      );
     },
-    prepare: () =>
-      Effect.succeed({
-        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }),
-        executor: new FakeExecutor(),
-      }),
+    prepare: () => Effect.succeed({ graph: serviceGraph, executor: new FakeExecutor() }),
   });
 
   return { daemon, entered: entered.promise, release: () => bundle.resolve("bundle") };

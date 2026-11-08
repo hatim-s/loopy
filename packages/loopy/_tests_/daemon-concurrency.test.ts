@@ -49,7 +49,7 @@ test("six runs respect concurrency two while the loop keeps polling", async () =
           store,
           concurrency: 2,
           prepare: () => Effect.succeed({ graph, executor }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
         });
 
         for (let i = 0; i < 6; i++) {
@@ -113,7 +113,7 @@ test("shutdown drains owned work without aborting its receipt and preserves queu
           store,
           concurrency: 1,
           prepare: () => Effect.succeed({ graph, executor }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
         });
 
         yield* store.createRun(newRun());

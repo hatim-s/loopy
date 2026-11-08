@@ -4,7 +4,6 @@ import { CloudError, platform } from "../operation";
 
 export const ARTIFACT_LIMITS = {
   definitions: 1000,
-  requestBytes: 24 * 1024 * 1024,
   graphBytes: 1024 * 1024,
   bundleBytes: 8 * 1024 * 1024,
   totalBundleBytes: 16 * 1024 * 1024,

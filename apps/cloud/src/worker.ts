@@ -1,8 +1,8 @@
-import { errorResponse, json } from "@loopy/runtime/service";
+import { CLOUD_MAX_REQUEST_BYTES } from "@loopy/contract";
+import { bearerMatches, errorResponse, json, readBoundedBody } from "@loopy/runtime/service";
 import { Effect } from "effect";
-import type { Environment } from "./environment";
-import { principals } from "./environment";
-import { acceptsOrigin, boundedRequest } from "./http";
+import { cloudConfig, type Environment, servesLocally } from "./environment";
+import { acceptsOrigin, mebibytes } from "./http";
 import { platform } from "./operation";
 import { RECEIPTS_PATH, routeReceipts } from "./receipts/route";
 
@@ -14,16 +14,10 @@ function handle(request: Request, env: Environment) {
   return Effect.gen(function* () {
     const url = new URL(request.url);
 
-    if (env.LOOPY_STAGE !== "local" || !["127.0.0.1", "localhost"].includes(url.hostname)) {
-      return json(
-        {
-          error: {
-            code: "forbidden",
-            message:
-              "This configuration is local-only. Phase 2 requires approval and a deployment configuration.",
-          },
-        },
-        403,
+    if (!servesLocally(env, url)) {
+      return errorResponse(
+        "forbidden",
+        "This configuration is local-only. Phase 2 requires approval and a deployment configuration.",
       );
     }
 
@@ -35,8 +29,11 @@ function handle(request: Request, env: Environment) {
       return yield* routeReceipts(request, env);
     }
 
-    const principal = principals(env).find(
-      ({ token }) => request.headers.get("Authorization") === `Bearer ${token}`,
+    const authorization = request.headers.get("Authorization");
+
+    // Every principal is compared so the match position does not show in the timing.
+    const [principal] = cloudConfig(env).principals.filter(({ token }) =>
+      bearerMatches(authorization, token),
     );
 
     if (!principal) {
@@ -50,29 +47,28 @@ function handle(request: Request, env: Environment) {
       );
     }
 
-    const bounded = yield* boundedRequest(request);
+    const body = yield* readBoundedBody(request.body, CLOUD_MAX_REQUEST_BYTES).pipe(
+      Effect.catchTag("BodyLimitError", () => Effect.succeed(null)),
+    );
 
-    if (bounded instanceof Response) {
-      return bounded;
+    if (body === null) {
+      return errorResponse(
+        "bad_request",
+        `Request exceeds the ${mebibytes(CLOUD_MAX_REQUEST_BYTES)} cloud artifact limit.`,
+      );
     }
 
-    const headers = new Headers(bounded.headers);
+    const headers = new Headers(request.headers);
     headers.set("X-Loopy-Workspace", principal.workspace);
     const stub = env.WORKSPACES.get(env.WORKSPACES.idFromName(principal.workspace));
 
-    const body = bounded.body
-      ? yield* platform("read request", () => bounded.arrayBuffer())
-      : undefined;
-
-    const response = yield* platform("forward workspace request", () =>
-      stub.fetch(bounded.url, {
-        method: bounded.method,
+    return yield* platform("forward workspace request", () =>
+      stub.fetch(request.url, {
+        method: request.method,
         headers: [...headers],
-        body,
+        body: request.body === null ? undefined : body,
       }),
     );
-
-    return response;
   });
 }
 

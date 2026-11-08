@@ -8,9 +8,9 @@ import {
   operationOutput,
   SANDBOX_MAX_REQUEST_BYTES,
 } from "@loopy/contract/sandbox";
+import { readBoundedBody } from "@loopy/runtime/service";
 import { Effect } from "effect";
 import type { ImmutableResults, SandboxAttemptAuthority } from "./authority";
-import { readBounded } from "./http-body";
 import { failure } from "./operations";
 
 export class HttpSandboxAuthority implements SandboxAttemptAuthority {
@@ -79,13 +79,15 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
       throw new Error("Receipt authority returned an empty response.");
     }
 
-    const bytes = await readBounded(response.body, SANDBOX_MAX_REQUEST_BYTES);
+    const bytes = await Effect.runPromise(
+      readBoundedBody(response.body, SANDBOX_MAX_REQUEST_BYTES).pipe(
+        Effect.catchTag("BodyLimitError", () =>
+          Effect.fail(new Error("Receipt authority response exceeds its byte limit.")),
+        ),
+      ),
+    );
 
-    if (bytes === null) {
-      throw new Error("Receipt authority response exceeds 16 MiB.");
-    }
-
-    return bytes.toString("utf8");
+    return new TextDecoder().decode(bytes);
   }
 
   status(input: AuthorityInput<"status">) {

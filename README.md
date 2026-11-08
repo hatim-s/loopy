@@ -244,7 +244,7 @@ Declare secret names in the definition. The executor reads one validated snapsho
 
 Sandbox mode denies network and restricts filesystem access using platform sandbox tools. Executable bundles retain filesystem restrictions even when full mode permits network. Unsupported or failed sandbox launches do not fall back to broader permissions. Only save trusted source and executable modules.
 
-`--home` or `LOOPY_HOME` selects the home containing registry metadata, historical graphs, captured sources, bundles, receipts, secrets and `runs.sqlite`. Project lookup selects the nearest ancestor with `.loopy/loopies`. A slug belongs to its canonical source file; `save --replace` transfers that ownership. SQLite schema 15 upgrades schemas 13 and 14 atomically and rejects unsupported populated databases without resetting them.
+`--home` or `LOOPY_HOME` selects the home containing registry metadata, historical graphs, captured sources, bundles, receipts, secrets and `runs.sqlite`. Project lookup selects the nearest ancestor with `.loopy/loopies`. A slug belongs to its canonical source file; `save --replace` transfers that ownership. SQLite schema 16 upgrades schemas 13, 14 and 15 atomically and rejects unsupported populated databases without resetting them.
 
 `loopy daemon install` installs a user service through launchd or systemd. `daemon status` reads private discovery metadata; `daemon uninstall` removes the service. Pass an absolute `--home` to select isolated state. Logs append to `<home>/logs/daemon.log`.
 

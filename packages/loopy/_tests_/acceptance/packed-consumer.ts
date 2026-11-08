@@ -42,6 +42,7 @@ await Effect.runPromise(
     Effect.gen(function* () {
       const store = yield* openRunStore(home);
       const service = makeLocalService({ home, store, clock: { now: Date.now } });
+
       const daemon = yield* localDaemon({
         home,
         cwd,
@@ -50,6 +51,7 @@ await Effect.runPromise(
         port: 0,
         assets: join(cwd, "node_modules/loopy/dist/dashboard"),
       });
+
       const url = yield* daemon.start;
       yield* Effect.promise(() => assertDashboardServed(url));
       yield* service.putLoopy("packed", {

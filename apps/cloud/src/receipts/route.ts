@@ -1,9 +1,10 @@
 import { decodeBoundary } from "@loopy/contract";
 import { SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract/sandbox";
+import { bearerMatches } from "@loopy/runtime/service";
 import { Effect, Schema } from "effect";
 import type { Environment } from "../environment";
-import { principals } from "../environment";
-import { readBoundedText, recoverBodyLimit } from "../http";
+import { cloudConfig } from "../environment";
+import { readBoundedText } from "../http";
 import { platform } from "../operation";
 
 export const RECEIPTS_PATH = "/internal/sandbox-receipts";
@@ -36,7 +37,7 @@ export function receiptsConfiguration(env: Environment) {
     root: env.RECEIPTS_ROOT,
   });
 
-  if (principals(env).some(({ token }) => token === config.token)) {
+  if (cloudConfig(env).principals.some(({ token }) => token === config.token)) {
     throw new Error("Receipt bridge credentials must differ from user principal credentials.");
   }
 
@@ -58,7 +59,7 @@ export function receiptAccess(request: Request, env: Environment): Response | nu
 
   const config = receiptsConfiguration(env);
 
-  if (request.headers.get("Authorization") !== `Bearer ${config.token}`) {
+  if (!bearerMatches(request.headers.get("Authorization"), config.token)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -87,8 +88,8 @@ export function routeReceipts(request: Request, env: Environment) {
       return Response.json({ error: "invalid_request" }, { status: 400 });
     }
 
-    const body = yield* recoverBodyLimit(
-      readBoundedText(new Response(request.body), SANDBOX_MAX_REQUEST_BYTES),
+    const body = yield* readBoundedText(new Response(request.body), SANDBOX_MAX_REQUEST_BYTES).pipe(
+      Effect.catchTag("BodyLimitError", () => Effect.succeed(null)),
     );
 
     if (body === null) {

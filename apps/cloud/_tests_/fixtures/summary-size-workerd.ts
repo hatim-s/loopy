@@ -4,8 +4,8 @@ import { canonicalJson, errorMessage } from "@loopy/core";
 import { makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect, Schema } from "effect";
-import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts";
-import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
+import { R2ArtifactRegistry } from "../../src/artifacts";
+import { DurableSqlDriver } from "../../src/sql-driver";
 
 const requestSchema = Schema.Struct({
   operation: Schema.Literals(["legacy", "save", "summary", "list", "service", "inspect"]),

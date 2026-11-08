@@ -21,9 +21,9 @@ import {
   RegistryError,
 } from "@loopy/runtime/service";
 import { Effect, Result } from "effect";
-import { ArtifactDefinitions, type Publication } from "./definitions";
+import { ArtifactDefinitions, artifactEntry, type Publication } from "./definitions";
 import { ARTIFACT_LIMITS, bytesToBase64, ImmutableBucket, r2Key } from "./storage";
-import { artifactEntry, checkArtifactLimits } from "./validation";
+import { checkArtifactLimits } from "./validation";
 
 export { ARTIFACT_LIMITS } from "./storage";
 
@@ -53,7 +53,7 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
     private readonly workspaceId: string,
   ) {
     this.artifacts = new ImmutableBucket(bucket, r2Key.workspace(workspaceId));
-    this.definitions = new ArtifactDefinitions(storage, this.artifacts, workspaceId);
+    this.definitions = new ArtifactDefinitions(storage, workspaceId);
   }
   workspace() {
     return Effect.succeed(this.workspaceId);
@@ -267,9 +267,6 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
       );
 
       const graph = new TextEncoder().encode(canonicalJson(body.graph));
-      yield* this.definitions.capacity
-        .measureCurrent(body.graph.name)
-        .pipe(Effect.mapError(registryError("measure capacity")));
       yield* publicationSync("check capacity", () =>
         this.definitions.capacity.check(body.graph.name, graph.byteLength),
       );

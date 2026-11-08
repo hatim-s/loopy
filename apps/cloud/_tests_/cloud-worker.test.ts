@@ -6,8 +6,8 @@ import { revision } from "@loopy/core";
 import { log, loopy, wait } from "@loopy/sdk/graph";
 import { Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { waitRecordSchema } from "../../runtime/src/store/wait-schema";
-import { compiledBody } from "./compiled-fixture";
+import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import { waitRecordSchema } from "../../../packages/runtime/src/store/wait-schema";
 
 let runtime: Miniflare;
 

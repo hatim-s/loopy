@@ -102,7 +102,7 @@ function scheduleFires(makeStore: StoreFactory): void {
     await Effect.runPromise(store.putSchedule(SCHEDULE));
     const next = "2026-10-16T00:01:00.000Z";
     const run = newRun();
-    const fire = { ...SCHEDULE, fireKey: "key", run, nextFireAt: next };
+    const fire = { schedule: SCHEDULE, next, run };
     expect(
       await Promise.all([
         Effect.runPromise(store.fireSchedule(fire)),
@@ -113,16 +113,13 @@ function scheduleFires(makeStore: StoreFactory): void {
     run.input = "changed";
     expect((await Effect.runPromise(store.getRun("run")))?.input).toEqual(SCHEDULE.input);
     expect(await Effect.runPromise(store.listSchedules())).toEqual([
-      { ...SCHEDULE, lastFireKey: "key", nextFireAt: next },
+      { ...SCHEDULE, lastFireKey: `test@${SCHEDULE.nextFireAt}`, nextFireAt: next },
     ]);
-    expect(
-      await Effect.runPromise(store.fireSchedule({ ...fire, run: newRun(), nextFireAt: LOG.at })),
-    ).toBe(false);
     expect(
       await Effect.runPromise(
         store.fireSchedule({
-          ...fire,
-          fireKey: "next-key",
+          schedule: { ...SCHEDULE, nextFireAt: next },
+          next: "2026-10-16T00:02:00.000Z",
           run: { ...newRun(), id: "next" },
         }),
       ),
@@ -136,14 +133,7 @@ function scheduleFireFailures(makeStore: StoreFactory): void {
     const store = await fixture(makeStore);
     await Effect.runPromise(store.putSchedule(SCHEDULE));
     await expect(
-      Effect.runPromise(
-        store.fireSchedule({
-          ...SCHEDULE,
-          fireKey: "key",
-          run: newRun(),
-          nextFireAt: LOG.at,
-        }),
-      ),
+      Effect.runPromise(store.fireSchedule({ schedule: SCHEDULE, next: LOG.at, run: newRun() })),
     ).rejects.toThrow("Run 'run' already exists. Use a new run ID.");
     expect(await Effect.runPromise(store.listSchedules())).toEqual([SCHEDULE]);
     expect(await allRuns(store)).toEqual([newRun()]);
@@ -151,10 +141,9 @@ function scheduleFireFailures(makeStore: StoreFactory): void {
     await expect(
       Effect.runPromise(
         store.fireSchedule({
-          ...SCHEDULE,
-          fireKey: "key",
+          schedule: SCHEDULE,
+          next: LOG.at,
           run: { ...newRun(), id: "missing" },
-          nextFireAt: LOG.at,
         }),
       ),
     ).rejects.toThrow("Schedule 'test' does not exist. Save the schedule before firing it.");
@@ -175,7 +164,9 @@ function scheduleRevisions(makeStore: StoreFactory): void {
     expect(replacement.version).toBe(original.version + 1);
     const before = await Effect.runPromise(store.events(0, 100));
     expect(
-      await Effect.runPromise(store.fireSchedule({ ...original, fireKey: "stale", run: newRun() })),
+      await Effect.runPromise(
+        store.fireSchedule({ schedule: original, next: nextFireAt, run: newRun() }),
+      ),
     ).toBe(false);
     expect(await allRuns(store)).toEqual([]);
     expect(await Effect.runPromise(store.listSchedules())).toEqual([replacement]);
@@ -183,50 +174,44 @@ function scheduleRevisions(makeStore: StoreFactory): void {
   });
 }
 
-function scheduleAdvances(makeStore: StoreFactory): void {
-  test("catch-up advances only nextFireAt and rejects stale, disabled and deleted schedules without events", async () => {
+function scheduleFailures(makeStore: StoreFactory): void {
+  test("a failed schedule waits for its retry deadline and a disabled one keeps its error until saved", async () => {
     const store = await makeStore();
     const original = await Effect.runPromise(store.putSchedule(SCHEDULE));
+    const retryAt = "2026-10-16T00:00:05.000Z";
+    const failure = { workspace: SCHEDULE.workspace, slug: "test", error: "boom" };
 
-    const replacement = await Effect.runPromise(
-      store.putSchedule({
-        ...original,
-        cron: "0 * * * *",
-        input: "edited",
-      }),
-    );
-
-    const nextFireAt = "2026-10-16T01:00:00.000Z";
-    const before = await Effect.runPromise(store.events(0, 100));
-    expect(await Effect.runPromise(store.advanceSchedule({ ...original, nextFireAt }))).toBe(false);
-    expect(await Effect.runPromise(store.listSchedules())).toEqual([replacement]);
-    expect(await Effect.runPromise(store.events(0, 100))).toEqual(before);
-    expect(await Effect.runPromise(store.advanceSchedule({ ...replacement, nextFireAt }))).toBe(
-      true,
-    );
-    const advanced = { ...replacement, nextFireAt };
-    expect(await Effect.runPromise(store.listSchedules())).toEqual([advanced]);
-    expect((await Effect.runPromise(store.events(0, 100))).slice(before.length)).toMatchObject([
-      { entity: "schedule", kind: "saved", record: advanced },
-    ]);
-
-    const disabled = await Effect.runPromise(
-      store.setScheduleEnabled({ ...advanced, enabled: false }),
-    );
-
-    const disabledEvents = await Effect.runPromise(store.events(0, 100));
     expect(
       await Effect.runPromise(
-        store.advanceSchedule({ ...disabled, nextFireAt: SCHEDULE.nextFireAt }),
+        store.failSchedule({ schedule: { ...original, version: 0 }, error: "boom", retryAt }),
       ),
     ).toBe(false);
+    expect(
+      await Effect.runPromise(store.failSchedule({ schedule: original, error: "boom", retryAt })),
+    ).toBe(true);
+    expect(await Effect.runPromise(store.dueSchedules(LOG.at, 10))).toEqual([]);
+    expect(await Effect.runPromise(store.dueSchedules(retryAt, 10))).toEqual([original]);
+    expect(await Effect.runPromise(store.nextScheduleAt())).toBe(retryAt);
+    expect(await Effect.runPromise(store.scheduleFailures(10))).toEqual([{ ...failure, retryAt }]);
+
+    const before = await Effect.runPromise(store.events(0, 100));
+    expect(
+      await Effect.runPromise(
+        store.failSchedule({ schedule: original, error: "boom", retryAt: null }),
+      ),
+    ).toBe(true);
+    const disabled = { ...original, enabled: false, version: original.version + 1 };
     expect(await Effect.runPromise(store.listSchedules())).toEqual([disabled]);
-    expect(await Effect.runPromise(store.events(0, 100))).toEqual(disabledEvents);
-    await Effect.runPromise(store.deleteSchedule(disabled.workspace, disabled.slug));
-    const deletedEvents = await Effect.runPromise(store.events(0, 100));
-    expect(await Effect.runPromise(store.advanceSchedule({ ...disabled, nextFireAt }))).toBe(false);
-    expect(await Effect.runPromise(store.listSchedules())).toEqual([]);
-    expect(await Effect.runPromise(store.events(0, 100))).toEqual(deletedEvents);
+    expect((await Effect.runPromise(store.events(0, 100))).slice(before.length)).toMatchObject([
+      { entity: "schedule", kind: "saved", record: disabled },
+    ]);
+    expect(await Effect.runPromise(store.scheduleFailures(10))).toEqual([
+      { ...failure, retryAt: null },
+    ]);
+    expect(await Effect.runPromise(store.nextScheduleAt())).toBeUndefined();
+
+    await Effect.runPromise(store.putSchedule(SCHEDULE));
+    expect(await Effect.runPromise(store.scheduleFailures(10))).toEqual([]);
   });
 }
 
@@ -240,7 +225,7 @@ function scheduleToggles(makeStore: StoreFactory): void {
     );
 
     const nextFireAt = "2026-10-16T01:00:00.000Z";
-    const fire = { ...replacement, fireKey: "current", run: newRun(), nextFireAt };
+    const fire = { schedule: replacement, next: nextFireAt, run: newRun() };
     expect(await Effect.runPromise(store.fireSchedule(fire))).toBe(true);
 
     const disabled = await Effect.runPromise(
@@ -251,13 +236,13 @@ function scheduleToggles(makeStore: StoreFactory): void {
       }),
     );
 
-    const fired = { ...replacement, nextFireAt, lastFireKey: "current" };
+    const fired = { ...replacement, nextFireAt, lastFireKey: `test@${replacement.nextFireAt}` };
     expect(disabled).toEqual({ ...fired, enabled: false, version: 3 });
     const before = await Effect.runPromise(store.events(0, 100));
-    expect(await Effect.runPromise(store.fireSchedule({ ...fire, fireKey: "stale" }))).toBe(false);
+    expect(await Effect.runPromise(store.fireSchedule(fire))).toBe(false);
     expect(
       await Effect.runPromise(
-        store.fireSchedule({ ...fire, version: disabled.version, fireKey: "disabled" }),
+        store.fireSchedule({ ...fire, schedule: { ...disabled, nextFireAt } }),
       ),
     ).toBe(false);
     expect(await allRuns(store)).toHaveLength(1);
@@ -513,7 +498,7 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
     scheduleFires(makeStore);
     scheduleFireFailures(makeStore);
     scheduleRevisions(makeStore);
-    scheduleAdvances(makeStore);
+    scheduleFailures(makeStore);
     scheduleToggles(makeStore);
     nextWakeAt(makeStore);
     rateLimits(makeStore);

@@ -134,6 +134,8 @@ export {
 
 export * from "./graph";
 
+export * from "./limits";
+
 export { parseModuleOutput } from "./module-output";
 
 export { canCancelRun, cancelRefusal, canResumeRun, runMatchesQuery } from "./run-rules";
