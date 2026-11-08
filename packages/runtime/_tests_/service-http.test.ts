@@ -176,7 +176,8 @@ for (const failApply of [false, true]) {
     expect(await response.text()).not.toContain("private");
     expect(f.causes).toHaveLength(1);
     const failures = f.causes[0]!.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
-    expect(failures).toEqual(failApply ? [applyError, releaseError] : [releaseError]);
+    const released = { _tag: "LeaseReleaseFailed", runId: run.id, cause: releaseError };
+    expect(failures).toMatchObject(failApply ? [applyError, released] : [released]);
   });
 }
 

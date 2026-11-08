@@ -1,12 +1,11 @@
 import { expect, test } from "bun:test";
-import { type Executor, OwnershipError, StorageError } from "@loopy/core";
+import { type Executor, LeaseReleaseUnknown, OwnershipError, StorageError } from "@loopy/core";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Cause, Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import {
   DriverCleanupFailed,
-  LeaseReleaseUnknown,
   makeDaemon,
   PreparationError,
   ScheduleDefinitionError,

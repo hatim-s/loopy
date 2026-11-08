@@ -42,6 +42,8 @@ export {
   outputBytes,
 } from "./json";
 
+export { LeaseReleaseFailed, LeaseReleaseUnknown, withLease } from "./lease";
+
 export { limitLogs } from "./logs";
 
 export * from "./model";

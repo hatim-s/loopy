@@ -1,5 +1,11 @@
 import { cancelRefusal, isTerminalRun, type Json } from "@loopy/contract";
-import { executionKeyString, isPendingWait, type RunRecord, type StoreEffect } from "@loopy/core";
+import {
+  executionKeyString,
+  isPendingWait,
+  type RunRecord,
+  type StoreEffect,
+  withLease,
+} from "@loopy/core";
 import { Effect } from "effect";
 import type { ServiceContext } from "./context";
 import { requireDefinition } from "./definition";
@@ -43,7 +49,7 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
       return yield* Effect.fail(new ServiceError("not_claimable"));
     }
 
-    yield* store.claim(id, token).pipe(
+    return yield* store.claim(id, token).pipe(
       Effect.catchTag("OwnershipError", () =>
         Effect.fail(
           new ServiceError(
@@ -101,10 +107,10 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
     }
 
     yield* cancellableNodes(id);
-    const token = crypto.randomUUID();
-    yield* Effect.acquireUseRelease(
-      claim(id, token),
-      () =>
+    yield* withLease(
+      { claim, release: (runId, token) => store.release(runId, token) },
+      id,
+      (token) =>
         Effect.gen(function* () {
           const nodes = yield* cancellableNodes(id);
           const at = yield* now;
@@ -135,7 +141,6 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
           effects.push({ kind: "finish_run", outcome: { status: "cancelled" }, at });
           yield* store.apply({ runId: id, token, effects });
         }),
-      () => store.release(id, token),
     );
 
     return yield* view(yield* requireRun(id));

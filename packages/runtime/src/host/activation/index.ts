@@ -1,16 +1,16 @@
-import type {
-  Executor,
-  ExecutorError,
-  Graph,
-  OwnershipError,
-  RunOutcome,
-  StorageError,
-  Store,
+import {
+  type Executor,
+  type ExecutorError,
+  type Graph,
+  type OwnershipError,
+  type RunOutcome,
+  type StorageError,
+  type Store,
+  withLease,
 } from "@loopy/core";
 import type { EngineEvent } from "@loopy/core/engine";
 import { Clock, Effect } from "effect";
 import { type DriverCleanupFailed, withHeartbeat } from "../heartbeat";
-import { withLease } from "../lease";
 import { commitTurn, type TurnOptions } from "../turn";
 import { type ActivationWorkCleanupFailed, makeActivationWork } from "./work";
 

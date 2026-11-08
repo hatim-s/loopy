@@ -4,10 +4,10 @@ import {
   type RunOutcome,
   type RunRecord,
   type Store,
+  withLease,
 } from "@loopy/core";
 import { Cause, Clock, Data, Effect } from "effect";
 import { type ActivationOptions, activate } from "./activation";
-import { withLease } from "./lease";
 
 export class PreparationError extends Data.TaggedError("PreparationError")<{ cause: unknown }> {}
 

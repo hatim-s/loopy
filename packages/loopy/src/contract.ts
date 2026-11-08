@@ -1,4 +1,4 @@
-// Browser-safe wire schemas, routes and views. Sandbox protocol and server-side validation stay private.
+// Browser-safe wire schemas, routes and views. Server-side artifact validation stays private.
 export {
   boundaryOptions,
   type CursorView,
