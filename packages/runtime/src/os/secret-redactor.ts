@@ -44,27 +44,34 @@ function unitPattern(unit: Unit): string {
   }
 }
 
-/** Phase 0 starts a unit, -1 follows at least one backslash, n > 0 counts escape letters read. */
-type Thread = { index: number; phase: number; start: number };
+type Phase = { kind: "start" } | { kind: "escaped" } | { kind: "letters"; read: number };
 
-/** Phase after one more character of a control unit, or "done" once the unit is complete. */
+type Thread = { index: number; phase: Phase; start: number };
+
+const START: Phase = { kind: "start" };
+
+const ESCAPED: Phase = { kind: "escaped" };
+
+const samePhase = (a: Phase, b: Phase) =>
+  a.kind === b.kind && (a.kind !== "letters" || (b.kind === "letters" && a.read === b.read));
+
 function controlPhase(
   unit: Extract<Unit, { kind: "control" }>,
-  phase: number,
+  phase: Phase,
   char: string,
-): number | "done" | undefined {
-  if (phase === 0 && char === unit.raw) {
+): Phase | "done" | undefined {
+  if (phase.kind === "start" && char === unit.raw) {
     return "done";
   }
 
-  if (phase <= 0 && char === "\\") {
-    return -1;
+  if (phase.kind !== "letters" && char === "\\") {
+    return ESCAPED;
   }
 
-  const read = Math.max(phase, 0);
+  const read = phase.kind === "letters" ? phase.read : 0;
 
-  if (phase !== 0 && char === unit.escape[read]) {
-    return read + 1 === unit.escape.length ? "done" : read + 1;
+  if (phase.kind !== "start" && char === unit.escape[read]) {
+    return read + 1 === unit.escape.length ? "done" : { kind: "letters", read: read + 1 };
   }
 
   return undefined;
@@ -72,7 +79,7 @@ function controlPhase(
 
 function advance(secret: Unit[], { index, phase, start }: Thread, char: string): Thread[] {
   const unit = secret[index];
-  const next = (to: number, at = 0) => ({ index: to, phase: at, start });
+  const next = (to: number, at = START) => ({ index: to, phase: at, start });
 
   switch (unit?.kind) {
     case undefined:
@@ -80,10 +87,10 @@ function advance(secret: Unit[], { index, phase, start }: Thread, char: string):
     case "literal":
       return char === unit.char ? [next(index + 1)] : [];
     case "quote":
-      return char === "\\" ? [next(index, -1)] : char === '"' ? [next(index + 1)] : [];
+      return char === "\\" ? [next(index, ESCAPED)] : char === '"' ? [next(index + 1)] : [];
     case "backslash":
       // A run of backslashes may end the unit at any length, so both continuations stay open.
-      return char === "\\" ? [next(index, -1), next(index + 1)] : [];
+      return char === "\\" ? [next(index, ESCAPED), next(index + 1)] : [];
     case "control": {
       const moved = controlPhase(unit, phase, char);
 
@@ -102,7 +109,7 @@ function trailingSecretStart(text: string, secret: Unit[]): number {
   let position = 0;
 
   for (const char of text) {
-    const opened = advance(secret, { index: 0, phase: 0, start: position }, char);
+    const opened = advance(secret, { index: 0, phase: START, start: position }, char);
     position += char.length;
 
     if (threads.length === 0 && opened.length === 0) {
@@ -114,7 +121,7 @@ function trailingSecretStart(text: string, secret: Unit[]): number {
 
     for (const moved of moves) {
       const same = threads.find(
-        (thread) => thread.index === moved.index && thread.phase === moved.phase,
+        (thread) => thread.index === moved.index && samePhase(thread.phase, moved.phase),
       );
 
       // Earlier starts win because they mask the longer cut-off tail.

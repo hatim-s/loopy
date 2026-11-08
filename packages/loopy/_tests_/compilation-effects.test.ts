@@ -7,7 +7,7 @@ import { Cause, Effect, Exit } from "effect";
 import { authorFailure, CompilationError, recoverDiagnostics } from "../../compiler/src/errors";
 import { Registry } from "../../runtime/src/local/registry";
 import { makeArtifactRegistry, saveCompiled } from "../../runtime/src/local/save-compiled";
-import { outputOf } from "../../runtime/src/local/typegen/generate";
+import { generateCommand } from "../../runtime/src/local/typegen/generate";
 import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];
@@ -40,7 +40,7 @@ test("save validates before publication and pins a private historical graph", as
     _tag: "Failure",
     cause: { reasons: [{ _tag: "Fail", error: { _tag: "ArtifactValidationError" } }] },
   });
-  expect(Effect.runSync(registry.get("saved")).revision).toBe(body.revision);
+  expect(Effect.runSync(registry.get("saved"))?.revision).toBe(body.revision);
   expect(readFileSync(registry.graphPath(body.revision), "utf8")).toBe(historical);
   expect(await Effect.runPromise(makeArtifactRegistry(registry).get("absent"))).toBeNull();
 });
@@ -77,13 +77,11 @@ test("unreadable compiler input is an infrastructure failure, not an author diag
 });
 
 test("typegen preserves help printed by a nonzero command and types spawn failure", async () => {
-  expect(
-    await Effect.runPromise(
-      outputOf(process.execPath, ["-e", 'console.error("usage: fixture");process.exit(1)']),
-    ),
-  ).toBe("usage: fixture");
   const { root } = fixture();
-  const failure = await Effect.runPromiseExit(outputOf(join(root, "missing"), []));
+  const binary = join(root, "fixture-cli");
+  writeFileSync(binary, '#!/bin/sh\necho "usage: fixture" >&2\nexit 1\n', { mode: 0o755 });
+  expect((await Effect.runPromise(generateCommand(binary, []))).help).toBe("usage: fixture");
+  const failure = await Effect.runPromiseExit(generateCommand(join(root, "missing"), []));
   expect(failure).toMatchObject({
     _tag: "Failure",
     cause: { reasons: [{ _tag: "Fail", error: { _tag: "TypeGenerationError" } }] },

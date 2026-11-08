@@ -45,8 +45,15 @@ export const localDaemon = (options: DaemonOptions) =>
       revisionFor: (schedule) =>
         Effect.gen(function* () {
           const registry = yield* Registry.make(options.home, schedule.workspace);
+          const entry = yield* registry.get(schedule.slug);
 
-          return (yield* registry.get(schedule.slug)).revision;
+          if (entry === null) {
+            return yield* Effect.fail(
+              new Error(`No saved loopy '${schedule.slug}'. Use loopy save <file.ts> first.`),
+            );
+          }
+
+          return entry.revision;
         }).pipe(Effect.mapError((cause) => new ScheduleRevisionError({ cause }))),
       prepare: (run) =>
         Effect.gen(function* () {

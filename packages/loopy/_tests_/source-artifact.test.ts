@@ -117,7 +117,7 @@ test("old registry metadata never gains today's source for an existing revision"
   expect(await Effect.runPromise(registry.revisionSource("legacy", body.revision))).toEqual(
     unavailable,
   );
-  expect((await Effect.runPromise(registry.get("legacy"))).version).toBe(3);
+  expect((await Effect.runPromise(registry.get("legacy")))?.version).toBe(3);
 });
 
 test("source lookup rejects traversal and never opens source metadata paths", async () => {

@@ -65,18 +65,13 @@ export const saveCompiled = Effect.fn(function* (registry: Registry, body: PutLo
   return yield* registry.save({ ...body, sourceArtifact });
 });
 
-/** Capture one filesystem registry for a workspace lifetime. No open handles are retained. */
 export const makeArtifactRegistry = (registry: Registry): ArtifactRegistry => ({
   workspace: () => Effect.succeed(registry.project),
   listSummaries: () =>
     registry.list().pipe(Effect.map((entries) => entries.map(definitionSummary))),
-  get: (slug) =>
-    registry.get(slug).pipe(Effect.catchTag("RegistryMissingError", () => Effect.succeed(null))),
+  get: (slug) => registry.get(slug),
   summary: (slug) =>
-    registry.get(slug).pipe(
-      Effect.map(definitionSummary),
-      Effect.catchTag("RegistryMissingError", () => Effect.succeed(null)),
-    ),
+    registry.get(slug).pipe(Effect.map((entry) => entry && definitionSummary(entry))),
   revisionGraph: (revision) => registry.revisionGraph(revision),
   revisionSource: (slug, revision) => registry.revisionSource(slug, revision),
   save: (body) => saveCompiled(registry, body).pipe(Effect.asVoid),

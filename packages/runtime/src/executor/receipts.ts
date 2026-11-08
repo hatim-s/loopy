@@ -188,7 +188,6 @@ export class FilesystemReceipts {
     return value;
   });
 
-  /** Report whether this observer sealed uncertainty or found an existing completion. */
   reconcile = Effect.fn("FilesystemReceipts.reconcile")(function* (
     this: FilesystemReceipts,
     identity: AttemptIdentity,

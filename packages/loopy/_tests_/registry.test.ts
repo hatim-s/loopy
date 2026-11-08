@@ -51,10 +51,10 @@ test("registry lookup uses the nearest project root and falls back to global ent
   const child = join(f.project, "nested", "child");
   mkdirSync(child, { recursive: true });
   expect(Effect.runSync(Registry.make(f.home, child)).project).toBe(f.project);
-  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, child)).get("saved")).revision).toBe(
+  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, child)).get("saved"))?.revision).toBe(
     "b".repeat(64),
   );
-  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, f.root)).get("saved")).revision).toBe(
+  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, f.root)).get("saved"))?.revision).toBe(
     "a".repeat(64),
   );
   expect(Effect.runSync(Effect.runSync(Registry.make(f.home, child)).list())).toHaveLength(1);
@@ -98,10 +98,10 @@ test("changing scope removes only the other entry owned by the same source", asy
       source: { ...definition.source, path: other },
     }),
   );
-  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, f.root)).get("saved")).revision).toBe(
+  expect(Effect.runSync(Effect.runSync(Registry.make(f.home, f.root)).get("saved"))?.revision).toBe(
     "c".repeat(64),
   );
-  expect(Effect.runSync(registry.get("saved")).revision).toBe("d".repeat(64));
+  expect(Effect.runSync(registry.get("saved"))?.revision).toBe("d".repeat(64));
 });
 
 test("stale registry entries are ignored and replaced without preserving the old format", async () => {
