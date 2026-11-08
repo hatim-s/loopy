@@ -133,8 +133,8 @@ export async function capture(daemon: OwnedDaemon, snapshot: RunSnapshotView, wo
     firstNodeStartedAt: snapshot.nodeRuns.map((node) => node.startedAt).sort()[0] ?? null,
     attemptCount: snapshot.nodeRuns.reduce((count, node) => count + node.attempt, 0),
     truncation: {
-      nodeRunsNext: snapshot.nodeRunsNext ?? null,
-      hooks: snapshot.hooksTruncated ?? false,
+      nodeRunsNext: snapshot.nodeRunsNext,
+      hooks: snapshot.hooksTruncated,
     },
   };
 }

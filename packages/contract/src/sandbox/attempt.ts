@@ -1,5 +1,6 @@
 import {
   counter,
+  DEFAULT_MAX_OUTPUT_BYTES,
   executionKeySchema,
   executionSpecSchema,
   hashSchema,
@@ -13,7 +14,8 @@ export const SANDBOX_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 
 export const SANDBOX_MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
 
-export const SANDBOX_MAX_CAPTURE_BYTES = 2 * 1024 * 1024;
+// The sandbox captures as much as the local host lets a command or bundle without a declared cap.
+export const SANDBOX_MAX_CAPTURE_BYTES = DEFAULT_MAX_OUTPUT_BYTES;
 
 export const sandboxAttemptIdentitySchema = struct({
   workspace: boundedToken,

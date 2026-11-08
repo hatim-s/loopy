@@ -11,8 +11,8 @@ import {
   type SourceArtifact,
   sourceArtifactSchema,
   unavailableSource,
-  validateCompiled,
 } from "@loopy/contract";
+import { validateCompiled } from "@loopy/contract/server";
 import { canonicalJson, revision } from "@loopy/core";
 import {
   type ArtifactRegistry,

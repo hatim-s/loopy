@@ -58,7 +58,10 @@ function snapshot(overrides: Partial<RunSnapshotView> = {}): RunSnapshotView {
   return {
     run,
     nodeRuns: [],
+    nodeRunsNext: null,
+    truncatedOutputs: {},
     hooks: [],
+    hooksTruncated: false,
     cursor: 10,
     epoch: "e1",
     ...overrides,
@@ -836,8 +839,8 @@ test("stream overflow keeps the execution keyset boundary and preview metadata b
   const firstPage = keysWritten.sort().slice(0, 200);
 
   expect(current.nodeRuns.map((node) => executionKeyString(node.key))).toEqual(firstPage);
-  expect(current.nodeRunsNext).toBe(firstPage.at(-1));
-  expect(Object.keys(current.truncatedOutputs ?? {}).sort()).toEqual(firstPage);
+  expect(current.nodeRunsNext).toBe(firstPage.at(-1) ?? null);
+  expect(Object.keys(current.truncatedOutputs).sort()).toEqual(firstPage);
 });
 
 test("scoped node bursts refetch active scope counts once and never the run snapshot", () => {

@@ -1,5 +1,6 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
-import { decodeBoundary, putLoopyBodySchema, validateCompiled } from "@loopy/contract";
+import { decodeBoundary, putLoopyBodySchema } from "@loopy/contract";
+import { validateCompiled } from "@loopy/contract/server";
 import { errorMessage } from "@loopy/core";
 import { makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";

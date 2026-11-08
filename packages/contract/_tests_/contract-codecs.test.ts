@@ -1,14 +1,8 @@
 import { expect, test } from "bun:test";
 import { canonicalJson, revision } from "@loopy/core";
 import { Effect, Result } from "effect";
-import {
-  decodeBoundary,
-  encodeBoundary,
-  graphSchema,
-  routes,
-  validateCompiled,
-  valueSchema,
-} from "../src";
+import { decodeBoundary, encodeBoundary, graphSchema, routes, valueSchema } from "../src";
+import { validateCompiled } from "../src/server";
 
 const graph = {
   version: 1,

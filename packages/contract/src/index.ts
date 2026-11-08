@@ -96,12 +96,6 @@ export {
   savedLoopySchema,
 } from "./compiled-loopy";
 
-export {
-  CompiledHashError,
-  CompiledValidationError,
-  validateCompiled,
-} from "./compiled-validation";
-
 export * from "./dashboard";
 
 export * from "./dashboard-reader";
@@ -135,7 +129,13 @@ export * from "./graph";
 
 export * from "./limits";
 
-export { canCancelRun, cancelRefusal, canResumeRun, runMatchesQuery } from "./run-rules";
+export {
+  canCancelRun,
+  canResumeRun,
+  cleanupRefusal,
+  runMatchesQuery,
+  runningRefusal,
+} from "./run-rules";
 
 export {
   MAX_SOURCE_BYTES,
@@ -150,7 +150,6 @@ export {
 
 export {
   decodeEventBatch,
-  eventFrame,
   SSE_CONNECTED,
   SSE_HEARTBEAT,
   type SseFrame,

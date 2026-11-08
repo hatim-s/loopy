@@ -1,11 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import {
-  definitionSummary,
-  type PutLoopyBody,
-  unavailableSource,
-  validateCompiled,
-} from "@loopy/contract";
+import { definitionSummary, type PutLoopyBody, unavailableSource } from "@loopy/contract";
+import { validateCompiled } from "@loopy/contract/server";
 import { canonicalJson } from "@loopy/core";
 import { Effect } from "effect";
 import { writeFileAtomically } from "../os";

@@ -6,8 +6,8 @@ import {
   nodeIdSchema,
   type PutLoopyBody,
   type SourceArtifact,
-  validateCompiled,
 } from "@loopy/contract";
+import { validateCompiled } from "@loopy/contract/server";
 import { revision } from "@loopy/core";
 import { code, loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
