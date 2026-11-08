@@ -66,6 +66,8 @@ export {
   type StartedAttemptRecord,
 } from "./journal";
 
+export { isLoopbackOrigin, isLoopbackUrl } from "./loopback";
+
 export {
   admitTransition,
   beginExportTransition,

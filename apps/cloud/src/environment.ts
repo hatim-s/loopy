@@ -1,5 +1,6 @@
 import type { DurableObjectNamespace, R2Bucket } from "@cloudflare/workers-types";
 import { decodeBoundary } from "@loopy/contract";
+import { isLoopbackOrigin, isLoopbackUrl } from "@loopy/contract/sandbox";
 import { Schema } from "effect";
 
 // Wrangler passes every var as a string, so the config schema decodes from strings.
@@ -13,12 +14,10 @@ export interface Environment {
   CONCURRENCY: string;
   SANDBOX_RECEIPTS: DurableObjectNamespace;
   RECEIPT_RESULTS: R2Bucket;
-  RECEIPTS_TOKEN: string;
-  RECEIPTS_NAMESPACE: string;
-  RECEIPTS_ROOT: string;
+  RECEIPTS_TOKEN?: string;
+  RECEIPTS_NAMESPACE?: string;
+  RECEIPTS_ROOT?: string;
 }
-
-const LOOPBACK_HOSTS = ["127.0.0.1", "localhost"];
 
 export const workspaceIdSchema = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,62}$/));
 
@@ -40,16 +39,37 @@ const configSchema = Schema.Struct({
   SANDBOX_TOKEN: Schema.String.check(Schema.isMinLength(1)),
 });
 
+const receiptsSchema = Schema.Struct({
+  token: Schema.String.check(Schema.isMinLength(32), Schema.isMaxLength(256)),
+  namespace: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(256),
+    Schema.isPattern(/^[A-Za-z0-9_-]+$/),
+  ),
+  root: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(4096),
+    Schema.makeFilter(
+      (root) =>
+        root.startsWith("/") &&
+        root
+          .slice(1)
+          .split("/")
+          .every((part) => part !== "" && part !== "." && part !== ".."),
+    ),
+  ),
+});
+
+type Principal = { token: string; workspace: string };
+
 export type CloudConfig = {
   stage: "local";
-  principals: readonly { token: string; workspace: string }[];
+  principals: readonly Principal[];
   concurrency: number;
   sandbox: { url: URL; token: string };
+  /** Null when this Worker serves no durable receipt authority. */
+  receipts: typeof receiptsSchema.Type | null;
 };
-
-export function isLoopbackUrl(url: URL): boolean {
-  return LOOPBACK_HOSTS.includes(url.hostname);
-}
 
 /** The phase 2 approval boundary: only the local stage on a loopback host is served. */
 export function servesLocally(env: Pick<Environment, "LOOPY_STAGE">, url: URL): boolean {
@@ -59,19 +79,33 @@ export function servesLocally(env: Pick<Environment, "LOOPY_STAGE">, url: URL): 
 function localEndpoint(value: string): URL {
   const url = new URL(value);
 
-  if (
-    url.protocol !== "http:" ||
-    !isLoopbackUrl(url) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    url.pathname !== "/"
-  ) {
+  if (!isLoopbackOrigin(url)) {
     throw new Error("Phase 1 requires a loopback HTTP sandbox URL without credentials or a path.");
   }
 
   return url;
+}
+
+function receiptsConfig(env: Environment, principals: readonly Principal[]) {
+  if (
+    env.RECEIPTS_TOKEN === undefined &&
+    env.RECEIPTS_NAMESPACE === undefined &&
+    env.RECEIPTS_ROOT === undefined
+  ) {
+    return null;
+  }
+
+  const receipts = decodeBoundary(receiptsSchema)({
+    token: env.RECEIPTS_TOKEN,
+    namespace: env.RECEIPTS_NAMESPACE,
+    root: env.RECEIPTS_ROOT,
+  });
+
+  if (principals.some(({ token }) => token === receipts.token)) {
+    throw new Error("Receipt bridge credentials must differ from user principal credentials.");
+  }
+
+  return receipts;
 }
 
 const parsed = new WeakMap<Environment, CloudConfig>();
@@ -97,6 +131,7 @@ export function cloudConfig(env: Environment): CloudConfig {
     principals: vars.LOCAL_AUTH,
     concurrency: vars.CONCURRENCY,
     sandbox: { url: localEndpoint(vars.SANDBOX_URL), token: vars.SANDBOX_TOKEN },
+    receipts: receiptsConfig(env, vars.LOCAL_AUTH),
   };
 
   parsed.set(env, config);

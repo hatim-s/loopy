@@ -92,7 +92,7 @@ export class ArtifactDefinitions {
 
     if (rows.length > ARTIFACT_LIMITS.definitions) {
       throw new Error(
-        "Workspace exceeds the 1000 definition capacity. Remove definitions before listing.",
+        `Workspace exceeds the ${ARTIFACT_LIMITS.definitions} definition capacity. Remove definitions before listing.`,
       );
     }
 
@@ -218,8 +218,7 @@ export class ArtifactDefinitions {
 
     if (count >= ARTIFACT_LIMITS.definitions) {
       throw new ArtifactValidationError({
-        cause:
-          "Workspace has reached its 1000 definition capacity. Replace an existing definition or remove one first.",
+        cause: `Workspace has reached its ${ARTIFACT_LIMITS.definitions} definition capacity. Replace an existing definition or remove one first.`,
       });
     }
   }

@@ -65,11 +65,11 @@ export class Workspace {
     const registry = new R2ArtifactRegistry(this.ctx.storage, this.env.ARTIFACTS, workspace);
 
     const requireWorkspace = (value: string) =>
-      value !== "" && value !== workspace
-        ? Effect.fail(
+      value === workspace
+        ? Effect.succeed(workspace)
+        : Effect.fail(
             new ServiceError("forbidden", "This credential belongs to a different workspace."),
-          )
-        : Effect.succeed(workspace);
+          );
 
     const service = makeService({
       store: this.store,
@@ -150,14 +150,6 @@ export class Workspace {
 
             if (!["GET", "HEAD"].includes(request.method)) {
               yield* scheduler.wake();
-            }
-
-            if (
-              url.pathname === "/api/secrets" ||
-              url.pathname.startsWith("/api/secrets/") ||
-              url.pathname === "/api/types"
-            ) {
-              return errorResponse("not_yet", PHASE_1_UNSUPPORTED);
             }
 
             if (request.method === "GET" && url.pathname === "/api/cloud/artifacts") {
