@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { root } from "./config";
+import { sha256Hex } from "../shared/hash";
+import { root } from "../stack/constants";
 
 export async function runtimeSource() {
   const directory = join(root, "packages");
@@ -10,19 +10,15 @@ export async function runtimeSource() {
     new Bun.Glob("*/src/**/*.ts").scan({ cwd: directory, absolute: true }),
   );
 
-  const hash = createHash("sha256");
+  const parts: Uint8Array[] = [];
 
   for (const file of files.sort()) {
-    hash.update(`${relative(directory, file)}\0`);
-    hash.update(await readFile(file));
+    parts.push(new TextEncoder().encode(`${relative(directory, file)}\0`), await readFile(file));
   }
 
   return {
     observedAt: new Date().toISOString(),
     files: files.length,
-    sha256: hash.digest("hex"),
-    queryRunsSha256: createHash("sha256")
-      .update(await readFile(join(directory, "runtime/src/store/sqlite/query/runs.ts")))
-      .digest("hex"),
+    sha256: sha256Hex(Buffer.concat(parts)),
   };
 }

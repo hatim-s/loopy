@@ -1,15 +1,16 @@
 import { type RunSnapshotView, routes } from "@loopy/contract";
 import { controlledFailure, matchesControlledFailure } from "../playground/outcomes";
 import type { OwnedDaemon } from "./daemon";
+import { approves, failsByInput } from "./plan";
 
 const approvalDenied = "PLAYGROUND_APPROVAL_DENIED: security publication requires approval.";
 
 export function expectedFailure(slug: string, ordinal: number) {
-  if (slug === "playground-c-security-review" && ordinal === 8) {
+  if (slug === "playground-c-security-review" && !approves(ordinal)) {
     return approvalDenied;
   }
 
-  if (ordinal !== 5) {
+  if (!failsByInput(ordinal)) {
     return null;
   }
 

@@ -1,31 +1,25 @@
 import { join } from "node:path";
 import { Schema } from "effect";
-import { closedExecutions } from "./closed-executions";
-import { evidence, writeEvidence } from "./config";
+import { sha256Hex } from "../shared/hash";
+import { distribution } from "../shared/stats";
+import { closedDatabase, closedExecutions } from "./closed-executions";
+import { evidencePath, writeEvidence } from "./config";
 import { preflightSchema, reportSchema } from "./report-schema";
-import { requireEqual, sha, validators } from "./semantics";
-
-function distribution(values: number[]) {
-  const sorted = [...values].sort((a, b) => a - b);
-
-  return {
-    count: sorted.length,
-    min: sorted[0],
-    p50: sorted[Math.ceil(sorted.length * 0.5) - 1],
-    p95: sorted[Math.ceil(sorted.length * 0.95) - 1],
-    max: sorted.at(-1),
-  };
-}
+import { requireEqual, validators } from "./semantics";
 
 export async function analyze() {
-  const report = Schema.decodeUnknownSync(reportSchema)(
-    await Bun.file(join(evidence, "playground-daemon.json")).json(),
-  );
+  // Retained evidence carries many more fields than analysis reads, so excess keys are ignored.
+  const report = Schema.decodeUnknownSync(reportSchema)(await Bun.file(evidencePath("")).json());
 
-  const executions = await closedExecutions();
+  const executions = closedExecutions();
+  await writeEvidence("-executions", {
+    source: closedDatabase,
+    access: "Bun Database readonly with SELECT only; no store constructor or migration",
+    records: executions,
+  });
 
   const preflight = Schema.decodeUnknownSync(preflightSchema)(
-    await Bun.file(join(evidence, "playground-daemon-preflight.json")).json(),
+    await Bun.file(evidencePath("-preflight")).json(),
   );
 
   for (const execution of executions) {
@@ -44,7 +38,7 @@ export async function analyze() {
     for (const file of record.outputs) {
       const bytes = await Bun.file(join(record.outputDirectory, file.path)).bytes();
       requireEqual(bytes.length, file.bytes, "retained file byte count");
-      requireEqual(sha(bytes), file.sha256, "retained file hash");
+      requireEqual(sha256Hex(bytes), file.sha256, "retained file hash");
       verifiedFiles++;
     }
 
@@ -71,12 +65,10 @@ export async function analyze() {
 
   for (const receipt of report.restartProof.before) {
     requireEqual(
-      Number(
-        restarted.receipts.some(
-          (final) => final.path === receipt.path && final.sha256 === receipt.sha256,
-        ),
+      restarted.receipts.some(
+        (final) => final.path === receipt.path && final.sha256 === receipt.sha256,
       ),
-      1,
+      true,
       "finished seed receipt reused through completion",
     );
   }

@@ -1,50 +1,53 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { decodeBoundary, logRecordSchema, nodeRunSchema } from "@loopy/contract";
-import { z } from "zod";
-import { state, writeEvidence } from "./config";
+import { Schema } from "effect";
+import { state } from "./config";
 
-const rowsSchema = z.array(z.object({ record: z.string() }));
+export const closedDatabase = join(state, "daemon-readonly.sqlite");
 
-export async function closedExecutions() {
-  const path = join(state, "daemon-readonly.sqlite");
-  const database = new Database(path, { readonly: true });
+const recordRows = decodeBoundary(Schema.Array(Schema.Struct({ record: Schema.String })));
+
+const runRows = decodeBoundary(
+  Schema.Array(Schema.Struct({ id: Schema.String, slug: Schema.String, revision: Schema.String })),
+);
+
+function records<S extends Schema.ConstraintDecoder<unknown>>(
+  database: Database,
+  sql: string,
+  schema: S,
+) {
+  const decode = decodeBoundary(schema);
+
+  return recordRows(database.query(sql).all()).map((row) => decode(JSON.parse(row.record)));
+}
+
+export function closedExecutions() {
+  const database = new Database(closedDatabase, { readonly: true });
 
   try {
-    const nodes = rowsSchema
-      .parse(database.query("SELECT record FROM node_runs ORDER BY run_id,execution_key").all())
-      .map((row) => decodeBoundary(nodeRunSchema)(JSON.parse(row.record)));
+    const nodes = records(
+      database,
+      "SELECT record FROM node_runs ORDER BY run_id,execution_key",
+      nodeRunSchema,
+    );
 
-    const attempts = rowsSchema
-      .parse(
-        database
-          .query("SELECT record FROM node_attempts ORDER BY run_id,execution_key,attempt")
-          .all(),
-      )
-      .map((row) => decodeBoundary(nodeRunSchema)(JSON.parse(row.record)));
+    const attempts = records(
+      database,
+      "SELECT record FROM node_attempts ORDER BY run_id,execution_key,attempt",
+      nodeRunSchema,
+    );
 
-    const logs = rowsSchema
-      .parse(database.query("SELECT record FROM logs ORDER BY run_id,seq").all())
-      .map((row) => decodeBoundary(logRecordSchema)(JSON.parse(row.record)));
+    const logs = records(database, "SELECT record FROM logs ORDER BY run_id,seq", logRecordSchema);
 
-    const revisions = z
-      .array(z.object({ id: z.string(), slug: z.string(), revision: z.string() }))
-      .parse(database.query("SELECT id,slug,revision FROM runs ORDER BY id").all());
-
-    const records = revisions.map((run) => ({
-      ...run,
-      nodes: nodes.filter((node) => node.key.runId === run.id),
-      attempts: attempts.filter((node) => node.key.runId === run.id),
-      logs: logs.filter((log) => log.runId === run.id),
-    }));
-
-    await writeEvidence("-executions", {
-      source: path,
-      access: "Bun Database readonly with SELECT only; no store constructor or migration",
-      records,
-    });
-
-    return records;
+    return runRows(database.query("SELECT id,slug,revision FROM runs ORDER BY id").all()).map(
+      (run) => ({
+        ...run,
+        nodes: nodes.filter((node) => node.key.runId === run.id),
+        attempts: attempts.filter((node) => node.key.runId === run.id),
+        logs: logs.filter((log) => log.runId === run.id),
+      }),
+    );
   } finally {
     database.close();
   }

@@ -1,37 +1,40 @@
-import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { z } from "zod";
+import { isDeepStrictEqual } from "node:util";
+import type { nodeRunSchema } from "@loopy/contract";
+import { Schema } from "effect";
+import { sha256Hex } from "../shared/hash";
+import { artifactIdentitySchema } from "./capture";
 import type { DaemonRunRecord } from "./report-schema";
 
-export function sha(bytes: string | Uint8Array) {
-  return createHash("sha256").update(bytes).digest("hex");
-}
+type VerifiedRecord = DaemonRunRecord & { nodeRuns: readonly (typeof nodeRunSchema.Type)[] };
 
-export function requireEqual(actual: string | number, expected: string | number, label: string) {
-  if (actual !== expected) {
-    throw new Error(`${label}: expected ${expected}, observed ${actual}.`);
+export function requireEqual<T>(actual: T, expected: T, label: string) {
+  if (!isDeepStrictEqual(actual, expected)) {
+    throw new Error(
+      `${label}: expected ${JSON.stringify(expected)}, observed ${JSON.stringify(actual)}.`,
+    );
   }
 }
 
-async function text(record: DaemonRunRecord, path: string) {
+async function text(record: VerifiedRecord, path: string) {
   return Bun.file(join(record.outputDirectory, "loopies-playground", path)).text();
 }
 
-async function artifact(record: DaemonRunRecord) {
+async function artifact<S extends Schema.ConstraintDecoder<unknown>>(
+  record: VerifiedRecord,
+  schema: S,
+) {
   const value: unknown = JSON.parse(await text(record, "results/result.json"));
-
-  const identity = z
-    .object({ batch: z.string(), ordinal: z.number(), slug: z.string() })
-    .parse(value);
+  const identity = Schema.decodeUnknownSync(artifactIdentitySchema)(value);
 
   requireEqual(identity.batch, record.input.batch, "artifact batch");
   requireEqual(identity.ordinal, record.input.ordinal, "artifact ordinal");
   requireEqual(identity.slug, record.slug, "artifact slug");
 
-  return value;
+  return Schema.decodeUnknownSync(schema)(value);
 }
 
-async function lint(record: DaemonRunRecord) {
+async function lint(record: VerifiedRecord) {
   const mapped = record.nodeRuns.filter((node) => node.key.nodeId.endsWith(":lint-source"));
   requireEqual(mapped.length, record.input.items.length, "map item count");
 
@@ -49,16 +52,19 @@ async function lint(record: DaemonRunRecord) {
   const expected = `# Lint report\n\nCompleted ${record.input.items.length} source checks.\nFound ${findings} trailing whitespace findings.\n\nThe fixture treats whitespace as advisory.\n`;
   requireEqual(await text(record, "reports/lint.md"), expected, "lint report");
 
-  const result = z
-    .object({ files: z.array(z.object({ path: z.string(), content: z.string() })) })
-    .parse(await artifact(record));
+  const result = await artifact(
+    record,
+    Schema.Struct({
+      files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
+    }),
+  );
 
   for (const file of result.files) {
     requireEqual(await text(record, file.path), file.content, "published file");
   }
 }
 
-async function parallel(record: DaemonRunRecord) {
+async function parallel(record: VerifiedRecord) {
   const sizes = [];
 
   for (const [target, multiplier] of [
@@ -78,11 +84,12 @@ async function parallel(record: DaemonRunRecord) {
     return;
   }
 
-  const result = z
-    .object({ values: z.array(z.number()), checksum: z.number() })
-    .parse(await artifact(record));
+  const result = await artifact(
+    record,
+    Schema.Struct({ values: Schema.Array(Schema.Number), checksum: Schema.Number }),
+  );
 
-  requireEqual(JSON.stringify(result.values), JSON.stringify(sizes), "parallel sizes");
+  requireEqual(result.values, sizes, "parallel sizes");
   requireEqual(
     result.checksum,
     sizes.reduce((sum, size) => sum + size, 0),
@@ -90,9 +97,9 @@ async function parallel(record: DaemonRunRecord) {
   );
 }
 
-async function retry(record: DaemonRunRecord) {
+async function retry(record: VerifiedRecord) {
   const node = record.nodeRuns.find((item) => item.key.nodeId.endsWith(":retry-update"));
-  requireEqual(node?.attempt ?? 0, 2, "retry attempt");
+  requireEqual(node?.attempt, 2, "retry attempt");
   const expected = record.input.items.map((value) => value + (record.input.fail ? 0 : 1));
   requireEqual(
     await text(record, "src/ci-values.txt"),
@@ -101,71 +108,77 @@ async function retry(record: DaemonRunRecord) {
   );
 
   if (!record.input.fail) {
-    const result = z.object({ values: z.array(z.number()) }).parse(await artifact(record));
-    requireEqual(JSON.stringify(result.values), JSON.stringify(expected), "retry artifact values");
+    const result = await artifact(record, Schema.Struct({ values: Schema.Array(Schema.Number) }));
+    requireEqual(result.values, expected, "retry artifact values");
   }
 }
 
-async function validation(record: DaemonRunRecord) {
+async function validation(record: VerifiedRecord) {
   const csv = `id,value\n${record.input.items.map((value, index) => `${index + 1},${value}`).join("\n")}\n`;
   requireEqual(await text(record, "data/records.csv"), csv, "seeded CSV");
 
-  const result = z
-    .object({ validatedFiles: z.array(z.string()), sourceHash: z.string(), outcome: z.string() })
-    .parse(await artifact(record));
+  const result = await artifact(
+    record,
+    Schema.Struct({
+      validatedFiles: Schema.Array(Schema.String),
+      sourceHash: Schema.String,
+      outcome: Schema.String,
+    }),
+  );
 
   requireEqual(
-    JSON.stringify(result.validatedFiles),
-    JSON.stringify(["README.md", "docs/policy.md", "src/limits.ts"]),
+    result.validatedFiles,
+    ["README.md", "docs/policy.md", "src/limits.ts"],
     "parallel validated files",
   );
-  requireEqual(result.sourceHash, sha(csv), "validation CSV hash");
+  requireEqual(result.sourceHash, sha256Hex(csv), "validation CSV hash");
   requireEqual(result.outcome, record.input.fail ? "failed" : "succeeded", "validation outcome");
   const report = await text(record, "docs/validation.md");
 
   for (const file of result.validatedFiles) {
     const content = await text(record, file);
     requireEqual(
-      Number(
-        report.includes(`${file}: ${Buffer.byteLength(content)} bytes, sha256 ${sha(content)}`),
-      ),
-      1,
+      report.includes(`${file}: ${Buffer.byteLength(content)} bytes, sha256 ${sha256Hex(content)}`),
+      true,
       "validation report hash",
     );
   }
 }
 
-async function security(record: DaemonRunRecord) {
+async function security(record: VerifiedRecord) {
   if (record.hold?.approved === false) {
     requireEqual(
-      Number(
-        await Bun.file(
-          join(record.outputDirectory, "loopies-playground/docs/security-review.md"),
-        ).exists(),
-      ),
-      0,
+      await Bun.file(
+        join(record.outputDirectory, "loopies-playground/docs/security-review.md"),
+      ).exists(),
+      false,
       "denied publication",
     );
 
     return;
   }
 
-  const result = z
-    .object({
-      approved: z.literal(true),
-      findings: z.literal(0),
-      policyHash: z.string(),
-      sourceHash: z.string(),
-      outcome: z.string(),
-    })
-    .parse(await artifact(record));
+  const result = await artifact(
+    record,
+    Schema.Struct({
+      approved: Schema.Literal(true),
+      findings: Schema.Literal(0),
+      policyHash: Schema.String,
+      sourceHash: Schema.String,
+      outcome: Schema.String,
+    }),
+  );
 
   requireEqual(
     result.policyHash,
-    sha(await text(record, "docs/policy.md")),
+    sha256Hex(await text(record, "docs/policy.md")),
     "security policy hash",
   );
-  requireEqual(result.sourceHash, sha(await text(record, "src/limits.ts")), "security source hash");
+  requireEqual(
+    result.sourceHash,
+    sha256Hex(await text(record, "src/limits.ts")),
+    "security source hash",
+  );
   requireEqual(result.outcome, record.input.fail ? "failed" : "succeeded", "security outcome");
   const expected = `# Security review\n\nOrdinal ${record.input.ordinal}: approved.\nChecked src/limits.ts and docs/policy.md.\nNo forbidden execution or network calls found.\n`;
   requireEqual(await text(record, "docs/security-review.md"), expected, "security publication");

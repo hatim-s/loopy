@@ -1,19 +1,22 @@
-import { createHash } from "node:crypto";
 import { cp, lstat, mkdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { decodeBoundary, type RunSnapshotView, routes } from "@loopy/contract";
 import { executionKeyString } from "@loopy/core";
-import { z } from "zod";
+import { Schema, Struct } from "effect";
 import { receiptSchema } from "../../../../packages/runtime/src/executor/receipts";
+import { sha256Hex } from "../shared/hash";
 import { home, state } from "./config";
 import type { OwnedDaemon } from "./daemon";
-import { treeFiles } from "./prepare";
+import { sortedFiles } from "./prepare";
 
-const artifactIdentitySchema = z.object({
-  batch: z.string(),
-  ordinal: z.number(),
-  slug: z.string(),
+// Fixtures write this identity into results/result.json; extra result fields are workflow-specific.
+export const artifactIdentitySchema = Schema.Struct({
+  batch: Schema.String,
+  ordinal: Schema.Number,
+  slug: Schema.String,
 });
+
+const decodeArtifactIdentity = Schema.decodeUnknownSync(artifactIdentitySchema);
 
 async function artifactIdentity(snapshot: RunSnapshotView, workspace: string) {
   const file = join(workspace, "loopies-playground/results/result.json");
@@ -26,8 +29,11 @@ async function artifactIdentity(snapshot: RunSnapshotView, workspace: string) {
     return null;
   }
 
-  const actual = artifactIdentitySchema.parse(JSON.parse(await readFile(file, "utf8")));
-  const input = artifactIdentitySchema.omit({ slug: true }).parse(snapshot.run.input);
+  const actual = decodeArtifactIdentity(JSON.parse(await readFile(file, "utf8")));
+
+  const input = Schema.decodeUnknownSync(
+    artifactIdentitySchema.mapFields(Struct.pick(["batch", "ordinal"])),
+  )(snapshot.run.input);
 
   const matched =
     actual.batch === input.batch &&
@@ -45,7 +51,7 @@ export async function receiptInventory(runId: string) {
   const directory = join(home, "receipts", runId);
 
   const files = await lstat(directory)
-    .then(() => treeFiles(directory))
+    .then(() => sortedFiles(directory))
     .catch(() => []);
 
   return Promise.all(
@@ -55,7 +61,7 @@ export async function receiptInventory(runId: string) {
 
       return {
         path: relative(home, file),
-        sha256: createHash("sha256").update(bytes).digest("hex"),
+        sha256: sha256Hex(bytes),
         kind: receipt.kind,
         key: receipt.executionKey,
         attempt: receipt.attempt,
@@ -74,12 +80,12 @@ export async function capture(daemon: OwnedDaemon, snapshot: RunSnapshotView, wo
   if (await lstat(directory).catch(() => null)) {
     await cp(directory, join(destination, "loopies-playground"), { recursive: true });
 
-    for (const file of await treeFiles(directory)) {
+    for (const file of await sortedFiles(directory)) {
       const bytes = await readFile(file);
       outputs.push({
         path: relative(workspace, file),
         bytes: bytes.length,
-        sha256: createHash("sha256").update(bytes).digest("hex"),
+        sha256: sha256Hex(bytes),
       });
     }
   }
@@ -97,11 +103,8 @@ export async function capture(daemon: OwnedDaemon, snapshot: RunSnapshotView, wo
     retried.push({ key: node.key, attempts: detail.attempts });
   }
 
-  const { waitingOn, ...run } = snapshot.run;
-
   return {
-    run,
-    waitingOn: waitingOn ? { ...waitingOn, token: "[omitted]" } : null,
+    run: snapshot.run,
     nodeRuns: snapshot.nodeRuns,
     retried,
     logs: snapshot.logs,
