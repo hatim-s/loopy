@@ -2,9 +2,14 @@ import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { decodeBoundary, executionKeyString, routes } from "@loopy/contract";
+import {
+  decodeBoundary,
+  executionKeyString,
+  PAGE_LIMIT,
+  PREVIEW_BYTES,
+  routes,
+} from "@loopy/contract";
 import { Effect } from "effect";
-import { RUN_PREVIEW_COLUMNS } from "../../runtime/src/store/sqlite/query/runs";
 import { largeMapFixture, manyRunsFixture } from "./dashboard-scale-fixture";
 
 function bytes<T>(value: T) {
@@ -126,6 +131,18 @@ export async function benchmarkDashboardQueries() {
   expect(next).toHaveLength(50);
   expect(new Set([...page, ...next].map((run) => run.id)).size).toBe(100);
 
+  const workspacePage = await measure(
+    "10k workflow workspace page50",
+    () =>
+      Effect.runPromise(
+        runs.store.queryRuns({ workspace: runs.root, limit: 50, now: new Date().toISOString() }),
+      ),
+    (value) => value.length,
+  );
+
+  expect(workspacePage).toHaveLength(50);
+  expect(workspacePage.every((run) => run.workspace === runs.root)).toBe(true);
+
   const summary = await measure(
     "10k workflow overview",
     () =>
@@ -154,24 +171,6 @@ export async function benchmarkDashboardQueries() {
   const plans: Record<string, object[]> = {};
 
   for (const [name, home, sql, params] of [
-    [
-      "runs keyset",
-      runs.home,
-      `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE (r.created_at,r.id)<(?,?) ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-      [last?.createdAt ?? "", last?.id ?? "", 50],
-    ],
-    [
-      "runs slug",
-      runs.home,
-      `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE r.slug=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-      ["queue-drain", 50],
-    ],
-    [
-      "runs workspace",
-      runs.home,
-      `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE r.workspace=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-      [runs.root, 50],
-    ],
     [
       "node scope",
       map.home,
@@ -221,8 +220,6 @@ export async function benchmarkDashboardQueries() {
     db.close();
   }
 
-  expect(JSON.stringify(plans["runs keyset"])).toContain("runs_created_id");
-  expect(JSON.stringify(plans["runs workspace"])).toContain("runs_workspace_created_id");
   expect(JSON.stringify(plans["scope filtered items"])).toContain("status=? AND item_index>?");
 
   return {
@@ -231,9 +228,9 @@ export async function benchmarkDashboardQueries() {
     measurements,
     plans,
     limits: {
-      page: 200,
+      page: PAGE_LIMIT,
       feedCandidates: 2000,
-      nodeOutputPreviewBytes: 16384,
+      nodeOutputPreviewBytes: PREVIEW_BYTES,
       overviewBuckets: 744,
     },
     note: "Local synthetic read measurements only. Ingest uses store writes without activation, executors, or provider calls. Both datasets contain terminal runs.",

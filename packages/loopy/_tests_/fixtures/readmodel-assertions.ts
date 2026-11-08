@@ -1,12 +1,6 @@
 import { expect } from "bun:test";
-import {
-  emptyRunCounts,
-  type RunStatus,
-  type ScopeItem,
-  type ScopeItemsQuery,
-  type Store,
-} from "@loopy/core";
-import type { Effect } from "effect";
+import { emptyRunCounts, type ScopeItemsPage, type ScopeItemsQuery } from "@loopy/contract";
+import type { RunStatus } from "@loopy/core";
 import type { countHistory } from "./readmodel-history";
 
 export function checkCountHistory(
@@ -74,9 +68,7 @@ export function checkCountHistory(
   expect(history.after).toEqual(history.before);
 }
 
-export async function checkScopePages(
-  read: (query: ScopeItemsQuery) => Promise<Effect.Success<ReturnType<Store["scopeItems"]>>>,
-) {
+export async function checkScopePages(read: (query: ScopeItemsQuery) => Promise<ScopeItemsPage>) {
   for (const limit of [97, 98, 200]) {
     const terminal = await read({
       nodeId: "map",
@@ -109,7 +101,7 @@ export async function checkScopePages(
 
         for (const item of page.items) {
           const ordinal = item.index / 2;
-          const counts: ScopeItem["counts"] = { succeeded: 1 };
+          const counts: ScopeItemsPage["items"][number]["counts"] = { succeeded: 1 };
 
           if (ordinal % 10 !== 0) {
             counts.waiting = 1;

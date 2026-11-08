@@ -6,17 +6,12 @@ import {
   serverEvent,
   serverEventSchema,
 } from "@loopy/contract";
-import { MemoryStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
 import { newRun } from "./fixture";
+import { memoryStore } from "./store-fixture";
 
-test("node and run outbox events publish one isolated transaction and parse over SSE", async () => {
-  const store = new MemoryStore();
-  const batches: string[][] = [];
-  store.subscribe((events) => {
-    batches.push(events.map((event) => event.entity));
-    events.splice(0);
-  });
+test("stored run and node events parse over SSE", async () => {
+  const store = memoryStore();
   await Effect.runPromise(store.createRun(newRun()));
   await Effect.runPromise(store.claim("run", "owner"));
   await Effect.runPromise(
@@ -45,7 +40,6 @@ test("node and run outbox events publish one isolated transaction and parse over
       ],
     }),
   );
-  expect(batches.at(-1)).toEqual(["node", "run"]);
 
   for (const event of await Effect.runPromise(store.events(0, 100))) {
     const wire = serverEvent(event, (run) =>

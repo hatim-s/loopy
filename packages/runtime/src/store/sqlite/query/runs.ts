@@ -1,28 +1,29 @@
 import {
-  type HookRecord,
+  decodeRunCursor,
   type OverviewQuery,
+  type PendingHook,
+  PREVIEW_BYTES,
   type RunDefinitionCount,
-  type RunFilter,
   type RunPageQuery,
-  type RunRecord,
   type StatusCounts,
-} from "@loopy/core";
+} from "@loopy/contract";
+import type { RunRecord } from "@loopy/core";
 import { Schema } from "effect";
-import { storageOperation } from "../../operation";
-import { overviewBuckets, PREVIEW_BYTES } from "../../query-utils";
+import { overviewBuckets } from "../../query-utils";
 import { storedDecoder } from "../../row-codec";
 import { waitRecordSchema } from "../../wait-schema";
+import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";
-import { SqliteSchedules } from "../schedules";
-import { rowToRun } from "../store-rows";
-import type { RunRow } from "../store-schema";
+import { type RunRow, rowToRun } from "../rows";
+
+type RunFilter = Pick<RunPageQuery, "slug" | "workspace" | "status" | "from" | "to">;
 
 export const PENDING_HOOK = `SELECT w.record FROM waits w JOIN node_runs n ON n.run_id=w.run_id AND n.execution_key=w.execution_key
   WHERE w.run_id=r.id AND r.status IN ('running','suspended') AND n.status='waiting'
   AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL
   AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1`;
 
-export function runWhere(filter: RunFilter, alias = "r") {
+function runWhere(filter: RunFilter) {
   const clauses: string[] = [];
   const values: SqlValue[] = [];
 
@@ -32,18 +33,18 @@ export function runWhere(filter: RunFilter, alias = "r") {
     ["status", filter.status],
   ] as const) {
     if (value !== undefined) {
-      clauses.push(`${alias}.${field}=?`);
+      clauses.push(`r.${field}=?`);
       values.push(value);
     }
   }
 
   if (filter.from !== undefined) {
-    clauses.push(`${alias}.created_at>=?`);
+    clauses.push("r.created_at>=?");
     values.push(filter.from);
   }
 
   if (filter.to !== undefined) {
-    clauses.push(`${alias}.created_at<?`);
+    clauses.push("r.created_at<?");
     values.push(filter.to);
   }
 
@@ -77,128 +78,107 @@ export function previewRun(row: PreviewRunRow) {
   return run;
 }
 
-const pendingHookSchema = Schema.Struct({
-  ...waitRecordSchema.fields,
-  expiresAt: Schema.NullOr(Schema.String),
-});
+const decodePendingHook = storedDecoder(
+  Schema.Struct({ ...waitRecordSchema.fields, expiresAt: Schema.NullOr(Schema.String) }),
+  "waits",
+);
 
-const decodePendingHook = storedDecoder(pendingHookSchema, "waits");
+export function readRunReference(ctx: SqlContext, id: string) {
+  return (
+    ctx.db
+      .query<Pick<RunRecord, "id" | "slug" | "workspace" | "revision">, [string]>(
+        "SELECT id,slug,workspace,revision FROM runs WHERE id=?",
+      )
+      .get(id) ?? undefined
+  );
+}
 
-export class SqliteQueryRuns extends SqliteSchedules {
-  runReference(id: string) {
-    return storageOperation("runReference", () => {
-      return (
-        this.db
-          .query<Pick<RunRecord, "id" | "slug" | "workspace" | "revision">, [string]>(
-            "SELECT id,slug,workspace,revision FROM runs WHERE id=?",
-          )
-          .get(id) ?? undefined
-      );
-    });
-  }
-  queryRuns(query: RunPageQuery) {
-    return storageOperation("queryRuns", () => {
-      const { clauses, values } = runWhere(query);
+export function queryRuns(ctx: SqlContext, query: RunPageQuery): RunRecord[] {
+  const { clauses, values } = runWhere(query);
 
-      if (query.before !== undefined) {
-        const separator = query.before.indexOf("|");
-        clauses.push("(r.created_at,r.id)<(?,?)");
-        values.push(query.before.slice(0, separator), query.before.slice(separator + 1));
-      }
-
-      if (query.waiting !== undefined) {
-        clauses.push(`${query.waiting ? "" : "NOT "}EXISTS(${PENDING_HOOK})`);
-        values.push(query.now);
-      }
-
-      return this.db
-        .query<PreviewRunRow, SqlValue[]>(
-          `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""} ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-        )
-        .all(...values, Math.min(query.limit, 200))
-        .map(previewRun);
-    });
+  if (query.before !== undefined) {
+    const cursor = decodeRunCursor(query.before);
+    clauses.push("(r.created_at,r.id)<(?,?)");
+    values.push(cursor.createdAt, cursor.id);
   }
 
-  runningCount() {
-    return storageOperation("runningCount", () => {
-      return (
-        this.db
-          .query<{ count: number }, []>("SELECT count(*) AS count FROM runs WHERE status='running'")
-          .get()?.count ?? 0
-      );
-    });
+  if (query.waiting !== undefined) {
+    clauses.push(`${query.waiting ? "" : "NOT "}EXISTS(${PENDING_HOOK})`);
+    values.push(query.now);
   }
 
-  runCountsByDefinition() {
-    return storageOperation("runCountsByDefinition", () => {
-      return this.db
-        .query<RunDefinitionCount, []>(
-          "SELECT workspace,slug,status,count(*) AS count FROM runs GROUP BY workspace,slug,status",
-        )
-        .all();
-    });
+  return ctx.db
+    .query<PreviewRunRow, SqlValue[]>(
+      `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""} ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
+    )
+    .all(...values, query.limit)
+    .map(previewRun);
+}
+
+export function readRunningCount(ctx: SqlContext): number {
+  return (
+    ctx.db
+      .query<{ count: number }, []>("SELECT count(*) AS count FROM runs WHERE status='running'")
+      .get()?.count ?? 0
+  );
+}
+
+export function readRunCountsByDefinition(ctx: SqlContext) {
+  return ctx.db
+    .query<RunDefinitionCount, []>(
+      "SELECT workspace,slug,status,count(*) AS count FROM runs GROUP BY workspace,slug,status",
+    )
+    .all();
+}
+
+export function readRunWorkspaces(ctx: SqlContext): string[] {
+  return ctx.db
+    .query<{ workspace: string }, []>("SELECT DISTINCT workspace FROM runs")
+    .all()
+    .map((row) => row.workspace);
+}
+
+export function readPendingHooks(ctx: SqlContext, ids: string[], now: string) {
+  const hooks = new Map<string, PendingHook>();
+
+  if (ids.length === 0) {
+    return hooks;
   }
 
-  runWorkspaces() {
-    return storageOperation("runWorkspaces", () => {
-      return this.db
-        .query<{ workspace: string }, []>("SELECT DISTINCT workspace FROM runs")
-        .all()
-        .map((row) => row.workspace);
-    });
+  // One array binding keeps a full run page below workerd's SQL variable limit.
+  const rows = ctx.db
+    .query<{ id: string; record: string | null }, SqlValue[]>(
+      `SELECT r.id,(${PENDING_HOOK.replace("SELECT w.record", "SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))`,
+    )
+    .all(now, JSON.stringify(ids));
+
+  for (const row of rows) {
+    if (row.record !== null) {
+      hooks.set(row.id, decodePendingHook(row.record));
+    }
   }
 
-  pendingHooks(ids: string[], now: string) {
-    return storageOperation("pendingHooks", () => {
-      const hooks = new Map<string, HookRecord & { expiresAt: string | null }>();
+  return hooks;
+}
 
-      if (ids.length === 0) {
-        return hooks;
-      }
+export function readOverview(ctx: SqlContext, query: OverviewQuery) {
+  const overview = overviewBuckets(query);
+  const { clauses, values } = runWhere(query);
 
-      // One array binding keeps a 200-run page below workerd's SQL variable limit.
-      const rows = this.db
-        .query<{ id: string; record: string | null }, SqlValue[]>(
-          `SELECT r.id,(${PENDING_HOOK.replace("SELECT w.record", "SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))`,
-        )
-        .all(now, JSON.stringify(ids));
+  const rows = ctx.db
+    .query<{ bucket: number; status: keyof StatusCounts; count: number }, SqlValue[]>(
+      `SELECT CAST((unixepoch(created_at,'subsec')-?)/? AS INTEGER) AS bucket,status,count(*) AS count FROM runs r WHERE ${clauses.join(" AND ")} GROUP BY bucket,status`,
+    )
+    .all(Date.parse(query.from) / 1000, query.bucketSeconds, ...values);
 
-      for (const row of rows) {
-        if (row.record === null) {
-          continue;
-        }
+  for (const row of rows) {
+    const bucket = overview.buckets[row.bucket];
 
-        const hook = decodePendingHook(row.record);
-
-        hooks.set(row.id, hook);
-      }
-
-      return hooks;
-    });
+    if (bucket) {
+      bucket.counts[row.status] = row.count;
+      overview.counts[row.status] += row.count;
+    }
   }
 
-  overview(query: OverviewQuery) {
-    return storageOperation("overview", () => {
-      const overview = overviewBuckets(query);
-      const { clauses, values } = runWhere(query);
-
-      const rows = this.db
-        .query<{ bucket: number; status: keyof StatusCounts; count: number }, SqlValue[]>(
-          `SELECT CAST((unixepoch(created_at,'subsec')-?)/? AS INTEGER) AS bucket,status,count(*) AS count FROM runs r WHERE ${clauses.join(" AND ")} GROUP BY bucket,status`,
-        )
-        .all(Date.parse(query.from) / 1000, query.bucketSeconds, ...values);
-
-      for (const row of rows) {
-        const bucket = overview.buckets[row.bucket];
-
-        if (bucket) {
-          bucket.counts[row.status] = row.count;
-          overview.counts[row.status] += row.count;
-        }
-      }
-
-      return overview;
-    });
-  }
+  return overview;
 }

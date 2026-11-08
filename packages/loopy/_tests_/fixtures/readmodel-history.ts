@@ -1,9 +1,19 @@
-import { emptyRunCounts, type RunRecord, type Store } from "@loopy/core";
+import { type DashboardReader, emptyRunCounts } from "@loopy/contract";
+import type { RunOutcome, RunRecord, Store } from "@loopy/core";
 import { Effect } from "effect";
 
 export const readmodelAt = "2026-10-23T00:00:00.000Z";
 
-export async function countHistory(store: Store) {
+export async function countHistory(store: Store & DashboardReader) {
+  const finish = (runId: string, outcome: RunOutcome) =>
+    Effect.runPromise(
+      store.apply({
+        runId,
+        token: "owner",
+        effects: [{ kind: "finish_run", outcome, at: readmodelAt }],
+      }),
+    );
+
   const snapshots: Awaited<ReturnType<typeof snapshot>>[] = [];
 
   const identities = [
@@ -78,25 +88,21 @@ export async function countHistory(store: Store) {
   await Effect.runPromise(store.release("count-0", "owner"));
   snapshots.push(await snapshot("release"));
   await Effect.runPromise(store.claim("count-0", "owner"));
-  await Effect.runPromise(
-    store.finishRun("count-0", "owner", { status: "succeeded", output: { kept: true } }),
-  );
+  await finish("count-0", { status: "succeeded", output: { kept: true } });
   snapshots.push(await snapshot("finish"));
   await Effect.runPromise(store.claim("count-1", "owner"));
-  await Effect.runPromise(store.suspend("count-1", "owner", "2026-10-23T01:00:00.000Z"));
-  snapshots.push(await snapshot("suspend"));
-  await Effect.runPromise(store.claim("count-2", "owner"));
-  await Effect.runPromise(
-    store.finishRun("count-2", "owner", { status: "failed", error: "controlled failure" }),
-  );
-  await Effect.runPromise(store.claim("count-3", "owner"));
   await Effect.runPromise(
     store.apply({
-      runId: "count-3",
+      runId: "count-1",
       token: "owner",
-      effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at: readmodelAt }],
+      effects: [{ kind: "suspend_run", wakeAt: "2026-10-23T01:00:00.000Z", at: readmodelAt }],
     }),
   );
+  snapshots.push(await snapshot("suspend"));
+  await Effect.runPromise(store.claim("count-2", "owner"));
+  await finish("count-2", { status: "failed", error: "controlled failure" });
+  await Effect.runPromise(store.claim("count-3", "owner"));
+  await finish("count-3", { status: "cancelled" });
   snapshots.push(await snapshot("terminal"));
   await Effect.runPromise(store.claim("count-4", "owner"));
   const before = await Effect.runPromise(store.eventCursor());

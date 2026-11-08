@@ -1,55 +1,108 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { StoreService } from "@loopy/core";
-import { Effect, Layer } from "effect";
+import type { RuntimeEvent } from "@loopy/core";
+import { Effect } from "effect";
 import { storageOperation } from "../operation";
-import { SqlRunStore } from "../portable";
 import { BunSqlDriver } from "./bun-driver";
 import { localOwnerPolicy } from "./local-owner";
-import { initializeLocalSchema } from "./local-schema";
+import { SqlRunStore } from "./run-store";
+import { upgradeLegacyHome } from "./schema/legacy";
+
+type LocalOptions = { leaseMs?: number };
+
+// Tests and tools may write the same home from another connection. Those commits never reach this
+// connection's outbox, so a data_version change tells listeners to re-read storage.
+const EXTERNAL_WRITE_POLL_MS = 100;
 
 class LocalSqlStore extends SqlRunStore {
-  constructor(file: string, now: () => number = Date.now, options: { leaseMs?: number } = {}) {
-    const db = new BunSqlDriver(file);
+  private poll?: ReturnType<typeof setInterval>;
+  private version = 0;
+
+  constructor(
+    private readonly driver: BunSqlDriver,
+    options: LocalOptions,
+  ) {
+    driver.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000");
+    upgradeLegacyHome(driver);
+    super(driver, { ...options, owner: localOwnerPolicy() });
+  }
+
+  override subscribe(listener: (events: RuntimeEvent[]) => void): () => void {
+    const unsubscribe = super.subscribe(listener);
+
+    if (!this.poll) {
+      this.version = this.dataVersion();
+      this.poll = setInterval(() => this.notifyExternalWrites(), EXTERNAL_WRITE_POLL_MS);
+    }
+
+    return () => {
+      unsubscribe();
+
+      if (this.listeners.size === 0) {
+        this.stopPolling();
+      }
+    };
+  }
+
+  override close() {
+    this.stopPolling();
+
+    return super.close();
+  }
+
+  private dataVersion(): number {
+    return (
+      this.driver.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ??
+      0
+    );
+  }
+
+  private notifyExternalWrites(): void {
+    let version: number;
 
     try {
-      initializeLocalSchema(db);
-      super(db, { ...options, now, owner: localOwnerPolicy() });
-    } catch (error) {
-      db.close();
-      throw error;
+      version = this.dataVersion();
+    } catch {
+      // One notification lets each listener's next read report the failure with its cause.
+      this.stopPolling();
+      this.listeners.notify();
+
+      return;
+    }
+
+    if (version !== this.version) {
+      this.version = version;
+      this.listeners.notify();
     }
   }
 
-  dataVersion() {
-    return storageOperation(
-      "dataVersion",
-      () =>
-        this.db.query<{ data_version: number }, []>("PRAGMA data_version").get()?.data_version ?? 0,
-    );
+  private stopPolling(): void {
+    clearInterval(this.poll);
+    this.poll = undefined;
   }
 }
 
 export type SqliteRunStore = LocalSqlStore;
 
-export function openRunStore(home: string, options: { leaseMs?: number } = {}) {
-  return Effect.gen(function* () {
-    yield* storageOperation("prepareHome", () => mkdirSync(home, { recursive: true, mode: 0o700 }));
-
-    return yield* makeSqliteRunStore(join(home, "runs.sqlite"), Date.now, options);
-  });
-}
-
-export const makeSqliteRunStore = (
-  file: string,
-  now: () => number = Date.now,
-  options: { leaseMs?: number } = {},
-) =>
+export const makeSqliteRunStore = (file: string, options: LocalOptions = {}) =>
   Effect.acquireRelease(
-    storageOperation("open", () => new LocalSqlStore(file, now, options)),
+    storageOperation("open", () => {
+      const driver = new BunSqlDriver(file);
+
+      try {
+        return new LocalSqlStore(driver, options);
+      } catch (error) {
+        driver.close();
+        throw error;
+      }
+    }),
     (store) => store.close().pipe(Effect.orDie),
   );
 
-// Reuse this layer value throughout one daemon build to share one connection.
-export const sqliteStoreLayer = (file: string, options: { leaseMs?: number } = {}) =>
-  Layer.effect(StoreService, makeSqliteRunStore(file, Date.now, options));
+export function openRunStore(home: string, options: LocalOptions = {}) {
+  return Effect.gen(function* () {
+    yield* storageOperation("prepareHome", () => mkdirSync(home, { recursive: true, mode: 0o700 }));
+
+    return yield* makeSqliteRunStore(join(home, "runs.sqlite"), options);
+  });
+}

@@ -1,114 +1,132 @@
-import { executionKeyString, type NodeRun, type Store, type StoreEffect } from "@loopy/core";
-import type { EventTransaction } from "../event-outbox";
-import { StoreInvariantError, storageOperation } from "../operation";
-import { earliestWakeAt, utc } from "../timestamps";
+import {
+  executionKeyString,
+  type HookRecord,
+  type Json,
+  type NodeRun,
+  type StoreEffect,
+  type WaitRecord,
+  type WaitResolution,
+} from "@loopy/core";
+import { StoreInvariantError } from "../operation";
+import { utc } from "../timestamps";
 import { checkSignal, publicHook, registerWait } from "../wait";
-import { SqliteNodes } from "./nodes";
-import { rowToRun, SQL } from "./store-rows";
+import type { SqlContext, SqlWrite } from "./context";
+import { emit } from "./events";
+import { readNode, writeNodeRun } from "./nodes";
+import { decodeWait, rowToRun } from "./rows";
+import { markWoken, readRun } from "./runs";
 
-export class SqliteWaits extends SqliteNodes {
-  protected override applyEffect(txn: EventTransaction, runId: string, effect: StoreEffect): void {
-    if (effect.kind === "register_wait") {
-      if (effect.executionKey.runId !== runId) {
-        throw new StoreInvariantError("Wait belongs to another run.");
-      }
+export function readWaits(ctx: SqlContext, runId: string): WaitRecord[] {
+  return ctx.db
+    .query<{ record: string }, [string]>("SELECT record FROM waits WHERE run_id=? ORDER BY rowid")
+    .all(runId)
+    .map((row) => decodeWait(row.record));
+}
 
-      const key = executionKeyString(effect.executionKey);
-      const node = this.readNode(runId, key);
-      const wait = registerWait(effect, node, this.readWaits(runId));
+export function readHooks(ctx: SqlContext, runId: string, limit: number): HookRecord[] {
+  return ctx.db
+    .query<{ record: string }, [string, number]>(
+      "SELECT record FROM waits WHERE run_id=? ORDER BY rowid LIMIT ?",
+    )
+    .all(runId, limit)
+    .map((row) => publicHook(decodeWait(row.record)));
+}
 
-      if (wait) {
-        this.db
-          .query("INSERT INTO waits VALUES (?,?,?,?)")
-          .run(wait.token, runId, key, JSON.stringify(wait));
-        this.emit(txn, { entity: "hook", kind: "created", runId, record: publicHook(wait) });
-      }
+function readWait(ctx: SqlContext, token: string): WaitRecord | undefined {
+  const row = ctx.db
+    .query<{ record: string }, [string]>("SELECT record FROM waits WHERE token=?")
+    .get(token);
 
-      return;
-    }
+  return row ? decodeWait(row.record) : undefined;
+}
 
-    if (effect.kind === "suspend_run") {
-      const run = this.requireRow(runId);
-      this.db
-        .query(SQL.suspend)
-        .run(earliestWakeAt(run.wake_at, effect.wakeAt), utc(effect.at), runId, run.owner_token);
-      this.emitRun(txn, runId, "suspended");
+function writeWait(write: SqlWrite, wait: WaitRecord): void {
+  write.db.query("UPDATE waits SET record=? WHERE token=?").run(JSON.stringify(wait), wait.token);
+}
 
-      return;
-    }
-
-    super.applyEffect(txn, runId, effect);
-
-    if (effect.kind === "write_node_run" && effect.nodeRun.status !== "waiting") {
-      this.expireNodeWait(txn, effect.nodeRun);
-    }
-
-    if (effect.kind === "finish_run") {
-      this.expireWaits(txn, runId, effect.at);
-    }
+function expireWait(write: SqlWrite, wait: WaitRecord, at: string): void {
+  if (wait.resolvedAt || wait.expiredAt) {
+    return;
   }
 
-  private expireNodeWait(txn: EventTransaction, node: NodeRun): void {
-    const key = executionKeyString(node.key);
+  const record = { ...wait, expiredAt: utc(at) };
+  writeWait(write, record);
+  emit(write, { entity: "hook", kind: "expired", runId: wait.runId, record: publicHook(record) });
+}
 
-    for (const wait of this.readWaits(node.key.runId)) {
-      if (executionKeyString(wait.executionKey) === key) {
-        this.expireWait(txn, wait, "endedAt" in node ? node.endedAt : this.timestamp());
-      }
+export function expireWaits(write: SqlWrite, runId: string, at: string): void {
+  for (const wait of readWaits(write, runId)) {
+    expireWait(write, wait, at);
+  }
+}
+
+// A node that leaves the waiting state closes the hook that was waiting on it.
+export function expireNodeWait(write: SqlWrite, node: NodeRun): void {
+  const key = executionKeyString(node.key);
+
+  for (const wait of readWaits(write, node.key.runId)) {
+    if (executionKeyString(wait.executionKey) === key) {
+      expireWait(write, wait, "endedAt" in node ? node.endedAt : write.at);
     }
   }
+}
 
-  resolveWait({ token, payload, at }: Parameters<Store["resolveWait"]>[0]) {
-    return storageOperation("resolveWait", () => {
-      return this.commit((txn) => {
-        const wait = this.readWait(token);
-
-        const node = wait && this.readNode(wait.runId, executionKeyString(wait.executionKey));
-
-        const row = wait && this.row(wait.runId);
-
-        const rejected = checkSignal({
-          wait,
-          node,
-          run: row ? rowToRun(row) : undefined,
-          payload,
-          at,
-        });
-
-        if (rejected) {
-          return rejected;
-        }
-
-        if (!wait || !node) {
-          throw new StoreInvariantError("Validated wait disappeared.");
-        }
-
-        const resolved = { ...wait, payload, resolvedAt: utc(at) };
-        this.writeWait(resolved);
-        this.emit(txn, {
-          entity: "hook",
-          kind: "resolved" as const,
-          runId: wait.runId,
-          record: publicHook(resolved),
-        });
-        this.applyEffect(txn, wait.runId, {
-          kind: "write_node_run",
-          nodeRun: {
-            key: node.key,
-            attempt: node.attempt,
-            maxAttempts: node.maxAttempts,
-            startedAt: node.startedAt,
-            receipt: node.receipt,
-            status: "succeeded",
-            output: payload,
-            endedAt: utc(at),
-          },
-        });
-        this.db.query(SQL.wakeRun).run(utc(at), utc(at), wait.runId);
-        this.emitRun(txn, wait.runId, "woken");
-
-        return { kind: "resolved" as const, runId: wait.runId };
-      });
-    });
+export function insertWait(
+  write: SqlWrite,
+  runId: string,
+  effect: Extract<StoreEffect, { kind: "register_wait" }>,
+): void {
+  if (effect.executionKey.runId !== runId) {
+    throw new StoreInvariantError("Wait belongs to another run.");
   }
+
+  const key = executionKeyString(effect.executionKey);
+  const wait = registerWait(effect, readNode(write, runId, key), readWaits(write, runId));
+
+  if (wait) {
+    write.db
+      .query("INSERT INTO waits VALUES (?,?,?,?)")
+      .run(wait.token, runId, key, JSON.stringify(wait));
+    emit(write, { entity: "hook", kind: "created", runId, record: publicHook(wait) });
+  }
+}
+
+export function resolveWait(
+  write: SqlWrite,
+  { token, payload, at }: { token: string; payload: Json; at: string },
+): WaitResolution {
+  const wait = readWait(write, token);
+  const node = wait && readNode(write, wait.runId, executionKeyString(wait.executionKey));
+  const row = wait && readRun(write, wait.runId);
+  const rejected = checkSignal({ wait, node, run: row ? rowToRun(row) : undefined, payload, at });
+
+  if (rejected) {
+    return rejected;
+  }
+
+  if (!wait || !node) {
+    throw new StoreInvariantError("Validated wait disappeared.");
+  }
+
+  const resolved = { ...wait, payload, resolvedAt: utc(at) };
+  writeWait(write, resolved);
+  emit(write, {
+    entity: "hook",
+    kind: "resolved",
+    runId: wait.runId,
+    record: publicHook(resolved),
+  });
+  writeNodeRun(write, wait.runId, {
+    key: node.key,
+    attempt: node.attempt,
+    maxAttempts: node.maxAttempts,
+    startedAt: node.startedAt,
+    receipt: node.receipt,
+    status: "succeeded",
+    output: payload,
+    endedAt: utc(at),
+  });
+  markWoken(write, wait.runId, at);
+
+  return { kind: "resolved", runId: wait.runId };
 }

@@ -1,9 +1,7 @@
 import type { Database } from "bun:sqlite";
+import { PREVIEW_BYTES } from "@loopy/contract";
 import type { SqlValue } from "@loopy/runtime/store/portable";
-import {
-  FEED_SCAN_LIMIT,
-  PREVIEW_BYTES,
-} from "../../../../../packages/runtime/src/store/query-utils";
+import { FEED_SCAN_LIMIT } from "../../../../../packages/runtime/src/store/query-utils";
 import {
   PENDING_HOOK,
   RUN_PREVIEW_COLUMNS,

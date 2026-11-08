@@ -6,6 +6,7 @@ import { type NodeRun, type StoreEffect } from "@loopy/core";
 import { makeLocalService, Registry } from "@loopy/runtime/local";
 import { Effect } from "effect";
 import { fixtureSqlite, fixtureStore } from "./fixtures/service-runtime";
+import { runAt } from "./store-fixture";
 
 export async function largeMapFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-map-")));
@@ -36,11 +37,12 @@ export default loopy("reindex-docs", {
 
   const registry = await Effect.runPromise(Registry.make(home, root));
   let now = Date.parse("2026-10-22T06:00:00.000Z");
-  const store = await fixtureSqlite(join(home, "runs.sqlite"), () => now);
+  const store = await fixtureSqlite(join(home, "runs.sqlite"));
+  const onClock = runAt(() => now);
 
   const service = makeLocalService({
     store,
-    clock: { ...{ now: Date.now }, now: () => now },
+    clock: { now: () => now },
     home: home,
     cwd: root,
   });
@@ -73,7 +75,7 @@ export default loopy("reindex-docs", {
     throw new Error("Fixture graph lacks its map/code nodes.");
   }
 
-  await Effect.runPromise(
+  await onClock(
     store.createRun({
       id: runId,
       slug: "reindex-docs",
@@ -85,7 +87,7 @@ export default loopy("reindex-docs", {
       updatedAt: at,
     }),
   );
-  await Effect.runPromise(store.claim(runId, "synthetic-owner"));
+  await onClock(store.claim(runId, "synthetic-owner"));
   const started = performance.now();
 
   for (let base = 0; base < items.length; base += 500) {
@@ -116,7 +118,7 @@ export default loopy("reindex-docs", {
       ];
     });
 
-    await Effect.runPromise(store.apply({ runId, token: "synthetic-owner", effects }));
+    await onClock(store.apply({ runId, token: "synthetic-owner", effects }));
   }
 
   const rootEffects: StoreEffect[] = compiled.graph.nodes
@@ -136,7 +138,7 @@ export default loopy("reindex-docs", {
     }));
 
   now = Date.parse("2026-10-22T06:01:00.000Z");
-  await Effect.runPromise(
+  await onClock(
     store.apply({
       runId,
       token: "synthetic-owner",
@@ -150,7 +152,7 @@ export default loopy("reindex-docs", {
       ],
     }),
   );
-  await Effect.runPromise(store.release(runId, "synthetic-owner"));
+  await onClock(store.release(runId, "synthetic-owner"));
 
   return {
     root,

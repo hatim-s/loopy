@@ -1,6 +1,10 @@
-import { StoreRejectedError } from "../operation";
-import type { SqlDriver } from "./driver";
-import { SCHEDULE_OVERVIEW_INDEX, SCHEMA_VERSION, WAIT_SCHEMA } from "./store-schema";
+import { StoreRejectedError } from "../../operation";
+import type { SqlDriver } from "../driver";
+
+export const SCHEMA_VERSION = 15;
+
+export const SCHEDULE_OVERVIEW_INDEX = `CREATE INDEX IF NOT EXISTS schedules_enabled_next
+  ON schedules(enabled,next_fire_at,workspace,slug)`;
 
 const FRESH_SCHEMA = `
   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -15,7 +19,13 @@ const FRESH_SCHEMA = `
   CREATE INDEX runs_slug_created_id ON runs(slug,created_at DESC,id DESC);
   CREATE INDEX runs_status_created_id ON runs(status,created_at DESC,id DESC);
   CREATE INDEX runs_due ON runs(status,wake_at,created_at);
-  ${WAIT_SCHEMA}
+  CREATE TABLE waits (
+    token TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    execution_key TEXT NOT NULL, record TEXT NOT NULL,
+    UNIQUE(run_id, execution_key)
+  );
+  CREATE INDEX waits_run ON waits(run_id);
   CREATE TABLE events (
     sequence INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, txn TEXT NOT NULL,
     entity TEXT NOT NULL, kind TEXT NOT NULL, run_id TEXT, record TEXT NOT NULL,
@@ -68,7 +78,11 @@ const FRESH_SCHEMA = `
   ${SCHEDULE_OVERVIEW_INDEX};
 `;
 
-export function createSqlSchema(db: SqlDriver): void {
+export function markSchemaVersion(db: SqlDriver): void {
+  db.query("INSERT OR REPLACE INTO meta VALUES ('schema_version',?)").run(String(SCHEMA_VERSION));
+}
+
+function createSchema(db: SqlDriver): void {
   for (const statement of FRESH_SCHEMA.split(";")) {
     if (statement.trim().length > 0) {
       db.exec(statement);
@@ -76,24 +90,22 @@ export function createSqlSchema(db: SqlDriver): void {
   }
 
   db.query("INSERT INTO meta VALUES ('epoch',?)").run(crypto.randomUUID());
-  markSqlSchema(db);
+  markSchemaVersion(db);
 }
 
-export function markSqlSchema(db: SqlDriver): void {
-  db.query("INSERT OR REPLACE INTO meta VALUES ('schema_version',?)").run(String(SCHEMA_VERSION));
-}
-
-export function initializeSqlSchema(db: SqlDriver): void {
+// meta.schema_version is the only version marker. An empty database receives the fresh schema.
+export function initializeSchema(db: SqlDriver): void {
   db.transaction(() => {
     const tables = db
       .query<{ name: string }, []>(
         "SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
       )
       .all()
+      // Durable Objects keep their own _cf and __cf tables in the same database.
       .filter((table) => !table.name.startsWith("_cf") && !table.name.startsWith("__cf"));
 
     if (tables.length === 0) {
-      createSqlSchema(db);
+      createSchema(db);
 
       return;
     }

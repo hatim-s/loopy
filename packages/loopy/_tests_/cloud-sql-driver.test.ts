@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
-import type { Store, StoreEffect } from "@loopy/core";
-import { EVENT_RETENTION, MemoryStore } from "@loopy/runtime/store";
+import type { StoreEffect } from "@loopy/core";
 import {
   type SqlDriver,
   SqlRunStore,
@@ -11,21 +13,34 @@ import {
   type SqlValue,
 } from "@loopy/runtime/store/portable";
 import { Effect, Schema } from "effect";
+import { EVENT_RETENTION } from "../../runtime/src/store/event-outbox";
 import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
-import { applyQuerySchema } from "../../runtime/src/store/sqlite/query/schema";
-import { SCHEMA, WAIT_SCHEMA } from "../../runtime/src/store/sqlite/store-schema";
 import { newRun } from "./fixture";
+import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { storeContract } from "./store-contract";
+import { createTestStores, runAt } from "./store-fixture";
 
 const drivers: BunSqlDriver[] = [];
 
+const homes: string[] = [];
+
+const { openTestStore, closeTestStores } = createTestStores();
+
 const at = newRun().createdAt;
+
+const run = runAt(() => Date.parse(at));
 
 const owner = { identity: { pid: null, host: "workspace:test:session" }, isAlive: () => false };
 
 afterEach(() => {
+  closeTestStores();
+
   for (const driver of drivers.splice(0)) {
     driver.close();
+  }
+
+  for (const home of homes.splice(0)) {
+    rmSync(home, { recursive: true, force: true });
   }
 });
 
@@ -142,48 +157,55 @@ test("unsupported portable databases retain their records", () => {
   expect(sqlite.query("SELECT * FROM personal").all()).toEqual([{ value: "retained" }]);
 });
 
-for (const version of [13, 14]) {
-  test(`fresh schema matches the migrated schema ${version} tables and indexes`, () => {
-    const fresh = fixture().sqlite;
-    const legacy = new BunSqlDriver(":memory:");
-    drivers.push(legacy);
-    legacy.exec(version === 13 ? SCHEMA.replace(WAIT_SCHEMA, "") : SCHEMA);
+test("schema 13 upgrades through the local migration to the fresh tables, indexes and records", async () => {
+  const home = mkdtempSync(join(tmpdir(), "loopy-schema13-"));
+  homes.push(home);
+  const file = join(home, "runs.sqlite");
+  const db = legacyDatabase(file, 13);
+  db.query("INSERT INTO meta VALUES ('epoch','retained-epoch')").run();
+  db.query(
+    "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+  ).run("run", "test", "bundle", "/workspace", "{}", "queued", at, at);
+  db.close();
 
-    if (version === 13) {
-      legacy.exec(WAIT_SCHEMA);
-    }
+  const upgraded = openTestStore(file);
+  expect(await Effect.runPromise(upgraded.epoch())).toBe("retained-epoch");
+  expect(await Effect.runPromise(upgraded.getRun("run"))).toMatchObject({ id: "run" });
+  closeTestStores();
 
-    applyQuerySchema(legacy);
-    legacy.exec(
-      "CREATE INDEX schedules_enabled_next ON schedules(enabled,next_fire_at,workspace,slug)",
+  const fresh = fixture().sqlite;
+  const legacy = new BunSqlDriver(file);
+  drivers.push(legacy);
+  expect(legacy.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
+  expect(legacy.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
+    value: "15",
+  });
+
+  const tables = fresh
+    .query<{ name: string }, []>("SELECT name FROM sqlite_schema WHERE type='table'")
+    .all();
+
+  for (const { name } of tables) {
+    expect(fresh.query(`PRAGMA table_info('${name}')`).all()).toEqual(
+      legacy.query(`PRAGMA table_info('${name}')`).all(),
+    );
+    expect(fresh.query(`PRAGMA foreign_key_list('${name}')`).all()).toEqual(
+      legacy.query(`PRAGMA foreign_key_list('${name}')`).all(),
     );
 
-    const tables = fresh
-      .query<{ name: string }, []>("SELECT name FROM sqlite_schema WHERE type='table'")
-      .all();
+    const indexes = (db: BunSqlDriver) =>
+      db
+        .query<{ name: string }, []>(`PRAGMA index_list('${name}')`)
+        .all()
+        .map((row) => ({
+          name: row.name,
+          columns: db.query(`PRAGMA index_info('${row.name}')`).all(),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-    for (const { name } of tables) {
-      expect(fresh.query(`PRAGMA table_info('${name}')`).all()).toEqual(
-        legacy.query(`PRAGMA table_info('${name}')`).all(),
-      );
-      expect(fresh.query(`PRAGMA foreign_key_list('${name}')`).all()).toEqual(
-        legacy.query(`PRAGMA foreign_key_list('${name}')`).all(),
-      );
-
-      const indexes = (db: BunSqlDriver) =>
-        db
-          .query<{ name: string }, []>(`PRAGMA index_list('${name}')`)
-          .all()
-          .map((row) => ({
-            name: row.name,
-            columns: db.query(`PRAGMA index_info('${row.name}')`).all(),
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-
-      expect(indexes(fresh)).toEqual(indexes(legacy));
-    }
-  });
-}
+    expect(indexes(fresh)).toEqual(indexes(legacy));
+  }
+});
 
 function logEffects(count: number): StoreEffect[] {
   return [...Array(count).keys()].map((index) => ({
@@ -199,36 +221,34 @@ function logEffects(count: number): StoreEffect[] {
   }));
 }
 
-for (const kind of ["portable", "memory"] as const) {
-  test(`${kind} age pruning removes a full transaction when time crosses the cutoff mid-batch`, async () => {
-    let tick = Date.parse(at);
-    const now = () => tick++;
-    const store: Store = kind === "portable" ? fixture({ now }).store : new MemoryStore(now);
-    await Effect.runPromise(store.createRun(newRun()));
-    await Effect.runPromise(store.claim("run", "owner"));
-    await Effect.runPromise(store.apply({ runId: "run", token: "owner", effects: logEffects(2) }));
-    const events = await Effect.runPromise(store.events(0, 10));
-    const tail = events.at(-1);
+test("age pruning removes a whole transaction when the cutoff falls inside it", async () => {
+  const { store, sqlite } = fixture();
+  await run(store.createRun(newRun()));
+  await run(store.claim("run", "owner"));
+  await run(store.apply({ runId: "run", token: "owner", effects: logEffects(2) }));
+  const events = await run(store.events(0, 10));
+  const tail = events.at(-1);
 
-    if (!tail) {
-      throw new Error("Missing transaction tail.");
-    }
+  if (!tail) {
+    throw new Error("Missing transaction tail.");
+  }
 
-    expect(events[2]?.txn).toBe(tail.txn);
-    const pruneAt = new Date(Date.parse(tail.at) + EVENT_RETENTION.maxAgeMs).toISOString();
-    expect(await Effect.runPromise(store.pruneEvents(pruneAt))).toBe(4);
-    expect(await Effect.runPromise(store.events(0, 10))).toEqual([]);
-    expect(await Effect.runPromise(store.eventCursor())).toMatchObject({ cursor: 4 });
-    await Effect.runPromise(store.heartbeat("run", "owner"));
-    expect((await Effect.runPromise(store.events(0, 10)))[0]?.sequence).toBe(5);
-  });
-}
+  expect(events[2]?.txn).toBe(tail.txn);
+  // Age the first row of the batch so the cutoff splits the transaction.
+  sqlite.query("UPDATE events SET at=? WHERE sequence<=3").run("2026-10-15T00:00:00.000Z");
+  const pruneAt = new Date(Date.parse(tail.at) + EVENT_RETENTION.maxAgeMs).toISOString();
+  expect(await run(store.pruneEvents(pruneAt))).toBe(4);
+  expect(await run(store.events(0, 10))).toEqual([]);
+  expect(await run(store.eventCursor())).toMatchObject({ cursor: 4 });
+  await run(store.heartbeat("run", "owner"));
+  expect((await run(store.events(0, 10)))[0]?.sequence).toBe(5);
+});
 
 test("row retention removes an entire transaction prefix and keeps replay boundaries", async () => {
-  const { store, sqlite } = fixture({ now: () => Date.parse(at) });
-  await Effect.runPromise(store.createRun(newRun()));
-  await Effect.runPromise(store.claim("run", "owner"));
-  await Effect.runPromise(store.apply({ runId: "run", token: "owner", effects: logEffects(2) }));
+  const { store, sqlite } = fixture();
+  await run(store.createRun(newRun()));
+  await run(store.claim("run", "owner"));
+  await run(store.apply({ runId: "run", token: "owner", effects: logEffects(2) }));
   const batch = (await Effect.runPromise(store.events(2, 10)))[0];
 
   if (!batch) {
@@ -258,39 +278,23 @@ test("portable initialization ignores Cloudflare internal tables and retains nul
   sqlite.query("INSERT INTO __cf_kv VALUES ('saved','retained')").run();
   const driver = new PortableDriver(sqlite);
   let now = Date.parse(at);
-  const store = new SqlRunStore(driver, { owner, now: () => now, leaseMs: 1000 });
-  await Effect.runPromise(store.createRun(newRun()));
-  expect(await Effect.runPromise(store.claim("run", "first"))).toMatchObject({
+  const runNow = runAt(() => now);
+  const store = new SqlRunStore(driver, { owner, leaseMs: 1000 });
+  await runNow(store.createRun(newRun()));
+  expect(await runNow(store.claim("run", "first"))).toMatchObject({
     owner: { token: "first", pid: null, host: owner.identity.host },
   });
   expect((await Effect.runPromise(store.events(0, 10))).at(-1)).toMatchObject({
     record: { owner: { pid: null } },
   });
   now += 1000;
-  await expect(Effect.runPromise(store.claim("run", "second"))).rejects.toThrow("not owned");
+  await expect(runNow(store.claim("run", "second"))).rejects.toThrow("not owned");
   now++;
-  expect(await Effect.runPromise(store.claim("run", "second"))).toMatchObject({
+  expect(await runNow(store.claim("run", "second"))).toMatchObject({
     owner: { token: "second", pid: null },
   });
-  expect(await Effect.runPromise(store.heartbeat("run", "first"))).toBe(false);
+  expect(await runNow(store.heartbeat("run", "first"))).toBe(false);
   expect(sqlite.query("SELECT value FROM __cf_kv WHERE key='saved'").get()).toEqual({
     value: "retained",
   });
-});
-
-test("memory row retention keeps the stricter cap when an older event also expires", async () => {
-  let now = Date.parse(at) - 1;
-  const store = new MemoryStore(() => now);
-  await Effect.runPromise(store.createRun(newRun()));
-  now++;
-  await Effect.runPromise(store.claim("run", "owner"));
-  await Effect.runPromise(store.apply({ runId: "run", token: "owner", effects: logEffects(2) }));
-
-  for (let index = 0; index < 99_999; index++) {
-    await Effect.runPromise(store.heartbeat("run", "owner"));
-  }
-
-  const pruneAt = new Date(now + EVENT_RETENTION.maxAgeMs).toISOString();
-  expect(await Effect.runPromise(store.pruneEvents(pruneAt))).toBe(4);
-  expect(await Effect.runPromise(store.oldestEventSequence())).toBe(5);
 });

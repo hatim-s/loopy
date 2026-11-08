@@ -1,9 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { nodeIdSchema } from "@loopy/contract";
 import type { RuntimeEvent, Store } from "@loopy/core";
-import { MemoryStore, makeSqliteRunStore, subscribeStore } from "@loopy/runtime/store";
+import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { Effect, Exit, Schema, Scope } from "effect";
+import { subscribeStore } from "../../runtime/src/host/subscription";
 import { newRun } from "./fixture";
+import { runAt } from "./store-fixture";
 
 const scopes: Scope.Closeable[] = [];
 
@@ -22,87 +24,90 @@ function fixtureScope() {
 
 const start = Date.parse(newRun().createdAt);
 
-const factories = [
-  { name: "memory", make: async (now: () => number) => new MemoryStore(now) },
-  {
-    name: "sqlite",
-    make: async (now: () => number) =>
-      await Effect.runPromise(
-        makeSqliteRunStore(":memory:", now).pipe(
-          Effect.provideService(Scope.Scope, fixtureScope()),
-        ),
-      ),
-  },
-];
+const make = () =>
+  Effect.runPromise(
+    makeSqliteRunStore(":memory:").pipe(Effect.provideService(Scope.Scope, fixtureScope())),
+  );
 
-for (const { name, make } of factories) {
-  test(`${name} subscribers survive throwing listeners and unsubscribe after committed batches`, async () => {
-    const store = await make(() => start);
+test("subscribers survive throwing listeners and unsubscribe after committed batches", async () => {
+  const store = await make();
 
-    const batches: RuntimeEvent[][] = [];
-    const reads: Promise<Effect.Success<ReturnType<Store["getRun"]>>>[] = [];
-    await Effect.runPromise(
-      subscribeStore(store, () => {
-        throw new Error("Listener failed.");
-      }).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
-    );
+  const batches: RuntimeEvent[][] = [];
+  const reads: Promise<Effect.Success<ReturnType<Store["getRun"]>>>[] = [];
+  await Effect.runPromise(
+    subscribeStore(store, () => {
+      throw new Error("Listener failed.");
+    }).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
+  );
 
-    const subscription = fixtureScope();
-    await Effect.runPromise(
-      subscribeStore(store, (events) => {
-        batches.push(events);
-        reads.push(Effect.runPromise(store.getRun("run")));
-      }).pipe(Effect.provideService(Scope.Scope, subscription)),
-    );
+  const subscription = fixtureScope();
+  await Effect.runPromise(
+    subscribeStore(store, (events) => {
+      batches.push(events);
+      reads.push(Effect.runPromise(store.getRun("run")));
+    }).pipe(Effect.provideService(Scope.Scope, subscription)),
+  );
 
-    await Effect.runPromise(store.createRun(newRun()));
-    expect(await reads[0]).toEqual(newRun());
-    await Effect.runPromise(store.claim("run", "owner"));
-    expect(batches.map((batch) => batch.length)).toEqual([1, 1]);
-    await Effect.runPromise(Scope.close(subscription, Exit.void));
-    await Effect.runPromise(store.finishRun("run", "owner", { status: "succeeded", output: null }));
-    expect(batches).toHaveLength(2);
-    expect(await Effect.runPromise(store.events(0, 10))).toHaveLength(3);
-  });
+  await Effect.runPromise(store.createRun(newRun()));
+  expect(await reads[0]).toEqual(newRun());
+  await Effect.runPromise(store.claim("run", "owner"));
+  expect(batches.map((batch) => batch.length)).toEqual([1, 1]);
+  await Effect.runPromise(Scope.close(subscription, Exit.void));
+  await Effect.runPromise(
+    store.apply({
+      runId: "run",
+      token: "owner",
+      effects: [
+        {
+          kind: "finish_run",
+          outcome: { status: "succeeded", output: null },
+          at: newRun().createdAt,
+        },
+      ],
+    }),
+  );
+  expect(batches).toHaveLength(2);
+  expect(await Effect.runPromise(store.events(0, 10))).toHaveLength(3);
+});
 
-  test(`${name} retention keeps the exact 24-hour boundary and monotonic sequences`, async () => {
-    let time = start;
-    const store = await make(() => time);
+test("retention keeps the exact 24-hour boundary and monotonic sequences", async () => {
+  let time = start;
+  const run = runAt(() => time);
+  const store = await make();
 
-    await Effect.runPromise(store.createRun(newRun()));
-    time++;
-    await Effect.runPromise(store.claim("run", "owner"));
-    time += 86_400_000;
-    expect(await Effect.runPromise(store.pruneEvents(new Date(time).toISOString()))).toBe(1);
-    expect((await Effect.runPromise(store.events(0, 10))).map((event) => event.sequence)).toEqual([
-      2,
-    ]);
-    expect(await Effect.runPromise(store.pruneEvents(new Date(time).toISOString()))).toBe(0);
-    await Effect.runPromise(store.heartbeat("run", "owner"));
-    expect((await Effect.runPromise(store.events(2, 10)))[0]?.sequence).toBe(3);
-  });
+  await run(store.createRun(newRun()));
+  time++;
+  await run(store.claim("run", "owner"));
+  time += 86_400_000;
+  expect(await run(store.pruneEvents(new Date(time).toISOString()))).toBe(1);
+  expect((await run(store.events(0, 10))).map((event) => event.sequence)).toEqual([2]);
+  expect(await run(store.pruneEvents(new Date(time).toISOString()))).toBe(0);
+  await run(store.heartbeat("run", "owner"));
+  expect((await run(store.events(2, 10)))[0]?.sequence).toBe(3);
+});
 
-  test(`${name} retention bounds recent rows to the newest 100000`, async () => {
-    const store = await make(() => start);
+test("retention bounds recent rows to the newest 100000", async () => {
+  const store = await make();
 
-    await Effect.runPromise(store.createRun(newRun()));
-    await Effect.runPromise(store.claim("run", "owner"));
-
-    for (let index = 0; index < 100_001; index++) {
-      await Effect.runPromise(store.heartbeat("run", "owner"));
-    }
-
-    expect(await Effect.runPromise(store.pruneEvents(newRun().createdAt))).toBe(3);
-    const events = await Effect.runPromise(store.events(0, 100_010));
-    expect(events).toHaveLength(100_000);
-    expect(events[0]?.sequence).toBe(4);
-    expect(events.at(-1)?.sequence).toBe(100_003);
-  }, 30_000);
-}
-
-async function trace(store: Store) {
   await Effect.runPromise(store.createRun(newRun()));
   await Effect.runPromise(store.claim("run", "owner"));
+
+  for (let index = 0; index < 100_001; index++) {
+    await Effect.runPromise(store.heartbeat("run", "owner"));
+  }
+
+  expect(await Effect.runPromise(store.pruneEvents(newRun().createdAt))).toBe(3);
+  const events = await Effect.runPromise(store.events(0, 100_010));
+  expect(events).toHaveLength(100_000);
+  expect(events[0]?.sequence).toBe(4);
+  expect(events.at(-1)?.sequence).toBe(100_003);
+}, 30_000);
+
+test("graph node, log and run events commit in reducer order within one transaction", async () => {
+  const store = await make();
+  const run = runAt(() => start);
+  await run(store.createRun(newRun()));
+  await run(store.claim("run", "owner"));
   const key = { runId: "run", nodeId: Schema.decodeUnknownSync(nodeIdSchema)("0:code"), scope: [] };
 
   const node = {
@@ -113,7 +118,7 @@ async function trace(store: Store) {
     receipt: "finished" as const,
   };
 
-  await Effect.runPromise(
+  await run(
     store.apply({
       runId: "run",
       token: "owner",
@@ -134,35 +139,20 @@ async function trace(store: Store) {
       ],
     }),
   );
-  await Effect.runPromise(store.release("run", "owner"));
-  const events = await Effect.runPromise(store.events(0, 100));
+  await run(store.release("run", "owner"));
+  const events = await run(store.events(0, 100));
   expect(events.slice(2, 6).every((event) => event.txn === events[2]?.txn)).toBe(true);
   expect(new Set(events.map((event) => event.txn)).size).toBe(4);
-  expect(await Effect.runPromise(store.events(2, 2))).toEqual(events.slice(2, 4));
-
-  return events.map((event) => [event.sequence, event.entity, event.kind, event.runId, event.at]);
-}
-
-test("memory and SQLite emit equivalent graph node, log and run event ordering", async () => {
-  const sqlite = await Effect.runPromise(
-    makeSqliteRunStore(":memory:", () => start).pipe(
-      Effect.provideService(Scope.Scope, fixtureScope()),
-    ),
-  );
-
-  try {
-    const memoryOrder = await trace(new MemoryStore(() => start));
-    expect(memoryOrder.map((row) => row.slice(1, 4))).toEqual([
-      ["run", "created", "run"],
-      ["run", "claimed", "run"],
-      ["node", "running", "run"],
-      ["log", "written", "run"],
-      ["node", "succeeded", "run"],
-      ["run", "finished", "run"],
-      ["run", "released", "run"],
-    ]);
-    expect(await trace(sqlite)).toEqual(memoryOrder);
-  } finally {
-    await Effect.runPromise(sqlite.close());
-  }
+  expect(await run(store.events(2, 2))).toEqual(events.slice(2, 4));
+  expect(
+    events.map((event) => [event.sequence, event.entity, event.kind, event.runId, event.at]),
+  ).toEqual([
+    [1, "run", "created", "run", node.startedAt],
+    [2, "run", "claimed", "run", node.startedAt],
+    [3, "node", "running", "run", node.startedAt],
+    [4, "log", "written", "run", node.startedAt],
+    [5, "node", "succeeded", "run", node.startedAt],
+    [6, "run", "finished", "run", node.startedAt],
+    [7, "run", "released", "run", node.startedAt],
+  ]);
 });

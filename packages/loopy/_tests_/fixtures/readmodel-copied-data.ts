@@ -13,12 +13,12 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
+  type DashboardReader,
   emptyRunCounts,
   type RunDefinitionCount,
-  type RunFilter,
-  type RunRecord,
-  type Store,
-} from "@loopy/core";
+  type RunPageQuery,
+} from "@loopy/contract";
+import type { RunRecord, Store } from "@loopy/core";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect, Exit, Scope } from "effect";
 import { BunSqlDriver } from "../../../runtime/src/store/sqlite/bun-driver";
@@ -147,7 +147,7 @@ const order = (rows: RunDefinitionCount[]) =>
     ),
   );
 
-async function counts(store: Store, baseline: ReturnType<typeof snapshot>) {
+async function counts(store: Store & DashboardReader, baseline: ReturnType<typeof snapshot>) {
   const rows = await Effect.runPromise(store.runCountsByDefinition());
   const keys = rows.map(({ workspace, slug, status }) => JSON.stringify([workspace, slug, status]));
   assert.equal(new Set(keys).size, keys.length);
@@ -163,7 +163,7 @@ async function counts(store: Store, baseline: ReturnType<typeof snapshot>) {
   const slugs = [...new Set(baseline.runs.map(({ slug }) => slug))];
   const workspaces = [...new Set(baseline.runs.map(({ workspace }) => workspace))];
 
-  const filters: RunFilter[] = [
+  const filters: Pick<RunPageQuery, "slug" | "workspace">[] = [
     {},
     ...identities.values(),
     ...slugs.map((slug) => ({ slug })),

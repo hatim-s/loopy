@@ -8,8 +8,4 @@ export interface SqlOwnerPolicy {
   isAlive(owner: OwnerIdentity): boolean;
 }
 
-export type SqlStoreOptions = {
-  owner: SqlOwnerPolicy;
-  now?: () => number;
-  leaseMs?: number;
-};
+export type SqlStoreOptions = { owner: SqlOwnerPolicy; leaseMs?: number };

@@ -4,13 +4,13 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema, routes } from "@loopy/contract";
-import { executionKeyString, type LogRecord, type NodeRun, type Store } from "@loopy/core";
+import { executionKeyString, type LogRecord, type NodeRun } from "@loopy/core";
 import { makeLocalService } from "@loopy/runtime/local";
-import { MemoryStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
-import { SCHEMA, WAIT_SCHEMA } from "../../runtime/src/store/sqlite/store-schema";
 import { newRun } from "./fixture";
 import { fixtureSqlite } from "./fixtures/service-runtime";
+import { legacyDatabase } from "./fixtures/sqlite/legacy";
+import { memoryStore } from "./store-fixture";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 
@@ -24,7 +24,7 @@ async function fixture(memory = false) {
   const root = mkdtempSync(join(tmpdir(), "loopy-query-"));
   mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
   const sqlite = memory ? null : await fixtureSqlite(join(root, "runs.sqlite"));
-  const store: Store = sqlite ?? new MemoryStore();
+  const store = sqlite ?? memoryStore();
   cleanups.push(async () => {
     sqlite?.close();
     rmSync(root, { recursive: true, force: true });
@@ -59,7 +59,7 @@ function node(attempt = 1): NodeRun {
 }
 
 for (const memory of [false, true]) {
-  test(`${memory ? "memory" : "sqlite"} keyset ties, filtered counts and zero-filled fractional windows`, async () => {
+  test(`${memory ? "portable" : "local"} keyset ties, filtered counts and zero-filled fractional windows`, async () => {
     const { store } = await fixture(memory);
 
     for (const id of ["c", "a", "b"]) {
@@ -94,7 +94,7 @@ for (const memory of [false, true]) {
       (await Effect.runPromise(store.overview({ ...query, slug: "absent" }))).counts.succeeded,
     ).toBe(0);
   });
-  test(`${memory ? "memory" : "sqlite"} input and attempts persist, bulk reads omit input and selected detail keeps it`, async () => {
+  test(`${memory ? "portable" : "local"} input and attempts persist, bulk reads omit input and selected detail keeps it`, async () => {
     const { store, service } = await fixture(memory);
     await Effect.runPromise(store.createRun(newRun()));
     await Effect.runPromise(store.claim("run", "owner"));
@@ -212,8 +212,7 @@ test("schema 14 upgrade preserves epoch, outbox, log identity, output and exact 
   const root = mkdtempSync(join(tmpdir(), "loopy-v14-"));
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const file = join(root, "runs.sqlite");
-  const db = new Database(file);
-  db.exec(SCHEMA);
+  const db = legacyDatabase(file, 14);
   db.query("INSERT INTO meta VALUES ('epoch','retained')").run();
   db.query(
     "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES ('run','test','bundle','/workspace','{}','queued',?,?)",
@@ -247,7 +246,6 @@ test("schema 14 upgrade preserves epoch, outbox, log identity, output and exact 
   db.query(
     "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,'retained-txn','node','succeeded','run',?)",
   ).run(record.startedAt, JSON.stringify(record));
-  db.exec("PRAGMA user_version=14");
   db.close();
   const store = await fixtureSqlite(file);
   cleanups.push(() => Effect.runPromise(store.close()));
@@ -377,13 +375,11 @@ test("a rejected schema migration preserves the old records, epoch and version",
   const root = mkdtempSync(join(tmpdir(), "loopy-bad-migration-"));
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const file = join(root, "runs.sqlite");
-  const db = new Database(file);
-  db.exec(SCHEMA);
+  const db = legacyDatabase(file, 14);
   db.query("INSERT INTO meta VALUES ('epoch','keep-me')").run();
   db.query(
     "INSERT INTO events(at,txn,entity,kind,record) VALUES (?,'txn','node','succeeded','{broken')",
   ).run(newRun().createdAt);
-  db.exec("PRAGMA user_version=14");
   db.close();
   await expect(fixtureSqlite(file)).rejects.toThrow("malformed JSON");
   const unchanged = new Database(file, { readonly: true });
@@ -398,13 +394,12 @@ test("a rejected schema migration preserves the old records, epoch and version",
   unchanged.close();
 });
 
-for (const version of [13, 14]) {
+for (const version of [13, 14] as const) {
   test(`schema ${version} log events retain node filtering after migration and agree with new log events`, async () => {
     const root = mkdtempSync(join(tmpdir(), `loopy-v${version}-log-event-`));
     cleanups.push(() => rmSync(root, { recursive: true, force: true }));
     const file = join(root, "runs.sqlite");
-    const db = new Database(file);
-    db.exec(version === 13 ? SCHEMA.replace(WAIT_SCHEMA, "") : SCHEMA);
+    const db = legacyDatabase(file, version);
     db.query("INSERT INTO meta VALUES ('epoch','retained-epoch')").run();
     db.query(
       "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES ('run','test','bundle','/workspace','{}','queued',?,?)",
@@ -444,7 +439,6 @@ for (const version of [13, 14]) {
       log.at,
       JSON.stringify({ ...log, position: { ...log.position, executionKey: "missing" } }),
     );
-    db.exec(`PRAGMA user_version=${version}`);
     db.close();
     const store = await fixtureSqlite(file);
     cleanups.push(() => Effect.runPromise(store.close()));

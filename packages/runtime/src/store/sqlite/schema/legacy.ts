@@ -1,7 +1,20 @@
+import { StoreRejectedError } from "../../operation";
 import type { SqlDriver } from "../driver";
+import { markSchemaVersion, SCHEDULE_OVERVIEW_INDEX } from "./fresh";
+
+// Frozen migration steps. They describe how old homes changed and never follow the fresh schema.
+const SCHEMA_13_TO_14 = `
+  CREATE TABLE waits (
+    token TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    execution_key TEXT NOT NULL, record TEXT NOT NULL,
+    UNIQUE(run_id, execution_key)
+  );
+  CREATE INDEX waits_run ON waits(run_id);
+`;
 
 // The rebuild preserves legacy rowids as global log ids and all per-run sequences.
-export const QUERY_SCHEMA = `
+const SCHEMA_14_TO_15 = `
   DROP INDEX runs_slug_created;
   CREATE INDEX runs_workspace_created_id ON runs(workspace,created_at DESC,id DESC);
   CREATE INDEX runs_created_id ON runs(created_at DESC,id DESC);
@@ -65,11 +78,43 @@ export const QUERY_SCHEMA = `
     FROM logs GROUP BY execution_key,attempt;
 `;
 
-export function applyQuerySchema(db: SqlDriver): void {
-  // Each statement must report its own failure before the transaction can change the version.
-  for (const statement of QUERY_SCHEMA.split(";")) {
+function run(db: SqlDriver, script: string): void {
+  for (const statement of script.split(";")) {
     if (statement.trim().length > 0) {
       db.query(statement).run();
     }
   }
+}
+
+/**
+ * Local homes from before the meta marker record their version in PRAGMA user_version.
+ * This upgrades schema 13 and 14 and moves schema 15 homes onto the meta marker, keeping
+ * every record and the epoch. The runtime README states when this path can go.
+ */
+export function upgradeLegacyHome(db: SqlDriver): void {
+  db.transaction(() => {
+    const version =
+      db.query<{ user_version: number }, []>("PRAGMA user_version").get()?.user_version ?? 0;
+
+    if (version === 0) {
+      return;
+    }
+
+    if (version === 13) {
+      run(db, SCHEMA_13_TO_14);
+    }
+
+    if (version === 13 || version === 14) {
+      run(db, SCHEMA_14_TO_15);
+    } else if (version !== 15) {
+      throw new StoreRejectedError(
+        `Database schema ${version} cannot be opened by this runtime. Preserve this home and migrate its saved definitions into a separate home.`,
+      );
+    }
+
+    // Schema 15 homes may predate the schedule overview index.
+    db.exec(SCHEDULE_OVERVIEW_INDEX);
+    markSchemaVersion(db);
+    db.exec("PRAGMA user_version=0");
+  }, "immediate");
 }
