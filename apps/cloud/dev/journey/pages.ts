@@ -1,7 +1,7 @@
 import { type ExecutionPage, encodeRunCursor, PAGE_LIMIT, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal } from "../shared/assert";
-import { compileFixture } from "../shared/fixture-client";
+import { compileFixture } from "../shared/compile-fixture";
 import type { Journey } from "./client";
 
 export async function pages(journey: Journey, runId: string) {

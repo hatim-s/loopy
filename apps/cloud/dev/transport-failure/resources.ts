@@ -1,22 +1,18 @@
-import { access, mkdir, mkdtemp, readdir } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
-import { artifactHelperName, inputHelperName } from "@loopy/contract/sandbox";
-import { errnoCode } from "@loopy/core";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { sandboxConfig, sandboxConfigSchema } from "../../../sandbox/src/config";
-import {
-  ownerOf,
-  SANDBOX_DOCKER_CONTEXT,
-  SANDBOX_IMAGE,
-  SANDBOX_LABELS,
-} from "../../../sandbox/src/docker/identity";
+import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { runCommand } from "../../../sandbox/src/process";
 import { stateLayout } from "../../../sandbox/src/state-root";
-import { filesystemReceipt } from "../filesystem-receipt";
+import type { StoredReceipt } from "../filesystem-receipt";
 import { assert, equal } from "../shared/assert";
+import { lstatOrAbsent } from "../shared/fs";
 import { untilEffect } from "../shared/poll";
+import { docker as runDocker } from "../shared/process";
 import { root } from "../stack/constants";
+import { OwnedResources } from "../stack/owned";
 import { FixtureError, fixtureIO } from "./fixture-effect";
 
 const environment = {
@@ -24,8 +20,6 @@ const environment = {
   HOME: process.env.HOME ?? root,
   LANG: "C.UTF-8",
 };
-
-type StoredReceipt = Effect.Success<ReturnType<typeof filesystemReceipt>>;
 
 export function command(argv: [string, ...string[]]) {
   return runCommand(argv, { cwd: root, env: environment, timeoutMs: 30_000, maxBytes: 128 * 1024 });
@@ -63,18 +57,14 @@ export function fixture(maxTimeoutMs: number) {
 
 export type Config = Effect.Success<ReturnType<typeof fixture>>;
 
+function owned(config: Config) {
+  return new OwnedResources(config.stateRoot, (args) =>
+    runDocker(args, { env: environment, timeoutMs: 30_000 }),
+  );
+}
+
 export function receipts(config: Config) {
-  return Effect.gen(function* () {
-    const directory = stateLayout(config.stateRoot).receipts;
-
-    const files = (yield* fixtureIO("filesystem", () => readdir(directory))).filter((name) =>
-      /^[a-f0-9]{64}\.json$/.test(name),
-    );
-
-    return yield* Effect.all(
-      files.map((name) => filesystemReceipt(config.stateRoot, name.slice(0, -5))),
-    );
-  });
+  return fixtureIO("filesystem", () => owned(config).receipts());
 }
 
 export function oneReceipt(config: Config) {
@@ -88,37 +78,8 @@ export function oneReceipt(config: Config) {
   });
 }
 
-const containerSchema = Schema.Tuple([
-  Schema.Struct({
-    Id: Schema.String,
-    Name: Schema.String,
-    Config: Schema.Struct({ Labels: Schema.Record(Schema.String, Schema.String) }),
-    State: Schema.Struct({
-      Running: Schema.Boolean,
-      StartedAt: Schema.String,
-      FinishedAt: Schema.String,
-    }),
-    Mounts: Schema.Array(
-      Schema.Struct({ Type: Schema.String, Name: Schema.optional(Schema.String) }),
-    ),
-  }),
-]);
-
-const decodeContainer = Schema.decodeUnknownSync(containerSchema);
-
-export function ownedContainer(config: Config, receipt: StoredReceipt, name = receipt.container) {
-  return Effect.gen(function* () {
-    const [row] = decodeContainer(JSON.parse(yield* docker(["container", "inspect", name])));
-    equal(row.Name, `/${name}`, "container_name_mismatch");
-    equal(
-      row.Config.Labels[SANDBOX_LABELS.owner],
-      ownerOf(config.stateRoot),
-      "container_owner_mismatch",
-    );
-    equal(row.Config.Labels[SANDBOX_LABELS.request], receipt.requestHash, "request_owner_mismatch");
-
-    return row;
-  });
+export function ownedContainer(config: Config, receipt: StoredReceipt) {
+  return fixtureIO("docker", () => owned(config).container(receipt));
 }
 
 export function until<T, E, R>(read: () => Effect.Effect<T, E, R>, accepts: (value: T) => boolean) {
@@ -152,114 +113,14 @@ export function marker(receipt: StoredReceipt) {
 
 export function cleanup(config: Config) {
   return Effect.gen(function* () {
-    const saved = yield* receipts(config);
-    const removed: string[] = [];
-    const volumes = new Set<string>();
+    const evidence = yield* fixtureIO("cleanup", () => owned(config).remove());
 
-    for (const receipt of saved) {
-      volumes.add(receipt.inputVolume);
-      volumes.add(receipt.volume);
-
-      for (const name of [
-        receipt.container,
-        inputHelperName(receipt),
-        artifactHelperName(receipt.id),
-      ]) {
-        const listed = (yield* docker([
-          "container",
-          "ls",
-          "--all",
-          "--filter",
-          `name=^/${name}$`,
-          "--format",
-          "{{.Names}}",
-        ])).trim();
-
-        if (!listed) {
-          continue;
-        }
-
-        equal(listed, name, "cleanup_container_identity_mismatch");
-        const row = yield* ownedContainer(config, receipt, name);
-        assert(
-          row.Mounts.every((mount) => mount.Type !== "bind"),
-          "unexpected_host_bind_mount",
-        );
-
-        for (const mount of row.Mounts) {
-          if (mount.Type === "volume") {
-            assert(mount.Name && volumes.has(mount.Name), "unrecorded_volume_mount");
-          }
-        }
-
-        yield* docker(["rm", "--force", name]);
-        removed.push(name);
-      }
-    }
-
-    for (const volume of volumes) {
-      const listed = (yield* docker([
-        "volume",
-        "ls",
-        "--filter",
-        `name=^${volume}$`,
-        "--format",
-        "{{.Name}}",
-      ])).trim();
-
-      if (listed) {
-        equal(listed, volume, "cleanup_volume_identity_mismatch");
-        yield* docker(["volume", "rm", volume]);
-      }
-
-      equal(
-        (yield* docker([
-          "volume",
-          "ls",
-          "--filter",
-          `name=^${volume}$`,
-          "--format",
-          "{{.Name}}",
-        ])).trim(),
-        "",
-        "owned_volume_remains",
-      );
-    }
-
-    equal(
-      (yield* docker([
-        "container",
-        "ls",
-        "--all",
-        "--filter",
-        `label=${SANDBOX_LABELS.owner}=${ownerOf(config.stateRoot)}`,
-        "--format",
-        "{{.Names}}",
-      ])).trim(),
-      "",
-      "owned_container_remains",
+    const lock = yield* fixtureIO("filesystem", () =>
+      lstatOrAbsent(stateLayout(config.stateRoot).lock),
     );
 
-    const lockExists = yield* fixtureIO("filesystem", () =>
-      access(stateLayout(config.stateRoot).lock).then(
-        () => true,
-        (cause: unknown) => {
-          if (errnoCode(cause) !== "ENOENT") {
-            throw cause;
-          }
+    assert(!lock, "service_lock_remains");
 
-          return false;
-        },
-      ),
-    );
-
-    assert(!lockExists, "service_lock_remains");
-
-    return {
-      containersRemoved: removed,
-      volumesCheckedAbsent: [...volumes],
-      ownedContainersRemaining: 0,
-      ownedVolumesRemaining: 0,
-    };
+    return evidence;
   });
 }

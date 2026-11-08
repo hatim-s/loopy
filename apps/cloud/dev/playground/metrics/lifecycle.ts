@@ -1,30 +1,11 @@
 import type { Database } from "bun:sqlite";
-import { stat } from "node:fs/promises";
 import { decodeBoundary, isTerminalRun, runStatusSchema } from "@loopy/contract";
-import { errnoCode } from "@loopy/core";
 import { distribution } from "../../shared/stats";
 import { state } from "../config";
 import { journalDirectory, readAdmissions } from "../journal";
 import { countBy, elapsedMs, known } from "./statistics";
 
 const decodeStatus = decodeBoundary(runStatusSchema);
-
-// A diagnostic copy can be analyzed before any driver journal exists.
-async function journalAdmissions() {
-  const journal = journalDirectory(state);
-
-  try {
-    await stat(journal);
-  } catch (cause) {
-    if (errnoCode(cause) === "ENOENT") {
-      return [];
-    }
-
-    throw cause;
-  }
-
-  return readAdmissions(journal);
-}
 
 export async function lifecycle(db: Database) {
   const rows = db
@@ -71,7 +52,7 @@ export async function lifecycle(db: Database) {
     )
     .all();
 
-  const admission = (await journalAdmissions()).map((value) => ({
+  const admission = (await readAdmissions(journalDirectory(state))).map((value) => ({
     runId: value.runId,
     phase: value.phase,
     admissionMs: elapsedMs(value.intentAt, value.admittedAt),

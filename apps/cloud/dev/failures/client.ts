@@ -14,12 +14,14 @@ import {
   searchParams,
 } from "@loopy/contract/sandbox";
 import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
+import type { StoredReceipt } from "../filesystem-receipt";
+import { ApiClient } from "../shared/api-client";
 import { assert, JourneyFailure } from "../shared/assert";
-import { ApiClient, EvidenceLog } from "../shared/fixture-client";
+import { EvidenceLog } from "../shared/evidence-log";
 import { until } from "../shared/poll";
 import { root } from "../stack/constants";
 import { api, sandbox, state } from "./config";
-import { docker, ownedContainer, receipts } from "./resources";
+import { docker, owned } from "./resources";
 import { FailureStack } from "./stack";
 
 export class FailureJourney {
@@ -78,11 +80,11 @@ export class FailureJourney {
   }
 
   async running(id: string, effect = "started\n") {
-    const isStarted = (value: StoredReceiptView) =>
+    const isStarted = (value: StoredReceipt) =>
       value.executionKey.runId === id && value.kind === "started";
 
     const saved = await this.until(
-      receipts,
+      () => owned.receipts(),
       (values) => values.some(isStarted),
       "started_receipt_missing",
     );
@@ -97,7 +99,7 @@ export class FailureJourney {
       (value) => value === receipt.container,
       "worker_not_running",
     );
-    await ownedContainer(receipt.container);
+    await owned.container(receipt);
     await this.until(
       () =>
         docker([
@@ -149,7 +151,7 @@ export class FailureJourney {
   }
 
   async assertSingleAttempt(snapshot: RunSnapshotView) {
-    const own = (await receipts()).filter(
+    const own = (await owned.receipts()).filter(
       (receipt) => receipt.executionKey.runId === snapshot.run.id,
     );
 
@@ -174,5 +176,3 @@ export class FailureJourney {
     );
   }
 }
-
-type StoredReceiptView = Awaited<ReturnType<typeof receipts>>[number];

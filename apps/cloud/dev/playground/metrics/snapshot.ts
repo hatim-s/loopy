@@ -4,6 +4,7 @@ import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
 import { within } from "../../../../../packages/runtime/src/os/sandbox/paths";
 import { sha256Hex } from "../../shared/hash";
+import { PROFILE_LABELS } from "../../stack/images";
 
 export async function diagnosticPath(path: string, directory: string) {
   const canonical = await realpath(path);
@@ -24,7 +25,7 @@ export async function diagnosticPath(path: string, directory: string) {
 }
 
 const approvalSchema = Schema.Struct({
-  profile: Schema.Literals(["default", "architecture"]),
+  profile: Schema.Literals(PROFILE_LABELS),
   sourceClosed: Schema.Literal(true),
   path: Schema.String,
   sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
@@ -36,7 +37,7 @@ export async function approvedDiagnostic(options: {
   path: string;
   approvalPath: string;
   batch: string;
-  profile: "default" | "architecture";
+  profile: (typeof PROFILE_LABELS)[number];
 }) {
   const approval = decodeBoundary(approvalSchema)(
     JSON.parse(await readFile(options.approvalPath, "utf8")),

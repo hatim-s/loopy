@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { tryPidLock } from "@loopy/runtime/os";
-import { ApiClient } from "../shared/fixture-client";
+import { ApiClient } from "../shared/api-client";
 import { type Config, config, state } from "./config";
 import { CONCURRENCY } from "./plan";
 

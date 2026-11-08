@@ -1,24 +1,18 @@
-import { cp, lstat, mkdir, readFile } from "node:fs/promises";
+import { cp, mkdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { decodeBoundary, type RunSnapshotView, routes } from "@loopy/contract";
-import { errnoCode, executionKeyString } from "@loopy/core";
+import { executionKeyString } from "@loopy/core";
 import { Schema, Struct } from "effect";
 import {
   receiptSchema,
   runReceiptDirectory,
 } from "../../../../packages/runtime/src/executor/receipts";
+import { artifactIdentitySchema } from "../playground/repository";
 import { lstatOrAbsent } from "../shared/fs";
 import { sha256Hex } from "../shared/hash";
 import { home, state } from "./config";
 import type { OwnedDaemon } from "./daemon";
 import { sortedFiles } from "./prepare";
-
-// Fixtures write this identity into results/result.json; extra result fields are workflow-specific.
-export const artifactIdentitySchema = Schema.Struct({
-  batch: Schema.String,
-  ordinal: Schema.Number,
-  slug: Schema.String,
-});
 
 const decodeArtifactIdentity = Schema.decodeUnknownSync(artifactIdentitySchema);
 
@@ -54,16 +48,7 @@ async function artifactIdentity(snapshot: RunSnapshotView, workspace: string) {
 export async function receiptInventory(runId: string) {
   const directory = runReceiptDirectory(home, runId);
 
-  const files = await lstat(directory).then(
-    () => sortedFiles(directory),
-    (cause: unknown) => {
-      if (errnoCode(cause) !== "ENOENT") {
-        throw cause;
-      }
-
-      return [];
-    },
-  );
+  const files = (await lstatOrAbsent(directory)) ? await sortedFiles(directory) : [];
 
   return Promise.all(
     files.map(async (file) => {

@@ -1,9 +1,10 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, encodeBoundary } from "@loopy/contract";
 import { errorMessage } from "@loopy/core";
 import { processAlive } from "@loopy/runtime/os";
 import { Schema } from "effect";
+import { createOnce } from "../shared/fs";
 import { PlaygroundClient } from "./client";
 import { evidence, state } from "./config";
 import { atomic } from "./files";
@@ -54,10 +55,12 @@ export async function cohort(group: Group, phase: Phase = "primary") {
   }
 
   const claim = claimPath(phase, group);
-  await writeFile(claim, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }), {
-    flag: "wx",
-    mode: 0o600,
-  });
+  createOnce(
+    claim,
+    JSON.stringify({ pid: process.pid, at: new Date().toISOString() }),
+    0o600,
+    `Cohort ${phase}/${group} is already claimed at ${claim}. Remove the claim only after its driver has stopped.`,
+  );
   const jobs = cohortJobs(phase, await catalog(group));
   const results: Awaited<ReturnType<typeof execute>>[] = [];
   const startedAt = new Date().toISOString();

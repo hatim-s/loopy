@@ -1,12 +1,8 @@
-import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { compile } from "@loopy/compiler";
 import {
   decodeBoundary,
   decodeRouteResponse,
   isTerminalRun,
   type Json,
-  type PutLoopyBody,
   type Route,
   type RouteInput,
   type RouteResult,
@@ -14,37 +10,12 @@ import {
   routeRequest,
   routes,
 } from "@loopy/contract";
-import { type SandboxAttemptRequest } from "@loopy/contract/sandbox";
-import { Effect, type Schema } from "effect";
-import { root } from "../stack/constants";
-import { assert, type Evidence, failureEvidence, JourneyFailure } from "./assert";
+import type { SandboxAttemptRequest } from "@loopy/contract/sandbox";
+import type { Schema } from "effect";
+import { assert, JourneyFailure } from "./assert";
 import { until } from "./poll";
 
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
-
-export function compileFixture(name: string) {
-  return Effect.gen(function* () {
-    const path = resolve(root, "apps/cloud/dev/fixtures/cloud", name);
-    const result = yield* compile(path);
-    assert(result.ok, "fixture_compile_failed", {
-      fixture: name,
-      diagnostics: result.ok
-        ? []
-        : result.diagnostics.map((value) => `${value.code}:${value.line}:${value.column}`),
-    });
-
-    const body: PutLoopyBody = {
-      graph: result.graph,
-      revision: result.revision,
-      sourceArtifact: result.sourceArtifact,
-      bundles: result.bundles,
-      source: { path, workspace: "fixtures" },
-      replace: true,
-    };
-
-    return body;
-  });
-}
 
 async function readText(response: Response): Promise<string> {
   if (!response.headers.get("content-type")?.includes("application/json")) {
@@ -211,70 +182,6 @@ export class ApiClient {
               [],
           }),
       },
-    );
-  }
-}
-
-type CheckResult = {
-  name: string;
-  status: "passed" | "failed";
-  durationMs: number;
-  evidence: Evidence;
-};
-
-// Evidence is rewritten after every check so an interrupted journey still leaves its partial record.
-export class EvidenceLog {
-  readonly results: CheckResult[] = [];
-  readonly runs: string[] = [];
-  readonly startedAt = new Date().toISOString();
-
-  constructor(
-    private readonly path: string,
-    private readonly fields: Evidence,
-  ) {}
-
-  get passed() {
-    return this.results.every((result) => result.status === "passed");
-  }
-
-  async check(name: string, action: () => Promise<Evidence | void>) {
-    const start = Date.now();
-    let result: CheckResult;
-
-    try {
-      const evidence = (await action()) ?? {};
-      result = { name, status: "passed", durationMs: Date.now() - start, evidence };
-    } catch (cause) {
-      result = {
-        name,
-        status: "failed",
-        durationMs: Date.now() - start,
-        evidence: failureEvidence(cause),
-      };
-    }
-
-    this.results.push(result);
-    await this.save();
-    process.stdout.write(`${JSON.stringify(result)}\n`);
-  }
-
-  async save(extra: Evidence = {}) {
-    await mkdir(dirname(this.path), { recursive: true });
-    await Bun.write(
-      this.path,
-      `${JSON.stringify(
-        {
-          status: this.passed ? "passed" : "failed",
-          ...this.fields,
-          startedAt: this.startedAt,
-          updatedAt: new Date().toISOString(),
-          runIds: this.runs,
-          results: this.results,
-          ...extra,
-        },
-        null,
-        2,
-      )}\n`,
     );
   }
 }

@@ -1,126 +1,88 @@
 import type { Database } from "bun:sqlite";
-import type { SqlValue } from "@loopy/runtime/store/portable";
+import { encodeRunCursor } from "@loopy/contract";
+import type { SqlDriver, SqlStatement, SqlValue } from "@loopy/runtime/store/portable";
+import type { SqlContext } from "../../../../../packages/runtime/src/store/context";
+import { readEventPage, readLogPage } from "../../../../../packages/runtime/src/store/query/feeds";
+import { readExecution, readNodePage } from "../../../../../packages/runtime/src/store/query/nodes";
 import {
-  EVENT_PROJECTION,
-  LOG_PROJECTION,
-} from "../../../../../packages/runtime/src/store/query/feeds";
-import {
-  ATTEMPT_PROJECTION,
-  NODE_PAGE_PROJECTION,
-} from "../../../../../packages/runtime/src/store/query/nodes";
-import {
-  PENDING_HOOK_PROJECTION,
-  pendingHook,
-  RUN_PREVIEW_COLUMNS,
+  queryRuns,
+  readPendingHooks,
+  readRunCountsByDefinition,
 } from "../../../../../packages/runtime/src/store/query/runs";
-import { FEED_SCAN_LIMIT } from "../../../../../packages/runtime/src/store/query/scan";
-import { READY_TURNS, RUNNING_TURNS } from "../../../../../packages/runtime/src/store/turns";
+import { readDueTurns } from "../../../../../packages/runtime/src/store/turns";
 
+type Statement = { sql: string; bindings: SqlValue[] };
+
+/** Runs reads against the copy and records each statement exactly as the store sent it. */
+class RecordingDriver implements SqlDriver {
+  readonly statements: Statement[] = [];
+
+  constructor(private readonly db: Database) {}
+
+  query<Row = Record<string, SqlValue>, Params extends SqlValue[] = SqlValue[]>(
+    sql: string,
+  ): SqlStatement<Row, Params> {
+    const statement = this.db.query<Row, SqlValue[]>(sql);
+
+    return {
+      get: (...params) => {
+        this.statements.push({ sql, bindings: params });
+
+        return statement.get(...params);
+      },
+      all: (...params) => {
+        this.statements.push({ sql, bindings: params });
+
+        return statement.all(...params);
+      },
+      run: () => {
+        throw new Error("The SQL probe is read-only. A store write reached it.");
+      },
+    };
+  }
+
+  exec(): void {
+    throw new Error("The SQL probe is read-only. A store write reached it.");
+  }
+
+  transaction<T>(callback: () => T): T {
+    return callback();
+  }
+}
+
+// Each read runs only for the statements it records, so its result is discarded.
+type Operation = [name: string, source: keyof typeof SOURCES, read: () => void];
+
+const SOURCES = {
+  runs: "packages/runtime/src/store/query/runs.ts",
+  feeds: "packages/runtime/src/store/query/feeds.ts",
+  nodes: "packages/runtime/src/store/query/nodes.ts",
+  turns: "packages/runtime/src/store/turns.ts",
+} as const;
+
+/**
+ * Each case is one store read function called on the diagnostic copy. A read that sends several
+ * statements yields one case per statement, named `<operation>#<n>` after the first.
+ */
 export function sqlCases(db: Database) {
   const now = new Date().toISOString();
+  const driver = new RecordingDriver(db);
 
-  const runs = db
-    .query<{ id: string; slug: string; workspace: string; createdAt: string }, []>(
-      "SELECT id,slug,workspace,created_at AS createdAt FROM runs ORDER BY created_at DESC,id DESC LIMIT 200",
-    )
-    .all();
+  const ctx: SqlContext = {
+    db: driver,
+    owner: { identity: { pid: process.pid, host: "sql-probe" }, isAlive: () => false },
+    leaseMs: 0,
+  };
 
+  const runs = queryRuns(ctx, { limit: 200, now });
   const run = runs[0];
 
   if (!run) {
     throw new Error("Final SQL diagnostics require populated run data.");
   }
 
-  const cases: { name: string; source: string; sql: string; bindings: SqlValue[] }[] = [];
-
-  const add = (name: string, source: string, sql: string, bindings: SqlValue[] = []) =>
-    cases.push({ name, source, sql, bindings });
-
-  const runSource = "packages/runtime/src/store/query/runs.ts";
-  add(
-    "runs.latest",
-    runSource,
-    `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r  ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-    [50],
-  );
-  add(
-    "runs.slug-workspace",
-    runSource,
-    `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE r.slug=? AND r.workspace=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-    [run.slug, run.workspace, 50],
-  );
-  add(
-    "runs.failed",
-    runSource,
-    `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE r.status=? ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-    ["failed", 50],
-  );
-  add(
-    "runs.page2",
-    runSource,
-    `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE (r.created_at,r.id)<(?,?) ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-    [runs[49]?.createdAt ?? run.createdAt, runs[49]?.id ?? run.id, 50],
-  );
-  add(
-    "runs.waiting",
-    runSource,
-    `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE EXISTS(${pendingHook("1")}) ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
-    [now, 50],
-  );
-  add("counts.all", runSource, "SELECT status,count(*) AS count FROM runs r  GROUP BY status");
-  add(
-    "counts.slug-workspace",
-    runSource,
-    "SELECT status,count(*) AS count FROM runs r WHERE r.slug=? AND r.workspace=? GROUP BY status",
-    [run.slug, run.workspace],
-  );
-
-  const projection = `${PENDING_HOOK_PROJECTION} WHERE r.id IN (SELECT value FROM json_each(?))`;
-
-  for (const count of [50, 100, 200]) {
-    const ids = runs.slice(0, count).map((value) => value.id);
-    add(`pending-hooks.json-each-${count}`, runSource, projection, [now, JSON.stringify(ids)]);
-  }
-
-  const feedSource = "packages/runtime/src/store/query/feeds.ts";
-
-  add(
-    "logs.candidates",
-    feedSource,
-    `SELECT ${LOG_PROJECTION} FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? ORDER BY l.id DESC LIMIT ${FEED_SCAN_LIMIT + 1}`,
-    ["", Number.MAX_SAFE_INTEGER],
-  );
-  add(
-    "logs.text-candidates",
-    feedSource,
-    `SELECT ${LOG_PROJECTION} FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? ORDER BY l.id DESC LIMIT ${FEED_SCAN_LIMIT + 1}`,
-    ["playground", Number.MAX_SAFE_INTEGER],
-  );
-  add(
-    "logs.run-candidates",
-    feedSource,
-    `SELECT ${LOG_PROJECTION} FROM logs l JOIN runs r ON r.id=l.run_id WHERE l.id<? AND l.run_id=? ORDER BY l.id DESC LIMIT ${FEED_SCAN_LIMIT + 1}`,
-    ["", Number.MAX_SAFE_INTEGER, run.id],
-  );
-  add(
-    "events.candidates",
-    feedSource,
-    `SELECT ${EVENT_PROJECTION} FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE e.sequence<? ORDER BY e.sequence DESC LIMIT ${FEED_SCAN_LIMIT + 1}`,
-    [Number.MAX_SAFE_INTEGER],
-  );
-  add(
-    "events.run-candidates",
-    feedSource,
-    `SELECT ${EVENT_PROJECTION} FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE e.sequence<? AND e.run_id=? ORDER BY e.sequence DESC LIMIT ${FEED_SCAN_LIMIT + 1}`,
-    [Number.MAX_SAFE_INTEGER, run.id],
-  );
-  const nodeSource = "packages/runtime/src/store/query/nodes.ts";
-  add(
-    "executions.page",
-    nodeSource,
-    `SELECT ${NODE_PAGE_PROJECTION} FROM node_runs WHERE run_id=? AND scope=? ORDER BY execution_key LIMIT ?`,
-    [run.id, "[]", 51],
-  );
+  const page = (limit: number) => runs.slice(0, limit).map((value) => value.id);
+  const cursorRun = runs[49] ?? run;
 
   const key = db
     .query<{ key: string }, [string]>(
@@ -128,18 +90,53 @@ export function sqlCases(db: Database) {
     )
     .get(run.id)?.key;
 
-  if (key) {
-    add(
-      "execution.attempts",
-      nodeSource,
-      `SELECT ${ATTEMPT_PROJECTION} FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201`,
-      [run.id, key, 0],
-    );
-  }
+  const attempts = (key: string): Operation => [
+    "execution.attempts",
+    "nodes",
+    () => readExecution(ctx, run.id, key, 0),
+  ];
 
-  const turns = "packages/runtime/src/store/turns.ts";
-  add("scheduler.running", turns, RUNNING_TURNS, [now, 4]);
-  add("scheduler.ready", turns, READY_TURNS, [now, now, 4]);
+  const operations: Operation[] = [
+    ["runs.latest", "runs", () => queryRuns(ctx, { limit: 50, now })],
+    [
+      "runs.slug-workspace",
+      "runs",
+      () => queryRuns(ctx, { slug: run.slug, workspace: run.workspace, limit: 50, now }),
+    ],
+    ["runs.failed", "runs", () => queryRuns(ctx, { status: "failed", limit: 50, now })],
+    [
+      "runs.page2",
+      "runs",
+      () => queryRuns(ctx, { before: encodeRunCursor(cursorRun), limit: 50, now }),
+    ],
+    ["runs.waiting", "runs", () => queryRuns(ctx, { waiting: true, limit: 50, now })],
+    ["counts.by-definition", "runs", () => readRunCountsByDefinition(ctx)],
+    ...[50, 100, 200].map(
+      (count): Operation => [
+        `pending-hooks.json-each-${count}`,
+        "runs",
+        () => readPendingHooks(ctx, page(count), now),
+      ],
+    ),
+    ["logs.candidates", "feeds", () => readLogPage(ctx, { limit: 50 })],
+    ["logs.text-candidates", "feeds", () => readLogPage(ctx, { text: "playground", limit: 50 })],
+    ["logs.run-candidates", "feeds", () => readLogPage(ctx, { runId: run.id, limit: 50 })],
+    ["events.candidates", "feeds", () => readEventPage(ctx, { limit: 50 })],
+    ["events.run-candidates", "feeds", () => readEventPage(ctx, { runId: run.id, limit: 50 })],
+    ["executions.page", "nodes", () => readNodePage(ctx, run.id, { scope: "[]", limit: 50 })],
+    ...(key ? [attempts(key)] : []),
+    ["scheduler.due", "turns", () => readDueTurns(ctx, now, 4)],
+  ];
 
-  return cases;
+  return operations.flatMap(([operation, source, read]) => {
+    driver.statements.length = 0;
+    read();
+
+    return driver.statements.map((statement, index) => ({
+      name: index === 0 ? operation : `${operation}#${index + 1}`,
+      operation,
+      source: SOURCES[source],
+      ...statement,
+    }));
+  });
 }

@@ -1,8 +1,9 @@
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, encodeBoundary } from "@loopy/contract";
-import { errnoCode } from "@loopy/core";
+import { publishExclusive } from "@loopy/runtime/os";
 import { Schema } from "effect";
+import { lstatOrAbsent } from "../shared/fs";
 import { readJsonLines } from "../shared/jsonl";
 import { atomic } from "./files";
 
@@ -162,8 +163,13 @@ export async function readAdmission(path: string) {
   return decodeBoundary(admissionSchema)(await Bun.file(path).json());
 }
 
+// A diagnostic copy can be analyzed before any driver journal exists.
 export async function readAdmissions(journal: string, phase?: Phase) {
   const admissions: Admission[] = [];
+
+  if (!(await lstatOrAbsent(journal))) {
+    return admissions;
+  }
 
   for await (const path of new Bun.Glob(`${phase ?? "*"}/*/*.json`).scan({
     cwd: journal,
@@ -191,13 +197,7 @@ export const abortPath = (state: string) => resolve(state, "ABORT");
 
 // The first reason wins; later failures are consequences and must not overwrite it.
 export async function writeAbort(state: string, reason: string) {
-  try {
-    await writeFile(abortPath(state), `${reason}\n`, { flag: "wx", mode: 0o600 });
-  } catch (cause) {
-    if (errnoCode(cause) !== "EEXIST") {
-      throw cause;
-    }
-  }
+  publishExclusive(abortPath(state), `${reason}\n`, 0o600);
 }
 
 export const gatePath = (state: string) => resolve(state, "load-enabled.json");

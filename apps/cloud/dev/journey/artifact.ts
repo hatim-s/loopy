@@ -3,7 +3,7 @@ import { encodeBoundary, routes } from "@loopy/contract";
 import { cloudRoutes } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { assert, equal } from "../shared/assert";
-import { compileFixture } from "../shared/fixture-client";
+import { compileFixture } from "../shared/compile-fixture";
 import { sha256Hex } from "../shared/hash";
 import { root } from "../stack/constants";
 import { Journey } from "./client";

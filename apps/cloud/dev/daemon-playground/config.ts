@@ -4,10 +4,7 @@ import { root } from "../stack/constants";
 
 const profile = playgroundProfile(root, process.env.LOOPY_PLAYGROUND_PROFILE);
 
-export const state = resolve(
-  root,
-  `.loopy/playground-daemon${profile.name ? `-${profile.name}` : ""}`,
-);
+export const state = profile.daemonState;
 
 export const home = resolve(state, "home");
 
@@ -17,7 +14,7 @@ export const upstream = profile.repository;
 
 export const evidence = profile.evidence;
 
-export const port = profile.name ? 15370 : 15170;
+export const port = profile.daemonPort;
 
 export function environment() {
   return {

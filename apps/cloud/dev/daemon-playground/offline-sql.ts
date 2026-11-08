@@ -29,7 +29,7 @@ const daemonReport = Schema.decodeUnknownSync(
 const selected = new Set([
   "runs.latest",
   "runs.failed",
-  "counts.all",
+  "counts.by-definition",
   "logs.candidates",
   "events.candidates",
   "executions.page",
@@ -52,10 +52,11 @@ try {
   );
 
   const plans = sqlCases(db).flatMap((item) =>
-    selected.has(item.name)
+    selected.has(item.operation)
       ? [
           {
             name: item.name,
+            operation: item.operation,
             source: item.source,
             sql: item.sql,
             parameterCount: item.bindings.length,
