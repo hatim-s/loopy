@@ -22,7 +22,7 @@ import { burstGroups, FIXTURES_PER_GROUP } from "./plan";
 
 const execFileAsync = promisify(execFile);
 
-const sourceRoot = join(workspace, "packages/loopy/_tests_/fixtures/playground");
+const sourceRoot = join(workspace, "apps/cloud/dev/fixtures/playground");
 
 const repository = profile.repository;
 

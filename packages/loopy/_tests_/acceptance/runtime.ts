@@ -180,12 +180,6 @@ export class Runtime {
     );
   }
 
-  revision(id: string) {
-    return this.response(`/runs/${encodeURIComponent(id)}/graph`).pipe(
-      Effect.map((value) => decodeBoundary(routes.runGraph.response)(value).revision),
-    );
-  }
-
   until<E>(predicate: Effect.Effect<boolean, E>, timeout = 30_000) {
     return Effect.gen(function* () {
       const deadline = Date.now() + timeout;

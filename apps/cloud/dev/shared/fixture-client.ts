@@ -20,7 +20,7 @@ const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 export function compileFixture(name: string) {
   return Effect.gen(function* () {
-    const path = resolve(root, "packages/loopy/_tests_/fixtures/cloud", name);
+    const path = resolve(root, "apps/cloud/dev/fixtures/cloud", name);
     const result = yield* compile(path);
     assert(result.ok, "fixture_compile_failed", {
       fixture: name,
