@@ -1,5 +1,5 @@
-import { StoreRejectedError } from "../../operation";
 import type { SqlDriver } from "../driver";
+import { StoreRejectedError } from "../operation";
 
 // Frozen migration steps. They describe how old homes changed and never follow the fresh schema.
 const SCHEMA_13_TO_14 = `

@@ -25,10 +25,6 @@ export const runStatusSchema = Schema.Literals(RUN_STATUSES);
 
 export type RunStatus = Schema.Schema.Type<typeof runStatusSchema>;
 
-export function emptyRunCounts(): Record<RunStatus, number> {
-  return { queued: 0, running: 0, suspended: 0, succeeded: 0, failed: 0, cancelled: 0 };
-}
-
 export const runOutcomeSchema = Schema.Union([
   struct({ status: Schema.Literal("succeeded"), output: jsonSchema }),
   struct({ status: Schema.Literal("failed"), error: Schema.String }),
@@ -43,7 +39,6 @@ const runBaseSchema = struct({
   revision: Schema.String,
   workspace: Schema.String,
   input: jsonSchema,
-  nextRetryAt: Schema.optional(Schema.String),
   createdAt: Schema.String,
   updatedAt: Schema.String,
   owner: Schema.optional(
@@ -115,8 +110,6 @@ export const waitRecordSchema = struct({
 
 export type WaitRecord = Schema.Schema.Type<typeof waitRecordSchema>;
 
-export type PendingHook = HookRecord & { expiresAt: string | null };
-
 export const scheduleSchema = struct({
   version: Schema.Int,
   workspace: Schema.String,
@@ -184,7 +177,7 @@ export const runtimeEventSchema = Schema.Union([
   struct({
     ...eventFields,
     entity: Schema.Literal("schedule"),
-    kind: Schema.Literals(["saved", "fired"]),
+    kind: Schema.Literals(["saved", "fired", "skipped"]),
     record: scheduleSchema,
   }),
   struct({

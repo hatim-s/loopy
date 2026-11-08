@@ -21,6 +21,6 @@ export { ScratchCleanupError } from "./sandbox/io";
 
 export { secretRedactor } from "./secret-redactor";
 
-export { SecretStore, validateSecretValue } from "./secrets";
+export { SecretStore } from "./secrets";
 
 export { spawnCaptured, unstarted } from "./spawn";

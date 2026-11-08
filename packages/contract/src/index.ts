@@ -9,7 +9,6 @@ export {
   type ExecutionResult,
   type ExecutionSpec,
   edgeSchema,
-  emptyRunCounts,
   executionErrorSchema,
   executionKeySchema,
   executionKeyString,
@@ -37,7 +36,6 @@ export {
   nodeSchema,
   type OutSchema,
   outputSchema,
-  PAGE_LIMIT,
   parseFieldText,
   predicateSchema,
   type Receipt,
@@ -105,7 +103,7 @@ export {
 
 export * from "./dashboard";
 
-export type * from "./dashboard-reader";
+export * from "./dashboard-reader";
 
 export {
   type DefinitionSummary,

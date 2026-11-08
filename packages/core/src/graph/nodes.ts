@@ -117,8 +117,9 @@ export const commandNodeSchema = struct({
 
 const MAP_ERROR_MODES = ["fail", "collect"] as const;
 
-// Control and value nodes need no executor, so their wire views equal their stored shape.
-export const otherNodeSchemas = [
+export const nodeSchema = Schema.Union([
+  codeNodeSchema,
+  commandNodeSchema,
   struct({
     ...base.fields,
     kind: Schema.Literal("branch"),
@@ -188,9 +189,7 @@ export const otherNodeSchemas = [
       struct({ kind: Schema.Literal("none") }),
     ]),
   }),
-] as const;
-
-export const nodeSchema = Schema.Union([codeNodeSchema, commandNodeSchema, ...otherNodeSchemas]);
+]);
 
 export type Node = Schema.Schema.Type<typeof nodeSchema>;
 

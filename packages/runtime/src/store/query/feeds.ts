@@ -7,9 +7,9 @@ import type {
   LogSummaryView,
 } from "@loopy/contract";
 import type { RunStatus } from "@loopy/core";
-import { FEED_SCAN_LIMIT, scanPage } from "../../query-utils";
 import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";
+import { FEED_SCAN_LIMIT, scanPage } from "./scan";
 
 type FeedRow = {
   runId: string | null;

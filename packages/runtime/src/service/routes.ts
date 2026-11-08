@@ -1,8 +1,8 @@
 import {
+  boundaryOptions,
   type DaemonView,
   type DashboardReader,
   DEFAULT_ERROR_MESSAGES,
-  decodeBoundary,
   ERROR_STATUS,
   type ErrorCode,
   encodeBoundary,
@@ -104,38 +104,40 @@ function makeEndpoint<P, Q, B, R, E>(
   };
 }
 
-// BOUNDARY: URL captures, search values and JSON enter the contract here.
+// BOUNDARY: URL captures, search values and JSON enter the contract here. An unreadable body is
+// a transport defect; one that is not JSON or not the route's shape is the caller's mistake.
 const parseRequest = Effect.fn("Http.decodeRequest")(function* <P, Q, B>(
   route: Omit<Schemas<P, Q, B, unknown>, "method" | "response">,
   params: Record<string, string>,
   query: Record<string, string>,
   request: Request,
 ) {
-  const body: unknown =
+  const badRequest = () => new ServiceError("bad_request");
+
+  const text =
     ["POST", "PUT"].includes(request.method) && request.body
-      ? yield* Effect.tryPromise({ try: () => request.json(), catch: (cause) => cause }).pipe(
-          Effect.catch((error) =>
-            error instanceof SyntaxError
-              ? Effect.fail(new ServiceError("bad_request"))
-              : Effect.die(error),
-          ),
-        )
+      ? yield* Effect.promise(() => request.text())
       : undefined;
 
-  return yield* Effect.try({
-    try: () => ({
-      params: decodeBoundary(route.params)(params),
-      query: decodeBoundary(route.query)(query),
-      body: decodeBoundary(route.body)(body),
-    }),
-    catch: (error) => error,
-  }).pipe(
-    Effect.catch((error) =>
-      Schema.isSchemaError(error)
-        ? Effect.fail(new ServiceError("bad_request"))
-        : Effect.die(error),
-    ),
-  );
+  const body: unknown =
+    text === undefined
+      ? undefined
+      : yield* Effect.try({ try: () => JSON.parse(text), catch: badRequest });
+
+  return {
+    params: yield* Schema.decodeUnknownEffect(
+      route.params,
+      boundaryOptions,
+    )(params).pipe(Effect.mapError(badRequest)),
+    query: yield* Schema.decodeUnknownEffect(
+      route.query,
+      boundaryOptions,
+    )(query).pipe(Effect.mapError(badRequest)),
+    body: yield* Schema.decodeUnknownEffect(
+      route.body,
+      boundaryOptions,
+    )(body).pipe(Effect.mapError(badRequest)),
+  };
 });
 
 export function apiRoutes({ service, store, cwd, daemon, onError }: RouteDependencies) {

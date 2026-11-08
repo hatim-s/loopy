@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { nextFire, parseCron } from "@loopy/core";
 
 function next(expression: string, after: string, zone = "UTC") {
-  return nextFire(parseCron(expression), new Date(after), zone).toISOString();
+  return nextFire(expression, new Date(after), zone).toISOString();
 }
 
 describe("parseCron", () => {
@@ -128,9 +128,7 @@ describe("nextFire", () => {
     );
   });
   test("rejects invalid dates and zones", () => {
-    expect(() => nextFire(parseCron("* * * * *"), new Date(Number.NaN), "UTC")).toThrow(
-      "Invalid after date.",
-    );
+    expect(() => nextFire("* * * * *", new Date(Number.NaN), "UTC")).toThrow("Invalid after date.");
     expect(() => next("* * * * *", "2026-01-01T00:00:00Z", "invalid/zone")).toThrow(
       "Invalid time zone 'invalid/zone'.",
     );

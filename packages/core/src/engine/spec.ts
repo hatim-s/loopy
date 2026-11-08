@@ -1,6 +1,7 @@
 import { durationMs } from "../duration";
 import { DEFAULT_TIMEOUT_MS, type ExecutionSpec } from "../executor";
 import type { Node } from "../graph/nodes";
+import { bundleHash, carriesBundle } from "../revision";
 import { isStringArray } from "../validation";
 import { type ResolutionContext, ROOT_CONTEXT, resolve, resolveValues } from "./resolve";
 import type { EngineState } from "./state";
@@ -30,16 +31,12 @@ function commandArgv(node: CommandNode, state: EngineState, context: ResolutionC
 }
 
 function parserSpec(node: CommandNode, state: EngineState, context: ResolutionContext) {
-  if (node.parse === null) {
+  if (!carriesBundle(node)) {
     return null;
   }
 
-  if (node.parse.bundleHash === null) {
-    throw new Error("Parser bundle is missing. Save the graph again.");
-  }
-
   return {
-    bundleHash: node.parse.bundleHash,
+    bundleHash: bundleHash(node),
     input: resolveValues(node.parse.input, state, context),
     timeoutMs: DEFAULT_TIMEOUT_MS,
   };
@@ -51,13 +48,9 @@ export function executionSpec(
   context = ROOT_CONTEXT,
 ): ExecutionSpec {
   if (node.kind === "code") {
-    if (node.module.bundleHash === null) {
-      throw new Error("Code bundle is missing. Save the graph again.");
-    }
-
     return {
       kind: "code",
-      bundleHash: node.module.bundleHash,
+      bundleHash: bundleHash(node),
       input: resolveValues(node.in, state, context),
       timeoutMs: node.timeout === null ? DEFAULT_TIMEOUT_MS : durationMs(node.timeout),
     };

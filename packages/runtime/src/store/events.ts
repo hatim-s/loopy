@@ -1,7 +1,7 @@
 import type { LogRecord, RuntimeEventChange } from "@loopy/core";
-import { EVENT_RETENTION } from "../event-outbox";
-import { StoredDataError } from "../operation";
 import type { SqlContext, SqlWrite } from "./context";
+import { EVENT_RETENTION } from "./event-outbox";
+import { StoredDataError } from "./operation";
 import { type EventRow, rowToEvent } from "./rows";
 
 type EventParams = [

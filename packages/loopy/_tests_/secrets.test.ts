@@ -12,7 +12,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { localDaemon, openRunStore } from "@loopy/runtime/local";
+import { localDaemon } from "@loopy/runtime/local";
+import { openRunStore } from "@loopy/runtime/store";
 import { Effect, Exit, Scope } from "effect";
 import { secretRedactor } from "../../runtime/src/os/secret-redactor";
 import { SecretStore } from "../../runtime/src/os/secrets";

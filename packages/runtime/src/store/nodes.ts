@@ -1,10 +1,59 @@
-import { executionKeyString, type NodeRun, PAGE_LIMIT, type StoreEffect } from "@loopy/core";
-import { checkLogBytes, checkNodeWrite, logRecord } from "../node-write";
-import { StoreRejectedError } from "../operation";
-import { normalizeNode } from "../timestamps";
+import { PAGE_LIMIT } from "@loopy/contract";
+import {
+  exceedsInlineLimit,
+  executionKeyString,
+  type LogRecord,
+  MAX_LOG_BYTES,
+  type NodeRun,
+  outputBytes,
+  outSchemaMessage,
+  type StoreEffect,
+} from "@loopy/core";
 import type { SqlContext, SqlWrite } from "./context";
 import { emit, emitLog } from "./events";
+import { StoreRejectedError } from "./operation";
 import { decodeLog, decodeNodeRun } from "./rows";
+import { normalizeNode, utc } from "./timestamps";
+
+// The store is a public port, so it holds the inline cap even for writers other than the reducer.
+function checkNodeWrite(node: NodeRun) {
+  if (node.status === "succeeded" && exceedsInlineLimit(node.output)) {
+    throw new StoreRejectedError(outSchemaMessage("Node output", "output_limit"));
+  }
+}
+
+function logBytes(log: Pick<LogRecord, "message" | "data">): number {
+  return outputBytes({ message: log.message, data: log.data ?? null });
+}
+
+function checkLogBytes(previousBytes: number, log: LogRecord): number {
+  const bytes = previousBytes + logBytes(log);
+
+  if (bytes > MAX_LOG_BYTES) {
+    throw new StoreRejectedError("Attempt logs exceed the 64 KiB limit.");
+  }
+
+  return bytes;
+}
+
+function logRecord(
+  position: { seq: number; index: number },
+  effect: Extract<StoreEffect, { kind: "write_log" }>,
+) {
+  return {
+    ...effect.log,
+    runId: effect.executionKey.runId,
+    seq: position.seq,
+    position: {
+      kind: "node" as const,
+      executionKey: executionKeyString(effect.executionKey),
+      attempt: effect.attempt,
+      index: position.index,
+    },
+    level: "info" as const,
+    at: utc(effect.at),
+  };
+}
 
 export function readNodes(ctx: SqlContext, runId: string): NodeRun[] {
   return ctx.db
@@ -33,7 +82,7 @@ export function writeNodeRun(write: SqlWrite, runId: string, nodeRun: NodeRun): 
   checkNodeWrite(node);
 
   if (node.status === "running") {
-    write.db.query("UPDATE runs SET next_retry_at=NULL,wake_at=NULL WHERE id=?").run(runId);
+    write.db.query("UPDATE runs SET wake_at=NULL WHERE id=?").run(runId);
   }
 
   write.db

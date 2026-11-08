@@ -213,6 +213,11 @@ test("service schedules create, replace, toggle, delete and emit persisted event
 
   expect(first).toMatchObject({ workspace: root, enabled: true, lastFireKey: null, tz: "UTC" });
   expect(await Effect.runPromise(service.listSchedules(root))).toEqual([first]);
+  const retryAt = new Date(Date.parse(first.nextFireAt) + 5000).toISOString();
+  await Effect.runPromise(store.failSchedule({ schedule: first, error: "boom", retryAt }));
+  expect(await Effect.runPromise(service.listSchedules(root))).toEqual([
+    { ...first, failure: { error: "boom", retryAt } },
+  ]);
   await Effect.runPromise(
     store.putSchedule({ ...first, lastFireKey: "fired", nextFireAt: first.nextFireAt }),
   );

@@ -30,13 +30,7 @@ export function artifactEntry(row: Publication, graph: Graph): SavedLoopy {
     revision: row.revision,
     source: row.source,
     savedAt: row.saved_at,
-    bundles: graphBundles(graph).map(({ nodeId, bundleHash }) => {
-      if (bundleHash === null) {
-        throw new Error("Stored graph has an uncompiled executable. Save the loopy again.");
-      }
-
-      return { nodeId, bundleHash };
-    }),
+    bundles: graphBundles(graph),
   };
 }
 

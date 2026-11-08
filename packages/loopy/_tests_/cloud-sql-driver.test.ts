@@ -13,8 +13,9 @@ import {
   type SqlValue,
 } from "@loopy/runtime/store/portable";
 import { Effect, Schema } from "effect";
+import { BunSqlDriver } from "../../runtime/src/store/bun-driver";
 import { EVENT_RETENTION } from "../../runtime/src/store/event-outbox";
-import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
+import { upgradeLegacyHome } from "../../runtime/src/store/schema/legacy";
 import { newRun } from "./fixture";
 import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { storeContract } from "./store-contract";
@@ -205,6 +206,52 @@ test("schema 13 upgrades through the local migration to the fresh tables, indexe
 
     expect(indexes(fresh)).toEqual(indexes(legacy));
   }
+});
+
+test("schema 15 run events reopen in the schema 16 run shape with sequences and epoch intact", async () => {
+  const home = mkdtempSync(join(tmpdir(), "loopy-schema15-"));
+  homes.push(home);
+  const file = join(home, "runs.sqlite");
+  legacyDatabase(file, 14).close();
+  const legacy = new BunSqlDriver(file);
+  upgradeLegacyHome(legacy);
+  legacy.query("INSERT INTO meta VALUES ('epoch','retained-epoch')").run();
+
+  const record = {
+    id: "run",
+    slug: "test",
+    revision: "bundle",
+    workspace: "/workspace",
+    input: {},
+    createdAt: at,
+    updatedAt: at,
+  };
+
+  const insert = legacy.query<unknown, [string, string, string, string]>(
+    "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,?,'run',?,'run',?)",
+  );
+
+  insert.run(
+    at,
+    "heartbeat-txn",
+    "heartbeat",
+    JSON.stringify({ ...record, status: "running", wakeAt: at, nextRetryAt: at }),
+  );
+  insert.run(
+    at,
+    "suspend-txn",
+    "suspended",
+    JSON.stringify({ ...record, status: "suspended", nextRetryAt: at }),
+  );
+  legacy.close();
+
+  const upgraded = openTestStore(file);
+  expect(await Effect.runPromise(upgraded.epoch())).toBe("retained-epoch");
+  expect(await Effect.runPromise(upgraded.events(0, 10))).toMatchObject([
+    { sequence: 1, txn: "heartbeat-txn", record: { ...record, status: "running" } },
+    { sequence: 2, txn: "suspend-txn", record: { ...record, status: "suspended", wakeAt: null } },
+  ]);
+  expect((await Effect.runPromise(upgraded.events(0, 10)))[0]?.record).not.toHaveProperty("wakeAt");
 });
 
 function logEffects(count: number): StoreEffect[] {

@@ -71,7 +71,7 @@ loopy schedule hello --off
 
 Data commands use authenticated daemon HTTP. Only daemon control opens local SQLite. Resume wakes a claimable run; it does not reset terminal outcomes. Cancellation rejects actively owned runs and unfinished executions or started graphs whose finally cleanup cannot yet be driven safely.
 
-`wait` nodes persist hook registrations and optional deadlines. `sleep` nodes persist wake times. Neither requires a timer to remain alive while the run is suspended. Schedules retain their workspace and use optimistic versions; missed fires are not backfilled. Keep the daemon running to claim queued and due work.
+`wait` nodes persist hook registrations and optional deadlines. `sleep` nodes persist wake times. Neither requires a timer to remain alive while the run is suspended. Schedules retain their workspace and use optimistic versions; missed fires are not backfilled. A slot up to a minute late fires once; a later one is skipped and the schedule waits for its next slot. Keep the daemon running to claim queued and due work.
 
 The dashboard shows definition source and graphs, revision-pinned runs, execution attempts, logs and schedules. Lists use bounded pages. A transaction event stream updates caches, resumes from cursors and refetches after cursor expiry or a store epoch change. API destinations are configured at build time, not through URL query parameters. Tokens stay scoped to the selected API; requests omit cookies and reject redirects.
 

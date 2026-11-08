@@ -5,7 +5,8 @@ import { compile } from "@loopy/compiler";
 import { requireRecord } from "@loopy/core";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { activate } from "@loopy/runtime/host";
-import { makeLocalService, openRunStore, Registry } from "@loopy/runtime/local";
+import { makeLocalService, Registry } from "@loopy/runtime/local";
+import { openRunStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
 
 export const roots: string[] = [];

@@ -6,12 +6,11 @@ import {
   type RuntimeEvent,
   type WakeError,
 } from "@loopy/core";
-import { StoreRejectedError } from "../operation";
-import { acquireWindow, type RateLimitWindow } from "../rate-limit-window";
-import { normalizeRun, utc } from "../timestamps";
 import type { SqlContext, SqlWrite } from "./context";
 import { emit } from "./events";
+import { StoreRejectedError } from "./operation";
 import { type RunRow, rowToRun } from "./rows";
+import { normalizeRun, utc } from "./timestamps";
 
 const RELEASE =
   "UPDATE runs SET wake_at=CASE WHEN status='running' THEN ? ELSE wake_at END,status=CASE WHEN status='running' THEN 'suspended' ELSE status END,owner_token=NULL,owner_pid=NULL,owner_host=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND owner_token=?";
@@ -81,7 +80,7 @@ export function insertRun(write: SqlWrite, input: RunRecord): void {
 
   write.db
     .query(
-      "INSERT INTO runs(id,slug,revision,workspace,input_json,status,output_json,error,wake_at,next_retry_at,created_at,updated_at,owner_token,owner_pid,owner_host,heartbeat_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO runs(id,slug,revision,workspace,input_json,status,output_json,error,wake_at,created_at,updated_at,owner_token,owner_pid,owner_host,heartbeat_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .run(
       run.id,
@@ -93,7 +92,6 @@ export function insertRun(write: SqlWrite, input: RunRecord): void {
       run.status === "succeeded" ? JSON.stringify(run.output) : null,
       run.status === "failed" ? run.error : null,
       run.status === "suspended" ? run.wakeAt : null,
-      run.nextRetryAt ?? null,
       run.createdAt,
       run.updatedAt,
       run.owner?.token ?? null,
@@ -123,7 +121,7 @@ export function claimRun(write: SqlWrite, runId: string, token: string): RunReco
 
   const claimed = write.db
     .query(
-      "UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,updated_at=?,status='running',wake_at=NULL,next_retry_at=NULL WHERE id=? AND owner_token IS NULL AND status IN ('queued','suspended','running')",
+      "UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,updated_at=?,status='running',wake_at=NULL WHERE id=? AND owner_token IS NULL AND status IN ('queued','suspended','running')",
     )
     .run(token, write.owner.identity.pid, write.owner.identity.host, write.at, write.at, runId);
 
@@ -219,7 +217,7 @@ export function finishRun(
 ): void {
   write.db
     .query(
-      "UPDATE runs SET status=?,output_json=?,error=?,wake_at=NULL,next_retry_at=NULL,updated_at=? WHERE id=? AND owner_token=? AND status='running'",
+      "UPDATE runs SET status=?,output_json=?,error=?,wake_at=NULL,updated_at=? WHERE id=? AND owner_token=? AND status='running'",
     )
     .run(
       outcome.status,
@@ -252,25 +250,4 @@ export function readNextWakeAt(ctx: SqlContext): string | undefined {
       )
       .get()?.wake_at ?? undefined
   );
-}
-
-export function acquireRateLimit(
-  ctx: SqlContext,
-  limit: { key: string; count: number; windowMs: number; now: string },
-) {
-  const window =
-    ctx.db
-      .query<RateLimitWindow, [string]>(
-        "SELECT window_start AS windowStart,count FROM rate_limits WHERE key=?",
-      )
-      .get(limit.key) ?? undefined;
-
-  const acquired = acquireWindow(window, limit.count, limit.windowMs, limit.now);
-  ctx.db
-    .query(
-      "INSERT INTO rate_limits VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=excluded.count",
-    )
-    .run(limit.key, acquired.window.windowStart, acquired.window.count);
-
-  return acquired.result;
 }

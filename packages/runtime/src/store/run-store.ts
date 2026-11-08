@@ -1,18 +1,18 @@
-import type {
-  DashboardReader,
-  EventPageQuery,
-  LogPageQuery,
-  NodePageQuery,
-  OverviewQuery,
-  RunPageQuery,
-  ScopeItemsQuery,
+import {
+  type DashboardReader,
+  type EventPageQuery,
+  type LogPageQuery,
+  type NodePageQuery,
+  type OverviewQuery,
+  PAGE_LIMIT,
+  type RunPageQuery,
+  type ScopeItemsQuery,
 } from "@loopy/contract";
 import {
   type DurableTurnStore,
   type ExecutionKey,
   executionKeyString,
   type Json,
-  PAGE_LIMIT,
   type RunRecord,
   type RuntimeEvent,
   type Schedule,
@@ -20,12 +20,10 @@ import {
   type StoreEffect,
 } from "@loopy/core";
 import { Clock, Effect } from "effect";
-import { EventListeners } from "../event-outbox";
-import { ownedStorageOperation, storageOperation } from "../operation";
-import { utc } from "../timestamps";
 import { applyBatch } from "./apply";
 import type { SqlContext, SqlWrite } from "./context";
 import type { SqlDriver } from "./driver";
+import { EventListeners } from "./event-outbox";
 import {
   pruneEvents,
   readEpoch,
@@ -36,6 +34,7 @@ import {
   readTransactionEvents,
 } from "./events";
 import { readLog, readLogs, readNode, readNodes } from "./nodes";
+import { ownedStorageOperation, storageOperation } from "./operation";
 import type { SqlStoreOptions } from "./owner-policy";
 import { readEventPage, readLogPage } from "./query/feeds";
 import {
@@ -54,9 +53,9 @@ import {
   readRunReference,
   readRunWorkspaces,
 } from "./query/runs";
+import { acquireRateLimit } from "./rate-limits";
 import { rowToRun } from "./rows";
 import {
-  acquireRateLimit,
   claimRun,
   heartbeatRun,
   insertRun,
@@ -77,8 +76,10 @@ import {
   readScheduleOverview,
   readSchedules,
   setScheduleEnabled,
+  skipSchedule,
 } from "./schedules";
 import { initializeSchema } from "./schema/fresh";
+import { utc } from "./timestamps";
 import { readDueTurns, readNextTurnAt, readStrandedTurns, readTurnErrors, saveTurn } from "./turns";
 import { readWaits, resolveWait } from "./waits";
 
@@ -258,6 +259,10 @@ export class SqlRunStore implements Store, DurableTurnStore, DashboardReader {
 
   fireSchedule(options: Parameters<Store["fireSchedule"]>[0]) {
     return this.write("fireSchedule", (write) => fireSchedule(write, options));
+  }
+
+  skipSchedule(options: Parameters<Store["skipSchedule"]>[0]) {
+    return this.write("skipSchedule", (write) => skipSchedule(write, options));
   }
 
   failSchedule(options: Parameters<Store["failSchedule"]>[0]) {

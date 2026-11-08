@@ -635,7 +635,7 @@ const record: Schedule = {
   version: 2,
 };
 
-const scheduled: ScheduleView = { ...record, lastFireKey: null };
+const scheduled: ScheduleView = { ...record, lastFireKey: null, failure: null };
 
 function scheduleSaved(sequence: number, saved: Schedule) {
   return event(sequence, { entity: "schedule", kind: "saved", runId: null, record: saved });
@@ -716,8 +716,10 @@ test("a delayed HTTP response cannot undo a fire at the same version", () => {
 
   applyScheduleView(client, scheduled);
 
-  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([fired]);
-  applyScheduleView(client, { ...fired, nextFireAt: "2026-10-17T10:15:00.000Z" });
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([
+    { ...fired, failure: null },
+  ]);
+  applyScheduleView(client, { ...fired, failure: null, nextFireAt: "2026-10-17T10:15:00.000Z" });
   expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))?.[0]?.nextFireAt).toBe(
     "2026-10-17T10:15:00.000Z",
   );

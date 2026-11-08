@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { processAlive } from "../../os";
+import { processAlive } from "../os";
 import type { SqlOwnerPolicy } from "./owner-policy";
 
 export function localOwnerPolicy(): SqlOwnerPolicy {

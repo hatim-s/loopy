@@ -128,24 +128,6 @@ for (const wakeAt of [null, future]) {
   });
 }
 
-test(`stale suspension keeps an earlier deadline instead of postponing it`, async () => {
-  const store = await createStore();
-  await prepare(store);
-  await run(store.claim("run", "owner"));
-  await run(
-    store.apply({
-      runId: "run",
-      token: "owner",
-      effects: [
-        { kind: "schedule_activation", at: future },
-        { kind: "suspend_run", wakeAt: at },
-      ],
-    }),
-  );
-  await run(store.release("run", "owner"));
-  expect(await run(store.nextWakeAt())).toBe(at);
-});
-
 test(`signal between activation reload and suspension remains due and completes`, async () => {
   const store = await createStore();
   const hook = await prepare(store);

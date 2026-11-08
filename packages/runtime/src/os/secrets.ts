@@ -9,23 +9,23 @@ import {
   readFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { MAX_SECRET_VALUE_BYTES, secretValueSchema } from "@loopy/contract";
 import {
   errnoCode,
-  isString,
   requireRecord,
   SecretError,
   setOwnProperty,
   validateSecretName,
 } from "@loopy/core";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { withLockDirectory, writeFileAtomically } from "./fs";
 
-const MAX_VALUE_BYTES = 64 * 1024;
+const validSecretValue = Schema.is(secretValueSchema);
 
-export function validateSecretValue(value: string): void {
-  if (!value || value.includes("\0") || Buffer.byteLength(value) > MAX_VALUE_BYTES) {
-    throw new Error("A secret must be nonempty, contain no NUL bytes, and fit within 64 KiB.");
-  }
+function invalidSecretValue(name: string): Error {
+  return new Error(
+    `Secret '${name}' must be nonempty text with no NUL bytes within ${MAX_SECRET_VALUE_BYTES / 1024} KiB.`,
+  );
 }
 
 function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
@@ -42,11 +42,10 @@ function parseSecrets(value: unknown) {
   for (const [name, secret] of Object.entries(record)) {
     validateSecretName(name);
 
-    if (!isString(secret)) {
-      throw new Error(`The secret store value for '${name}' must be a string.`);
+    if (!validSecretValue(secret)) {
+      throw invalidSecretValue(name);
     }
 
-    validateSecretValue(secret);
     setOwnProperty(secrets, name, secret);
   }
 
@@ -181,8 +180,8 @@ export class SecretStore {
       try: () => {
         validateSecretName(name);
 
-        if (value !== undefined) {
-          validateSecretValue(value);
+        if (value !== undefined && !validSecretValue(value)) {
+          throw invalidSecretValue(name);
         }
       },
       catch: (cause) => new SecretError({ operation: "validate", reason: "invalid", cause }),

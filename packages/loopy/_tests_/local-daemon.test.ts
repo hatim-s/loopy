@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "@loopy/runtime/local";
+import { daemonUrl, localDaemon, readDaemonFile } from "@loopy/runtime/local";
+import { openRunStore } from "@loopy/runtime/store";
 import { Effect, Exit, Scope } from "effect";
 import { removeDaemonFile, writeDaemonFile } from "../../runtime/src/local/daemon/file";
 

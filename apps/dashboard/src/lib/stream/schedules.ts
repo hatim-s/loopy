@@ -46,11 +46,19 @@ export function applyScheduleEvent(client: QueryClient, event: ScheduleEvent): b
     return true;
   }
 
-  if (!list.some((item) => sameSchedule(item, event.record))) {
+  const previous = list.find((item) => sameSchedule(item, event.record));
+
+  if (!previous) {
     return false;
   }
 
-  const view = { ...event.record, lastFireKey: event.record.lastFireKey ?? null };
+  // Saving and firing retire a schedule failure; a skipped slot keeps it.
+  const view = {
+    ...event.record,
+    lastFireKey: event.record.lastFireKey ?? null,
+    failure: event.kind === "skipped" ? previous.failure : null,
+  };
+
   client.setQueryData<ScheduleView[]>(
     keys.schedules(view.workspace),
     (current) => current && withSchedule(current, view),

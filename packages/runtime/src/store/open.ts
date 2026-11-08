@@ -1,14 +1,16 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { storageOperation } from "../operation";
 import { BunSqlDriver } from "./bun-driver";
 import { localOwnerPolicy } from "./local-owner";
+import { storageOperation } from "./operation";
 import { SqlRunStore } from "./run-store";
 import { upgradeLegacyHome } from "./schema/legacy";
 
 type LocalOptions = { leaseMs?: number };
 
+// Subscribers see only commits made through this connection. SQLite has no cross-connection
+// change signal, so a second writer's commits reach them only through a later re-read.
 export const makeSqliteRunStore = (file: string, options: LocalOptions = {}) =>
   Effect.acquireRelease(
     storageOperation("open", () => {

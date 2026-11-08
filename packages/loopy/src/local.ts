@@ -4,8 +4,8 @@ export {
   type LocalService,
   localDaemon,
   makeLocalService,
-  openRunStore,
   readDaemonFile,
   ServiceError,
-  type SqlRunStore,
 } from "@loopy/runtime/local";
+
+export { openRunStore, type SqlRunStore } from "@loopy/runtime/store";

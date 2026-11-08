@@ -27,21 +27,25 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
     });
   }
 
-  const expected = graphBundles(body.graph);
+  const invalidBundles = new CompiledValidationError({
+    code: "invalid_bundles",
+    message: "Supply exactly one bundle for each code node and parser in node order.",
+  });
+
+  const expected = yield* Effect.try({
+    try: () => graphBundles(body.graph),
+    catch: () => invalidBundles,
+  });
 
   if (
     expected.length !== body.bundles.length ||
     expected.some(
       (value, index) =>
-        value.bundleHash === null ||
         value.nodeId !== body.bundles[index]?.nodeId ||
         value.bundleHash !== body.bundles[index]?.bundleHash,
     )
   ) {
-    return yield* new CompiledValidationError({
-      code: "invalid_bundles",
-      message: "Supply exactly one bundle for each code node and parser in node order.",
-    });
+    return yield* invalidBundles;
   }
 
   if (

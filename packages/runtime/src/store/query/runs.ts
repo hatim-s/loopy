@@ -1,18 +1,19 @@
 import {
   decodeRunCursor,
   type OverviewQuery,
+  type PendingHook,
   type RunDefinitionCount,
   type RunPageQuery,
   type RunPreview,
   type StatusCounts,
 } from "@loopy/contract";
-import { MAX_PREVIEW_BYTES, type PendingHook, type RunRecord, waitRecordSchema } from "@loopy/core";
+import { MAX_PREVIEW_BYTES, type RunRecord, waitRecordSchema } from "@loopy/core";
 import { Schema } from "effect";
-import { overviewBuckets } from "../../query-utils";
-import { storedDecoder } from "../../row-codec";
 import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";
+import { storedDecoder } from "../row-codec";
 import { type RunRow, rowToRun } from "../rows";
+import { overviewBuckets } from "./scan";
 
 type RunFilter = Pick<RunPageQuery, "slug" | "workspace" | "status" | "from" | "to">;
 
@@ -49,7 +50,7 @@ function runWhere(filter: RunFilter) {
   return { clauses, values };
 }
 
-export const RUN_PREVIEW_COLUMNS = `r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,
+export const RUN_PREVIEW_COLUMNS = `r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,
  CASE WHEN length(CAST(r.input_json AS BLOB))>${MAX_PREVIEW_BYTES} THEN 'null' ELSE r.input_json END AS input_json,
  CASE WHEN length(CAST(r.output_json AS BLOB))>${MAX_PREVIEW_BYTES} THEN 'null' ELSE r.output_json END AS output_json,
  length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes`;

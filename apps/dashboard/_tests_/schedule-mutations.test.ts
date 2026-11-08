@@ -12,6 +12,7 @@ const schedule: ScheduleView = {
   tz: "UTC",
   input: {},
   enabled: true,
+  failure: null,
   version: 2,
   nextFireAt: "2026-10-17T11:00:00.000Z",
   lastFireKey: null,

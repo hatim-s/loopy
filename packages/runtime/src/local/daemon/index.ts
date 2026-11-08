@@ -5,6 +5,7 @@ import { Clock, Data, Effect } from "effect";
 import { LocalExecutor } from "../../executor";
 import { makeDaemon, PreparationError, ScheduleDefinitionError } from "../../host";
 import { withLockDirectory } from "../../os";
+import { requireDefinition } from "../../service";
 import type { SqlRunStore } from "../../store";
 import { Registry } from "../registry";
 import { startServer } from "../server/start-server";
@@ -43,18 +44,10 @@ export const localDaemon = (options: DaemonOptions) =>
       concurrency: options.concurrency,
       onError: options.onError,
       definitionFor: (schedule) =>
-        Effect.gen(function* () {
-          const registry = yield* Registry.make(options.home, schedule.workspace);
-          const entry = yield* registry.get(schedule.slug);
-
-          if (entry === null) {
-            return yield* Effect.fail(
-              new Error(`No saved loopy '${schedule.slug}'. Use loopy save <file.ts> first.`),
-            );
-          }
-
-          return { revision: entry.revision, graph: entry.graph };
-        }).pipe(Effect.mapError((cause) => new ScheduleDefinitionError({ cause }))),
+        Registry.make(options.home, schedule.workspace).pipe(
+          Effect.flatMap((registry) => requireDefinition(registry, schedule.slug)),
+          Effect.mapError((cause) => new ScheduleDefinitionError({ cause })),
+        ),
       prepare: (run) =>
         Effect.gen(function* () {
           const registry = yield* Registry.make(options.home, run.workspace);

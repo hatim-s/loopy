@@ -73,7 +73,7 @@ export class PolicyProvider implements DurableExecutionProvider {
   }
 }
 
-/** Completes `retried` once a committed batch schedules a retry. */
+/** Completes `retried` once a committed batch writes a retrying or rate-limited node. */
 export class RetryGateStore extends MemorySqlStore {
   constructor(
     private readonly retried: Deferred.Deferred<void>,
@@ -87,7 +87,11 @@ export class RetryGateStore extends MemorySqlStore {
       .apply(batch)
       .pipe(
         Effect.tap(() =>
-          batch.effects.some((effect) => effect.kind === "schedule_activation")
+          batch.effects.some(
+            (effect) =>
+              effect.kind === "write_node_run" &&
+              (effect.nodeRun.status === "retrying" || effect.nodeRun.status === "rate_limited"),
+          )
             ? Deferred.succeed(this.retried, undefined)
             : Effect.void,
         ),

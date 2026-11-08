@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Executor } from "@loopy/core";
-import { initialState, step } from "@loopy/core/engine";
+import { initialState, nextDeadline, step } from "@loopy/core/engine";
 import { activate } from "@loopy/runtime/host";
 import { code, loopy, sh } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
@@ -152,13 +152,15 @@ for (const mode of ["retry", "rate"] as const) {
         expect(yield* store.getRun("run")).toMatchObject({
           status: "running",
           owner: { token: expect.any(String) },
-          nextRetryAt: new Date(base + (mode === "retry" ? 1000 : 60_000)).toISOString(),
         });
+        expect(nextDeadline(yield* store.getNodeRuns("run"))).toBe(
+          new Date(base + (mode === "retry" ? 1000 : 60_000)).toISOString(),
+        );
         expect(attempts).toEqual(mode === "retry" ? [1] : [1, 1]);
         yield* TestClock.adjust(mode === "retry" ? 1000 : 60_000);
         expect(yield* Fiber.join(running)).toMatchObject({ status: "succeeded" });
         expect(attempts).toEqual(mode === "retry" ? [1, 2] : [1, 1, 1]);
-        expect((yield* store.getRun("run"))?.nextRetryAt).toBeUndefined();
+        expect(nextDeadline(yield* store.getNodeRuns("run"))).toBeNull();
       }).pipe(Effect.provide(TestClock.layer())),
     );
   });
