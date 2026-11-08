@@ -1,11 +1,17 @@
-import { resolve } from "node:path";
 import { boundaryOptions, errorBodySchema } from "@loopy/contract";
 import { readDaemonFile } from "@loopy/runtime/local";
-import { Data, Effect, Schema } from "effect";
-import type { CliContext } from "./context";
+import { Data, Effect, Exit, Schema } from "effect";
+import type { Context } from "./context";
+import { daemonCommand } from "./entry";
 import { CliError, cliSync } from "./errors";
 
-type ClientContext = Pick<CliContext, "home" | "cwd">;
+type ClientContext = Pick<Context, "home" | "cwd">;
+
+type Method = "GET" | "POST" | "PUT" | "DELETE";
+
+const DISCOVERY_TIMEOUT_MS = 5000;
+
+const DISCOVERY_POLL_MS = 50;
 
 export class HttpError extends Data.TaggedError("HttpError")<{
   status: number;
@@ -15,10 +21,16 @@ export class HttpError extends Data.TaggedError("HttpError")<{
 
 export class TransportError extends Data.TaggedError("TransportError")<{
   operation: "fetch" | "decode";
+  method: Method;
   cause: unknown;
 }> {
   override get message() {
-    return `Daemon HTTP ${this.operation} failed. Inspect the daemon before retrying a mutation.`;
+    const next =
+      this.method === "GET"
+        ? "Check that the daemon is running and retry."
+        : `Inspect the daemon before retrying the ${this.method} request.`;
+
+    return `Daemon HTTP ${this.operation} failed. ${next}`;
   }
 }
 
@@ -29,34 +41,20 @@ const daemon = Effect.fn(function* (context: ClientContext) {
     return current;
   }
 
-  // The internal CLI stays executable so daemon autostart works in source and packed builds.
-  const spawn = cliSync(() =>
-    Bun.spawn(
-      [
-        process.execPath,
-        resolve(import.meta.dir, import.meta.path.endsWith(".ts") ? "index.ts" : "index.js"),
-        "--home",
-        context.home,
-        "--cwd",
-        context.cwd,
-        "daemon",
-        "run",
-        "--port",
-        "0",
-      ],
-      { cwd: context.cwd, stdin: "ignore", stdout: "ignore", stderr: "ignore" },
-    ),
-  );
-
-  let discovered = false;
-
   return yield* Effect.acquireUseRelease(
-    spawn,
+    cliSync(() =>
+      Bun.spawn(daemonCommand({ home: context.home, cwd: context.cwd, port: 0 }), {
+        cwd: context.cwd,
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      }),
+    ),
     (child) =>
       Effect.gen(function* () {
         child.unref();
 
-        for (let attempt = 0; attempt < 100; attempt++) {
+        for (let waited = 0; waited < DISCOVERY_TIMEOUT_MS; waited += DISCOVERY_POLL_MS) {
           const record = yield* cliSync(() => readDaemonFile(context.home));
 
           if (record) {
@@ -65,24 +63,17 @@ const daemon = Effect.fn(function* (context: ClientContext) {
               child.kill();
             }
 
-            discovered = true;
-
             return record;
           }
 
-          yield* Effect.sleep(50);
+          yield* Effect.sleep(DISCOVERY_POLL_MS);
         }
 
         return yield* new CliError({
-          message: "The daemon did not start. Run loopy daemon run to inspect the error.",
+          message: `The daemon did not publish discovery within ${DISCOVERY_TIMEOUT_MS} ms. Run loopy daemon run to inspect the error.`,
         });
       }),
-    (child) =>
-      Effect.sync(() => {
-        if (!discovered) {
-          child.kill();
-        }
-      }),
+    (child, exit) => (Exit.isFailure(exit) ? Effect.sync(() => child.kill()) : Effect.void),
   );
 });
 
@@ -90,7 +81,7 @@ export const request = <S extends Schema.Top & { readonly DecodingServices: neve
   context: ClientContext,
   path: string,
   schema: S,
-  options: { method: "GET" | "POST" | "PUT" | "DELETE"; body?: object } = { method: "GET" },
+  options: { method: Method; body?: object } = { method: "GET" },
 ) =>
   Effect.gen(function* () {
     const record = yield* daemon(context);
@@ -109,19 +100,25 @@ export const request = <S extends Schema.Top & { readonly DecodingServices: neve
 
         return { ok: response.ok, status: response.status, value };
       },
-      catch: (cause) => new TransportError({ operation: "fetch", cause }),
+      catch: (cause) => new TransportError({ operation: "fetch", method: options.method, cause }),
     });
 
     if (!ok) {
       const { error } = yield* Schema.decodeUnknownEffect(errorBodySchema)(
         value,
         boundaryOptions,
-      ).pipe(Effect.mapError((cause) => new TransportError({ operation: "decode", cause })));
+      ).pipe(
+        Effect.mapError(
+          (cause) => new TransportError({ operation: "decode", method: options.method, cause }),
+        ),
+      );
 
       return yield* new HttpError({ status, ...error });
     }
 
     return yield* Schema.decodeUnknownEffect(schema)(value, boundaryOptions).pipe(
-      Effect.mapError((cause) => new TransportError({ operation: "decode", cause })),
+      Effect.mapError(
+        (cause) => new TransportError({ operation: "decode", method: options.method, cause }),
+      ),
     );
   });

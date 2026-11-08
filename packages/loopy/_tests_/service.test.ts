@@ -514,6 +514,26 @@ test("run graphs stay pinned to the revision each run started on", async () => {
   });
 });
 
+test("putLoopy preserves every author option from graph meta", async () => {
+  const { service, root, registry } = await fixture();
+
+  const meta = {
+    description: "Author metadata",
+    schedule: { cron: "0 9 * * *", tz: "Asia/Kolkata" },
+    secrets: ["TOKEN"],
+    mode: "full" as const,
+    scope: "global" as const,
+  };
+
+  await Effect.runPromise(
+    service.putLoopy("metadata", await compiledBody("metadata", join(root, "metadata.ts"), meta)),
+  );
+  expect(await Effect.runPromise(registry.get("metadata"))).toMatchObject({
+    ...meta,
+    graph: { meta },
+  });
+});
+
 test("service maps completion between requireRun and claim to not_claimable", async () => {
   const { service, store, root } = await fixture();
   const run = await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));

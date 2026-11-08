@@ -7,14 +7,12 @@ export class CliError extends Data.TaggedError("CliError")<{
   cause?: unknown;
 }> {}
 
-/** Adapt thrown filesystem and untyped parser failures at their boundary. Typed validation returns Effects directly. */
 export const cliSync = <A>(run: () => A) =>
   Effect.try({
     try: run,
     catch: (cause) => new CliError({ message: errorMessage(cause), cause }),
   });
 
-/** Only foreign filesystem, terminal and framework calls use this boundary. */
 export const cliIO = <A>(run: (signal: AbortSignal) => PromiseLike<A>) =>
   Effect.tryPromise({
     try: run,

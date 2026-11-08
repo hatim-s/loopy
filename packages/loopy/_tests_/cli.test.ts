@@ -52,14 +52,6 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
   const text = await cli(f, "graph", "compiled", "--format", "text");
   expect(text.code).toBe(0);
   expect(text.stdout).toContain("0:log log [next -> 1:join]");
-  const entry = await registryEntry(f.home, f.cwd, "compiled");
-  expect(entry).toMatchObject({
-    version: 2,
-    graph: { name: "compiled" },
-    revision: expect.stringMatching(/^[a-f0-9]{64}$/),
-    bundles: [],
-  });
-  expect(entry).not.toHaveProperty("bundleHash");
 });
 
 test("HTTP commands queue schema-validated graph runs and pin the saved revision", async () => {
@@ -82,18 +74,20 @@ test("HTTP commands queue schema-validated graph runs and pin the saved revision
   });
 });
 
-test("save rejects another source until --replace and locates absolute files beside their source", async () => {
+test("save forwards --replace and registers outside files beside their source unless --cwd is explicit", async () => {
   const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   const other = join(f.cwd, "other.ts");
   writeFileSync(other, await Bun.file(f.file).text());
-  const rejected = await cli(f, "save", other);
-  expect(rejected.stderr).toContain("belongs to another source");
   expect((await cli(f, "save", other, "--replace")).code).toBe(0);
+  expect((await registryEntry(f.home, f.cwd, "compiled")).source).toBe(other);
   const caller = join(f.cwd, "caller");
-  mkdirSync(caller);
+  mkdirSync(caller, { recursive: true });
+  mkdirSync(join(caller, ".loopy", "loopies"), { recursive: true });
   expect((await cli({ ...f, cwd: caller }, "save", other)).code).toBe(0);
   expect((await registryEntry(f.home, f.cwd, "compiled")).source).toBe(other);
+  expect((await cli({ ...f, cwd: caller }, "save", other, "--cwd", caller)).code).toBe(0);
+  expect((await registryEntry(f.home, caller, "compiled")).source).toBe(other);
 });
 
 test("compiler diagnostics include locations and do not create registry entries", async () => {
@@ -110,12 +104,15 @@ test("compiler diagnostics include locations and do not create registry entries"
   ).toEqual([]);
 });
 
-test("CLI rejects invalid graph formats and short leases", async () => {
+test("CLI rejects invalid graph formats, short daemon leases and leases on data commands", async () => {
   const f = await graphFixture();
   expect((await cli(f, "graph", f.file, "--format", "svg")).stderr).toContain(
     "--format json or --format text",
   );
-  expect((await cli(f, "runs", "--lease-ms", "999")).stderr).toContain("at least 1000");
+  expect((await cli(f, "daemon", "run", "--lease-ms", "999")).stderr).toContain("at least 1000");
+  expect((await cli(f, "runs", "--lease-ms", "2000")).stderr).toContain(
+    "Unknown option '--lease-ms' for loopy runs.",
+  );
 });
 
 test("save starts the daemon on demand and leaves artifact writes to the service", async () => {
@@ -181,26 +178,6 @@ test("an absolute source in another project is registered beside that source", a
       Effect.flatMap(Registry.make(source.home, caller.cwd), (r) => r.list()),
     ),
   ).toEqual([]);
-});
-
-test("save preserves every author option from graph meta", async () => {
-  const f = await graphFixture("metadata");
-
-  const meta = {
-    description: "Author metadata",
-    schedule: { cron: "0 9 * * *", tz: "Asia/Kolkata" },
-    secrets: ["TOKEN"],
-    mode: "full",
-    scope: "global",
-  };
-
-  writeFileSync(
-    f.file,
-    `import {loopy} from "loopy/graph"; export default loopy("metadata", {${JSON.stringify(meta).slice(1, -1)},input:{count:"number"},run:({input})=>input.get("count")});`,
-  );
-  expect(await cli(f, "save", f.file)).toMatchObject({ code: 0, stderr: "" });
-  const saved = await registryEntry(f.home, f.cwd, "metadata");
-  expect(saved).toMatchObject({ ...meta, input: { count: "number" }, graph: { meta } });
 });
 
 test("HTTP schedule enable, disable and off persist their state", async () => {

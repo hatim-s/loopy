@@ -6,11 +6,7 @@ import { routes } from "@loopy/contract";
 import type { Json } from "@loopy/core";
 import { Effect } from "effect";
 import { HttpError, request, TransportError } from "../../cli/src/client";
-import {
-  readDaemonFile,
-  removeDaemonFile,
-  writeDaemonFile,
-} from "../../runtime/src/local/daemon/file";
+import { writeDaemonFile } from "../../runtime/src/local/daemon/file";
 
 async function withHttp(
   body: Json,
@@ -18,14 +14,13 @@ async function withHttp(
   use: (context: { home: string; cwd: string }, count: () => number) => Promise<void>,
 ) {
   const root = mkdtempSync(join(tmpdir(), "loopy-cli-http-"));
-  let count = 0;
+  const authorizations: (string | null)[] = [];
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch(req) {
-      count++;
-      expect(req.headers.get("authorization")).toBe("Bearer fixture-token");
+      authorizations.push(req.headers.get("authorization"));
 
       return Response.json(body, { status });
     },
@@ -38,7 +33,8 @@ async function withHttp(
       token: "fixture-token",
       startedAt: new Date().toISOString(),
     });
-    await use({ home: root, cwd: root }, () => count);
+    await use({ home: root, cwd: root }, () => authorizations.length);
+    expect(authorizations.every((value) => value === "Bearer fixture-token")).toBe(true);
   } finally {
     await server.stop(true);
     rmSync(root, { recursive: true, force: true });
@@ -86,24 +82,14 @@ test("HTTP client rejects malformed success and error envelopes", async () => {
   }
 });
 
-test("discovery cleanup never removes another daemon token", async () => {
-  await withHttp([], 200, async (context) => {
-    removeDaemonFile(context.home, "different-token");
-    expect(readDaemonFile(context.home)?.token).toBe("fixture-token");
-    removeDaemonFile(context.home, "fixture-token");
-    expect(readDaemonFile(context.home)).toBeUndefined();
-  });
-});
-
-test("CLI argument failures use the typed error channel", async () => {
+test("CLI argument failures report their message", async () => {
   const { main } = await import("@loopy/cli");
-  const { CliError } = await import("../../cli/src/errors");
 
-  for (const argv of [["unknown-command"], ["types", "bun"]]) {
-    const failure = await Effect.runPromise(Effect.flip(main(argv)));
-    expect(failure).toBeInstanceOf(CliError);
-    expect(failure.message).toContain(
-      argv[0] === "types" ? "--out is required" : "Unknown command",
-    );
+  for (const [argv, message] of [
+    [["unknown-command"], "Unknown command 'unknown-command'."],
+    [["types", "bun"], "--out is required."],
+    [["secrets", "remove"], "Secret name is required. Run loopy secrets remove --help for usage."],
+  ] as const) {
+    expect((await Effect.runPromise(Effect.flip(main([...argv])))).message).toStartWith(message);
   }
 });

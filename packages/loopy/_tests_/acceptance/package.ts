@@ -120,7 +120,7 @@ export default loopy("packed", {input: {}, run: () => {
     );
     await Bun.write(join(fixture, "answer.ts"), "export default () => 42;");
     await run([
-      "node_modules/loopy/dist/loopy/src/cli.js",
+      "node_modules/loopy/dist/cli/src/index.js",
       "--home",
       home,
       "--cwd",
@@ -169,7 +169,7 @@ await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
 })));
 const home = ${JSON.stringify(home)};
 try {
-  const cli = Bun.spawn([process.execPath, "--no-env-file", "node_modules/loopy/dist/loopy/src/cli.js", "--home", home, "--cwd", ${JSON.stringify(fixture)}, "list"], {
+  const cli = Bun.spawn([process.execPath, "--no-env-file", "node_modules/loopy/dist/cli/src/index.js", "--home", home, "--cwd", ${JSON.stringify(fixture)}, "list"], {
     stdout: "pipe", stderr: "pipe",
   });
   const [stdout, stderr, exit] = await Promise.all([

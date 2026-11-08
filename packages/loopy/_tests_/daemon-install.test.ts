@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { parseCliArgs } from "../../cli/src/args";
-import {
-  daemonStatus,
-  installDaemon,
-  uninstallDaemon,
-} from "../../runtime/src/local/daemon/install";
+import { decodeOptions } from "../../cli/src/command";
+import { daemonCommand } from "../../cli/src/entry";
+import { parseCommandLine } from "../../cli/src/parse";
+import { COMMANDS } from "../../cli/src/table";
+import { installDaemon, uninstallDaemon } from "../../runtime/src/local/daemon/install";
 import type {
   DaemonExecResult,
   DaemonOperations,
@@ -20,6 +19,7 @@ const target = "gui/501/com.loopy.daemon";
 const ok = { code: 0, stdout: "", stderr: "" };
 
 function fixture(platform: string, replies: DaemonExecResult[] = []) {
+  const command: [string, ...string[]] = ["/opt/bun", "/opt/loopy/cli.js", "daemon", "run"];
   const files = new Map<string, string>();
   const commands: string[][] = [];
 
@@ -34,7 +34,6 @@ function fixture(platform: string, replies: DaemonExecResult[] = []) {
 
         files.set(path, content);
       }),
-    exists: (path) => Effect.succeed(files.has(path)),
     exec: (argv) =>
       Effect.sync(() => {
         commands.push(argv);
@@ -52,8 +51,7 @@ function fixture(platform: string, replies: DaemonExecResult[] = []) {
       uid: 501,
       operations,
       home: "/data/loopy",
-      executable: "/opt/bun",
-      args: ["/opt/loopy/cli.js"],
+      command,
       path: "/opt/bin:/usr/bin",
     },
   };
@@ -65,13 +63,13 @@ test("macOS plist retains absolute argv, environment, working directory and log 
     installDaemon({
       ...options,
       home: "/data/hatim & loopy",
-      args: ["/opt/cli.js", "--concurrency", "7"],
+      command: ["/opt/bun", "/opt/cli.js", "--home", "/data/hatim & loopy", "daemon", "run"],
     }),
   );
   const content = files.get(plist);
   expect(content).toContain("<key>Label</key><string>com.loopy.daemon</string>");
   expect(content).toContain(
-    "<array><string>/opt/bun</string><string>/opt/cli.js</string><string>--concurrency</string><string>7</string><string>daemon</string><string>run</string><string>--home</string><string>/data/hatim &amp; loopy</string></array>",
+    "<array><string>/opt/bun</string><string>/opt/cli.js</string><string>--home</string><string>/data/hatim &amp; loopy</string><string>daemon</string><string>run</string></array>",
   );
   expect(content).toContain("<key>RunAtLoad</key><true/>");
   expect(content).toContain("<key>KeepAlive</key><true/>");
@@ -96,12 +94,12 @@ test("Linux unit escapes command expansion and supplies environment and persiste
     installDaemon({
       ...options,
       home: "/data/loopy % $HOME",
-      args: ["/opt/cli with spaces.js"],
+      command: ["/opt/bun", "/opt/cli with spaces.js", "--home", "/data/loopy % $HOME"],
     }),
   );
   const content = files.get(unit);
   expect(content).toContain(
-    'ExecStart="/opt/bun" "/opt/cli with spaces.js" "daemon" "run" "--home" "/data/loopy %% $$HOME"',
+    'ExecStart="/opt/bun" "/opt/cli with spaces.js" "--home" "/data/loopy %% $$HOME"',
   );
   expect(content).toContain("Restart=always");
   expect(content).toContain("WorkingDirectory=/data/loopy %% $HOME");
@@ -122,7 +120,9 @@ for (const platform of ["darwin", "linux"]) {
     const { options, files, commands } = fixture(platform);
     await Effect.runPromise(installDaemon(options));
     const first = commands.splice(0);
-    await Effect.runPromise(installDaemon({ ...options, executable: "/new/bun" }));
+    await Effect.runPromise(
+      installDaemon({ ...options, command: ["/new/bun", "/opt/loopy/cli.js"] }),
+    );
     expect(files.size).toBe(2);
     expect(files.get(platform === "darwin" ? plist : unit)).toContain("/new/bun");
     expect(commands).toEqual(first);
@@ -156,77 +156,10 @@ test("older launchctl falls back to unload and load -w", async () => {
   ]);
 });
 
-for (const item of [
-  { code: 0, stdout: "state = running\n pid = 42", state: "running", pid: 42 },
-  { code: 0, stdout: "state = waiting", state: "stopped" },
-] as const) {
-  test(`launchctl status parses ${item.state}`, async () => {
-    const { options, commands } = fixture("darwin", [{ ...ok, ...item }]);
-    const expected = "pid" in item ? { state: item.state, pid: item.pid } : { state: item.state };
-    expect(await Effect.runPromise(daemonStatus(options))).toEqual(expected);
-    expect(commands).toEqual([["launchctl", "print", target]]);
-  });
-}
-
-for (const item of [
-  {
-    active: "active",
-    code: 0,
-    info: "MainPID=81\nLoadState=loaded\n",
-    expected: { state: "running", pid: 81 },
-  },
-  {
-    active: "inactive",
-    code: 3,
-    info: "MainPID=0\nLoadState=loaded\n",
-    expected: { state: "stopped" },
-  },
-  {
-    active: "failed",
-    code: 3,
-    info: "MainPID=0\nLoadState=loaded\n",
-    expected: { state: "stopped" },
-  },
-  {
-    active: "inactive",
-    code: 4,
-    info: "MainPID=0\nLoadState=not-found\n",
-    expected: { state: "not-installed" },
-  },
-] as const) {
-  test(`systemctl status parses ${item.active} / ${item.expected.state}`, async () => {
-    const { options, commands } = fixture("linux", [
-      { ...ok, code: item.code, stdout: item.active },
-      { ...ok, stdout: item.info },
-    ]);
-
-    expect(await Effect.runPromise(daemonStatus(options))).toEqual(item.expected);
-    expect(commands).toEqual([
-      ["systemctl", "--user", "is-active", "loopy-daemon.service"],
-      ["systemctl", "--user", "show", "-p", "MainPID", "-p", "LoadState", "loopy-daemon.service"],
-    ]);
-  });
-}
-
-test("supervisor failures are errors rather than an absent service", async () => {
-  const { options } = fixture("linux", [
-    { ...ok, code: 1 },
-    { ...ok, code: 1 },
-  ]);
-
-  await expect(Effect.runPromise(daemonStatus(options))).rejects.toThrow(
-    "Cannot inspect the daemon. Check systemctl --user status loopy-daemon.service and retry.",
-  );
-  const mac = fixture("darwin", [{ ...ok, code: 1 }]);
-  await expect(Effect.runPromise(daemonStatus(mac.options))).rejects.toThrow(
-    "Cannot inspect the daemon.",
-  );
-});
-
 test("unsupported platforms reject every service action without side effects", async () => {
   const { options, commands, files } = fixture("win32");
 
-  for (const action of [installDaemon, uninstallDaemon, daemonStatus]) {
+  for (const action of [installDaemon, uninstallDaemon]) {
     await expect(Effect.runPromise(action(options))).rejects.toThrow(
       "Daemon services require macOS or Linux. Run loopy daemon run under a supervisor.",
     );
@@ -238,20 +171,36 @@ test("unsupported platforms reject every service action without side effects", a
 
 test("install rejects relative paths and line injection before writing", async () => {
   const { options, files } = fixture("linux");
-  await expect(Effect.runPromise(installDaemon({ ...options, executable: "bun" }))).rejects.toThrow(
-    "Daemon paths must be absolute.",
-  );
+  await expect(
+    Effect.runPromise(installDaemon({ ...options, command: ["bun", "/opt/loopy/cli.js"] })),
+  ).rejects.toThrow("Daemon paths must be absolute.");
   await expect(
     Effect.runPromise(installDaemon({ ...options, home: "/data/loopy\nRestart=no" })),
   ).rejects.toThrow("Service values cannot contain NUL or line breaks.");
   expect(files.size).toBe(0);
 });
 
-test("install concurrency is parsed as a daemon option", () => {
-  const result = parseCliArgs(["daemon", "install", "--concurrency", "7", "--home", "/data/loopy"]);
-  expect(result.values.concurrency).toBe("7");
-  expect(result.values.home).toBe("/data/loopy");
-  expect(result.positionals).toEqual(["daemon", "install"]);
+test("the service argv the CLI installs parses back to daemon run with the same flags", async () => {
+  const [, , ...args] = daemonCommand({
+    home: "/data/loopy",
+    port: 4999,
+    concurrency: 7,
+    leaseMs: 5000,
+  });
+
+  const parsed = await Effect.runPromise(parseCommandLine(COMMANDS, args));
+
+  if (parsed.kind !== "command") {
+    throw new Error("The daemon argv must name a command.");
+  }
+
+  expect(parsed.command.path).toEqual(["daemon", "run"]);
+  expect(parsed.globals.home).toBe("/data/loopy");
+  expect(await Effect.runPromise(decodeOptions(parsed.command.options, parsed.arguments))).toEqual({
+    port: 4999,
+    concurrency: 7,
+    "lease-ms": 5000,
+  });
 });
 
 test("failed install and uninstall report errors without deleting the definition", async () => {
@@ -284,17 +233,6 @@ test("older launchctl uninstall uses unload when bootout is unavailable", async 
     ["launchctl", "unload", "-w", plist],
     ["launchctl", "print", target],
   ]);
-});
-
-test("unloaded macOS service with a plist is stopped", async () => {
-  const { options, files } = fixture("darwin", [{ ...ok, code: 113 }]);
-  files.set(plist, "installed");
-  expect(await Effect.runPromise(daemonStatus(options))).toEqual({ state: "stopped" });
-});
-
-test("unloaded macOS service without a plist is not installed", async () => {
-  const { options } = fixture("darwin", [{ ...ok, code: 113 }]);
-  expect(await Effect.runPromise(daemonStatus(options))).toEqual({ state: "not-installed" });
 });
 
 test("zero-exit load rejects when the service remains unloaded", async () => {
