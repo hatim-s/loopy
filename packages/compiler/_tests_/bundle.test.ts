@@ -3,134 +3,11 @@ import { rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { type Json, validateGraph } from "@loopy/core";
 import { bundleResult } from "@loopy/runtime/executor/protocol";
-import { Effect } from "effect";
-import { compiledBody } from "../../runtime/_tests_/fixtures/compiled";
-import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
-import { onCleanup } from "../../runtime/_tests_/fixtures/test-scope";
-import { compile as compileEffect } from "../src";
-import { evaluate as evaluateEffect } from "../src/evaluate";
+import { compile, project } from "./fixtures/compile";
 
 // The executor's own decoder, so these tests read bundle stdout exactly as a run does.
 const decodeStdout = (stdout: string) =>
   bundleResult({ stdout, stderr: "", exitCode: 0 }, (text) => text);
-
-const fixtureRoot = resolve(import.meta.dir, "fixtures");
-
-async function project(source: string) {
-  const root = qualityTestRoot("compile-test");
-  const file = join(root, "entry.ts");
-  await writeFile(file, source);
-  await writeFile(join(root, "not-function.ts"), "export default 1;");
-
-  return { root, file };
-}
-
-const rejected = {
-  "options-identifier": "options_not_literal",
-  "options-wrapped": "module_default",
-  "parser-inline": "module_path",
-  "parameter-computed": "invalid_binding",
-  "parameter-default": "invalid_binding",
-  "parameter-rest": "invalid_binding",
-  "unknown-sdk-call": "unknown_sdk_call",
-  "parser-effect": "module_path",
-  "default-export": "default_loopy",
-  "duplicate-label": "duplicate_label",
-  enum: "module_effect",
-  namespace: "module_effect",
-  async: "synchronous_run",
-  await: "await_forbidden",
-  if: "forbidden_statement",
-  for: "forbidden_statement",
-  while: "forbidden_statement",
-  do: "forbidden_statement",
-  switch: "forbidden_statement",
-  exception: "forbidden_statement",
-  template: "template_reference",
-  call: "forbidden_call",
-  mutable: "forbidden_statement",
-  captured: "module_effect",
-  label: "literal_required",
-  name: "literal_required",
-  key: "literal_key",
-  "module-literal": "module_path",
-  "module-relative": "module_path",
-  "module-default": "module_default",
-  "inline-function": "invalid_callback",
-  spread: "literal_key",
-  mutation: "forbidden_expression",
-  constructor: "synchronous_run",
-  "get-key": "literal_required",
-} as const;
-
-for (const [name, code] of Object.entries(rejected)) {
-  test(`restrict rejects ${name} with a located stable diagnostic`, async () => {
-    const { root, file } = await project(
-      await Bun.file(join(fixtureRoot, "rejected", `${name}.txt`)).text(),
-    );
-
-    const result = await compile(file);
-    expect(result.ok).toBe(false);
-
-    if (result.ok) {
-      throw new Error("Expected compiler diagnostics.");
-    }
-
-    expect(result.diagnostics).toContainEqual({
-      code,
-      message: expect.any(String),
-      file: code === "module_default" ? join(root, "not-function.ts") : file,
-      line: expect.any(Number),
-      column: expect.any(Number),
-    });
-    expect(result.diagnostics.every((value) => value.line > 0 && value.column > 0)).toBe(true);
-  });
-}
-
-test("restrictions traverse imported author modules before any author evaluation", async () => {
-  const { root, file } = await project(
-    'import {loopy} from "loopy"; import {value} from "./effect.ts"; export default loopy("safe", {input:{},run:()=>value});',
-  );
-
-  const marker = join(root, "ran");
-  await writeFile(
-    join(root, "effect.ts"),
-    `Bun.write(${JSON.stringify(marker)}, "effect"); export const value=1;`,
-  );
-  const result = await compile(file);
-  expect(result.ok).toBe(false);
-
-  if (result.ok) {
-    throw new Error("Expected compiler diagnostics.");
-  }
-
-  expect(result.diagnostics).toContainEqual(
-    expect.objectContaining({ code: "module_effect", file: join(root, "effect.ts") }),
-  );
-  expect(await Bun.file(marker).exists()).toBe(false);
-});
-
-test("subgraphs expand in each author module's directory", async () => {
-  const { root, file } = await project(
-    'import {loopy} from "loopy"; import {child} from "./child/graph.ts"; export default loopy("scoped", {input:{},run:()=>child()});',
-  );
-
-  await Bun.write(
-    join(root, "child/graph.ts"),
-    `import {code,subgraph} from "loopy"; export const child=subgraph("child",()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"}));`,
-  );
-  await Bun.write(join(root, "child/value.ts"), "export default () => 1;");
-  const result = await compile(file);
-
-  if (!result.ok) {
-    throw new Error(JSON.stringify(result.diagnostics));
-  }
-
-  expect(result.graph.nodes[0]).toMatchObject({
-    kind: "code",
-    module: { path: "child/value.ts" },
-  });
-});
 
 test("the same loopy compiled from two checkout locations has one revision", async () => {
   const compileCopy = async () => {
@@ -155,51 +32,6 @@ test("the same loopy compiled from two checkout locations has one revision", asy
     first.graph.nodes.flatMap((node) => (node.kind === "code" ? [node.module.path] : [])),
   ).toEqual(["lib/value.ts"]);
 });
-
-for (const effect of ["network", "write"]) {
-  test(`evaluation sandbox denies ${effect} even if AST validation is bypassed`, async () => {
-    const { root, file } = await project("export default {};");
-    const outside = `${root}-outside`;
-    onCleanup(() => rm(outside, { force: true }));
-
-    const server = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: () => new Response("reachable"),
-    });
-
-    const graph = JSON.stringify((await compiledBody("isolated", file)).graph);
-
-    const source =
-      effect === "network"
-        ? `await fetch(${JSON.stringify(server.url.toString())}); export default ${graph};`
-        : `await Bun.write(${JSON.stringify(outside)}, "escaped"); export default ${graph};`;
-
-    await writeFile(file, source);
-
-    try {
-      await expect(evaluate(file, [{ file, evaluated: source }])).rejects.toMatchObject({
-        _tag: "AuthorDiagnostics",
-        diagnostics: [{ code: "evaluation_failed" }],
-      });
-    } finally {
-      await server.stop(true);
-    }
-
-    expect(await Bun.file(outside).exists()).toBe(false);
-  });
-}
-
-test("evaluation has a hard ten second timeout", async () => {
-  const { file } = await project("while(true){} export default {};");
-  const source = await Bun.file(file).text();
-  const started = performance.now();
-  await expect(evaluate(file, [{ file, evaluated: source }])).rejects.toMatchObject({
-    _tag: "AuthorDiagnostics",
-    diagnostics: [{ code: "evaluation_failed", message: "Command timed out after 10000 ms." }],
-  });
-  expect(performance.now() - started).toBeLessThan(12_000);
-}, 15_000);
 
 test("bundle hashes are stable, code changes alter revisions and whitespace does not", async () => {
   const { root, file } = await project(
@@ -375,48 +207,6 @@ test("parser and code bundles execute and return output", async () => {
   });
 });
 
-for (const name of [
-  "import-meta-helper",
-  "require-helper",
-  "transitive-helper",
-  "absolute-helper",
-]) {
-  test(`code modules reject ${name} with a located dynamic_code diagnostic`, async () => {
-    const { root, file } = await project(
-      'import {loopy,code} from "loopy";export default loopy("dynamic",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
-    );
-
-    await writeFile(
-      join(root, "code.ts"),
-      (await Bun.file(join(fixtureRoot, "modules", `${name}.txt`)).text()).replace(
-        "__HELPER__",
-        join(root, "helper.ts"),
-      ),
-    );
-    await writeFile(
-      join(root, "helper.ts"),
-      'export const value=()=>import(import.meta.dir + "/escaped.ts");',
-    );
-    const result = await compile(file);
-    expect(result).toMatchObject({
-      ok: false,
-      diagnostics: [
-        expect.objectContaining({
-          code: "dynamic_code",
-          file: join(
-            root,
-            name.endsWith("transitive-helper") || name === "absolute-helper"
-              ? "helper.ts"
-              : "code.ts",
-          ),
-          line: 1,
-          column: expect.any(Number),
-        }),
-      ],
-    });
-  });
-}
-
 test("literal dynamic imports are bundled and alter the pinned revision", async () => {
   const { root, file } = await project(
     'import {loopy,code} from "loopy";export default loopy("literal",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
@@ -445,50 +235,6 @@ test("literal dynamic imports are bundled and alter the pinned revision", async 
 
   expect(await run()).toBe(1);
 });
-
-test("parser modules reject dynamic imports in their local dependencies", async () => {
-  const { root, file } = await project(
-    'import {loopy,defineCommand} from "loopy";const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"number"});export default loopy("parser",{input:{},run:()=>cmd()});',
-  );
-
-  await writeFile(
-    join(root, "parse.ts"),
-    'import {value} from "./helper.ts";export default ()=>value();',
-  );
-  await writeFile(
-    join(root, "helper.ts"),
-    'export const value=()=>import(import.meta.dir+"/escaped.ts");',
-  );
-  const result = await compile(file);
-  expect(result).toMatchObject({
-    ok: false,
-    diagnostics: [expect.objectContaining({ code: "dynamic_code", file: join(root, "helper.ts") })],
-  });
-});
-
-for (const wrapper of [
-  "({options} as const)",
-  "({options} satisfies object)",
-  "({options})!",
-  "((({options})))",
-]) {
-  test(`options retain module validation through ${wrapper}`, async () => {
-    const options = wrapper.replace(
-      "{options}",
-      '{in:{},out:{kind:"value",type:"number"},module:"./not-function.ts"}',
-    );
-
-    const { file } = await project(
-      `import {loopy,code} from "loopy";export default loopy("wrapped",{input:{},run:()=>code("x",${options})});`,
-    );
-
-    const result = await compile(file);
-    expect(result).toMatchObject({
-      ok: false,
-      diagnostics: [expect.objectContaining({ code: "module_default" })],
-    });
-  });
-}
 
 for (const expression of [
   "import(path)",
@@ -600,90 +346,4 @@ test("node_modules dependencies with literal dynamic imports bundle their helper
   await rm(join(root, "node_modules"), { recursive: true });
   const { default: run }: { default: () => Promise<number> } = await import(saved);
   expect(await run()).toBe(42);
-});
-
-for (const specifier of ["@loopy/sdk", "loopy/graph"]) {
-  test(`author builders reject ${specifier}`, async () => {
-    const { file } = await project(
-      `import {loopy} from ${JSON.stringify(specifier)}; export default loopy("private-sdk", {input: {}, run: () => 1});`,
-    );
-
-    const result = await compile(file);
-    expect(result).toMatchObject({
-      ok: false,
-      diagnostics: expect.arrayContaining([expect.objectContaining({ code: "module_import" })]),
-    });
-  });
-}
-
-function compile(path: string) {
-  return Effect.runPromise(compileEffect(path));
-}
-
-function evaluate(...args: Parameters<typeof evaluateEffect>) {
-  return Effect.runPromise(evaluateEffect(...args));
-}
-
-for (const specifier of ["./missing", "not-a-real-loopy-fixture-package"]) {
-  test(`unresolved author import ${specifier} remains diagnostic data`, async () => {
-    const { root, file } = await project(
-      'import {loopy,code} from "loopy";export default loopy("broken",{input:{},run:()=>code("x",{in:{},out:{kind:"value",type:"number"},module:"./code.ts"})});',
-    );
-
-    await writeFile(
-      join(root, "code.ts"),
-      `import {value} from ${JSON.stringify(specifier)};export default ()=>value;`,
-    );
-    const result = await compile(file);
-    expect(result).toMatchObject({
-      ok: false,
-      diagnostics: [
-        expect.objectContaining({
-          code: specifier.startsWith(".") ? "source_error" : "bundle_failed",
-          message: expect.stringContaining(specifier.replace("./", "")),
-        }),
-      ],
-    });
-  });
-}
-
-test("a missing builder dependency remains a source diagnostic", async () => {
-  const { file } = await project('import {missing} from "./missing";export default missing;');
-  expect(await compile(file)).toMatchObject({
-    ok: false,
-    diagnostics: [
-      expect.objectContaining({
-        code: "source_error",
-        message: expect.stringContaining("missing"),
-      }),
-    ],
-  });
-});
-
-for (const [name, source, message] of [
-  ["invalid graph", "export default null;", "Expected object"],
-  ["output overflow", 'export default "x".repeat(17_000_000);', "output exceeded"],
-] as const) {
-  test(`evaluator ${name} stays an author failure`, async () => {
-    const { file } = await project(source);
-    await expect(evaluate(file, [{ file, evaluated: source }])).rejects.toMatchObject({
-      _tag: "AuthorDiagnostics",
-      diagnostics: [{ code: "evaluation_failed", message: expect.stringContaining(message) }],
-    });
-  });
-}
-
-test("a label key is ordinary data outside command options, and label flags compile", async () => {
-  const { root, file } = await project(
-    'import {loopy,code,defineCommand} from "loopy"; const gh=defineCommand({key:"gh.issue",program:"gh",flags:{label:{cli:"--label",kind:"string",repeatable:true}}}); export default loopy("labels", {input:{name:"string"},run:({input})=>{gh({flags:{label:[input.get("name")]}},{label:"tag"});return code("step",{in:{label:input.get("name")},out:{kind:"value",type:"string"},module:"./step.ts"});}});',
-  );
-
-  await writeFile(join(root, "step.ts"), "export default (input) => input.label;");
-  const result = await compile(file);
-
-  if (!result.ok) {
-    throw new Error(JSON.stringify(result.diagnostics));
-  }
-
-  expect(result.graph.nodes.slice(0, 2).map((node) => node.label)).toEqual(["tag", "step"]);
 });
