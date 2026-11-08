@@ -738,6 +738,17 @@ test("state roots reject symlinks and public binding; live root ownership is exc
   );
 });
 
+test("a lock file from an older sandbox version stops startup with its cleanup steps", async () => {
+  const config = await fixture();
+  const lock = stateLayout(config.stateRoot).lock;
+  await writeFile(lock, JSON.stringify({ pid: 999_999, nonce: "old" }));
+
+  await expect(openAttempts(config, dependencies(config, succeedingBackend))).rejects.toThrow(
+    `Lock file '${lock}' was written by an older sandbox version.`,
+  );
+  expect(await readFile(lock, "utf8")).toBe(JSON.stringify({ pid: 999_999, nonce: "old" }));
+});
+
 test("loopback server serves health and an authenticated asynchronous attempt", async () => {
   const config = await fixture();
   const service = await openSandbox(config, dependencies(config, succeedingBackend));

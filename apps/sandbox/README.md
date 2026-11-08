@@ -109,6 +109,8 @@ The support to delete together is:
 - The inline branches in `resolveResult` (`src/receipt-view.ts`) and `inlineRef` (`src/filesystem/authority.ts`).
 - The tests that write flat or inline receipts: the retained-receipt case in `packages/loopy/_tests_/sandbox-authority-contract.test.ts` and the historical scan in `packages/loopy/_tests_/sandbox-authority-publication.test.ts`.
 
+A `service.lock` written by an older sandbox holds JSON `{pid, nonce}` instead of the shared `pid nonce` format. Startup does not convert it: `rejectPreviousLock` in `src/state-root.ts` stops with the lock path and asks the operator to stop any sandbox on that root, delete the file and start again. Remove that check and its case in `packages/loopy/_tests_/cloud-sandbox.test.ts` once no retained root carries an old lock.
+
 ## Tests
 
 See [AGENTS.md](../../AGENTS.md#tests-and-isolation) for test roots and fixture isolation. Run the boundary tests without Docker:
