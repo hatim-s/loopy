@@ -1,7 +1,7 @@
-import { type CommandDescriptor, descriptorCommand } from "../../descriptor";
+import { builtin } from "../../graph/nodes/command";
 import { parseJq, parseSha256, parseWc } from "../parse/text";
 
-export const base64Descriptor = {
+const base64Descriptor = {
   namespace: "text",
   name: "base64",
   program: "base64",
@@ -21,25 +21,26 @@ export const base64Descriptor = {
       },
     },
   },
-} as const satisfies CommandDescriptor;
+} as const;
 
 export const format = {
-  wc: descriptorCommand({
-    parse: parseWc,
-    exclude: ["lines", "words", "bytes", "characters"],
-    preset: { flags: {} },
-    namespace: "text",
-    name: "wc",
-    program: "wc",
-    flags: {
-      lines: { cli: "-l", kind: "boolean" },
-      words: { cli: "-w", kind: "boolean" },
-      bytes: { cli: "-c", kind: "boolean" },
-      characters: { cli: "-m", kind: "boolean" },
+  wc: builtin(
+    {
+      exclude: ["lines", "words", "bytes", "characters"],
+      namespace: "text",
+      name: "wc",
+      program: "wc",
+      flags: {
+        lines: { cli: "-l", kind: "boolean" },
+        words: { cli: "-w", kind: "boolean" },
+        bytes: { cli: "-c", kind: "boolean" },
+        characters: { cli: "-m", kind: "boolean" },
+      },
+      positionals: [{ name: "paths", optional: true, variadic: true }],
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-  tr: descriptorCommand({
+    { parse: parseWc, out: { kind: "value", type: "json[]" } },
+  ),
+  tr: builtin({
     namespace: "text",
     name: "tr",
     program: "tr",
@@ -50,7 +51,7 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  diff: descriptorCommand({
+  diff: builtin({
     namespace: "text",
     name: "diff",
     program: "diff",
@@ -62,27 +63,29 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  jq: descriptorCommand({
-    parse: parseJq,
-    exclude: ["rawOutput", "rawOutput0"],
-    preset: { flags: { compactOutput: true } },
-    namespace: "text",
-    name: "jq",
-    program: "jq",
-    flags: {
-      rawOutput0: { cli: "--raw-output0", kind: "boolean" },
-      rawOutput: { cli: "-r", kind: "boolean" },
-      compactOutput: { cli: "-c", kind: "boolean" },
-      slurp: { cli: "-s", kind: "boolean" },
-      rawInput: { cli: "-R", kind: "boolean" },
-      arg: { cli: "--arg", kind: "string", pairs: true },
-      argjson: { cli: "--argjson", kind: "string", pairs: true },
-      nullInput: { cli: "-n", kind: "boolean" },
-      exitStatus: { cli: "-e", kind: "boolean" },
+  jq: builtin(
+    {
+      exclude: ["rawOutput", "rawOutput0"],
+      preset: { flags: { compactOutput: true } },
+      namespace: "text",
+      name: "jq",
+      program: "jq",
+      flags: {
+        rawOutput0: { cli: "--raw-output0", kind: "boolean" },
+        rawOutput: { cli: "-r", kind: "boolean" },
+        compactOutput: { cli: "-c", kind: "boolean" },
+        slurp: { cli: "-s", kind: "boolean" },
+        rawInput: { cli: "-R", kind: "boolean" },
+        arg: { cli: "--arg", kind: "string", pairs: true },
+        argjson: { cli: "--argjson", kind: "string", pairs: true },
+        nullInput: { cli: "-n", kind: "boolean" },
+        exitStatus: { cli: "-e", kind: "boolean" },
+      },
+      positionals: [{ name: "paths", optional: true, variadic: true }],
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-  yq: descriptorCommand({
+    { parse: parseJq, out: { kind: "value", type: "json" } },
+  ),
+  yq: builtin({
     namespace: "text",
     name: "yq",
     program: "yq",
@@ -93,24 +96,25 @@ export const format = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  base64: descriptorCommand(base64Descriptor),
-  sha256sum: descriptorCommand({
-    parse: parseSha256,
-    exclude: ["check"],
-    preset: { flags: {} },
-    namespace: "text",
-    name: "sha256sum",
-    program: "sha256sum",
-    flags: {
-      check: { cli: "-c", kind: "boolean" },
-      binary: { cli: "-b", kind: "boolean" },
-    },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-    variants: {
-      darwin: {
-        program: "shasum",
-        path: ["-a", "256"],
+  base64: builtin(base64Descriptor),
+  sha256sum: builtin(
+    {
+      exclude: ["check"],
+      namespace: "text",
+      name: "sha256sum",
+      program: "sha256sum",
+      flags: {
+        check: { cli: "-c", kind: "boolean" },
+        binary: { cli: "-b", kind: "boolean" },
+      },
+      positionals: [{ name: "paths", optional: true, variadic: true }],
+      variants: {
+        darwin: {
+          program: "shasum",
+          path: ["-a", "256"],
+        },
       },
     },
-  }),
+    { parse: parseSha256, out: { kind: "value", type: "json[]" } },
+  ),
 };

@@ -1,8 +1,8 @@
-import { descriptorCommand } from "../../descriptor";
+import { builtin } from "../../graph/nodes/command";
 import { parseStashList } from "../parse/git";
 
 export const stash = {
-  push: descriptorCommand({
+  push: builtin({
     namespace: "git",
     name: "stash.push",
     program: "git",
@@ -15,7 +15,7 @@ export const stash = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  pop: descriptorCommand({
+  pop: builtin({
     namespace: "git",
     name: "stash.pop",
     program: "git",
@@ -25,16 +25,18 @@ export const stash = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  list: descriptorCommand({
-    parse: parseStashList,
-    preset: { flags: { format: "%gd%x00%H%x00%gs" } },
-    namespace: "git",
-    name: "stash.list",
-    program: "git",
-    path: ["stash", "list"],
-    flags: {
-      format: { cli: "--format", kind: "string" },
+  list: builtin(
+    {
+      preset: { flags: { format: "%gd%x00%H%x00%gs" } },
+      namespace: "git",
+      name: "stash.list",
+      program: "git",
+      path: ["stash", "list"],
+      flags: {
+        format: { cli: "--format", kind: "string" },
+      },
+      style: "equals",
     },
-    style: "equals",
-  }),
+    { parse: parseStashList, out: { kind: "value", type: "json[]" } },
+  ),
 };

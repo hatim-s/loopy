@@ -35,7 +35,7 @@ test("normalized graph metadata and schema do not retain caller-owned arrays or 
   const input = { "limit?": "number" } as const;
   const secrets = ["TOKEN"];
   const schedule = { cron: "0 * * * *" };
-  const { graph } = loopy("test", { input, secrets, schedule, run: ({ input }) => input });
+  const graph = loopy("test", { input, secrets, schedule, run: ({ input }) => input });
   expect(graph.meta).toEqual({
     description: null,
     mode: "sandbox",
@@ -64,14 +64,14 @@ test("graph definitions validate timezones and reject unknown properties", () =>
   ).toThrow("Invalid time zone 'Mars/Olympus'");
   // @ts-expect-error JavaScript callers can pass unknown properties.
   expect(() => loopy("test", { input: {}, typo: true, run: () => null })).toThrow(
-    "Unknown definition property 'typo'",
+    "Loopy definition has an unsupported field 'typo'",
   );
   expect(() =>
     // @ts-expect-error JavaScript callers can pass unknown schedule properties.
     loopy("test", { input: {}, schedule: { cron: "@daily", timezone: "UTC" }, run: () => null }),
-  ).toThrow("Unknown schedule property 'timezone'");
+  ).toThrow("Schedule has an unsupported field 'timezone'");
   expect(
     loopy("test", { input: {}, schedule: { cron: "@daily", tz: "Asia/Kolkata" }, run: () => null })
-      .graph.meta.schedule,
+      .meta.schedule,
   ).toEqual({ cron: "@daily", tz: "Asia/Kolkata" });
 });

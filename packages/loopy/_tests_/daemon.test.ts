@@ -27,7 +27,7 @@ function schedule(overrides: Partial<Schedule> = {}): Schedule {
 const graph = loopy("test", {
   input: { "value?": "number", "scheduled?": "boolean" },
   run: ({ input }) => input,
-}).graph;
+});
 
 const runs = (store: Pick<DashboardReader, "queryRuns">) =>
   store.queryRuns({ limit: 200, now: newRun().createdAt });

@@ -13,7 +13,7 @@ test("an admission denial reloads state and cannot overwrite a newer persisted a
   const graph = loopy("limited", {
     input: {},
     run: () => sh(["true"], { rateLimit: { key: "shared", limit: 1, window: "1m" } }),
-  }).graph;
+  });
 
   const at = newRun().createdAt;
   await Effect.runPromise(store.createRun(newRun()));

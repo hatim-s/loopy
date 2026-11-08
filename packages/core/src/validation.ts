@@ -49,6 +49,19 @@ export function requireOneOf<const Choices extends readonly string[]>(
   return value;
 }
 
+/** Rejects keys the schema does not know, so a typo never silently disappears. */
+export function allowKeys(
+  value: UnknownRecord,
+  location: string,
+  allowed: readonly string[],
+): void {
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) {
+      throw new Error(`${location} has an unsupported field '${key}'.`);
+    }
+  }
+}
+
 /**
  * Sets a key on a record built from untrusted keys without touching the
  * prototype chain. `record[key] = value` with key `__proto__` would.

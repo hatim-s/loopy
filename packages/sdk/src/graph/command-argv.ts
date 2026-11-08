@@ -1,80 +1,27 @@
-import { type CommandFlagSpec, isBoolean, isNumber, isRecord, isString } from "@loopy/core";
+import { type CommandFlagSpec, checkCommandFlags } from "@loopy/core";
 import {
   type CommandDefinition,
   type CommandDescriptor,
+  type CommandOperands,
+  commandKey,
+  type PositionalDefinition,
+  type Prepare,
   parsedFlags,
   platformVariant,
-} from "../define-command";
-import { renderOperands } from "../render-argv";
-import { type AuthorValue, isRef, type RefValue } from "./ref";
-import { refuse } from "./validate";
+} from "../descriptor";
+import { type AuthorValue, RefValue } from "./ref";
 
-type Input = {
-  args?: readonly (string | RefValue)[];
-  revisions?: readonly (string | RefValue)[];
-  paths?: readonly (string | RefValue)[];
-  flags?: Readonly<Record<string, AuthorValue>>;
+export type CommandArguments = CommandOperands<string | RefValue, AuthorValue>;
+
+type RenderedCommand = {
+  key: string;
+  program: string;
+  operands: (string | RefValue)[];
+  flags: Readonly<Record<string, AuthorValue>>;
+  flagSpec: CommandFlagSpec;
+  okExitCodes: readonly number[];
+  parseInput: Record<string, AuthorValue>;
 };
-
-// prepare uses argument counts and flag presence; opaque tokens keep its legacy string API isolated.
-class Preparation {
-  private readonly values = new Map<string, AuthorValue>();
-
-  encode = (value: AuthorValue): AuthorValue => {
-    if (isRef(value) || isString(value)) {
-      const key = `\u0000${this.values.size}\u0000`;
-      this.values.set(key, value);
-
-      return key;
-    }
-
-    if (Array.isArray(value)) {
-      return value.map(this.encode);
-    }
-
-    if (isRecord(value)) {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key, this.encode(item)]),
-      );
-    }
-
-    return value;
-  };
-
-  // BOUNDARY: Legacy descriptor prepare returns RenderInput's unknown flag values.
-  decode(value: unknown): AuthorValue {
-    if (isString(value)) {
-      return this.values.get(value) ?? value;
-    }
-
-    if (value === null || value === undefined || isNumber(value) || isBoolean(value)) {
-      return value;
-    }
-
-    if (Array.isArray(value)) {
-      return value.map((child) => this.decode(child));
-    }
-
-    if (isRecord(value)) {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key, this.decode(item)]),
-      );
-    }
-
-    return refuse("unresolved_ref", "Descriptor preparation must return literals or references.");
-  }
-
-  input(input: Input) {
-    return {
-      args: input.args?.map(this.encode).map(String),
-      revisions: input.revisions?.map(this.encode).map(String),
-      paths: input.paths?.map(this.encode).map(String),
-      flags: Object.fromEntries(
-        Object.entries(input.flags ?? {}).map(([name, value]) => [name, this.encode(value)]),
-      ),
-    };
-  }
-}
 
 function flagSpec(descriptor: CommandDefinition): CommandFlagSpec {
   return {
@@ -86,37 +33,71 @@ function flagSpec(descriptor: CommandDefinition): CommandFlagSpec {
   };
 }
 
-export function commandArgv(
-  original: Omit<CommandDescriptor, "parse">,
-  input: Input,
-  mode: "parsed" | "raw",
+function checkArity(
+  positionals: readonly PositionalDefinition[] | undefined,
+  args: readonly unknown[],
+  key: string,
 ) {
-  const descriptor = platformVariant(original, process.platform);
-  const key = original.key ?? `${original.namespace}.${original.name}`;
-  const codec = new Preparation();
-  const flags = mode === "parsed" ? parsedFlags(descriptor, { flags: input.flags }) : input.flags;
-  const encoded = codec.input({ ...input, flags });
-  const prepared = mode === "parsed" ? (descriptor.prepare?.(encoded) ?? encoded) : encoded;
+  if (!positionals) {
+    return;
+  }
 
-  const operands = {
-    ...descriptor,
-    positionals:
-      mode === "parsed"
-        ? (descriptor.parsedPositionals ?? descriptor.positionals)
-        : descriptor.positionals,
-  };
+  const minimum = positionals.filter((part) => !part.optional).length;
+  const maximum = positionals.some((part) => part.variadic) ? Infinity : positionals.length;
+
+  if (args.length < minimum || args.length > maximum) {
+    const count = maximum === Infinity ? `at least ${minimum}` : `${minimum} to ${maximum}`;
+    throw new Error(
+      `Command '${key}' expected ${count} positional arguments. Supply args with the expected count.`,
+    );
+  }
+}
+
+function operands(descriptor: CommandDefinition, input: CommandArguments) {
+  const args = input.args ?? [];
+
+  if (!descriptor.revisionPaths) {
+    return [...args];
+  }
+
+  return [
+    ...args,
+    ...(input.revisions ?? []),
+    ...(input.paths?.length ? ["--", ...input.paths] : []),
+  ];
+}
+
+/** Validates author operands and flags with the rules the executor applies to resolved values. */
+export function commandArgv(
+  original: CommandDescriptor,
+  input: CommandArguments,
+  mode: { kind: "raw" } | { kind: "parsed"; prepare?: Prepare },
+): RenderedCommand {
+  const descriptor = platformVariant(original, process.platform);
+  const key = commandKey(original);
+  const flags = mode.kind === "parsed" ? parsedFlags(descriptor, input) : (input.flags ?? {});
+  const unprepared = { ...input, flags };
+  const prepared = mode.kind === "parsed" && mode.prepare ? mode.prepare(unprepared) : unprepared;
+  const spec = flagSpec(descriptor);
+
+  checkArity(
+    mode.kind === "parsed"
+      ? (descriptor.parsedPositionals ?? descriptor.positionals)
+      : descriptor.positionals,
+    prepared.args ?? [],
+    key,
+  );
+  checkCommandFlags(spec, prepared.flags ?? {}, (value) => value instanceof RefValue);
 
   return {
-    parseInput: Object.fromEntries(
-      Object.entries(prepared)
-        .filter(([, value]) => value !== undefined)
-        .map(([name, value]) => [name, codec.decode(value)]),
-    ),
+    key,
     program: descriptor.program,
-    argv: renderOperands(operands, prepared, key).map((value) => codec.decode(value)),
-    flagSpec: flagSpec(descriptor),
-    flags: Object.fromEntries(
-      Object.entries(prepared.flags ?? {}).map(([name, value]) => [name, codec.decode(value)]),
+    operands: operands(descriptor, prepared),
+    flags: prepared.flags ?? {},
+    flagSpec: spec,
+    okExitCodes: original.okExitCodes ?? [0],
+    parseInput: Object.fromEntries(
+      Object.entries(prepared).filter(([, value]) => value !== undefined),
     ),
   };
 }

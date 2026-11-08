@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import { graphSchema } from "@loopy/contract";
 import { LocalExecutor } from "@loopy/runtime/executor";
@@ -27,7 +27,7 @@ test("compiled command parser gets result and prepared input, then code runs thr
   );
   await writeFile(
     source,
-    `import {loopy, defineCommand, code, sh} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))};
+    `import {loopy, defineCommand, code, sh} from "loopy";
 const echo = defineCommand({key: "fixture.echo", program: "printf", parse: "./parse.ts", positionals: [{name: "word"}]}, {kind: "record", fields: {word: "string", operand: "string"}});
 export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw"], {label: "raw"}); const raw = echo({args: ["hello"]}); return code("greet", {in: {word: raw.get("word"), operand: raw.get("operand")}, out: {kind: "record", fields: {message: "string"}}, module: "./code.ts"});}});`,
   );

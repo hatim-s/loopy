@@ -125,7 +125,7 @@ test("production Workspace queues runs, loopies and event history during provide
         body.graph = loopy("read-queue", {
           input: {},
           run: () => sh(["synthetic-command-never-executed"]),
-        }).graph;
+        });
         body.revision = await revision(body.graph);
         const saved = await api("/loopies/read-queue", token, { method: "PUT", body });
         expect(saved.status).toBe(200);

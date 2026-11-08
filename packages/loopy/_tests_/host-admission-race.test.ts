@@ -23,7 +23,7 @@ test("admission commits work first and reloads a signal before reducing denial",
             work: () => sh(["true"], { rateLimit: { key: "shared", limit: 1, window: "1m" } }),
             approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
           }),
-      }).graph;
+      });
 
       yield* store.createRun(newRun());
       yield* store.acquireRateLimit("shared", 1, 60_000, newRun().createdAt);

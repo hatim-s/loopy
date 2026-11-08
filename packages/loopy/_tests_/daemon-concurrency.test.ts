@@ -43,7 +43,7 @@ test("six runs respect concurrency two while the loop keeps polling", async () =
             }).pipe(Effect.orDie),
         };
 
-        const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) }).graph;
+        const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) });
 
         const daemon = yield* makeDaemon({
           store,
@@ -107,7 +107,7 @@ test("shutdown drains owned work without aborting its receipt and preserves queu
             }),
         };
 
-        const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) }).graph;
+        const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) });
 
         const daemon = yield* makeDaemon({
           store,

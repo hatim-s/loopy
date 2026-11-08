@@ -4,7 +4,13 @@ import { revision, validateGraph } from "@loopy/core";
 import { Effect } from "effect";
 import { bundle } from "./bundle";
 import { captureSource } from "./capture-source";
-import { type CompilationError, compilerIO, recoverDiagnostics } from "./errors";
+import {
+  AuthorDiagnostics,
+  type CompilationError,
+  compilerIO,
+  graphDiagnostics,
+  recoverDiagnostics,
+} from "./errors";
 import { evaluate } from "./evaluate";
 import { restrict } from "./restrict";
 import type { CompileResult } from "./types";
@@ -13,43 +19,24 @@ export const compile = (path: string): Effect.Effect<CompileResult, CompilationE
   recoverDiagnostics(
     Effect.gen(function* () {
       const file = yield* compilerIO("resolve entry", resolve(path), () => realpath(resolve(path)));
-      const restricted = yield* restrict(file);
-
-      if (!restricted.ok) {
-        return restricted;
-      }
-
-      const graph = yield* evaluate(file, restricted.modules);
-      const diagnostics = validateGraph(graph);
+      const { modules, parsers } = yield* restrict(file);
+      const evaluated = yield* evaluate(file, modules);
+      const diagnostics = validateGraph(evaluated);
 
       if (diagnostics.length > 0) {
-        return {
-          ok: false,
-          diagnostics: diagnostics.map((value) => ({
-            code: value.code,
-            message: value.message,
-            file: value.source?.module ?? file,
-            line: value.source?.line ?? 1,
-            column: value.source?.column ?? 1,
-          })),
-        } satisfies CompileResult;
+        return yield* new AuthorDiagnostics({ diagnostics: graphDiagnostics(diagnostics, file) });
       }
 
-      const bundled = yield* bundle(graph, restricted.parsers, file);
-
-      if (!bundled.ok) {
-        return bundled;
-      }
-
+      const { graph, bundles } = yield* bundle(evaluated, parsers, file);
       const compiledRevision = yield* compilerIO("hash revision", file, () => revision(graph));
 
       return {
         ok: true,
         graph,
-        bundles: bundled.bundles,
+        bundles,
         revision: compiledRevision,
         warnings: graph.warnings,
-        sourceArtifact: captureSource(graph, compiledRevision, restricted.modules),
+        sourceArtifact: captureSource(graph, compiledRevision, modules),
       } satisfies CompileResult;
     }),
     resolve(path),

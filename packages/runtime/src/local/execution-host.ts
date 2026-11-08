@@ -1,5 +1,4 @@
-import type { ExecutionSpec } from "@loopy/core";
-import { renderArgv } from "@loopy/sdk/host";
+import { type ExecutionSpec, renderCommandArgv } from "@loopy/core";
 
 export { CommandExecutionError, type ResolvedCommand } from "./command-error";
 
@@ -16,14 +15,7 @@ export { spawnCaptured } from "./spawn";
 export function renderCommand(
   spec: Extract<ExecutionSpec, { kind: "command" }>,
 ): [string, ...string[]] {
-  const [program, ...args] = spec.argv;
+  const [program = "", ...operands] = spec.argv;
 
-  return [
-    program ?? "",
-    ...renderArgv(
-      { program: program ?? "", ...spec.node.flagSpec },
-      { args, flags: spec.flags },
-      spec.node.key,
-    ),
-  ];
+  return [program, ...renderCommandArgv(spec.node.flagSpec, operands, spec.flags)];
 }

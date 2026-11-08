@@ -19,7 +19,7 @@ function graph(wide = false) {
   const graph = loopy("test", {
     input: {},
     run: () => (wide ? parallel({ first: work, second: work }) : work()),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {

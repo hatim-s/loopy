@@ -1,5 +1,5 @@
 import { Data, Effect } from "effect";
-import { executable } from "./sandbox/paths";
+import { executable } from "./paths";
 
 export class CompilerLauncherError extends Data.TaggedError("CompilerLauncherError")<{
   message: string;

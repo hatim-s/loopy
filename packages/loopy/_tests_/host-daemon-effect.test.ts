@@ -30,7 +30,7 @@ test("daemon wakes for a newly committed run and shuts down owned work", async (
               Effect.andThen(Deferred.await(gate)),
               Effect.as({
                 executor: new FakeExecutor(),
-                graph: loopy("empty", { input: {}, run: () => 42 }).graph,
+                graph: loopy("empty", { input: {}, run: () => 42 }),
               }),
             ),
           revisionFor: () => Effect.succeed("bundle"),

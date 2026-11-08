@@ -33,19 +33,13 @@ async function fixture(definition = "") {
   export default loopy("service", { ${definition} input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
   );
 
-  const {
-    default: definitionValue,
-  }: {
-    default: {
-      graph: Graph;
-    };
-  } = await import(source);
+  const { default: definitionValue }: { default: Graph } = await import(source);
 
   const registry = await Effect.runPromise(Registry.make(home, root));
 
   const body = await compiledBody("service", source, {
-    scope: definitionValue.graph.meta.scope,
-    schedule: definitionValue.graph.meta.schedule ?? null,
+    scope: definitionValue.meta.scope,
+    schedule: definitionValue.meta.schedule ?? null,
     secrets: ["PRIVATE"],
   });
 
@@ -354,7 +348,7 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     revisionFor: () => Effect.succeed("bundle"),
     prepare: () =>
       Effect.succeed({
-        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }).graph,
+        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }),
         executor: new FakeExecutor(),
       }),
   });
@@ -435,7 +429,7 @@ async function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
     },
     prepare: () =>
       Effect.succeed({
-        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }).graph,
+        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }),
         executor: new FakeExecutor(),
       }),
   });

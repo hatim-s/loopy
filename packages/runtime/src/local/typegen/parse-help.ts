@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "@loopy/sdk/host";
+import type { CommandFlag } from "@loopy/core";
+import type { CommandDescriptor, PositionalDefinition } from "@loopy/sdk/host";
 import { identifier } from "./names";
 
 export type ParsedHelp = {
@@ -173,7 +174,7 @@ function descriptionLines(options: string[], index: number): string[] {
   return description;
 }
 
-function flagKind(placeholder: string | undefined): FlagDefinition["kind"] {
+function flagKind(placeholder: string | undefined): CommandFlag["kind"] {
   if (!placeholder) {
     return "boolean";
   }
@@ -181,7 +182,7 @@ function flagKind(placeholder: string | undefined): FlagDefinition["kind"] {
   return NUMERIC_PLACEHOLDER.test(placeholder) ? "number" : "string";
 }
 
-function parseFlagMatch(match: RegExpExecArray, options: string[], index: number): FlagDefinition {
+function parseFlagMatch(match: RegExpExecArray, options: string[], index: number): CommandFlag {
   const cli = match[1] ?? "";
   const placeholder = (match[3] ?? match[4])?.replace(/[<>[\]=]/g, "").toLowerCase();
   const optionalValue = Boolean(match[4] || match[3]?.startsWith("["));
@@ -196,7 +197,7 @@ function parseFlagMatch(match: RegExpExecArray, options: string[], index: number
       ),
   );
 
-  let flag: FlagDefinition = { cli, kind: flagKind(placeholder) };
+  let flag: CommandFlag = { cli, kind: flagKind(placeholder) };
 
   if (repeatable) {
     flag = { ...flag, repeatable: true };
@@ -218,7 +219,7 @@ function parseFlagMatch(match: RegExpExecArray, options: string[], index: number
 }
 
 function parseFlags(lines: string[], warnings: string[]) {
-  const flags: Record<string, FlagDefinition> = {};
+  const flags: Record<string, CommandFlag> = {};
   const optionsSection = section(lines, "Options");
 
   const options = optionsSection.length
@@ -253,7 +254,7 @@ function parseFlags(lines: string[], warnings: string[]) {
   return flags;
 }
 
-function flagName(cli: string, flags: Record<string, FlagDefinition>, warnings: string[]) {
+function flagName(cli: string, flags: Record<string, CommandFlag>, warnings: string[]) {
   if (!cli || cli === "--help" || cli === "--version") {
     return undefined;
   }

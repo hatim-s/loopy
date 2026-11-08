@@ -40,7 +40,7 @@ export const REVIEW = graphView(
         },
       });
     },
-  }).graph,
+  }),
 );
 
 const triage = (version: 1 | 2) =>
@@ -60,7 +60,7 @@ const triage = (version: 1 | 2) =>
 
         return code("reply", { in: { sorted }, out: text, module: "./reply.ts" });
       },
-    }).graph,
+    }),
   );
 
 export const TRIAGE_V1 = triage(1);
@@ -143,5 +143,5 @@ export const RELEASE = graphView(
         () => sh(["rm", "-rf", "dist"], { label: "clean" }),
       );
     },
-  }).graph,
+  }),
 );

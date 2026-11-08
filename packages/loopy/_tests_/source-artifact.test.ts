@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import {
   decodeBoundary,
@@ -17,7 +17,7 @@ import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];
 
-const sdk = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
+const sdk = "loopy";
 
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-source-")));

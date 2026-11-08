@@ -1,5 +1,5 @@
 // Bun folds import.meta.main for virtual entrypoints, so the bundle compares its runtime path.
-export function runnerSource(module: string, kind: "code" | "parser") {
+export function runnerSource(module: string, exportName: string, kind: "code" | "parser") {
   const invocation =
     kind === "code"
       ? "run(input, { workspace: process.cwd(), log })"
@@ -14,7 +14,7 @@ export function runnerSource(module: string, kind: "code" | "parser") {
         console[method] = (...values) => log(values.map(String).join(" "));
       }
     }
-    const {default: run} = await import(${JSON.stringify(module)});
+    const {${exportName}: run} = await import(${JSON.stringify(module)});
     export default run;
     if (main) {
       const input = await Bun.stdin.json();

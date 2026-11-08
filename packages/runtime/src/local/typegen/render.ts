@@ -1,11 +1,12 @@
-import type { CommandDescriptor, FlagDefinition, PositionalDefinition } from "@loopy/sdk/host";
+import type { CommandFlag } from "@loopy/core";
+import type { CommandDescriptor, PositionalDefinition } from "@loopy/sdk/host";
 import { isTypeScriptIdentifier } from "./names";
 
 function key(name: string): string {
   return isTypeScriptIdentifier(name) ? name : JSON.stringify(name);
 }
 
-function descriptorObject(value: FlagDefinition | PositionalDefinition): string {
+function descriptorObject(value: CommandFlag | PositionalDefinition): string {
   return `{ ${Object.entries(value)
     .map(([name, entry]) => `${key(name)}: ${JSON.stringify(entry)}`)
     .join(", ")} }`;

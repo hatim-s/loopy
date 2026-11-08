@@ -34,7 +34,7 @@ function work() {
   return code("work", { in: {}, out: { kind: "value", type: "number" }, module: "./work.ts" });
 }
 
-function compiled(graph = loopy("test", { input: {}, run: work }).graph) {
+function compiled(graph = loopy("test", { input: {}, run: work })) {
   for (const node of graph.nodes) {
     if (node.kind === "code") {
       node.module.bundleHash = "a".repeat(64);
@@ -256,7 +256,7 @@ test("hook waits release ownership and resume from the same persisted store", as
   const graph = loopy("approval", {
     input: {},
     run: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
-  }).graph;
+  });
 
   const f = await fixture(graph);
   expect(await f.turn()).toEqual({ status: "suspended", nextWakeAt: null, cursor: null });
@@ -281,7 +281,7 @@ test("hook waits release ownership and resume from the same persisted store", as
 });
 
 test("sleep returns its deadline and releases ownership until the next alarm", async () => {
-  const f = await fixture(loopy("sleep", { input: {}, run: () => sleep("2s") }).graph);
+  const f = await fixture(loopy("sleep", { input: {}, run: () => sleep("2s") }));
   expect(await f.turn()).toMatchObject({
     status: "suspended",
     nextWakeAt: "2026-10-16T00:00:02.000Z",
@@ -300,7 +300,7 @@ test("a waiting sibling does not surrender a retry's lease or concurrency slot",
           work,
           approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
         }),
-    }).graph,
+    }),
   );
 
   const f = await fixture(graph);
@@ -321,7 +321,7 @@ test("small budgets preserve all dispatches and entropy samples across turns", a
     loopy("bounded", {
       input: {},
       run: () => parallel({ one: work, two: work, id: uuid, value: random }),
-    }).graph,
+    }),
   );
 
   const f = await fixture(graph);
@@ -356,7 +356,7 @@ test("failed admission consumes quota without creating a new attempt or releasin
   const graph = loopy("limited-admission", {
     input: {},
     run: () => sh(["echo", "ok"], { rateLimit: { key: "shared", limit: 1, window: "1m" } }),
-  }).graph;
+  });
 
   const f = await fixture(graph);
   let admissions = 0;
@@ -391,7 +391,7 @@ test("rate limited dispatch retains the attempt and bounds the next alarm by the
   const graph: Graph = loopy("limited", {
     input: {},
     run: () => sh(["echo", "ok"], { rateLimit: { key: "shared", limit: 1, window: "1m" } }),
-  }).graph;
+  });
 
   const f = await fixture(graph);
   await f.run(f.store.acquireRateLimit("shared", 1, 60_000, newRun().createdAt));
@@ -411,8 +411,7 @@ test("rate limited dispatch retains the attempt and bounds the next alarm by the
 test("wide started graphs poll fairly without an immediate-alarm loop", async () => {
   const f = await fixture(
     compiled(
-      loopy("wide", { input: {}, run: () => parallel({ first: work, second: work, third: work }) })
-        .graph,
+      loopy("wide", { input: {}, run: () => parallel({ first: work, second: work, third: work }) }),
     ),
   );
 
@@ -460,7 +459,7 @@ test("interrupted suspension releases ownership when the same session resumes", 
   const graph = loopy("wait", {
     input: {},
     run: () => wait("approval", { payload: { kind: "value", type: "boolean" } }),
-  }).graph;
+  });
 
   const f = await fixture(graph, new InterruptedReleaseStore());
   await expect(f.turn()).rejects.toThrow("Release interrupted.");

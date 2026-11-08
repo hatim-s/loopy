@@ -7,14 +7,13 @@ import {
   type InputValidation,
   type Node,
   type NodeId,
-  type NodeKind,
   nodeNames,
   type OutSchema,
   type RecordSpec,
   type RefId,
 } from "@loopy/core";
 import { type AuthorValue, REF, type Ref, Reference, type RefValue, serialize } from "./ref";
-import { refuse, validate, validateLabel } from "./validate";
+import { refuse, validateLabel } from "./validate";
 
 type Tail = { id: NodeId; kind: "next" | "join" };
 
@@ -31,6 +30,19 @@ type NodeData = Node extends infer N
     ? Omit<N, "id" | "scope" | "label">
     : never
   : never;
+
+type ControlKind = "branch" | "switch" | "map" | "parallel" | "finally" | "rescue";
+
+type ControlArm = {
+  name: string;
+  run: () => AuthorValue;
+  edge: Exclude<Edge["kind"], "join">;
+};
+
+type Control = {
+  arms: readonly ControlArm[];
+  node: (entry: (arm: string) => NodeId) => Extract<NodeData, { kind: ControlKind }>;
+};
 
 function isNodeId(value: string): value is NodeId {
   return value.length > 0;
@@ -70,8 +82,11 @@ export function currentBuilder(): GraphBuilder {
   );
 }
 
+export function retryPolicy(retry?: Partial<GraphRetry>): GraphRetry {
+  return { attempts: 3, retryOnExit: false, ...retry };
+}
+
 export class GraphBuilder {
-  inputValidation?: InputValidation;
   readonly nodes: Node[] = [];
   readonly edges: Edge[] = [];
   readonly frames: Frame[] = [frame(null)];
@@ -82,6 +97,7 @@ export class GraphBuilder {
     readonly name: string,
     readonly input: RecordSpec,
     readonly meta: GraphMeta,
+    readonly inputValidation: InputValidation | undefined,
   ) {
     Object.keys(input).forEach(validateLabel);
   }
@@ -96,13 +112,11 @@ export class GraphBuilder {
     return value;
   }
 
-  // BOUNDARY: Synchronous author evaluation owns the module-level activation until it returns.
   run<T>(callback: () => T): T {
     if (activation.builder) {
       refuse("inactive_builder", "Finish the active builder before starting another loopy.");
     }
 
-    // Construction is synchronous; one active builder also catches accidental nested builds.
     activation.builder = this;
 
     try {
@@ -113,7 +127,6 @@ export class GraphBuilder {
   }
 
   expand<T>(label: string, callback: () => T): T {
-    validateLabel(label);
     const scope = this.scope;
     const labels = scope.labels;
     scope.labels = new Set();
@@ -127,8 +140,7 @@ export class GraphBuilder {
     }
   }
 
-  // PR 3 checks label literals in the AST; construction accepts the already typed string.
-  allocate(kind: NodeKind, label: string | null, fallback: string = kind) {
+  allocate(label: string | null, fallback: string) {
     if (label !== null) {
       validateLabel(label);
     }
@@ -151,7 +163,7 @@ export class GraphBuilder {
   }
 
   add(data: NodeData, label: string | null = null) {
-    const base = this.allocate(data.kind, label, data.kind === "command" ? data.key : data.kind);
+    const base = this.allocate(label, data.kind === "command" ? data.key : data.kind);
     const node = { ...base, ...data };
     this.record(node);
 
@@ -174,11 +186,6 @@ export class GraphBuilder {
     return bindingId(`${owner}:${name}`);
   }
 
-  caseEdge(from: NodeId, to: NodeId, label: string) {
-    validateLabel(label);
-    this.edges.push({ from, to, kind: "case", label });
-  }
-
   ref<T, Fields = never>(refId: string, schema?: OutSchema | null): Ref<T, Fields>;
   ref(refId: string, schema: OutSchema | null = null): RefValue {
     const referenceId = bindingId(refId);
@@ -194,12 +201,34 @@ export class GraphBuilder {
     }
   }
 
-  retry(retry?: Partial<GraphRetry>): GraphRetry {
-    return { attempts: 3, retryOnExit: false, ...retry };
-  }
-
   edge(from: NodeId, to: NodeId, kind: Exclude<Edge["kind"], "case">) {
     this.edges.push({ from, to, kind });
+  }
+
+  /** Records a control node, expands its arms in order, then points the node at their entries. */
+  control(kind: ControlKind, build: (id: NodeId) => Control) {
+    const base = this.allocate(null, kind);
+    const { arms, node } = build(base.id);
+    const index = this.nodes.length;
+    // Type resolution inside the arms needs the control's bindings before its arm entries exist.
+    this.record({ ...base, ...node(() => base.id) });
+    const entries = new Map<string, NodeId>();
+    const tails: NodeId[] = [];
+
+    for (const arm of arms) {
+      const expanded = this.arm(base.id, arm.run);
+      entries.set(arm.name, expanded.entry);
+      tails.push(...expanded.tails);
+      this.edges.push(
+        arm.edge === "case"
+          ? { from: base.id, to: expanded.entry, kind: "case", label: arm.name }
+          : { from: base.id, to: expanded.entry, kind: arm.edge },
+      );
+    }
+
+    this.nodes[index] = { ...base, ...node((arm) => entries.get(arm) ?? base.id) };
+
+    return { id: base.id, tails };
   }
 
   arm(owner: NodeId, callback: () => AuthorValue) {
@@ -250,7 +279,16 @@ export class GraphBuilder {
     });
   }
 
-  snapshot(entry: NodeId): Graph {
+  finish(result: AuthorValue): Graph {
+    const terminal = this.scope.first !== null && this.scope.tails.length === 0;
+
+    const output = terminal
+      ? null
+      : this.add({ kind: "join", result: { kind: "value", value: serialize(result, this) } });
+
+    const entry =
+      this.scope.first ?? refuse("missing_entry", "The builder requires an entry node.");
+
     return {
       meta: this.meta,
       version: 1,
@@ -258,30 +296,12 @@ export class GraphBuilder {
       input: this.input,
       inputValidation: this.inputValidation,
       nodes: this.nodes,
-      edges: this.edges,
+      edges: this.edges.sort(
+        (a, b) => (this.order.get(a.from) ?? 0) - (this.order.get(b.from) ?? 0),
+      ),
       entry,
-      outputs: null,
+      outputs: output === null ? null : { ref: bindingId(output.id), path: [] },
       warnings: [],
     };
-  }
-
-  finish(result: AuthorValue) {
-    const terminal = this.scope.first !== null && this.scope.tails.length === 0;
-
-    const output = terminal
-      ? null
-      : this.add({ kind: "join", result: { kind: "value", value: serialize(result, this) } });
-
-    const entry = this.scope.first;
-
-    if (entry === null) {
-      return refuse("missing_entry", "The builder requires an entry node.");
-    }
-
-    const graph = this.snapshot(entry);
-    graph.outputs = output === null ? null : { ref: bindingId(output.id), path: [] };
-    graph.edges.sort((a, b) => (this.order.get(a.from) ?? 0) - (this.order.get(b.from) ?? 0));
-
-    return { graph, diagnostics: validate(graph) };
   }
 }

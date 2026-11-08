@@ -151,7 +151,7 @@ test("started-only turns use two full reads plus B targeted reads without extra 
           ]),
         ),
       ),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -219,7 +219,7 @@ for (const observation of ["completion", "denial"] as const) {
                 work: () => sh(["true"], { rateLimit: { key: "limit", limit: 1, window: "1m" } }),
                 approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
               }),
-          }).graph;
+          });
 
     const at = newRun().createdAt;
     await Effect.runPromise(store.createRun(newRun()));

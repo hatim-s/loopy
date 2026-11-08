@@ -17,7 +17,6 @@
     "effect": "catalog:",
     "@loopy/core": "workspace:*",
     "@loopy/contract": "workspace:*",
-    "@loopy/sdk": "workspace:*",
-    "oxc-parser": "catalog:"
+    "@loopy/sdk": "workspace:*"
   }
 }

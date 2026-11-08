@@ -8,7 +8,7 @@ function graph() {
     input: { paths: "string[]" },
     inputValidation: { minItems: { paths: 1 }, unknownKeys: "strip" },
     run: ({ input }) => input,
-  }).graph;
+  });
 }
 
 test("nonempty array input rejects empty and malformed values before execution", () => {
@@ -54,7 +54,7 @@ test("open records retain unknown fields and defer missing optional references t
     input: { "message?": "json" },
     inputValidation: { minItems: {}, unknownKeys: "passthrough" },
     run: ({ input }) => input,
-  }).graph;
+  });
 
   expect(validateGraphInput(definition, { extra: 42 })).toEqual({ ok: true, value: { extra: 42 } });
   expect(validateGraphInput(definition, { message: 12, extra: [true] })).toEqual({
@@ -68,7 +68,7 @@ test("JSON-root input contracts preserve all JSON values without pre-queue field
     input: { "config?": "json" },
     inputValidation: { minItems: {}, unknownKeys: "passthrough", root: "json" },
     run: ({ input }) => input,
-  }).graph;
+  });
 
   for (const input of [null, false, 7, "config", [1], { extra: true }]) {
     expect(validateGraphInput(definition, input)).toEqual({ ok: true, value: input });

@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import { type NodeRun, type StoreEffect } from "@loopy/core";
 import { makeLocalService, Registry } from "@loopy/runtime/local";
@@ -16,7 +16,7 @@ export async function largeMapFixture() {
   const source = join(root, "reindex-docs.loopy.ts");
   writeFileSync(
     source,
-    `import {loopy,map,code} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))};
+    `import {loopy,map,code} from "loopy";
 export default loopy("reindex-docs", {
   description: "Synthetic completed 10,000-item fixture. No engine or provider calls.",
   input: {items:"string[]"},
@@ -183,7 +183,7 @@ export async function manyRunsFixture() {
   const source = join(root, "queue-drain.loopy.ts");
   writeFileSync(
     source,
-    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))};\nexport default loopy("queue-drain",{input:{},run:()=>null});\n`,
+    `import {loopy} from "loopy";\nexport default loopy("queue-drain",{input:{},run:()=>null});\n`,
   );
   const compiled = await Effect.runPromise(compile(source));
 

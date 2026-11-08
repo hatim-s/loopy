@@ -4,6 +4,8 @@ export { canonicalJson } from "./canonical-json";
 
 export { counter, hashSchema, positiveInt, struct } from "./codec";
 
+export { checkCommandFlags, renderCommandArgv } from "./command-argv";
+
 export { nextFire, parseCron } from "./cron";
 
 export { describeCron } from "./cron-reading";
@@ -54,9 +56,12 @@ export {
 
 export { graphBundles, revision, sha256Hex } from "./revision";
 
+export { validateSchedule, validateTimeZone } from "./schedule";
+
 export * from "./store";
 
 export {
+  allowKeys,
   isBoolean,
   isNumber,
   isRecord,

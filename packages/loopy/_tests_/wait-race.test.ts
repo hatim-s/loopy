@@ -55,7 +55,7 @@ async function createStore(): Promise<Store> {
 const graph = loopy("race", {
   input: {},
   run: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
-}).graph;
+});
 
 async function prepare(store: Store) {
   await run(store.createRun({ ...newRun(), input: {} }));

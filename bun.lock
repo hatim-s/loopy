@@ -152,7 +152,6 @@
         "@loopy/core": "workspace:*",
         "@loopy/sdk": "workspace:*",
         "effect": "catalog:",
-        "oxc-parser": "catalog:",
       },
     },
     "packages/sdk": {

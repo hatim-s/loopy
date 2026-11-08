@@ -11,13 +11,13 @@ export function lines(stdout: string): string[] {
   return stdout === "" ? [] : stdout.replace(/\n$/, "").split("\n");
 }
 
-export function nulFields(stdout: string, command: string, fail = unexpected): string[] {
+export function nulFields(stdout: string, command: string): string[] {
   if (stdout === "") {
     return [];
   }
 
   if (!stdout.endsWith("\0")) {
-    fail(command, stdout);
+    unexpected(command, stdout);
   }
 
   return stdout.slice(0, -1).split("\0");

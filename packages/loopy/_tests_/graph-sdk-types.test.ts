@@ -1,6 +1,7 @@
 import { expect, expectTypeOf, test } from "bun:test";
-import type { Json } from "@loopy/core";
+import { type Json, validateGraph } from "@loopy/core";
 import {
+  branch,
   code,
   defineCommand,
   eq,
@@ -18,8 +19,8 @@ import {
   size,
 } from "@loopy/sdk/graph";
 
-// This function is checked by tsc but never evaluated. Invalid author programs must not run.
-function operandTypes(
+// These functions are checked by tsc but never evaluated. Invalid author programs must not run.
+export function operandTypes(
   text: Ref<string>,
   number: Ref<number>,
   flag: Ref<boolean>,
@@ -76,7 +77,7 @@ function operandTypes(
   object.get("unknown");
 }
 
-function schemaTypes() {
+export function schemaTypes() {
   const command = defineCommand(
     { key: "count", program: "count", parse: "./parse-count.ts" },
     { kind: "value", type: "number" },
@@ -112,20 +113,16 @@ function schemaTypes() {
   record.get("data").get("arbitrary");
 }
 
-test("typecheck fixtures are present and parsed array outputs remain measurable", () => {
-  expect(operandTypes).toBeFunction();
-  expect(schemaTypes).toBeFunction();
-
-  const result = loopy("array-parser", {
+test("parsed array outputs remain measurable", () => {
+  const graph = loopy("array-parser", {
     input: {},
     run: () => {
       const files = fs.ls();
       expectTypeOf(files).toEqualTypeOf<Ref<string[]>>();
-      gt(size(files), 0);
 
-      return files;
+      return branch(gt(size(files), 0), { yes: () => files, no: () => null });
     },
   });
 
-  expect(result.diagnostics).toEqual([]);
+  expect(validateGraph(graph)).toEqual([]);
 });
