@@ -100,6 +100,7 @@ export class Workspace {
         store: this.store,
         cwd: workspace,
         daemon: { pid: null, startedAt: this.startedAt, concurrency: this.config.concurrency },
+        // The Worker reads every body within this bound before forwarding, so it never fires here.
         maxBodyBytes: CLOUD_MAX_REQUEST_BYTES,
       }),
       scheduler: new WorkspaceScheduler({
