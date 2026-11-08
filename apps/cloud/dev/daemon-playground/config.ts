@@ -1,9 +1,15 @@
 import { resolve } from "node:path";
-import { profile } from "../playground/config";
+import { playgroundProfile } from "../playground/profile";
+import { root } from "../stack/constants";
 
-export const root = resolve(import.meta.dir, "../../../..");
+export { root };
 
-export const state = profile.daemonState;
+const profile = playgroundProfile(root, process.env.LOOPY_PLAYGROUND_PROFILE);
+
+export const state = resolve(
+  root,
+  `.loopy/playground-daemon${profile.name ? `-${profile.name}` : ""}`,
+);
 
 export const home = resolve(state, "home");
 
@@ -13,7 +19,7 @@ export const upstream = profile.repository;
 
 export const evidence = profile.evidence;
 
-export const port = profile.daemonPort;
+export const port = profile.name ? 15370 : 15170;
 
 export const cli = resolve(root, "packages/cli/src/index.ts");
 

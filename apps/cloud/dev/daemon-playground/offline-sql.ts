@@ -3,10 +3,11 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { atomic, evidenceDirectory, profile } from "../config";
-import { sqlCases } from "./sql-queries";
+import { atomic } from "../playground/config";
+import { sqlCases } from "../playground/metrics/sql-queries";
+import { evidence as evidenceDirectory, state } from "./config";
 
-const path = resolve(profile.daemonState, "daemon-readonly.sqlite");
+const path = resolve(state, "daemon-readonly.sqlite");
 
 const sha256 = async () =>
   createHash("sha256")

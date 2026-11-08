@@ -69,7 +69,6 @@ export async function requireFreePorts() {
     profile.sandboxPort,
     profile.dashboardPort,
     profile.inspectorPort,
-    ...(profile.name ? [profile.daemonPort] : []),
   ]) {
     await new Promise<void>((done, reject) => {
       const listener = createServer();

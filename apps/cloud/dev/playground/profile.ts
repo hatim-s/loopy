@@ -8,7 +8,6 @@ export function playgroundProfile(root: string, input: string | undefined) {
   const suffix = name ? `-${name}` : "";
   const state = resolve(root, `.loopy/playground${suffix}`);
   const runtime = resolve(state, "runtime-root");
-  const daemonState = resolve(root, `.loopy/playground-daemon${suffix}`);
   const apiPort = name ? 15270 : 15070;
   const sandboxPort = apiPort + 1;
   const dashboardPort = apiPort + 2;
@@ -19,14 +18,12 @@ export function playgroundProfile(root: string, input: string | undefined) {
     state,
     runtime,
     sandboxState: resolve(runtime, ".loopy/cloud/sandbox"),
-    daemonState,
     repository: resolve(state, "loopies-playground"),
     evidence: resolve(root, ".notes/cloud/evidence", name ?? ""),
     apiPort,
     sandboxPort,
     dashboardPort,
     inspectorPort,
-    daemonPort: name ? 15370 : 15170,
     api: `http://127.0.0.1:${apiPort}`,
     dashboard: `http://127.0.0.1:${dashboardPort}`,
     sandbox: `http://127.0.0.1:${sandboxPort}`,
