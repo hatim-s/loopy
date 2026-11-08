@@ -1,6 +1,10 @@
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Result } from "effect";
+import { SandboxRequestError } from "./request-error";
 
-// The latch wakes internal waits. Only foreign Docker calls receive its abort bridge.
+export function stoppingConflict() {
+  return new SandboxRequestError("conflict", "Sandbox service is stopping. Retry after restart.");
+}
+
 export class Stopping {
   private readonly controller = new AbortController();
   private constructor(private readonly latch: Deferred.Deferred<void>) {}
@@ -19,7 +23,22 @@ export class Stopping {
       Effect.asVoid,
     );
   }
-  pause(ms: number) {
-    return Effect.sleep(ms).pipe(Effect.raceFirst(Deferred.await(this.latch)));
+  retry<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, SandboxRequestError> {
+    return Effect.gen({ self: this }, function* () {
+      let backoff = 100;
+
+      while (!this.stopped) {
+        const result = yield* Effect.result(effect);
+
+        if (Result.isSuccess(result)) {
+          return result.success;
+        }
+
+        yield* Effect.sleep(backoff).pipe(Effect.raceFirst(Deferred.await(this.latch)));
+        backoff = Math.min(backoff * 2, 5000);
+      }
+
+      return yield* Effect.fail(stoppingConflict());
+    });
   }
 }

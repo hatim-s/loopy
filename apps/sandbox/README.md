@@ -28,7 +28,7 @@ Execution flags are `--max-timeout-ms 600000`, `--memory 256m`, `--cpus 1` and `
 
 ## Receipt authority modes
 
-The CLI above and `cloud:start` use filesystem authority. It serializes writes under the state-root process lock and a process-local session. Its epoch is not persistent. New attempt records live in `receipts/`, immutable terminal result files in `results/`, and active guards plus released-token records in `exports/`. A terminal record points to result bytes by SHA-256 and size instead of embedding the result.
+The CLI above and `cloud:start` use filesystem authority. It serializes writes under the state-root process lock and a process-local session. Its epoch is not persistent. New attempt records live in `receipts/`, immutable terminal result files in `results/`, and active guards plus released-token records in `exports/`. `src/state-root.ts` owns this layout, its validation and the process lock. A terminal record points to result bytes by SHA-256 and size instead of embedding the result.
 
 The architecture playground injects `HttpSandboxAuthority` backed by the Worker's `SANDBOX_RECEIPTS` DO and `RECEIPT_RESULTS` R2 bucket. The default playground profile remains filesystem-backed. DO sessions persist epoch and nonce, fencing writers from earlier bridge processes. Receipt SQL owns admission, terminal pointers and export guards; R2 owns immutable result bytes. The sandbox CLI has no DO-mode flag.
 
@@ -94,13 +94,20 @@ Docker transport errors keep the durable receipt started. The service reconciles
 
 Requests are capped at 16 MiB, individual bundles at 8 MiB, combined process stdout/stderr at 2 MiB, successful output at 1 MiB and retained logs at 64 KiB. These caps also apply during recovery. Artifact reads have a separate 1 MiB file limit.
 
-Receipts, result blobs, export records, stopped containers and named volumes remain available for inspection. There is no automatic garbage collector. Stop only the service you own and let shutdown settle admissions, monitors and exports before releasing the process lock. Derive an exact container/volume allowlist from this authority's attempt plans, inspect uncertain attempts, verify ownership labels and confirm removal. A crash during staging can leave `<container>-input` and its input volume. Export recovery must confirm removal of the exact owned helper before releasing its guard. Never prune by name prefix or broad label.
+Receipts, result blobs, export records, stopped containers and named volumes remain available for inspection. There is no automatic garbage collector. Stop only the service you own and let shutdown settle admissions, monitors and exports before releasing the process lock. Derive an exact container/volume allowlist from this authority's attempt plans, inspect uncertain attempts, verify ownership labels and confirm removal. Tooling takes the owner label derivation, label names and default image from `src/docker/identity.ts`. A crash during staging can leave `<container>-input` and its input volume. Export recovery must confirm removal of the exact owned helper before releasing its guard. Never prune by name prefix or broad label.
 
 Keep admission, result, session and export records when removing container resources. Deleting admission records can permit re-execution; deleting result blobs breaks terminal reads; deleting guards can release a volume prematurely. In DO mode, preserve the matching Wrangler SQL/R2 state and namespace/root configuration as well as the bridge root. Do not erase retained datasets or historical evidence as routine teardown.
 
 ## Retained data
 
-Legacy flat filesystem receipts with inline results remain readable because accepted datasets still use them. Remove that decoder only after every retained root has a verified migration or explicit retirement, including reconciliation of all started attempts and export guards. Preserve historical evidence; deleting data is not migration. See the [cloud README](../cloud/README.md) for the phase 2 approval boundary.
+Legacy flat filesystem receipts with inline results remain readable because accepted datasets still use them. Remove that support only after every retained root has a verified migration or explicit retirement, including reconciliation of all started attempts and export guards. Preserve historical evidence; deleting data is not migration. See the [cloud README](../cloud/README.md) for the phase 2 approval boundary.
+
+The support to delete together is:
+
+- `src/filesystem/legacy.ts` and its fallback call in `FilesystemJournal.read` (`src/filesystem/journal.ts`).
+- The `inline` result variant of `attemptRecordSchema` in `packages/contract/src/sandbox-journal.ts`.
+- The inline branches in `resolveResult` (`src/receipt-view.ts`) and `FilesystemAuthority.complete` (`src/filesystem/authority.ts`).
+- The tests that write flat or inline receipts: the retained-receipt case in `packages/loopy/_tests_/sandbox-authority-contract.test.ts` and the historical scan in `packages/loopy/_tests_/sandbox-authority-publication.test.ts`.
 
 ## Tests
 

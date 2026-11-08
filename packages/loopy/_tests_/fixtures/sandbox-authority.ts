@@ -10,9 +10,11 @@ import {
 import { Effect } from "effect";
 import { attemptHash } from "../../../../apps/sandbox/src/admission";
 import type { ArtifactReader } from "../../../../apps/sandbox/src/artifacts";
-import { sandboxConfigSchema, validateStateRoot } from "../../../../apps/sandbox/src/config";
+import { sandboxConfigSchema } from "../../../../apps/sandbox/src/config";
+import type { AttemptBackend } from "../../../../apps/sandbox/src/docker";
 import { FilesystemAuthority } from "../../../../apps/sandbox/src/filesystem/authority";
-import { FilesystemResults } from "../../../../apps/sandbox/src/immutable-results";
+import { FilesystemResults } from "../../../../apps/sandbox/src/filesystem/results";
+import { validateStateRoot } from "../../../../apps/sandbox/src/state-root";
 import type { DockerAttemptPlan } from "../../../contract/src/sandbox-journal";
 
 export const successful: SandboxExecutionResult = {
@@ -28,8 +30,13 @@ export const uncertain: SandboxExecutionResult = {
   logs: [],
 };
 
+export const succeedingBackend: AttemptBackend = {
+  start: () => Effect.succeed(successful),
+  recover: () => Effect.succeed(successful),
+};
+
 export const artifactReader: ArtifactReader = {
-  cleanup: () => Effect.gen(function* () {}),
+  cleanup: () => Effect.void,
   read: (...[, path]) =>
     Effect.gen(function* () {
       return {

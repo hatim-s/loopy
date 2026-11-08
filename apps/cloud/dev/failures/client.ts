@@ -7,6 +7,7 @@ import {
   putLoopyBodySchema,
   type RunSnapshotView,
   routes,
+  type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
   sandboxExecutionSpecSchema,
@@ -14,7 +15,6 @@ import {
 } from "@loopy/contract";
 import type { Schema } from "effect";
 import { Effect } from "effect";
-import type { storedReceiptSchema } from "../../../sandbox/src/receipts";
 import { assert, JourneyFailure } from "../journey/client";
 import { api, root, sandbox, state } from "./config";
 import { docker, ownedContainer, receipts } from "./resources";
@@ -210,7 +210,7 @@ export class FailureJourney {
     };
   }
 
-  async artifact(receipt: Schema.Schema.Type<typeof storedReceiptSchema>) {
+  async artifact(receipt: SandboxAttemptIdentity) {
     const query = new URLSearchParams({
       workspace: "fixtures",
       key: JSON.stringify(receipt.executionKey),

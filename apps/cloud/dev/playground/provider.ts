@@ -4,7 +4,8 @@ import { DockerArtifacts } from "../../../sandbox/src/artifacts";
 import type { AttemptDependenciesFactory } from "../../../sandbox/src/attempt/dependencies";
 import { sandboxConfigSchema } from "../../../sandbox/src/config";
 import { DockerBackend } from "../../../sandbox/src/docker";
-import { filesystemDependencies } from "../../../sandbox/src/filesystem";
+import { DockerClient } from "../../../sandbox/src/docker/client";
+import { filesystemStorage } from "../../../sandbox/src/filesystem";
 import { HttpSandboxAuthority } from "../../../sandbox/src/http-authority";
 import { io } from "../../../sandbox/src/operations";
 import { startSandbox } from "../../../sandbox/src/server";
@@ -23,7 +24,9 @@ const providerConfig = decodeBoundary(sandboxConfigSchema)({
   port: profile.sandboxPort,
 });
 
-const docker = new DockerBackend(providerConfig);
+const client = new DockerClient(providerConfig);
+
+const docker = new DockerBackend(providerConfig, client);
 
 const backend = boundedBackend(docker, settings.runtimeConcurrency);
 
@@ -43,10 +46,15 @@ const dependencies: AttemptDependenciesFactory =
             authority,
             resultsFor: (workspace) => authority.resultsFor(workspace),
             backend,
-            artifactReader: new DockerArtifacts(providerConfig),
+            artifactReader: new DockerArtifacts(providerConfig, client),
           };
         })
-    : filesystemDependencies(providerConfig, { backend });
+    : () =>
+        Effect.sync(() => ({
+          ...filesystemStorage(providerConfig.stateRoot),
+          backend,
+          artifactReader: new DockerArtifacts(providerConfig, client),
+        }));
 
 // The script scope owns the server until a process shutdown signal arrives.
 await Effect.runPromise(

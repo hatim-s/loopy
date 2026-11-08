@@ -6,7 +6,6 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { sandboxConfigSchema } from "../../../sandbox/src/config";
 import { runCommand } from "../../../sandbox/src/process";
-import type { StoredReceipt } from "../../../sandbox/src/receipts";
 import { filesystemReceipt } from "../filesystem-receipt";
 import { FixtureError, fixtureIO } from "../fixture-effect";
 import { assert, equal } from "../journey/client";
@@ -23,8 +22,10 @@ export const environment = {
   LANG: "C.UTF-8",
 };
 
-export function command(argv: string[]) {
-  return runCommand(argv, { env: environment, timeoutMs: 30_000, maxBytes: 128 * 1024 });
+type StoredReceipt = Effect.Success<ReturnType<typeof filesystemReceipt>>;
+
+export function command(argv: [string, ...string[]]) {
+  return runCommand(argv, { cwd: root, env: environment, timeoutMs: 30_000, maxBytes: 128 * 1024 });
 }
 
 export function docker(args: string[]) {

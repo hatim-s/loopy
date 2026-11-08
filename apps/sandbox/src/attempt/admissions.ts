@@ -8,23 +8,26 @@ import {
   workspaceVolumeInput,
 } from "@loopy/contract";
 import { durationMs } from "@loopy/core";
-import { Effect, Result, Semaphore } from "effect";
-import {
-  AttemptConflict,
-  attemptHash,
-  attemptId,
-  InvalidAttempt,
-  validateBundles,
-} from "../admission";
+import { Effect, FiberMap, Result, Semaphore } from "effect";
+import { attemptHash, attemptId, validateBundles } from "../admission";
 import type { SandboxConfig } from "../config";
 import type { SandboxFailure } from "../operations";
-import { failure } from "../operations";
 import { publicReceipt } from "../receipt-view";
-import type { Stopping } from "../stopping";
+import { SandboxRequestError } from "../request-error";
+import { type Stopping, stoppingConflict } from "../stopping";
 import type { AttemptDependencies } from "./dependencies";
 import type { AttemptExports } from "./exports";
 import type { AttemptMonitors } from "./monitor";
-import { resolveAdmissionRead } from "./reconciliation";
+
+type AdmissionOptions = {
+  config: SandboxConfig;
+  dependencies: AttemptDependencies;
+  session: AuthoritySession;
+  monitors: AttemptMonitors;
+  exports: AttemptExports;
+  stopping: Stopping;
+  evictions: FiberMap.FiberMap<string, void, never>;
+};
 
 export class AttemptAdmissions {
   private readonly admissions = new Map<string, { mutex: Semaphore.Semaphore; users: number }>();
@@ -34,27 +37,7 @@ export class AttemptAdmissions {
     string,
     { request: SandboxAttemptRequest; requestHash: string }
   >();
-  private readonly config: SandboxConfig;
-  private readonly dependencies: AttemptDependencies;
-  private readonly session: AuthoritySession;
-  private readonly monitors: AttemptMonitors;
-  private readonly exports: AttemptExports;
-  private readonly stopping: Stopping;
-  constructor(options: {
-    config: SandboxConfig;
-    dependencies: AttemptDependencies;
-    session: AuthoritySession;
-    monitors: AttemptMonitors;
-    exports: AttemptExports;
-    stopping: Stopping;
-  }) {
-    this.config = options.config;
-    this.dependencies = options.dependencies;
-    this.session = options.session;
-    this.monitors = options.monitors;
-    this.exports = options.exports;
-    this.stopping = options.stopping;
-  }
+  constructor(private readonly options: AdmissionOptions) {}
 
   wait(id: string) {
     return Effect.suspend(() =>
@@ -90,23 +73,15 @@ export class AttemptAdmissions {
   }
   start(request: SandboxAttemptRequest): Effect.Effect<SandboxReceipt, SandboxFailure> {
     return Effect.gen({ self: this }, function* () {
-      if (this.stopping.stopped) {
-        return yield* Effect.fail(
-          new AttemptConflict("Sandbox service is stopping. Retry after restart."),
-        );
-      }
-
-      yield* Effect.try({
-        try: () => validateBundles(request),
-        catch: (cause) => (cause instanceof InvalidAttempt ? cause : failure("bundles", cause)),
-      });
-      const id = attemptId(this.config.stateRoot, request);
+      yield* validateBundles(request);
+      const id = attemptId(this.options.config.stateRoot, request);
 
       return yield* this.withAdmission(id, this.admit(id, request));
     });
   }
 
   private plan(id: string, requestHash: string, request: SandboxAttemptRequest): DockerAttemptPlan {
+    const { config } = this.options;
     const spec = request.spec;
 
     const timeout =
@@ -122,11 +97,8 @@ export class AttemptAdmissions {
       workspace: request.workspace,
       executionKey: request.executionKey,
       attempt: request.attempt,
-      ...attemptResourceNames(
-        id,
-        attemptHash(workspaceVolumeInput(this.config.stateRoot, request)),
-      ),
-      deadline: Date.now() + Math.min(timeout + 30_000, this.config.maxTimeoutMs),
+      ...attemptResourceNames(id, attemptHash(workspaceVolumeInput(config.stateRoot, request))),
+      deadline: Date.now() + Math.min(timeout + 30_000, config.maxTimeoutMs),
     };
   }
 
@@ -147,56 +119,72 @@ export class AttemptAdmissions {
 
   monitor(record: Extract<AttemptRecord, { kind: "started" }>, request?: SandboxAttemptRequest) {
     return Effect.gen({ self: this }, function* () {
-      if (this.stopping.stopped) {
+      const { dependencies, monitors, session, stopping } = this.options;
+
+      if (stopping.stopped) {
         return;
       }
 
       this.retained.delete(record.plan.id);
 
-      if (this.monitors.has(record.plan.id)) {
-        return;
-      }
-
-      const receipt = { ...record.plan, kind: "started" } as const;
-
       const sameSession =
-        record.session.epoch === this.session.epoch && record.session.nonce === this.session.nonce;
+        record.session.epoch === session.epoch && record.session.nonce === session.nonce;
 
       if (request && sameSession && !this.issued.has(record.plan.id)) {
-        // Record issuance before forking so a later observation can only recover.
         this.issued.add(record.plan.id);
-        yield* this.monitors.launch(record, () =>
-          this.dependencies.backend.start(receipt, request, this.stopping.signal),
+        yield* monitors.launch(record, () =>
+          dependencies.backend.start(record.plan, request, stopping.signal),
         );
       } else {
-        yield* this.monitors.launch(record, () =>
-          this.dependencies.backend.recover(receipt, this.stopping.signal),
+        yield* monitors.launch(record, () =>
+          dependencies.backend.recover(record.plan, stopping.signal),
         );
       }
     });
   }
 
+  // An admission whose commit is delayed can still start once on a later lookup. Its request
+  // stays retained only until the plan deadline, after which a start could no longer run.
+  private retain(plan: DockerAttemptPlan, request: SandboxAttemptRequest) {
+    return Effect.gen({ self: this }, function* () {
+      this.retained.set(plan.id, { request, requestHash: plan.requestHash });
+
+      yield* FiberMap.run(
+        this.options.evictions,
+        plan.id,
+        Effect.sleep(Math.max(0, plan.deadline - Date.now())).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              this.retained.delete(plan.id);
+            }),
+          ),
+        ),
+      );
+    });
+  }
+
   private publishAdmission(plan: DockerAttemptPlan, request: SandboxAttemptRequest) {
     return Effect.gen({ self: this }, function* () {
-      const authority = this.dependencies.authority;
-      const admitted = yield* authority.admit({ session: this.session, plan }).pipe(Effect.result);
+      const { dependencies, session, stopping } = this.options;
+      const authority = dependencies.authority;
+      const admitted = yield* authority.admit({ session, plan }).pipe(Effect.result);
 
       if (Result.isFailure(admitted)) {
-        this.retained.set(plan.id, { request, requestHash: plan.requestHash });
+        yield* this.retain(plan, request);
+        const record = yield* stopping.retry(authority.read(plan.id));
 
-        return yield* resolveAdmissionRead({
-          authority,
-          id: plan.id,
-          stopping: this.stopping,
-          cause: admitted.failure,
-        });
+        if (record === null) {
+          return yield* Effect.fail(admitted.failure);
+        }
+
+        return record;
       }
 
       const reply = admitted.success;
 
       if (reply.kind === "rejected") {
         return yield* Effect.fail(
-          new AttemptConflict(`Attempt admission was rejected: ${reply.code}.`),
+          new SandboxRequestError("conflict", `Attempt admission was rejected: ${reply.code}.`),
         );
       }
 
@@ -206,21 +194,21 @@ export class AttemptAdmissions {
 
   private admit(id: string, request: SandboxAttemptRequest) {
     return Effect.gen({ self: this }, function* () {
-      const authority = this.dependencies.authority;
+      const { dependencies, exports, stopping } = this.options;
 
       const requestHash = attemptHash({
         ...request,
         bundles: [...request.bundles].sort((a, b) => a.hash.localeCompare(b.hash)),
       });
 
-      let record = yield* authority.read(id);
+      let record = yield* dependencies.authority.read(id);
 
       if (record === null) {
         const plan = this.plan(id, requestHash, request);
-        yield* this.exports.reconcile(plan.volume);
+        yield* exports.reconcile(plan.volume);
 
-        if (this.stopping.stopped) {
-          return yield* Effect.fail(new AttemptConflict("Sandbox service is stopping."));
+        if (stopping.stopped) {
+          return yield* Effect.fail(stoppingConflict());
         }
 
         record = yield* this.publishAdmission(plan, request);
@@ -228,7 +216,10 @@ export class AttemptAdmissions {
 
       if (record.plan.requestHash !== requestHash) {
         return yield* Effect.fail(
-          new AttemptConflict("Attempt identity already has different request content."),
+          new SandboxRequestError(
+            "conflict",
+            "Attempt identity already has different request content.",
+          ),
         );
       }
 
@@ -236,7 +227,7 @@ export class AttemptAdmissions {
         yield* this.monitor(record, request);
       }
 
-      return yield* publicReceipt(this.dependencies.resultsFor, record);
+      return yield* publicReceipt(dependencies.resultsFor, record);
     });
   }
 }

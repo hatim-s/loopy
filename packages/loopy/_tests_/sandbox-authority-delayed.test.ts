@@ -81,3 +81,39 @@ for (const trigger of ["start", "lookup"] as const) {
     expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: successful });
   });
 }
+
+test("a failed admission releases its retained request at the plan deadline", async () => {
+  const { config, request, resultsFor } = await fixture();
+  config.maxTimeoutMs = 50;
+  const authority = new DelayedCommit(config.stateRoot);
+  let starts = 0;
+  let recoveries = 0;
+
+  const service = await open(config, {
+    authority,
+    resultsFor,
+    artifactReader,
+    backend: {
+      start: () =>
+        Effect.sync(() => {
+          starts++;
+
+          return successful;
+        }),
+      recover: () =>
+        Effect.sync(() => {
+          recoveries++;
+
+          return uncertain;
+        }),
+    },
+  });
+
+  await expect(run(service.start(request))).rejects.toThrow("timed out before eventual commit");
+  await Bun.sleep(100);
+  expect((await run(authority.commit())).kind).toBe("created");
+  expect(await run(service.lookup(request))).toEqual({ kind: "started" });
+  await run(service.drain());
+  expect(starts).toBe(0);
+  expect(recoveries).toBe(1);
+});

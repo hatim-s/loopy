@@ -1,13 +1,17 @@
 import { unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname } from "node:path";
 import type { AuthorityInput, AuthorityOutput } from "@loopy/contract";
 import { AuthorityError, type AuthoritySession, artifactHelperName } from "@loopy/contract";
 import { Effect, Semaphore } from "effect";
-import { FilesystemResults, resultReference } from "../immutable-results";
-import { missing, syncDirectory, writeAtomic } from "../journal-files";
+import { ignoreMissing, syncDirectory, writeAtomic } from "../journal-files";
 import type { SandboxAttemptAuthority, SandboxOperationError } from "../operations";
 import { io } from "../operations";
 import { FilesystemJournal } from "./journal";
+import { FilesystemResults, resultReference } from "./results";
+
+function byteOrder(left: string, right: string) {
+  return Buffer.compare(Buffer.from(left), Buffer.from(right));
+}
 
 export class FilesystemAuthority implements SandboxAttemptAuthority {
   private session: AuthoritySession | null = null;
@@ -88,7 +92,7 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
 
         const record = { kind: "started", plan: input.plan, session: input.session } as const;
         yield* io("filesystem-authority", () =>
-          writeAtomic(join(this.root, "receipts", `${input.plan.id}.json`), record),
+          writeAtomic(this.journal.receiptPath(input.plan.id), record),
         );
 
         return { kind: "created", record };
@@ -135,7 +139,7 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         } as const;
 
         yield* io("filesystem-authority", () =>
-          writeAtomic(join(this.root, "receipts", `${input.id}.json`), record),
+          writeAtomic(this.journal.receiptPath(input.id), record),
         );
 
         return { kind: "finished", record };
@@ -198,7 +202,7 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         };
 
         yield* io("filesystem-authority", () =>
-          writeAtomic(join(this.root, "exports", `${input.attemptId}.json`), record),
+          writeAtomic(this.journal.guardPath(input.attemptId), record),
         );
 
         return { kind: "granted", record };
@@ -219,16 +223,9 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
           yield* io("filesystem-authority", () =>
             writeAtomic(this.journal.releasedPath(guard.token), guard),
           );
-          yield* io("filesystem-authority", () =>
-            unlink(join(this.root, "exports", `${guard.attemptId}.json`)).catch(
-              (cause: unknown) => {
-                if (!missing(cause)) {
-                  throw cause;
-                }
-              },
-            ),
-          );
-          yield* io("filesystem-authority", () => syncDirectory(join(this.root, "exports")));
+          const path = this.journal.guardPath(guard.attemptId);
+          yield* io("filesystem-authority", () => ignoreMissing(unlink(path)));
+          yield* io("filesystem-authority", () => syncDirectory(dirname(path)));
         }
       });
     });
@@ -240,10 +237,9 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         .filter(
           (guard) =>
             guard.volume === input.volume &&
-            (input.after === null ||
-              Buffer.compare(Buffer.from(guard.token), Buffer.from(input.after)) > 0),
+            (input.after === null || byteOrder(guard.token, input.after) > 0),
         )
-        .sort((a, b) => Buffer.compare(Buffer.from(a.token), Buffer.from(b.token)));
+        .sort((a, b) => byteOrder(a.token, b.token));
 
       const page = guards.slice(0, input.limit);
 
@@ -262,8 +258,8 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
           .map((record) => ({ key: `a:${record.plan.id}`, record })),
         ...(yield* this.journal.guards()).map((guard) => ({ key: `e:${guard.attemptId}`, guard })),
       ]
-        .filter((entry) => input.after === null || entry.key > input.after)
-        .sort((a, b) => a.key.localeCompare(b.key));
+        .filter((entry) => input.after === null || byteOrder(entry.key, input.after) > 0)
+        .sort((a, b) => byteOrder(a.key, b.key));
 
       const page = entries.slice(0, input.limit);
 

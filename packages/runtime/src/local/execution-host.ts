@@ -11,7 +11,9 @@ export { SecretStore } from "./secrets";
 
 export { spawnCaptured } from "./spawn";
 
-export function renderCommand(spec: Extract<ExecutionSpec, { kind: "command" }>) {
+export function renderCommand(
+  spec: Extract<ExecutionSpec, { kind: "command" }>,
+): [string, ...string[]] {
   const [program, ...args] = spec.argv;
 
   return [

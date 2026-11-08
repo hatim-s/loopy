@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  artifactHelperName,
   decodeBoundary,
   type SandboxAttemptRequest,
   sandboxAttemptRequestSchema,
@@ -14,6 +15,9 @@ import { attemptHash } from "../../../../apps/sandbox/src/admission";
 import { DockerArtifacts } from "../../../../apps/sandbox/src/artifacts";
 import { sandboxConfigSchema } from "../../../../apps/sandbox/src/config";
 import { type AttemptBackend, DockerBackend } from "../../../../apps/sandbox/src/docker";
+import { DockerClient } from "../../../../apps/sandbox/src/docker/client";
+import { ownerOf, SANDBOX_LABELS } from "../../../../apps/sandbox/src/docker/identity";
+import { inputHelperName } from "../../../../apps/sandbox/src/docker/plan";
 import { SandboxOperationError } from "../../../../apps/sandbox/src/operations";
 import { type CommandRunner, runCommand } from "../../../../apps/sandbox/src/process";
 import { startSandbox } from "../../../../apps/sandbox/src/server";
@@ -66,7 +70,7 @@ export function resources(
     maxTimeoutMs: 8000,
   });
 
-  const owner = createHash("sha256").update(config.stateRoot).digest("hex");
+  const owner = ownerOf(config.stateRoot);
   const plans = new Map<string, DockerAttemptPlan>();
   const starts = new Map<string, number>();
   const commands: object[] = [];
@@ -104,6 +108,7 @@ export function resources(
   const docker = async (args: string[]) => {
     const output = await Effect.runPromise(
       runner(["docker", "--context", context, ...args], {
+        cwd: config.worktree,
         timeoutMs: 10_000,
         maxBytes: 128 * 1024,
         env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
@@ -115,8 +120,9 @@ export function resources(
     return output.stdout.trim();
   };
 
-  const backend = new DockerBackend(config, runner);
-  const reader = new DockerArtifacts(config, runner);
+  const client = new DockerClient(config, runner);
+  const backend = new DockerBackend(config, client);
+  const reader = new DockerArtifacts(config, client);
 
   const recordIdentities = Effect.tryPromise({
     try: () =>
@@ -204,7 +210,7 @@ export function resources(
     assert.equal(found, name);
     const state = labelsSchema.parse(JSON.parse(await docker(["container", "inspect", name])))[0];
     assert(state);
-    assert.equal(state.Config.Labels["loopy.sandbox.owner"], owner);
+    assert.equal(state.Config.Labels[SANDBOX_LABELS.owner], owner);
 
     return state;
   }
@@ -288,17 +294,17 @@ export function resources(
       for (const receipt of plans.values()) {
         for (const name of [
           receipt.container,
-          `${receipt.container}-input`,
-          `loopy-artifact-${receipt.id}`,
+          inputHelperName(receipt),
+          artifactHelperName(receipt.id),
         ]) {
           try {
             const state = await inspect(name);
 
             if (state) {
-              assert.equal(state.Config.Labels["loopy.sandbox.request"], receipt.requestHash);
+              assert.equal(state.Config.Labels[SANDBOX_LABELS.request], receipt.requestHash);
 
-              if (name.startsWith("loopy-artifact-")) {
-                assert.equal(state.Config.Labels["loopy.sandbox.role"], "artifact");
+              if (name === artifactHelperName(receipt.id)) {
+                assert.equal(state.Config.Labels[SANDBOX_LABELS.role], "artifact");
               }
 
               await docker(["rm", "--force", name]);

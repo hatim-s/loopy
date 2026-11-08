@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { decodeBoundary } from "@loopy/contract";
 import { Effect } from "effect";
 import { sandboxConfigSchema } from "./config";
+import { SANDBOX_IMAGE } from "./docker/identity";
 import { startSandbox } from "./server";
 
 const { values } = parseArgs({
@@ -10,7 +11,7 @@ const { values } = parseArgs({
     worktree: { type: "string" },
     "state-root": { type: "string" },
     "docker-context": { type: "string" },
-    image: { type: "string", default: "loopy-sandbox:bun-1.4.0" },
+    image: { type: "string", default: SANDBOX_IMAGE },
     hostname: { type: "string", default: "127.0.0.1" },
     port: { type: "string", default: "4010" },
     "max-timeout-ms": { type: "string", default: "600000" },

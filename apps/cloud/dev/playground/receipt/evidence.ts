@@ -1,7 +1,7 @@
 import type { SandboxAttemptIdentity } from "@loopy/contract";
 import { Effect } from "effect";
 import { attemptHash } from "../../../../sandbox/src/admission";
-import { resultReference } from "../../../../sandbox/src/immutable-results";
+import { resultReference } from "../../../../sandbox/src/filesystem/results";
 import type { ResultsFor, SandboxAttemptAuthority } from "../../../../sandbox/src/operations";
 
 export function receiptEvidence(options: {

@@ -7,39 +7,37 @@ import type {
 } from "@loopy/contract";
 import { Cause, Effect, Exit, Fiber, FiberMap, FiberSet, Scope } from "effect";
 import { attemptId } from "../admission";
-import { ArtifactError } from "../artifact-error";
-import { type SandboxConfig, validateStateRoot } from "../config";
-import { failure, io, type SandboxFailure } from "../operations";
+import type { SandboxConfig } from "../config";
+import { io, type SandboxFailure, type SandboxOperationError } from "../operations";
 import { publicReceipt } from "../receipt-view";
-import { lockStateRoot } from "../receipts";
-import { Stopping } from "../stopping";
+import { SandboxRequestError } from "../request-error";
+import { closeableScope } from "../scope";
+import { lockStateRoot, validateStateRoot } from "../state-root";
+import { Stopping, stoppingConflict } from "../stopping";
 import { AttemptAdmissions } from "./admissions";
 import type { AttemptDependencies, AttemptDependenciesFactory } from "./dependencies";
 import { AttemptExports, recoveryRecords } from "./exports";
 import { AttemptMonitors } from "./monitor";
 
-export { AttemptConflict } from "../admission";
+type AttemptsOptions = {
+  config: SandboxConfig;
+  dependencies: AttemptDependencies;
+  session: AuthoritySession;
+  scope: Scope.Closeable;
+  close: Effect.Effect<void, SandboxOperationError>;
+  stopping: Stopping;
+  operations: FiberSet.FiberSet<unknown, SandboxFailure>;
+  active: FiberMap.FiberMap<string, void, never>;
+  evictions: FiberMap.FiberMap<string, void, never>;
+};
 
 export class Attempts {
   private readonly admissions: AttemptAdmissions;
   private readonly monitors: AttemptMonitors;
   private readonly exports: AttemptExports;
-  private constructor(
-    private readonly config: SandboxConfig,
-    private readonly dependencies: AttemptDependencies,
-    session: AuthoritySession,
-    private readonly scope: Scope.Closeable,
-    private readonly closeResources: Effect.Effect<void, SandboxFailure>,
-    private readonly stopping: Stopping,
-    private readonly operations: FiberSet.FiberSet<unknown, SandboxFailure>,
-    active: FiberMap.FiberMap<string, void, never>,
-  ) {
-    this.monitors = new AttemptMonitors({
-      ...dependencies,
-      session,
-      stopping,
-      active,
-    });
+  private constructor(private readonly options: AttemptsOptions) {
+    const { config, dependencies, session, stopping, active, evictions } = options;
+    this.monitors = new AttemptMonitors({ ...dependencies, session, stopping, active });
     this.exports = new AttemptExports(dependencies.authority, dependencies.artifactReader, session);
     this.admissions = new AttemptAdmissions({
       config,
@@ -48,112 +46,87 @@ export class Attempts {
       monitors: this.monitors,
       exports: this.exports,
       stopping,
+      evictions,
     });
   }
   static open(config: SandboxConfig, createDependencies: AttemptDependenciesFactory) {
-    return Effect.gen(function* () {
-      const resources = yield* Scope.make();
+    return closeableScope(
+      {
+        operation: "resource release",
+        message: "Sandbox resource release failed. Inspect the state root before restarting.",
+      },
+      (close) =>
+        Effect.gen(function* () {
+          yield* io("state root", () => validateStateRoot(config));
+          yield* Effect.acquireRelease(
+            io("lock", () => lockStateRoot(config.stateRoot)),
+            (unlock) => io("unlock", unlock).pipe(Effect.orDie),
+          );
 
-      const closeResources = yield* Effect.cached(
-        Scope.close(resources, Exit.void).pipe(
-          Effect.catchCause((cause) =>
-            Effect.fail(
-              failure(
-                "resource release",
-                cause,
-                "Sandbox resource release failed. Inspect the state root before restarting.",
-              ),
-            ),
-          ),
-          Effect.uninterruptible,
-        ),
-      );
+          const dependencies = yield* Effect.acquireRelease(createDependencies(), (value) =>
+            (value.close?.() ?? Effect.void).pipe(Effect.orDie),
+          );
 
-      yield* Effect.addFinalizer(() => closeResources.pipe(Effect.orDie));
+          const { epoch } = yield* dependencies.authority.status();
 
-      return yield* Effect.gen(function* () {
-        yield* io("state root", () => validateStateRoot(config));
-        yield* Effect.acquireRelease(
-          io("lock", () => lockStateRoot(config.stateRoot)),
-          (unlock) => io("unlock", unlock).pipe(Effect.orDie),
-        );
+          const session = yield* dependencies.authority.openSession({
+            expectedEpoch: epoch,
+            nonce: randomUUID(),
+          });
 
-        const dependencies = yield* Effect.acquireRelease(createDependencies(), (value) =>
-          (value.close?.() ?? Effect.void).pipe(Effect.orDie),
-        );
+          const scope = yield* Effect.acquireRelease(Scope.make(), (scope) =>
+            Scope.close(scope, Exit.void),
+          );
 
-        const { epoch } = yield* dependencies.authority.status();
+          const [operations, active, evictions] = yield* Effect.all([
+            FiberSet.make<unknown, SandboxFailure>(),
+            FiberMap.make<string, void, never>(),
+            FiberMap.make<string, void, never>(),
+          ]).pipe(Effect.provideService(Scope.Scope, scope));
 
-        const session = yield* dependencies.authority.openSession({
-          expectedEpoch: epoch,
-          nonce: randomUUID(),
-        });
+          const attempts = new Attempts({
+            config,
+            dependencies,
+            session,
+            scope,
+            close,
+            stopping: yield* Stopping.make(),
+            operations,
+            active,
+            evictions,
+          });
 
-        const scope = yield* Effect.acquireRelease(Scope.make(), (scope) =>
-          Scope.close(scope, Exit.void),
-        );
+          yield* Effect.addFinalizer(() => attempts.stopWork());
+          const recovered = yield* recoveryRecords(dependencies.authority);
+          yield* attempts.exports.reconcileGuards(recovered.exports);
 
-        const operations = yield* FiberSet.make<unknown, SandboxFailure>().pipe(
-          Effect.provideService(Scope.Scope, scope),
-        );
+          for (const record of recovered.attempts) {
+            yield* attempts.admissions.monitor(record);
+          }
 
-        const active = yield* FiberMap.make<string, void, never>().pipe(
-          Effect.provideService(Scope.Scope, scope),
-        );
-
-        const stopping = yield* Stopping.make();
-
-        const attempts = new Attempts(
-          config,
-          dependencies,
-          session,
-          scope,
-          closeResources,
-          stopping,
-          operations,
-          active,
-        );
-
-        yield* Effect.addFinalizer(() => attempts.stopWork());
-        const recovered = yield* recoveryRecords(dependencies.authority);
-        yield* attempts.exports.reconcileGuards(recovered.exports);
-
-        for (const record of recovered.attempts) {
-          yield* attempts.admissions.monitor(record);
-        }
-
-        return attempts;
-      }).pipe(
-        Effect.provideService(Scope.Scope, resources),
-        Effect.onExit((exit) =>
-          Exit.isFailure(exit) ? closeResources.pipe(Effect.orDie) : Effect.void,
-        ),
-      );
-    });
+          return attempts;
+        }),
+    );
   }
   private supervise<A>(
     operation: Effect.Effect<A, SandboxFailure>,
   ): Effect.Effect<A, SandboxFailure> {
     return Effect.uninterruptibleMask((restore) =>
       Effect.gen({ self: this }, function* () {
-        if (this.stopping.stopped) {
-          return yield* Effect.fail(
-            new ArtifactError("conflict", "Sandbox service is stopping. Retry after restart."),
-          );
+        const { stopping, operations } = this.options;
+
+        if (stopping.stopped) {
+          return yield* Effect.fail(stoppingConflict());
         }
 
-        const fiber = yield* FiberSet.run(this.operations, operation);
+        const fiber = yield* FiberSet.run(operations, operation);
 
         return yield* restore(Fiber.join(fiber)).pipe(
-          Effect.catchCause((cause) => {
-            if (this.stopping.stopped && cause.reasons.every(Cause.isInterruptReason)) {
-              return Effect.fail(
-                new ArtifactError("conflict", "Sandbox service is stopping. Retry after restart."),
-              );
-            }
-
-            return Effect.failCause(cause);
-          }),
+          Effect.catchCause((cause) =>
+            stopping.stopped && cause.reasons.every(Cause.isInterruptReason)
+              ? Effect.fail(stoppingConflict())
+              : Effect.failCause(cause),
+          ),
         );
       }),
     );
@@ -161,20 +134,21 @@ export class Attempts {
   lookup(identity: SandboxAttemptIdentity) {
     return this.supervise(
       Effect.gen({ self: this }, function* () {
-        const id = attemptId(this.config.stateRoot, identity);
+        const { config, dependencies } = this.options;
+        const id = attemptId(config.stateRoot, identity);
         yield* this.admissions.wait(id);
 
         if (this.monitors.has(id)) {
           return { kind: "started" } as const;
         }
 
-        const record = yield* this.dependencies.authority.read(id);
+        const record = yield* dependencies.authority.read(id);
 
         if (record) {
           yield* this.admissions.observe(record);
         }
 
-        return yield* publicReceipt(this.dependencies.resultsFor, record);
+        return yield* publicReceipt(dependencies.resultsFor, record);
       }),
     );
   }
@@ -184,19 +158,20 @@ export class Attempts {
   artifact(request: SandboxArtifactRequest) {
     return this.supervise(
       Effect.gen({ self: this }, function* () {
-        const id = attemptId(this.config.stateRoot, request);
+        const { config, dependencies } = this.options;
+        const id = attemptId(config.stateRoot, request);
         yield* this.admissions.wait(id);
-        const record = yield* this.dependencies.authority.read(id);
+        const record = yield* dependencies.authority.read(id);
 
         if (!record) {
           return yield* Effect.fail(
-            new ArtifactError("not_found", "Artifact attempt receipt was not found."),
+            new SandboxRequestError("not_found", "Artifact attempt receipt was not found."),
           );
         }
 
         if (record.kind !== "finished") {
           return yield* Effect.fail(
-            new ArtifactError("conflict", "Artifact export requires a finished attempt."),
+            new SandboxRequestError("conflict", "Artifact export requires a finished attempt."),
           );
         }
 
@@ -208,14 +183,15 @@ export class Attempts {
     return this.monitors.drain();
   }
   close() {
-    return Effect.uninterruptible(this.closeResources);
+    return Effect.uninterruptible(this.options.close);
   }
   private stopWork() {
     return Effect.gen({ self: this }, function* () {
-      yield* this.stopping.stop();
-      yield* FiberSet.awaitEmpty(this.operations);
+      const { stopping, operations, scope } = this.options;
+      yield* stopping.stop();
+      yield* FiberSet.awaitEmpty(operations);
       yield* this.drain();
-      yield* Scope.close(this.scope, Exit.void);
+      yield* Scope.close(scope, Exit.void);
     }).pipe(Effect.uninterruptible);
   }
 }
