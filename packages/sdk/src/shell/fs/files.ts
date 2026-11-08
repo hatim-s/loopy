@@ -1,5 +1,5 @@
 import type { Prepare } from "../../descriptor";
-import { builtin } from "../../graph/nodes/command";
+import { builtin, PATHS } from "../builtin";
 import { parseLs } from "../parse/fs";
 
 export const currentDirectory: Prepare = (input) => ({
@@ -8,8 +8,6 @@ export const currentDirectory: Prepare = (input) => ({
 });
 
 const rawLs = {
-  namespace: "fs",
-  name: "ls",
   program: "ls",
   flags: {
     a: { cli: "-a", kind: "boolean" },
@@ -23,13 +21,11 @@ const rawLs = {
     one: { cli: "-1", kind: "boolean" },
     F: { cli: "-F", kind: "boolean" },
   },
-  positionals: [{ name: "paths", optional: true, variadic: true }],
+  positionals: PATHS,
   positionalSeparator: true,
 } as const;
 
 const parsedLs = {
-  namespace: "fs",
-  name: "ls",
   program: "find",
   preset: { flags: { maxDepth: 1, minDepth: 1, print0: true } },
   flags: {
@@ -49,20 +45,16 @@ export const files = {
     raw: rawLs,
   }),
   cat: builtin({
-    namespace: "fs",
-    name: "cat",
     program: "cat",
     flags: {
       n: { cli: "-n", kind: "boolean" },
       b: { cli: "-b", kind: "boolean" },
       s: { cli: "-s", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   cp: builtin({
-    namespace: "fs",
-    name: "cp",
     program: "cp",
     flags: {
       recursive: { cli: "-R", kind: "boolean" },
@@ -83,20 +75,16 @@ export const files = {
     positionalSeparator: true,
   }),
   mv: builtin({
-    namespace: "fs",
-    name: "mv",
     program: "mv",
     flags: {
       force: { cli: "-f", kind: "boolean" },
       interactive: { cli: "-i", kind: "boolean" },
       verbose: { cli: "-v", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   rm: builtin({
-    namespace: "fs",
-    name: "rm",
     program: "rm",
     flags: {
       recursive: { cli: "-r", kind: "boolean" },
@@ -104,24 +92,20 @@ export const files = {
       interactive: { cli: "-i", kind: "boolean" },
       verbose: { cli: "-v", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   mkdir: builtin({
-    namespace: "fs",
-    name: "mkdir",
     program: "mkdir",
     flags: {
       parents: { cli: "-p", kind: "boolean" },
       mode: { cli: "-m", kind: "string" },
       verbose: { cli: "-v", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   touch: builtin({
-    namespace: "fs",
-    name: "touch",
     program: "touch",
     flags: {
       access: { cli: "-a", kind: "boolean" },
@@ -130,6 +114,6 @@ export const files = {
       reference: { cli: "-r", kind: "string" },
       time: { cli: "-t", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
 };

@@ -1,8 +1,7 @@
 import { branch, code, defineCommand, eq, log, loopy, map, parallel, sh } from "loopy/graph";
 
 const printf = defineCommand({
-  namespace: "fixture",
-  name: "printf",
+  key: "fixture.printf",
   program: "/usr/bin/printf",
   positionals: [{ name: "value" }],
 });

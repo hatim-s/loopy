@@ -27,5 +27,3 @@ export { and, eq, exists, gt, gte, in_, isNull, lt, lte, ne, not, or, size } fro
 export type { Ref } from "./ref";
 
 export type { Infer } from "./types";
-
-export { GraphBuildError } from "./validate";

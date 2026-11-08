@@ -25,8 +25,6 @@ export type CompilerDiagnosticCode =
   | "await_forbidden"
   | "template_reference"
   | "forbidden_statement"
-  | "command_descriptor"
-  | "command_key"
   | "module_import"
   | "cyclic_import"
   | "sdk_alias"
@@ -53,8 +51,6 @@ export type CompileResult =
     }
   | { ok: false; diagnostics: CompilerDiagnostic[] };
 
-export type ParserSource = { file: string; exportName: string };
-
 export type SourceCall = {
   kind: NonNullable<CallSyntax["source"]>;
   label: string;
@@ -66,5 +62,5 @@ export type AuthorModule = {
   file: string;
   source: string;
   evaluated: string;
-  sourceCalls?: SourceCall[];
+  sourceCalls: SourceCall[];
 };

@@ -178,3 +178,8 @@ test("sh.run rejects shell operators during graph construction", () => {
     "Unsupported shell character '|'. Pass stdin or use separate commands instead.",
   );
 });
+
+test("a command descriptor without a key is refused", () => {
+  // @ts-expect-error The key is the command's identity.
+  expect(() => defineCommand({ program: "echo" })).toThrow("key");
+});

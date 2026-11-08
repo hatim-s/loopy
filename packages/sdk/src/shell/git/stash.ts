@@ -1,10 +1,8 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin, PATHS } from "../builtin";
 import { parseStashList } from "../parse/git";
 
 export const stash = {
   push: builtin({
-    namespace: "git",
-    name: "stash.push",
     program: "git",
     path: ["stash", "push"],
     flags: {
@@ -12,24 +10,20 @@ export const stash = {
       all: { cli: "--all", kind: "boolean" },
       message: { cli: "-m", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   pop: builtin({
-    namespace: "git",
-    name: "stash.pop",
     program: "git",
     path: ["stash", "pop"],
     flags: {
       index: { cli: "--index", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   list: builtin(
     {
       preset: { flags: { format: "%gd%x00%H%x00%gs" } },
-      namespace: "git",
-      name: "stash.list",
       program: "git",
       path: ["stash", "list"],
       flags: {

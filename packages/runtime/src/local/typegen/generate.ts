@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { type CommandResult, errorMessage } from "@loopy/core";
 import { Data, Effect } from "effect";
@@ -47,7 +48,16 @@ export const generateCommand = Effect.fn(function* (
 
   const parsed = parseCliHelp(binary, path, help);
   const name = options.name ?? identifier([basename(binary), ...path].join("-"));
-  const descriptor = { ...parsed.descriptor, observedVersion: version.split("\n")[0] ?? version };
 
-  return { source: renderCommandSource(name, descriptor), help, warnings: parsed.warnings };
+  const header = [
+    `// Generated from \`${[binary, ...path, "--help"].join(" ")}\`.`,
+    `// Help sha256: ${createHash("sha256").update(help).digest("hex")}`,
+    `// Observed version: ${version.split("\n")[0] ?? version}`,
+  ].join("\n");
+
+  return {
+    source: `${header}\n${renderCommandSource(name, parsed.descriptor)}`,
+    help,
+    warnings: parsed.warnings,
+  };
 });

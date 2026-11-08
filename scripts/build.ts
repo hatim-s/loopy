@@ -48,9 +48,7 @@ function moduleSpecifier(node: ts.StringLiteral) {
     (ts.isLiteralTypeNode(parent) && ts.isImportTypeNode(parent.parent)) ||
     (ts.isCallExpression(parent) &&
       parent.arguments[0] === node &&
-      (parent.expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isPropertyAccessExpression(parent.expression) &&
-          parent.expression.getText() === "Bun.resolveSync")))
+      parent.expression.kind === ts.SyntaxKind.ImportKeyword)
   );
 }
 

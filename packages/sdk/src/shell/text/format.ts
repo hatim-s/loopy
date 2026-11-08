@@ -1,34 +1,10 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin, PATHS } from "../builtin";
 import { parseJq, parseSha256, parseWc } from "../parse/text";
-
-const base64Descriptor = {
-  namespace: "text",
-  name: "base64",
-  program: "base64",
-  flags: {
-    decode: { cli: "-d", kind: "boolean" },
-    input: { cli: "-i", kind: "string" },
-  },
-  positionals: [],
-  variants: {
-    linux: {
-      flags: { input: { cli: "", kind: "string", style: "positional", position: "after" } },
-    },
-    darwin: {
-      flags: {
-        decode: { cli: "-D", kind: "boolean" },
-        input: { cli: "-i", kind: "string" },
-      },
-    },
-  },
-} as const;
 
 export const format = {
   wc: builtin(
     {
       exclude: ["lines", "words", "bytes", "characters"],
-      namespace: "text",
-      name: "wc",
       program: "wc",
       flags: {
         lines: { cli: "-l", kind: "boolean" },
@@ -36,24 +12,20 @@ export const format = {
         bytes: { cli: "-c", kind: "boolean" },
         characters: { cli: "-m", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseWc, out: { kind: "value", type: "json[]" } },
   ),
   tr: builtin({
-    namespace: "text",
-    name: "tr",
     program: "tr",
     flags: {
       delete: { cli: "-d", kind: "boolean" },
       squeeze: { cli: "-s", kind: "boolean" },
       complement: { cli: "-c", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   diff: builtin({
-    namespace: "text",
-    name: "diff",
     program: "diff",
     flags: {
       unified: { cli: "-u", kind: "boolean" },
@@ -61,14 +33,12 @@ export const format = {
       brief: { cli: "-q", kind: "boolean" },
       ignoreSpace: { cli: "-w", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   jq: builtin(
     {
       exclude: ["rawOutput", "rawOutput0"],
       preset: { flags: { compactOutput: true } },
-      namespace: "text",
-      name: "jq",
       program: "jq",
       flags: {
         rawOutput0: { cli: "--raw-output0", kind: "boolean" },
@@ -81,33 +51,47 @@ export const format = {
         nullInput: { cli: "-n", kind: "boolean" },
         exitStatus: { cli: "-e", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseJq, out: { kind: "value", type: "json" } },
   ),
   yq: builtin({
-    namespace: "text",
-    name: "yq",
     program: "yq",
     flags: {
       rawOutput: { cli: "-r", kind: "boolean" },
       compactOutput: { cli: "-c", kind: "boolean" },
       exitStatus: { cli: "-e", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
-  base64: builtin(base64Descriptor),
+  base64: builtin({
+    program: "base64",
+    flags: {
+      decode: { cli: "-d", kind: "boolean" },
+      input: { cli: "-i", kind: "string" },
+    },
+    positionals: [],
+    variants: {
+      linux: {
+        flags: { input: { cli: "", kind: "string", style: "positional", position: "after" } },
+      },
+      darwin: {
+        flags: {
+          decode: { cli: "-D", kind: "boolean" },
+          input: { cli: "-i", kind: "string" },
+        },
+      },
+    },
+  }),
   sha256sum: builtin(
     {
       exclude: ["check"],
-      namespace: "text",
-      name: "sha256sum",
       program: "sha256sum",
       flags: {
         check: { cli: "-c", kind: "boolean" },
         binary: { cli: "-b", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       variants: {
         darwin: {
           program: "shasum",

@@ -1,77 +1,72 @@
+import { errorMessage } from "@loopy/core";
 import { CALL_SYNTAX, type CallSyntax, COMMAND_CALL } from "./calls";
-import { type CommandDescriptor, commandKey } from "./descriptor";
 import * as graph from "./graph";
-import { PARSER, type Parser } from "./graph/nodes/command";
 import { GraphBuildError } from "./graph/validate";
-import * as fsParsers from "./shell/parse/fs";
-import * as gitParsers from "./shell/parse/git";
-import * as netParsers from "./shell/parse/net";
-import * as textParsers from "./shell/parse/text";
+import { BUILTIN, type Hosted } from "./shell/builtin";
+import * as parsers from "./shell/parse";
 
-export { type CallSyntax, COMMAND_CALL, type OptionRole } from "./calls";
+export { type CallSyntax, COMMAND_CALL } from "./calls";
 
-export { commandKey } from "./descriptor";
+export { GraphBuildError } from "./graph/validate";
 
-type Builtin = { readonly descriptor: CommandDescriptor; readonly [PARSER]?: Parser<unknown> };
+type Namespace = { readonly [name: string]: Hosted | Namespace };
 
-type Namespace = { readonly [name: string]: Builtin | Namespace };
-
-function isBuiltin(value: Builtin | Namespace): value is Builtin {
-  return "descriptor" in value;
-}
-
-function builtinsOf(namespace: Namespace, prefix: string): { path: string; call: Builtin }[] {
-  return Object.entries(namespace).flatMap(([name, value]) =>
-    isBuiltin(value)
-      ? [{ path: `${prefix}.${name}`, call: value }]
-      : builtinsOf(value, `${prefix}.${name}`),
+function builtinsOf(namespace: Namespace): Hosted[typeof BUILTIN][] {
+  return Object.values(namespace).flatMap((value) =>
+    BUILTIN in value ? [value[BUILTIN]] : builtinsOf(value),
   );
 }
 
+type NamespaceName = {
+  [K in keyof typeof CALL_SYNTAX]: (typeof CALL_SYNTAX)[K] extends "namespace" ? K : never;
+}[keyof typeof CALL_SYNTAX];
+
+// The mapped key type keeps this list equal to the namespaces the call table marks.
 const NAMESPACES = {
   archive: graph.archive,
   fs: graph.fs,
   git: graph.git,
   net: graph.net,
   text: graph.text,
-};
+} satisfies { readonly [K in NamespaceName]: Namespace };
 
-const builtins = Object.entries(NAMESPACES).flatMap(([name, namespace]) =>
-  builtinsOf(namespace, name),
-);
+const builtins = Object.values(NAMESPACES).flatMap(builtinsOf);
 
 /** Every callable author path, such as `git.stash.list.raw`, with the rules for its arguments. */
 export const sdkCalls: ReadonlyMap<string, CallSyntax> = new Map<string, CallSyntax>([
-  ...Object.entries(CALL_SYNTAX).filter(([name]) => !Object.hasOwn(NAMESPACES, name)),
+  ...Object.entries(CALL_SYNTAX).flatMap(([name, syntax]) =>
+    syntax === "namespace" ? [] : [[name, syntax] as const],
+  ),
   ...Object.keys(graph.sh).map((member) => [`sh.${member}`, CALL_SYNTAX.sh] as const),
-  ...builtins.flatMap(({ path }) => [
-    [path, COMMAND_CALL] as const,
-    [`${path}.raw`, COMMAND_CALL] as const,
+  ...builtins.flatMap(({ key }) => [
+    [key, COMMAND_CALL] as const,
+    [`${key}.raw`, COMMAND_CALL] as const,
   ]),
 ]);
 
-export const builtinCommandKeys = builtins.map(({ call }) => commandKey(call.descriptor));
-
-const PARSER_MODULES = [
-  ["./shell/parse/fs", fsParsers],
-  ["./shell/parse/git", gitParsers],
-  ["./shell/parse/net", netParsers],
-  ["./shell/parse/text", textParsers],
-] as const;
+const parserNames = new Map<unknown, string>(
+  Object.entries(parsers).map(([name, parse]) => [parse, name]),
+);
 
 /** Locates a built-in parser so the compiler can bundle it without knowing the SDK layout. */
 export function builtinParser(key: string) {
-  const parse = builtins.find(({ call }) => commandKey(call.descriptor) === key)?.call[PARSER];
+  const parse = builtins.find((command) => command.key === key)?.parse;
+  const exportName = parse ? parserNames.get(parse) : undefined;
 
-  for (const [specifier, exports] of PARSER_MODULES) {
-    const exportName = Object.entries(exports).find(([, value]) => value === parse)?.[0];
+  return exportName === undefined
+    ? undefined
+    : { file: Bun.resolveSync("./shell/parse", import.meta.dir), exportName };
+}
 
-    if (parse && exportName) {
-      return { file: Bun.resolveSync(specifier, import.meta.dir), exportName };
-    }
-  }
+/** The evaluator entry imports this module by path, so the compiler resolves no SDK package. */
+export function evaluatorSource(file: string) {
+  return `import {emitGraph} from ${JSON.stringify(import.meta.path)};
+await emitGraph(() => import(${JSON.stringify(file)}));`;
+}
 
-  return undefined;
+/** The module that author SDK imports resolve to while the evaluator bundle is built. */
+export function graphEntry() {
+  return Bun.resolveSync("./graph", import.meta.dir);
 }
 
 /** The evaluator protocol: graph JSON on stdout, or the build diagnostic on stderr. */
@@ -81,7 +76,7 @@ export async function emitGraph(load: () => Promise<{ default: unknown }>) {
     process.stdout.write(JSON.stringify(built));
   } catch (error) {
     process.stderr.write(
-      error instanceof GraphBuildError ? JSON.stringify(error.diagnostic) : String(error),
+      error instanceof GraphBuildError ? JSON.stringify(error.diagnostic) : errorMessage(error),
     );
     process.exitCode = 1;
   }

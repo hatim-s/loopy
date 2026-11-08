@@ -1,9 +1,7 @@
-import { builtin } from "../graph/nodes/command";
+import { builtin, namespace, PATHS } from "./builtin";
 
-export const archive = {
+export const archive = namespace("archive", {
   tar: builtin({
-    namespace: "archive",
-    name: "tar",
     program: "tar",
     flags: {
       create: { cli: "-c", kind: "boolean" },
@@ -15,11 +13,9 @@ export const archive = {
       file: { cli: "-f", kind: "string" },
       directory: { cli: "-C", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   gzip: builtin({
-    namespace: "archive",
-    name: "gzip",
     program: "gzip",
     flags: {
       decompress: { cli: "-d", kind: "boolean" },
@@ -28,11 +24,9 @@ export const archive = {
       force: { cli: "-f", kind: "boolean" },
       recursive: { cli: "-r", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   zip: builtin({
-    namespace: "archive",
-    name: "zip",
     program: "zip",
     flags: {
       recursive: { cli: "-r", kind: "boolean" },
@@ -40,11 +34,9 @@ export const archive = {
       update: { cli: "-u", kind: "boolean" },
       exclude: { cli: "-x", kind: "string", position: "after" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   unzip: builtin({
-    namespace: "archive",
-    name: "unzip",
     program: "unzip",
     flags: {
       list: { cli: "-l", kind: "boolean" },
@@ -53,6 +45,6 @@ export const archive = {
       quiet: { cli: "-q", kind: "boolean" },
       directory: { cli: "-d", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
-};
+});

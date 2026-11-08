@@ -325,7 +325,7 @@ test("parser execution failures propagate to the stored graph node and run", asy
     throw new Error("Expected command node");
   }
 
-  node.parse = { bundleHash: "a".repeat(64), input: {} };
+  node.parse = { module: null, bundleHash: "a".repeat(64), input: {} };
   const store = new MemorySqlStore();
   await Effect.runPromise(store.createRun(newRun()));
   expect(

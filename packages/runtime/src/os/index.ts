@@ -17,8 +17,6 @@ export { executeLocalCommand } from "./process";
 
 export { withBundleSandbox } from "./sandbox/bundle";
 
-export { compilerLauncher } from "./sandbox/compiler";
-
 export { ScratchCleanupError } from "./sandbox/io";
 
 export { secretRedactor } from "./secret-redactor";

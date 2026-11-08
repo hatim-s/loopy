@@ -85,8 +85,8 @@ export function retryPolicy(retry?: Partial<GraphRetry>): GraphRetry {
 export class GraphBuilder {
   readonly nodes: Node[] = [];
   readonly edges: Edge[] = [];
-  readonly frames: Frame[] = [frame(null)];
-  readonly prefixes: string[] = [];
+  private readonly frames: Frame[] = [frame(null)];
+  private readonly prefixes: string[] = [];
   private readonly order = new Map<NodeId, number>();
 
   constructor(
@@ -137,10 +137,6 @@ export class GraphBuilder {
   }
 
   allocate(label: string | null, fallback: string) {
-    if (label !== null) {
-      validateLabel(label);
-    }
-
     validateLabel(fallback);
     const name = [...this.prefixes, label ?? fallback].join("/");
 
@@ -201,7 +197,6 @@ export class GraphBuilder {
     this.edges.push({ from, to, kind });
   }
 
-  /** Records a control node, expands its arms in order, then points the node at their entries. */
   control(kind: ControlKind, build: (id: NodeId) => Control) {
     const base = this.allocate(null, kind);
     const { arms, node } = build(base.id);

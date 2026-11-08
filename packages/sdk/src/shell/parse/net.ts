@@ -10,9 +10,9 @@ type Curl = {
   url: string;
 };
 
-export const CURL_WRITE_OUT = "\n__LOOPY_CURL__%{json}";
-
 const CURL_MARKER = "\n__LOOPY_CURL__";
+
+export const CURL_WRITE_OUT = `${CURL_MARKER}%{json}`;
 
 function headerBlock(block: string) {
   const [first = "", ...rows] = block.split(/\r?\n/);
