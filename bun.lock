@@ -15,7 +15,7 @@
         "@loopy/runtime": "workspace:*",
         "@loopy/sdk": "workspace:*",
         "bun-types": "1.4.0",
-        "effect": "4.1.2",
+        "effect": "catalog:",
         "eslint": "10.8.1",
         "eslint-plugin-sonarjs": "4.2.2",
         "eslint-plugin-unicorn": "77.0.0",
@@ -96,7 +96,7 @@
         "@loopy/contract": "workspace:*",
         "@loopy/core": "workspace:*",
         "@loopy/runtime": "workspace:*",
-        "effect": "4.1.2",
+        "effect": "catalog:",
       },
     },
     "packages/compiler": {
@@ -107,8 +107,8 @@
         "@loopy/core": "workspace:*",
         "@loopy/runtime": "workspace:*",
         "@loopy/sdk": "workspace:*",
-        "effect": "4.1.2",
-        "oxc-parser": "^0.154.0",
+        "effect": "catalog:",
+        "oxc-parser": "catalog:",
       },
     },
     "packages/contract": {
@@ -116,25 +116,25 @@
       "version": "0.0.0",
       "dependencies": {
         "@loopy/core": "workspace:*",
-        "effect": "4.1.2",
+        "effect": "catalog:",
       },
     },
     "packages/core": {
       "name": "@loopy/core",
       "version": "0.0.0",
       "dependencies": {
-        "effect": "4.1.2",
+        "effect": "catalog:",
       },
     },
     "packages/loopy": {
       "name": "loopy",
       "version": "0.4.0",
       "bin": {
-        "loopy": "./dist/loopy/src/cli.js",
+        "loopy": "./dist/cli/src/index.js",
       },
       "dependencies": {
-        "effect": "4.1.2",
-        "oxc-parser": "^0.154.0",
+        "effect": "catalog:",
+        "oxc-parser": "catalog:",
       },
       "devDependencies": {
         "@loopy/cli": "workspace:*",
@@ -152,8 +152,8 @@
         "@loopy/contract": "workspace:*",
         "@loopy/core": "workspace:*",
         "@loopy/sdk": "workspace:*",
-        "effect": "4.1.2",
-        "oxc-parser": "0.154.0",
+        "effect": "catalog:",
+        "oxc-parser": "catalog:",
       },
     },
     "packages/sdk": {
@@ -163,6 +163,10 @@
         "@loopy/core": "workspace:*",
       },
     },
+  },
+  "catalog": {
+    "effect": "4.1.2",
+    "oxc-parser": "0.154.0",
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],

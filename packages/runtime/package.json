@@ -14,10 +14,10 @@
     "./executor/protocol": "./src/executor/protocol.ts"
   },
   "dependencies": {
-    "effect": "4.1.2",
+    "effect": "catalog:",
     "@loopy/core": "workspace:*",
     "@loopy/contract": "workspace:*",
     "@loopy/sdk": "workspace:*",
-    "oxc-parser": "0.154.0"
+    "oxc-parser": "catalog:"
   }
 }

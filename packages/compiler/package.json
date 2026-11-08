@@ -7,11 +7,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "effect": "4.1.2",
+    "effect": "catalog:",
     "@loopy/core": "workspace:*",
     "@loopy/contract": "workspace:*",
     "@loopy/sdk": "workspace:*",
     "@loopy/runtime": "workspace:*",
-    "oxc-parser": "^0.154.0"
+    "oxc-parser": "catalog:"
   }
 }

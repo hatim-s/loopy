@@ -9,7 +9,6 @@
       "!coverage",
       "!.loopy",
       "!tools/anti-slop",
-      "!research",
       "!.notes",
       "!**/routeTree.gen.ts",
       "!**/.wrangler"
@@ -23,16 +22,6 @@
     "lineEnding": "lf",
     "lineWidth": 100
   },
-  "overrides": [
-    {
-      "includes": [
-        ".notes/cloud/evidence/architecture/**",
-        ".notes/cloud/architecture/evidence/**"
-      ],
-      "files": { "maxSize": 16777216 },
-      "formatter": { "enabled": false }
-    }
-  ],
   "javascript": {
     "formatter": {
       "arrowParentheses": "always",

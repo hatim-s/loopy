@@ -4,7 +4,7 @@ import { decodeBoundary, routes } from "@loopy/contract";
 import { readDaemonFile } from "@loopy/runtime/local";
 import { Data, Effect } from "effect";
 
-const cliPath = resolve(import.meta.dir, "../../src/cli.ts");
+const cliPath = resolve(import.meta.dir, "../../../cli/src/index.ts");
 
 export class AcceptanceError extends Data.TaggedError("AcceptanceError")<{
   operation: string;

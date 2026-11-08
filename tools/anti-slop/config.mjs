@@ -1,7 +1,7 @@
 import antiSlop from "./index.mjs";
 
 export default [
-  { ignores: ["tools/anti-slop/**", ".agent/**", ".agents/**", ".claude/**", ".codex/**", ".continue/**", ".cursor/**", ".gemini/**", ".opencode/**", ".pi/**", ".roo/**", ".windsurf/**"] },
+  { ignores: ["tools/anti-slop/**"] },
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}"],
     plugins: { "anti-slop": antiSlop },

@@ -3,45 +3,53 @@ import { compile } from "@loopy/compiler";
 import { routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { request } from "../client";
-import { type CliContext, requireTarget } from "../context";
+import { defineCommand } from "../command";
 import { diagnosticsError } from "../errors";
 import { printJson } from "../output";
 
-export function runSave(context: CliContext) {
-  return Effect.gen(function* () {
-    const source = resolve(context.cwd, yield* requireTarget(context, "TypeScript file"));
-    const result = yield* compile(source);
+export const save = defineCommand({
+  path: ["save"],
+  summary: "Compile and save a graph",
+  options: {
+    replace: {
+      type: "boolean",
+      description: "Replace a saved loopy of the same name that came from another source.",
+    },
+  },
+  positionals: [{ name: "file.ts", label: "TypeScript file" }],
+  run: (cli) =>
+    Effect.gen(function* () {
+      const source = resolve(cli.cwd, cli.args[0]);
+      const result = yield* compile(source);
 
-    if (!result.ok) {
-      return yield* diagnosticsError(result.diagnostics);
-    }
+      if (!result.ok) {
+        return yield* diagnosticsError(result.diagnostics);
+      }
 
-    const path = relative(context.cwd, source);
-    const outside = path === ".." || path.startsWith("../");
-    const workspace = !context.values.cwd && outside ? dirname(source) : context.cwd;
-    printJson(
-      yield* request(
-        context,
-        `/loopies/${encodeURIComponent(result.graph.name)}`,
-        routes.putLoopy.response,
-        {
-          method: "PUT",
-          body: {
-            graph: result.graph,
-            revision: result.revision,
-            sourceArtifact: result.sourceArtifact,
-            bundles: result.bundles.map((value) => ({
-              ...value,
-              bytes: Buffer.from(value.bytes).toString("base64"),
-            })),
-            source: {
-              path: source,
-              workspace,
+      const path = relative(cli.cwd, source);
+      const outside = path === ".." || path.startsWith("../");
+      // A file outside an implicit workspace registers beside its source instead.
+      const workspace = !cli.cwdExplicit && outside ? dirname(source) : cli.cwd;
+      printJson(
+        yield* request(
+          cli,
+          `/loopies/${encodeURIComponent(result.graph.name)}`,
+          routes.putLoopy.response,
+          {
+            method: "PUT",
+            body: {
+              graph: result.graph,
+              revision: result.revision,
+              sourceArtifact: result.sourceArtifact,
+              bundles: result.bundles.map((value) => ({
+                ...value,
+                bytes: Buffer.from(value.bytes).toString("base64"),
+              })),
+              source: { path: source, workspace },
+              replace: cli.values.replace,
             },
-            replace: context.values.replace ?? false,
           },
-        },
-      ),
-    );
-  });
-}
+        ),
+      );
+    }),
+});

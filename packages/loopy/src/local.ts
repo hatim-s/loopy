@@ -1,1 +1,12 @@
-export * from "@loopy/runtime/local";
+export {
+  DEFAULT_PORT,
+  daemonUrl,
+  defaultHome,
+  type LocalService,
+  localDaemon,
+  makeLocalService,
+  openRunStore,
+  readDaemonFile,
+  ServiceError,
+  type SqliteRunStore,
+} from "@loopy/runtime/local";

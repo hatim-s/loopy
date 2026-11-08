@@ -72,10 +72,8 @@ test("RecordSpec round-trips every field type through contracts and input bounda
 
   const input = await Effect.runPromise(
     graphInput(spec, {
-      home: "/unused",
       cwd: "/unused",
       values: {},
-      positionals: [],
       namedInput,
     }),
   );
@@ -102,10 +100,8 @@ for (const [kind, invalid] of [
     await expect(
       Effect.runPromise(
         graphInput(spec, {
-          home: "/unused",
           cwd: "/unused",
           values: {},
-          positionals: [],
           namedInput: { items: JSON.stringify(invalid) },
         }),
       ),

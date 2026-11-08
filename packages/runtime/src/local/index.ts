@@ -11,7 +11,7 @@ export { localDaemon } from "./daemon";
 
 export { daemonUrl, readDaemonFile } from "./daemon/file";
 
-export { daemonStatus, installDaemon, uninstallDaemon } from "./daemon/install";
+export { installDaemon, uninstallDaemon } from "./daemon/install";
 
 export { defaultHome } from "./home";
 

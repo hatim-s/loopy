@@ -1,48 +1,49 @@
+import { realpath } from "node:fs/promises";
+import { resolve } from "node:path";
+import { defaultHome } from "@loopy/runtime/local";
 import { Effect } from "effect";
-import type { ParsedCliArgs } from "./args";
-import { CliError } from "./errors";
+import type { OptionSpec, OptionValues } from "./command";
+import { cliIO } from "./errors";
 
-export type CliContext = {
-  home: string;
-  leaseMs?: number;
-  cwd: string;
-  values: ParsedCliArgs["values"];
-  /** Positional arguments after the command name. */
-  positionals: string[];
-  namedInput: Record<string, string> | undefined;
+export const GLOBAL_OPTIONS = {
+  home: {
+    type: "string",
+    value: "directory",
+    description: `Registry, bundles and runs.sqlite. Default: ${defaultHome()}`,
+  },
+  cwd: {
+    type: "string",
+    value: "directory",
+    description: "Workspace for a new run. Default: current directory",
+  },
+  help: { type: "boolean", short: "h", description: "Show usage" },
+} as const satisfies Record<string, OptionSpec>;
+
+/** The global options resolved once for every command. */
+export type Context = {
+  readonly home: string;
+  readonly cwd: string;
+  readonly cwdExplicit: boolean;
 };
 
-export const requireArgument = Effect.fn(function* (value: string | undefined, label: string) {
-  if (!value) {
-    return yield* new CliError({ message: `${label} is required. Run loopy --help for usage.` });
-  }
+export type Invocation<Values, Args> = Context & {
+  readonly values: Values;
+  readonly args: Args;
+  readonly namedInput: Readonly<Record<string, string>> | undefined;
+};
 
-  return value;
-});
+/** The slice of a run or schedule invocation that input parsing reads. */
+export type CliContext = Pick<
+  Invocation<{ readonly "input-json"?: string; readonly "input-file"?: string }, unknown>,
+  "cwd" | "values" | "namedInput"
+>;
 
-export const expectNoArguments = (context: CliContext) =>
-  context.positionals.length
-    ? Effect.fail(
-        new CliError({ message: `Unexpected arguments: ${context.positionals.join(" ")}.` }),
-      )
-    : Effect.void;
+export const resolveContext = Effect.fn(function* (globals: OptionValues<typeof GLOBAL_OPTIONS>) {
+  const context: Context = {
+    home: resolve(globals.home ?? defaultHome()),
+    cwd: yield* cliIO(() => realpath(resolve(globals.cwd ?? process.cwd()))),
+    cwdExplicit: globals.cwd !== undefined,
+  };
 
-export const optionalTarget = Effect.fn(function* (context: CliContext) {
-  const [target, ...extra] = context.positionals;
-
-  if (extra.length) {
-    return yield* new CliError({ message: `Unexpected arguments: ${extra.join(" ")}.` });
-  }
-
-  return target;
-});
-
-export const requireTarget = Effect.fn(function* (context: CliContext, label: string) {
-  return yield* requireArgument(yield* optionalTarget(context), label);
-});
-
-export const requireHead = Effect.fn(function* (context: CliContext, label: string) {
-  const [head, ...rest] = context.positionals;
-
-  return { head: yield* requireArgument(head, label), rest };
+  return context;
 });

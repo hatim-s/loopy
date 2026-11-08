@@ -3,74 +3,59 @@ import { validateSecretName } from "@loopy/core";
 import { validateSecretValue } from "@loopy/runtime/local";
 import { Effect } from "effect";
 import { request } from "../client";
-import { type CliContext, optionalTarget, requireHead } from "../context";
-import { CliError, cliSync } from "../errors";
+import { defineCommand } from "../command";
+import { cliSync } from "../errors";
 import { printJson } from "../output";
 import { readSecret } from "../secret-entry";
 
-function storeSecret(context: CliContext, name: string | undefined) {
-  return Effect.gen(function* () {
-    if (!name) {
-      return yield* new CliError({
-        message: "Pass a secret name, e.g. loopy secrets set NPM_TOKEN.",
-      });
-    }
+const SECRET_NAME = { name: "name", label: "Secret name" } as const;
 
-    yield* cliSync(() => validateSecretName(name));
-    const value = yield* readSecret(context.values.stdin ?? false);
-    yield* cliSync(() => validateSecretValue(value));
-    printJson(
-      yield* request(context, `/secrets/${encodeURIComponent(name)}`, routes.putSecret.response, {
-        method: "PUT",
-        body: { value },
-      }),
-    );
-  });
-}
+export const secretsSet = defineCommand({
+  path: ["secrets", "set"],
+  summary: "Store a secret privately",
+  options: {
+    stdin: { type: "boolean", description: "Read the value from piped stdin instead of a prompt." },
+  },
+  positionals: [SECRET_NAME],
+  run: (cli) =>
+    Effect.gen(function* () {
+      const [name] = cli.args;
+      // Reject a bad name before asking for a hidden value.
+      yield* cliSync(() => validateSecretName(name));
+      const value = yield* readSecret(cli.values.stdin);
+      yield* cliSync(() => validateSecretValue(value));
+      printJson(
+        yield* request(cli, `/secrets/${encodeURIComponent(name)}`, routes.putSecret.response, {
+          method: "PUT",
+          body: { value },
+        }),
+      );
+    }),
+});
 
-export function runSecrets(context: CliContext) {
-  return Effect.gen(function* () {
-    const { head: action, rest } = yield* requireHead(context, "Secret action");
-    const name = yield* optionalTarget({ ...context, positionals: rest });
+export const secretsList = defineCommand({
+  path: ["secrets", "list"],
+  summary: "List secret names",
+  options: {},
+  positionals: [],
+  run: (cli) =>
+    Effect.gen(function* () {
+      printJson(yield* request(cli, "/secrets", routes.secrets.response));
+    }),
+});
 
-    if (context.values.stdin && action !== "set") {
-      return yield* new CliError({ message: "--stdin is only supported by loopy secrets set." });
-    }
-
-    switch (action) {
-      case "list":
-        if (name) {
-          return yield* new CliError({ message: "loopy secrets list takes no name." });
-        }
-
-        printJson(yield* request(context, "/secrets", routes.secrets.response));
-
-        return;
-      case "set":
-        yield* storeSecret(context, name);
-
-        return;
-      case "remove":
-        if (!name) {
-          return yield* new CliError({
-            message: "Pass a secret name, e.g. loopy secrets set NPM_TOKEN.",
-          });
-        }
-
-        printJson(
-          yield* request(
-            context,
-            `/secrets/${encodeURIComponent(name)}`,
-            routes.deleteSecret.response,
-            { method: "DELETE" },
-          ),
-        );
-
-        return;
-      default:
-        return yield* new CliError({
-          message: "Use loopy secrets set <name>, list, or remove <name>.",
-        });
-    }
-  });
-}
+export const secretsRemove = defineCommand({
+  path: ["secrets", "remove"],
+  summary: "Delete a stored secret",
+  options: {},
+  positionals: [SECRET_NAME],
+  run: (cli) =>
+    Effect.gen(function* () {
+      const [name] = cli.args;
+      printJson(
+        yield* request(cli, `/secrets/${encodeURIComponent(name)}`, routes.deleteSecret.response, {
+          method: "DELETE",
+        }),
+      );
+    }),
+});

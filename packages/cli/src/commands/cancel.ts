@@ -1,16 +1,21 @@
 import { routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { request } from "../client";
-import { type CliContext, requireTarget } from "../context";
+import { defineCommand, RUN_ID } from "../command";
 import { printJson } from "../output";
 
-export function runCancel(context: CliContext) {
-  return Effect.gen(function* () {
-    const id = yield* requireTarget(context, "Run ID");
-    printJson(
-      yield* request(context, `/runs/${encodeURIComponent(id)}/cancel`, routes.cancelRun.response, {
-        method: "POST",
-      }),
-    );
-  });
-}
+export const cancel = defineCommand({
+  path: ["cancel"],
+  summary: "Cancel a claimable run",
+  options: {},
+  positionals: [RUN_ID],
+  run: (cli) =>
+    Effect.gen(function* () {
+      const [id] = cli.args;
+      printJson(
+        yield* request(cli, `/runs/${encodeURIComponent(id)}/cancel`, routes.cancelRun.response, {
+          method: "POST",
+        }),
+      );
+    }),
+});

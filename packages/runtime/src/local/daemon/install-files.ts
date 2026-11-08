@@ -1,7 +1,5 @@
-import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { errorMessage } from "@loopy/core";
 import { Data, Effect } from "effect";
 import { spawnCaptured } from "../spawn";
 
@@ -9,16 +7,6 @@ export class DaemonInstallError extends Data.TaggedError("DaemonInstallError")<{
   message: string;
   cause?: unknown;
 }> {}
-
-export const installSync = <A>(run: () => A) =>
-  Effect.try({
-    try: run,
-    catch: (cause) =>
-      new DaemonInstallError({
-        message: errorMessage(cause),
-        cause,
-      }),
-  });
 
 const installIO = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({
@@ -31,7 +19,6 @@ export type DaemonExecResult = { code: number; stdout: string; stderr: string };
 
 export type DaemonOperations = {
   writeFile: (path: string, content: string | undefined) => Effect.Effect<void, DaemonInstallError>;
-  exists: (path: string) => Effect.Effect<boolean, DaemonInstallError>;
   exec: (argv: string[]) => Effect.Effect<DaemonExecResult, DaemonInstallError>;
 };
 
@@ -47,7 +34,6 @@ export const daemonOperations: DaemonOperations = {
       yield* installIO(() => mkdir(dirname(path), { recursive: true }));
       yield* installIO(() => writeFile(path, content));
     }),
-  exists: (path) => installSync(() => existsSync(path)),
   exec: (argv) =>
     Effect.gen(function* () {
       const [program, ...args] = argv;
@@ -95,7 +81,7 @@ function unitQuote(value: string): string {
     .replaceAll("\t", "\\t")}"`;
 }
 
-export function daemonPlist(home: string, command: string[], path: string): string {
+export function daemonPlist(home: string, command: readonly string[], path: string): string {
   const log = xml(join(home, "logs/daemon.log"));
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -113,7 +99,7 @@ export function daemonPlist(home: string, command: string[], path: string): stri
 `;
 }
 
-export function daemonUnit(home: string, command: string[], path: string): string {
+export function daemonUnit(home: string, command: readonly string[], path: string): string {
   return `[Unit]
 Description=Loopy daemon
 
