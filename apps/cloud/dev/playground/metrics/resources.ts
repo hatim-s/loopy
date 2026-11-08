@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
+import { processTree } from "../../stack/processes";
 import { state } from "../config";
 import { supervisorManifestSchema } from "../stack-identity";
 
@@ -53,29 +54,7 @@ export async function resources() {
       await Bun.file(resolve(state, "processes.json")).json(),
     );
 
-    const ids = new Set([manifest.owner, ...manifest.children.map((child) => child.pid)]);
-    let generation = [...ids];
-
-    for (let depth = 0; depth < 3 && ids.size < 80; depth++) {
-      const next: number[] = [];
-
-      for (const pid of generation) {
-        const result = await execute("pgrep", ["-P", String(pid)], { timeout: 2000 }).catch(
-          () => null,
-        );
-
-        for (const value of result?.stdout.trim().split(/\s+/) ?? []) {
-          const child = Number(value);
-
-          if (Number.isSafeInteger(child) && child > 0 && !ids.has(child)) {
-            ids.add(child);
-            next.push(child);
-          }
-        }
-      }
-
-      generation = next;
-    }
+    const ids = await processTree([manifest.owner, ...manifest.children.map((child) => child.pid)]);
 
     processes = processRows(
       (
@@ -98,6 +77,6 @@ export async function resources() {
     processes,
     disk,
     limits:
-      "ps CPU is lifetime averaged; RSS is KiB; child discovery is bounded to three generations. Docker guest/container CPU is not measured.",
+      "ps CPU is lifetime averaged; RSS is KiB; children come from one process table snapshot. Docker guest/container CPU is not measured.",
   };
 }

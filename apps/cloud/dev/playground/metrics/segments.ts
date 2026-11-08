@@ -1,12 +1,6 @@
 import { distribution } from "../../shared/stats";
 import { evidence, state } from "../config";
-import {
-  decodeJournalEvent,
-  eventsPath,
-  groups,
-  journalDirectory,
-  readAdmissions,
-} from "../journal";
+import { groups, journalDirectory, readAdmissions, readEvents } from "../journal";
 import { planTotals } from "../plan";
 import { catalogs } from "../repository";
 import { captureArtifact, readArtifact, segmentsArtifact, writeArtifact } from "./artifacts";
@@ -23,9 +17,7 @@ const groupTimes = [];
 for (const group of groups) {
   const terminalTimes: string[] = [];
 
-  for (const line of (await Bun.file(eventsPath(state, group)).text()).trim().split("\n")) {
-    const event = decodeJournalEvent(JSON.parse(line));
-
+  for (const event of (await readEvents(state, group, "strict")).values) {
     if (event.kind === "terminal" && event.phase === "primary") {
       terminalTimes.push(event.terminalAt);
     }

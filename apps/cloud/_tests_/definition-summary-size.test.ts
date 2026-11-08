@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { definitionSummarySchema } from "@loopy/contract";
 import { canonicalJson, revision } from "@loopy/core";
 import { Schema } from "effect";
+import { definitionPointerBytes } from "../src/artifacts/projection";
 import { ARTIFACT_LIMITS } from "../src/artifacts/storage";
 import { fillBytes, summarySizeBody, utf8 } from "./fixtures/summary-size-body";
 import type { SummarySizeRequest } from "./fixtures/summary-size-workerd";
@@ -47,13 +48,23 @@ const inspect = Schema.Struct({
   }),
 });
 
+const reference = await summarySizeBody("/");
+
+// Every revision has the same length, so any body's pointer fixes the largest source path.
 const pointerBudgetSourceBytes =
-  ARTIFACT_LIMITS.metadataRowBytes - utf8("summaries") - utf8("summary") - 64 - 36 - 27;
+  ARTIFACT_LIMITS.metadataRowBytes -
+  definitionPointerBytes({
+    workspace: reference.source.workspace,
+    slug: reference.graph.name,
+    revision: reference.revision,
+    path: "",
+  });
 
 for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
   test(`legacy ${sourceBytes}-byte source remains readable with maximum graph metadata`, async () => {
     const instance = `legacy-${sourceBytes}`;
     const body = await summarySizeBody(`/${"x".repeat(sourceBytes - 1)}`);
+
     expect(utf8(canonicalJson(body.graph))).toBe(ARTIFACT_LIMITS.graphBytes);
     const legacy = await probe(instance, { operation: "legacy", body });
     expect(legacy).toMatchObject({ status: 200 });

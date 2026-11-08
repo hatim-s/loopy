@@ -17,6 +17,7 @@ import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compile
 import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { ARTIFACT_LIMITS } from "../src/artifacts";
+import { r2Key } from "../src/artifacts/storage";
 import { startWorkerd, testWorker } from "./fixtures/workerd";
 
 let runtime: Miniflare;
@@ -136,7 +137,7 @@ test("real local R2 and DO SQL publish immutable revisions, pinned source and ba
   expect(await call(workspace, "workspace")).toMatchObject({ body: { value: workspace } });
 
   const bucket = await runtime.getR2Bucket("BUCKET");
-  const objects = await bucket.list({ prefix: `workspaces/${encodeURIComponent(workspace)}/` });
+  const objects = await bucket.list({ prefix: r2Key.workspace(workspace) });
   expect(objects.objects).toHaveLength(5);
 });
 
@@ -224,14 +225,14 @@ test("capacity rejects overflow without truncating list results", async () => {
   const body = await compiledBody("overflow", "/entry.ts", { workspace: "capacity" });
   expect(await call("capacity", "save", body)).toMatchObject({
     status: 400,
-    body: { error: expect.stringContaining("1000 definition capacity") },
+    body: { error: expect.stringContaining(`${ARTIFACT_LIMITS.definitions} definition capacity`) },
   });
   expect(await call("overfull", "fillCapacity", ARTIFACT_LIMITS.definitions + 1)).toMatchObject({
     status: 200,
   });
   expect(await call("overfull", "listSummaries")).toMatchObject({
     status: 400,
-    body: { error: expect.stringContaining("1000 definition capacity") },
+    body: { error: expect.stringContaining(`${ARTIFACT_LIMITS.definitions} definition capacity`) },
   });
 });
 
@@ -379,7 +380,7 @@ test("cloud rejects unsupported modes, declared secrets, oversized writes and bo
   const bucket = await runtime.getR2Bucket("BUCKET");
   const hash = "b".repeat(64);
   await bucket.put(
-    `workspaces/${workspace}/graphs/${hash}.json`,
+    r2Key.workspace(workspace) + r2Key.graph(hash),
     "x".repeat(ARTIFACT_LIMITS.graphBytes + 1),
   );
   expect(await call(workspace, "revisionGraph", hash)).toMatchObject({
@@ -448,12 +449,15 @@ test("shared validation rejects forged bundles, revisions and source mappings be
 
 test("HTTP capacity rejection retains bad_request and an actionable message", async () => {
   const workspace = "capacity-http";
-  expect((await call(workspace, "fillCapacity", 1000)).status).toBe(200);
+  expect((await call(workspace, "fillCapacity", ARTIFACT_LIMITS.definitions)).status).toBe(200);
   const body = await compiledBody("overflow", "/overflow.ts", { workspace });
   expect(await call(workspace, "httpSave", body)).toMatchObject({
     status: 400,
     body: {
-      error: { code: "bad_request", message: expect.stringContaining("1000 definition capacity") },
+      error: {
+        code: "bad_request",
+        message: expect.stringContaining(`${ARTIFACT_LIMITS.definitions} definition capacity`),
+      },
     },
   });
 });

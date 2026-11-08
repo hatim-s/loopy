@@ -2,7 +2,7 @@ import { routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal, failureEvidence } from "../shared/assert";
 import { compileFixture } from "../shared/fixture-client";
-import { sourceHashes } from "../shared/hash";
+import { FAILURE_JOURNEY_SOURCES, sourceHashes } from "../shared/sources";
 import { root } from "../stack/constants";
 import { FailureJourney } from "./client";
 import { ports } from "./config";
@@ -266,11 +266,7 @@ try {
   await evidence.check("cleanup_owned_processes_containers_volumes", () => journey.stack.close());
   await evidence.save({
     setupFailure,
-    sourceHashes: await sourceHashes(root, [
-      "apps/cloud/src/scheduler.ts",
-      "apps/sandbox/src/attempt/index.ts",
-      "apps/sandbox/src/docker/index.ts",
-    ]),
+    sourceHashes: await sourceHashes(root, FAILURE_JOURNEY_SOURCES),
   });
 }
 

@@ -9,10 +9,11 @@ import {
   tableCounts,
 } from "../playground/metrics/sql-probe";
 import { sqlCases } from "../playground/metrics/sql-queries";
-import { evidence, state } from "./config";
+import { closedDatabase } from "./closed-executions";
+import { evidence, evidencePath } from "./config";
 import { PLANNED_RUNS } from "./plan";
 
-const path = resolve(state, "daemon-readonly.sqlite");
+const path = closedDatabase;
 
 const beforeHash = await fileSha256(path);
 
@@ -23,7 +24,7 @@ const daemonReport = Schema.decodeUnknownSync(
     startedAt: Schema.String,
     endedAt: Schema.String,
   }),
-)(await Bun.file(resolve(evidence, "playground-daemon.json")).json());
+)(await Bun.file(evidencePath("")).json());
 
 const selected = new Set([
   "runs.latest",

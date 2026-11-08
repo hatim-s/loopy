@@ -1,15 +1,8 @@
-import { decodeBoundary, type Json, receiptSchema } from "@loopy/contract";
-import { sandboxAttemptIdentitySchema, sandboxAttemptRequestSchema } from "@loopy/contract/sandbox";
+import { decodeBoundary, receiptSchema } from "@loopy/contract";
+import { sandboxAttemptQuerySchema, sandboxAttemptRequestSchema } from "@loopy/contract/sandbox";
 import { SANDBOX_REQUEST_TIMEOUT_MS } from "../../src/provider";
 
-export type QueueProofDetails = Record<string, Json | undefined>;
-
-export type QueueProofEvent = { event: string; atMs: number; details?: QueueProofDetails };
-
-export function readQueueProvider(
-  mode: "lookup" | "start",
-  record: (event: string, details?: QueueProofDetails) => void,
-) {
+export function readQueueProvider(mode: "lookup" | "start") {
   const entered = Promise.withResolvers<void>();
   const gate = Promise.withResolvers<void>();
   const admissions: string[] = [];
@@ -25,13 +18,10 @@ export function readQueueProvider(
 
     releaseReason = reason;
     clearTimeout(watchdog);
-    record("provider-release", { mode, reason });
     gate.resolve();
   }
 
   async function hold() {
-    record("provider-held", { mode });
-
     // Release before the provider request times out, even if an assertion fails.
     if (releaseReason === null) {
       watchdog = setTimeout(() => release("watchdog"), SANDBOX_REQUEST_TIMEOUT_MS - 1500);
@@ -61,17 +51,11 @@ export function readQueueProvider(
         const identity =
           request.method === "POST"
             ? decodeBoundary(sandboxAttemptRequestSchema)(body)
-            : decodeBoundary(sandboxAttemptIdentitySchema)({
-                workspace: url.searchParams.get("workspace"),
-                executionKey: JSON.parse(url.searchParams.get("key") ?? "null"),
-                attempt: Number(url.searchParams.get("attempt")),
-              });
+            : decodeBoundary(sandboxAttemptQuerySchema)(Object.fromEntries(url.searchParams));
 
         if (identity.workspace !== mode) {
           throw new Error("Provider request crossed the synthetic workspace boundary.");
         }
-
-        record("provider-request", { method: request.method, identity });
 
         if (request.method === "GET") {
           lookups++;
@@ -85,7 +69,6 @@ export function readQueueProvider(
 
         const id = JSON.stringify([identity.workspace, identity.executionKey, identity.attempt]);
         admissions.push(id);
-        record("synthetic-admission", { id });
 
         if (mode === "start") {
           await hold();
@@ -104,7 +87,6 @@ export function readQueueProvider(
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         errors.push(message);
-        record("provider-error", { message });
 
         return new Response("Synthetic provider rejected the request.", { status: 500 });
       }

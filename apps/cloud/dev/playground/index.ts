@@ -6,7 +6,8 @@ import { cohort, recover } from "./cohort";
 import { profile } from "./config";
 import { groupSchema } from "./journal";
 import { arm, prepare } from "./prepare";
-import { serve, start, status, stop } from "./stack";
+import { start, status, stop } from "./stack";
+import { serve } from "./supervisor";
 
 const { positionals, values } = parseArgs({
   args: Bun.argv.slice(2),

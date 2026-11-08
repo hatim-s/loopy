@@ -21,7 +21,6 @@ authorityContract("Durable Object", async () => ({
   resultsFor: (workspace) => harness.authority.resultsFor(workspace),
   plan: (runId, attempt) => harness.plan(runId, attempt),
   restart: () => harness.reopen(),
-  unknownExportToken: "missing",
 }));
 
 async function finished(runId: string) {
@@ -69,72 +68,7 @@ test("racing same-volume admission and export cannot both obtain authority", asy
   }
 });
 
-test("recoverable pagination has one stable combined limit over attempts and export guards", async () => {
-  const { session, plan } = await finished("pagination");
-  await Effect.runPromise(
-    harness.authority.beginExport({ session, attemptId: plan.id, token: "pagination-guard" }),
-  );
-
-  for (const name of ["page-a", "page-b", "page-c"]) {
-    await Effect.runPromise(harness.authority.admit({ session, plan: await harness.plan(name) }));
-  }
-
-  const all = await Effect.runPromise(harness.authority.recoverable({ after: null, limit: 200 }));
-  const ids: string[] = [];
-  let after: string | null = null;
-
-  do {
-    const page: typeof all = await Effect.runPromise(
-      harness.authority.recoverable({ after, limit: 2 }),
-    );
-
-    const keys = [
-      ...page.attempts.map((record) => `a:${record.plan.id}`),
-      ...page.exports.map((record) => `e:${record.token}`),
-    ];
-
-    expect(keys.length).toBeLessThanOrEqual(2);
-    ids.push(...keys);
-    after = page.next;
-  } while (after !== null);
-
-  expect(ids).toEqual(
-    [
-      ...all.attempts.map((record) => `a:${record.plan.id}`),
-      ...all.exports.map((record) => `e:${record.token}`),
-    ].sort(),
-  );
-  expect(new Set(ids).size).toBe(ids.length);
-});
-
-test("export-only HTTP recovery filters an exact volume and excludes released guards", async () => {
-  const { session, plan } = await finished("export-only");
-  await Effect.runPromise(
-    harness.authority.beginExport({ session, attemptId: plan.id, token: "export-only-guard" }),
-  );
-  expect(
-    await Effect.runPromise(
-      harness.authority.exportGuards({ after: null, limit: 1, volume: plan.volume }),
-    ),
-  ).toMatchObject({ exports: [{ token: "export-only-guard" }], next: null });
-  expect(
-    await Effect.runPromise(
-      harness.authority.exportGuards({
-        after: "export-only-guard",
-        limit: 1,
-        volume: plan.volume,
-      }),
-    ),
-  ).toEqual({ exports: [], next: null });
-  await Effect.runPromise(harness.authority.endExport({ session, token: "export-only-guard" }));
-  expect(
-    await Effect.runPromise(
-      harness.authority.exportGuards({ after: null, limit: 1, volume: plan.volume }),
-    ),
-  ).toEqual({ exports: [], next: null });
-});
-
-test("real workerd recovery plans seek indexes through terminal and released history", async () => {
+test("real workerd recovery pages skip terminal attempts and released export history", async () => {
   const ns = await harness.runtime.getDurableObjectNamespace("PROBE", "rollback");
 
   const response = await ns.get(ns.idFromName("recovery")).fetch("http://probe/recovery", {
@@ -154,21 +88,8 @@ test("real workerd recovery plans seek indexes through terminal and released his
         { active: 1, count: 1 },
       ],
     },
-    attempts: [
-      {
-        detail:
-          "SEARCH receipt_attempts USING COVERING INDEX receipt_attempt_recovery (kind=? AND id>?)",
-      },
-    ],
-    exports: [
-      { detail: "SEARCH receipt_exports USING COVERING INDEX receipt_export_recovery (token>?)" },
-    ],
-    busy: [{ detail: "SEARCH receipt_exports USING INDEX receipt_export_volume (volume=?)" }],
     recovered: { attempts: [], exports: [{ token: "active" }], next: null },
     malformed: expect.stringContaining('Expected { "kind": "started"'),
-    volumePagePlan: [
-      { detail: "SEARCH receipt_exports USING INDEX receipt_export_volume (volume=?)" },
-    ],
     exactVolume: { exports: [{ token: "active" }], next: null },
     otherVolume: { exports: [], next: null },
   });

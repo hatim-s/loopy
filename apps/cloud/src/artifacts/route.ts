@@ -1,24 +1,22 @@
-import { decodeBoundary, type ErrorCode, isTerminalRun } from "@loopy/contract";
-import { type SandboxErrorCode, sandboxArtifactRequestSchema } from "@loopy/contract/sandbox";
-import { type Store, struct } from "@loopy/core";
+import { type ErrorCode, isTerminalRun } from "@loopy/contract";
+import { cloudRoutes, type SandboxErrorCode } from "@loopy/contract/sandbox";
+import type { Store } from "@loopy/core";
 import { errorResponse, json } from "@loopy/runtime/service";
 import { Effect, Result, Schema } from "effect";
-import { cloudSync } from "../operation";
 import type { SandboxProvider } from "../provider";
-
-const artifactQuerySchema = struct({
-  ...sandboxArtifactRequestSchema.fields,
-  executionKey: Schema.fromJsonString(sandboxArtifactRequestSchema.fields.executionKey),
-});
 
 const serviceCode = {
   invalid_request: "bad_request",
+  too_large: "bad_request",
   output_limit: "bad_request",
   not_found: "not_found",
   conflict: "conflict",
   unauthorized: "internal",
   internal: "internal",
 } as const satisfies Record<SandboxErrorCode, ErrorCode>;
+
+// The workspace guard upstream may leave a matching `workspace` search value in place.
+const decodeQuery = Schema.decodeUnknownResult(cloudRoutes.artifact.query);
 
 export function artifactResponse(options: {
   url: URL;
@@ -28,17 +26,7 @@ export function artifactResponse(options: {
 }) {
   return Effect.gen(function* () {
     const { url, workspace, store, provider } = options;
-
-    const parsed = yield* Effect.result(
-      cloudSync("decode artifact request", () =>
-        decodeBoundary(artifactQuerySchema)({
-          workspace,
-          executionKey: url.searchParams.get("key"),
-          attempt: Number(url.searchParams.get("attempt")),
-          path: url.searchParams.get("path"),
-        }),
-      ),
-    );
+    const parsed = decodeQuery(Object.fromEntries(url.searchParams));
 
     if (Result.isFailure(parsed)) {
       return errorResponse(

@@ -1,7 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type RunSnapshotView } from "@loopy/contract";
-import { sandboxArtifactSchema } from "@loopy/contract/sandbox";
+import { encodeBoundary, type RunSnapshotView } from "@loopy/contract";
+import { cloudRoutes } from "@loopy/contract/sandbox";
 import { publishExclusive } from "@loopy/runtime/os";
 import { Schema } from "effect";
 import { sha256Hex } from "../shared/hash";
@@ -35,13 +35,14 @@ export async function materialize(
     );
   }
 
-  const query = new URLSearchParams({
-    key: JSON.stringify(node.key),
-    attempt: String(node.attempt),
-    path: fixture.artifactPath,
+  const artifact = await client.call(cloudRoutes.artifact, {
+    query: encodeBoundary(cloudRoutes.artifact.query)({
+      executionKey: node.key,
+      attempt: node.attempt,
+      path: fixture.artifactPath,
+    }),
   });
 
-  const artifact = await client.json(sandboxArtifactSchema, `/api/cloud/artifacts?${query}`);
   const bytes = Buffer.from(artifact.bytes, "base64");
   const hash = sha256Hex(bytes);
 

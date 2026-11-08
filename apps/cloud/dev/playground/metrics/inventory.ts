@@ -25,7 +25,7 @@ for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
 
   const response = await client.request(
     routeUrl(routes.runs, { query: { limit: 50, before: cursor } }),
-    AbortSignal.timeout(15_000),
+    { signal: AbortSignal.timeout(15_000) },
   );
 
   const text = await response.text();

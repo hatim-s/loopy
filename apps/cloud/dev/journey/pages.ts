@@ -1,4 +1,4 @@
-import { type ExecutionPage, encodeRunCursor, routes } from "@loopy/contract";
+import { type ExecutionPage, encodeRunCursor, PAGE_LIMIT, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal } from "../shared/assert";
 import { compileFixture } from "../shared/fixture-client";
@@ -90,7 +90,7 @@ export async function pages(journey: Journey, runId: string) {
     "event_feed_page_duplicates",
   );
 
-  const oversized = { limit: 201 };
+  const oversized = { limit: PAGE_LIMIT + 1 };
   const run = { id: runId };
 
   for (const sent of [

@@ -9,7 +9,9 @@ import {
 import {
   type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
+  sandboxArtifactQuerySchema,
   sandboxArtifactSchema,
+  searchParams,
 } from "@loopy/contract/sandbox";
 import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { assert, JourneyFailure } from "../shared/assert";
@@ -139,12 +141,7 @@ export class FailureJourney {
   }
 
   async artifact(receipt: SandboxAttemptIdentity) {
-    const query = new URLSearchParams({
-      workspace: "fixtures",
-      key: JSON.stringify(receipt.executionKey),
-      attempt: String(receipt.attempt),
-      path: "effects",
-    });
+    const query = searchParams(sandboxArtifactQuerySchema, { ...receipt, path: "effects" });
 
     const result = await this.provider.json(sandboxArtifactSchema, `/artifacts?${query}`);
 

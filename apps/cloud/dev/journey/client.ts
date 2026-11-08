@@ -7,7 +7,6 @@ import {
   type RouteInput,
   routes,
 } from "@loopy/contract";
-import type { Schema } from "effect";
 import { assert } from "../shared/assert";
 import {
   ApiClient,
@@ -18,8 +17,9 @@ import {
 } from "../shared/fixture-client";
 import { root } from "../stack/constants";
 import { principalToken, readLocalCredentials } from "../stack/credentials";
+import { LOCAL_STACK } from "../stack/ports";
 
-const api = "http://127.0.0.1:14870";
+const api = LOCAL_STACK.origin("api");
 
 type Principal = "fixtures" | "other" | "none" | "invalid";
 
@@ -60,19 +60,6 @@ export class Journey {
       default:
         return this.tokens[principal];
     }
-  }
-
-  /** Raw requests reach the cloud-only artifact route, which the daemon contract does not name. */
-  request(path: string, { principal, ...options }: JourneyRequest = {}) {
-    return this.client.request(path, { ...options, token: this.token(principal) });
-  }
-
-  json<T>(
-    schema: Schema.Codec<T, unknown, never, never>,
-    path: string,
-    { principal, ...options }: JourneyRequest = {},
-  ) {
-    return this.client.json(schema, path, { ...options, token: this.token(principal) });
   }
 
   send<R extends Route>(

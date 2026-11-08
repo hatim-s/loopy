@@ -8,6 +8,7 @@ import {
   attemptResources,
   type DockerAttemptPlan,
   type SandboxAttemptRequest,
+  sameSession,
 } from "@loopy/contract/sandbox";
 import { attemptBudgetMs } from "@loopy/core";
 import { Clock, Effect, FiberMap, Result, Semaphore } from "effect";
@@ -124,10 +125,7 @@ export class AttemptAdmissions {
 
       this.retained.delete(record.plan.id);
 
-      const sameSession =
-        record.session.epoch === session.epoch && record.session.nonce === session.nonce;
-
-      if (request && sameSession && !this.issued.has(record.plan.id)) {
+      if (request && sameSession(record.session, session) && !this.issued.has(record.plan.id)) {
         this.issued.add(record.plan.id);
         yield* monitors.launch(record, () =>
           dependencies.backend.start(record.plan, request, stopping.signal),

@@ -142,22 +142,13 @@ export class DockerBackend implements AttemptBackend {
     return Effect.gen({ self: this }, function* () {
       const remaining = plan.deadline - (yield* Clock.currentTimeMillis);
 
-      const waited = yield* (
-        remaining <= 0
-          ? Effect.fail(
-              new CommandExecutionError({
-                reason: "timeout",
-                message: "Process timed out.",
-                output: { stdout: "", stderr: "", exitCode: -1 },
-                cause: undefined,
-              }),
-            )
-          : this.docker.required(["wait", plan.container], {
-              timeoutMs: remaining,
-              maxBytes: 1024,
-              signal,
-            })
-      ).pipe(Effect.result);
+      if (remaining <= 0) {
+        return yield* this.terminateExpired(plan, signal);
+      }
+
+      const waited = yield* this.docker
+        .required(["wait", plan.container], { timeoutMs: remaining, maxBytes: 1024, signal })
+        .pipe(Effect.result);
 
       if (Result.isFailure(waited)) {
         if (
@@ -166,24 +157,31 @@ export class DockerBackend implements AttemptBackend {
           return yield* Effect.fail(waited.failure);
         }
 
-        const current = yield* this.inspect(plan, signal);
-
-        if (current?.Running) {
-          yield* this.docker.required(["kill", plan.container], { signal });
-        }
-
-        const stopped = yield* this.inspect(plan, signal);
-
-        if (stopped?.Running) {
-          return yield* Effect.fail(
-            failure("docker", new Error("Attempt container termination is not yet confirmed.")),
-          );
-        }
-
-        return "timed_out" as const;
+        return yield* this.terminateExpired(plan, signal);
       }
 
       return "stopped" as const;
+    });
+  }
+
+  /** Kills a container past its deadline and confirms it stopped before reporting the timeout. */
+  private terminateExpired(plan: DockerAttemptPlan, signal: AbortSignal | undefined) {
+    return Effect.gen({ self: this }, function* () {
+      const current = yield* this.inspect(plan, signal);
+
+      if (current?.Running) {
+        yield* this.docker.required(["kill", plan.container], { signal });
+      }
+
+      const stopped = yield* this.inspect(plan, signal);
+
+      if (stopped?.Running) {
+        return yield* Effect.fail(
+          failure("docker", new Error("Attempt container termination is not yet confirmed.")),
+        );
+      }
+
+      return "timed_out" as const;
     });
   }
 

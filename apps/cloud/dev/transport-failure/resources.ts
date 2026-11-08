@@ -4,7 +4,7 @@ import { decodeBoundary } from "@loopy/contract";
 import { artifactHelperName, inputHelperName } from "@loopy/contract/sandbox";
 import { errnoCode } from "@loopy/core";
 import { Effect, Schema } from "effect";
-import { sandboxConfigSchema } from "../../../sandbox/src/config";
+import { sandboxConfig, sandboxConfigSchema } from "../../../sandbox/src/config";
 import {
   ownerOf,
   SANDBOX_DOCKER_CONTEXT,
@@ -48,15 +48,16 @@ export function fixture(maxTimeoutMs: number) {
     const worktree = resolve(directory, "runtime-root");
     yield* fixtureIO("filesystem", () => mkdir(worktree, { mode: 0o700 }));
 
-    return decodeBoundary(sandboxConfigSchema)({
-      worktree,
-      stateRoot: resolve(worktree, ".loopy/cloud/sandbox"),
-      token: "transport-test-fixture-token-32-characters",
-      dockerContext: SANDBOX_DOCKER_CONTEXT,
-      image: SANDBOX_IMAGE,
-      port: 0,
-      maxTimeoutMs,
-    });
+    return sandboxConfig(
+      decodeBoundary(sandboxConfigSchema)({
+        worktree,
+        token: "transport-test-fixture-token-32-characters",
+        dockerContext: SANDBOX_DOCKER_CONTEXT,
+        image: SANDBOX_IMAGE,
+        port: 0,
+        maxTimeoutMs,
+      }),
+    );
   });
 }
 

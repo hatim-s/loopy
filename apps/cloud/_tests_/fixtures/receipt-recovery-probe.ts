@@ -24,29 +24,6 @@ export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admi
     INSERT INTO receipt_exports SELECT 'released-'||x,volume,0,json_set(record,'$.token','released-'||x) FROM n,receipt_exports WHERE token='active'`)
     .toArray();
 
-  const attempts = db.storage.sql
-    .exec(
-      "EXPLAIN QUERY PLAN SELECT id FROM receipt_attempts WHERE kind='started' AND id>? ORDER BY id LIMIT ?",
-      "",
-      201,
-    )
-    .toArray();
-
-  const exports = db.storage.sql
-    .exec(
-      "EXPLAIN QUERY PLAN SELECT token FROM receipt_exports WHERE active=1 AND token>? ORDER BY token LIMIT ?",
-      "",
-      201,
-    )
-    .toArray();
-
-  const busy = db.storage.sql
-    .exec(
-      "EXPLAIN QUERY PLAN SELECT token FROM receipt_exports WHERE volume=? AND active=1 LIMIT 1",
-      input.plan.volume,
-    )
-    .toArray();
-
   const counts = {
     attempts: db.storage.sql
       .exec("SELECT kind,count(*) AS count FROM receipt_attempts GROUP BY kind ORDER BY kind")
@@ -57,15 +34,6 @@ export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admi
   };
 
   const recovered = db.recoverable({ after: null, limit: 2 });
-
-  const volumePagePlan = db.storage.sql
-    .exec(
-      "EXPLAIN QUERY PLAN SELECT token FROM receipt_exports WHERE active=1 AND volume=? AND token>? ORDER BY token LIMIT ?",
-      input.plan.volume,
-      "",
-      201,
-    )
-    .toArray();
 
   db.storage.sql
     .exec(
@@ -93,15 +61,5 @@ export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admi
     malformed = error instanceof Error ? error.message : "non-error rejection";
   }
 
-  return {
-    attempts,
-    exports,
-    busy,
-    counts,
-    recovered,
-    malformed,
-    volumePagePlan,
-    exactVolume,
-    otherVolume,
-  };
+  return { counts, recovered, malformed, exactVolume, otherVolume };
 }

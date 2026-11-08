@@ -1,15 +1,15 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
-import { decodeBoundary, type ExecutionResult, executionResultSchema } from "@loopy/contract";
+import type { ExecutionResult } from "@loopy/contract";
 import {
   AuthorityError,
   type ResultRef,
   resultBytes,
   resultRef,
-  sameRef,
+  verifiedResult,
 } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { ImmutableBucket, r2Key } from "../artifacts/storage";
-import { CloudError, cloudSync, platform } from "../operation";
+import { CloudError, platform } from "../operation";
 
 export class R2ImmutableResults {
   private readonly objects: ImmutableBucket;
@@ -40,30 +40,19 @@ export class R2ImmutableResults {
   get(ref: ResultRef) {
     return Effect.gen({ self: this }, function* () {
       const bytes = yield* this.objects.read(ref.sha256, ref.size);
+      const result = yield* platform("verify result", () => verifiedResult(bytes, ref));
 
-      if (!bytes) {
+      if (!result) {
         return yield* Effect.fail(
           new CloudError({
             operation: "verify result",
-            cause: "Immutable result is missing. Restore receipt storage before resuming.",
+            cause:
+              "Immutable result is missing or does not match its receipt. Restore receipt storage before resuming.",
           }),
         );
       }
 
-      if (!sameRef(yield* platform("hash result", () => resultRef(bytes)), ref)) {
-        return yield* Effect.fail(
-          new CloudError({
-            operation: "verify result",
-            cause: "Immutable result does not match its receipt.",
-          }),
-        );
-      }
-
-      return yield* cloudSync("decode immutable result", () =>
-        decodeBoundary(executionResultSchema)(
-          JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
-        ),
-      );
+      return result;
     });
   }
 }

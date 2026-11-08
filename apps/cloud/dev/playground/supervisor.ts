@@ -2,6 +2,7 @@ import { mkdir, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Schema } from "effect";
 import { SANDBOX_DOCKER_CONTEXT } from "../../../sandbox/src/docker/identity";
+import { root } from "../stack/constants";
 import {
   type Child,
   dashboardArgv,
@@ -10,7 +11,7 @@ import {
   wranglerArgv,
 } from "../stack/launch";
 import { waitUntilReady } from "../stack/readiness";
-import { api, dashboard, initialize, profile, root, runtime, sandboxState, state } from "./config";
+import { api, dashboard, initialize, profile, runtime, sandboxState, state } from "./config";
 import { atomic } from "./files";
 import {
   cleanEnvironment,

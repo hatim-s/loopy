@@ -86,8 +86,18 @@ export type RequestOptions = CallOptions & {
   body?: Json | SandboxAttemptRequest;
 };
 
+/** Carries one prepared request. Callers inject one to bound concurrency or to check ownership. */
+export type Transport = (url: string, init: RequestInit) => Promise<Response>;
+
 export class ApiClient {
-  constructor(private readonly options: { origin: string; token: string; timeoutMs: number }) {}
+  constructor(
+    private readonly options: {
+      origin: string;
+      token: string | null;
+      timeoutMs: number;
+      transport?: Transport;
+    },
+  ) {}
 
   private async fetch(path: string, init: RequestInit, options: CallOptions) {
     const headers = new Headers(init.headers);
@@ -102,13 +112,16 @@ export class ApiClient {
     }
 
     try {
-      return await fetch(`${this.options.origin}${path}`, {
+      return await (this.options.transport ?? fetch)(`${this.options.origin}${path}`, {
         ...init,
         headers,
         signal: options.signal ?? AbortSignal.timeout(this.options.timeoutMs),
       });
-    } catch {
-      throw new JourneyFailure({ failure: "local_api_transport_failed", path });
+    } catch (cause) {
+      // A transport may refuse with its own safe evidence; other faults keep only the path.
+      throw cause instanceof JourneyFailure
+        ? cause
+        : new JourneyFailure({ failure: "local_api_transport_failed", path });
     }
   }
 

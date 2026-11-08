@@ -5,6 +5,7 @@ import { revision } from "@loopy/core";
 import { Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { r2Key } from "../src/artifacts/storage";
 import type { SummaryProbeRequest } from "./fixtures/summary-workerd";
 import { probeRuntime } from "./fixtures/workerd";
 
@@ -132,7 +133,7 @@ for (const oldGraph of ["valid", "missing", "corrupt"] as const) {
     expect((await probe(`race-${oldGraph}`, { operation: "save", body })).status).toBe(200);
     expect((await probe(`race-${oldGraph}`, { operation: "forget" })).status).toBe(200);
     const bucket = await runtime.getR2Bucket("BUCKET");
-    const key = `workspaces/summaries/graphs/${body.revision}.json`;
+    const key = r2Key.workspace("summaries") + r2Key.graph(body.revision);
 
     if (oldGraph === "missing") {
       await bucket.delete(key);
@@ -194,7 +195,7 @@ test("warm metadata endpoints read zero graphs while direct get, start and sched
   expect(await probe("warm", { operation: "start" })).toMatchObject({ status: 200 });
   const bucket = await runtime.getR2Bucket("BUCKET");
   await bucket.put(
-    `workspaces/summaries/graphs/${body.revision}.json`,
+    r2Key.workspace("summaries") + r2Key.graph(body.revision),
     JSON.stringify({ ...body.graph, name: "corrupt" }),
   );
   expect(await probe("warm", { operation: "service" })).toMatchObject({
@@ -253,7 +254,7 @@ for (const failure of ["missing", "corrupt"] as const) {
     const body = await fixture(`required-${failure}`);
     expect((await probe(failure, { operation: "save", body })).status).toBe(200);
     const bucket = await runtime.getR2Bucket("BUCKET");
-    const key = `workspaces/summaries/graphs/${body.revision}.json`;
+    const key = r2Key.workspace("summaries") + r2Key.graph(body.revision);
 
     if (failure === "missing") {
       await bucket.delete(key);

@@ -19,8 +19,6 @@ export const evidence = profile.evidence;
 
 export const port = profile.name ? 15370 : 15170;
 
-export const cli = resolve(root, "packages/cli/src/index.ts");
-
 export function environment() {
   return {
     ...profile.environment,

@@ -1,6 +1,7 @@
 import { isAbsolute } from "node:path";
 import { struct } from "@loopy/core";
 import { Effect, Schema } from "effect";
+import { sandboxStateRoot } from "./state-root";
 
 const absolute = Schema.String.check(Schema.makeFilter(isAbsolute));
 
@@ -9,7 +10,6 @@ const defaulted = <S extends Schema.Constraint>(schema: S, value: S["Type"]) =>
 
 export const sandboxConfigSchema = struct({
   worktree: absolute,
-  stateRoot: absolute,
   hostname: defaulted(Schema.Literals(["127.0.0.1", "::1"]), "127.0.0.1"),
   port: defaulted(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })), 4010),
   token: Schema.String.check(Schema.isMinLength(32)),
@@ -24,4 +24,9 @@ export const sandboxConfigSchema = struct({
   pids: defaulted(Schema.Int.check(Schema.isBetween({ minimum: 16, maximum: 1024 })), 64),
 });
 
-export type SandboxConfig = Schema.Schema.Type<typeof sandboxConfigSchema>;
+/** The state root is always derived from the worktree, so no caller can point it elsewhere. */
+export function sandboxConfig(flags: Schema.Schema.Type<typeof sandboxConfigSchema>) {
+  return { ...flags, stateRoot: sandboxStateRoot(flags.worktree) };
+}
+
+export type SandboxConfig = ReturnType<typeof sandboxConfig>;
