@@ -1,7 +1,8 @@
 import { test } from "bun:test";
 import { Effect } from "effect";
 import { actions, initialModel, type ModelAction, modelStep } from "./host-policy-model";
-import { policyStore, replayPolicy, withFilePolicyStore } from "./host-policy-replay";
+import { replayPolicy, withFilePolicyStore } from "./host-policy-replay";
+import { memoryStore } from "./store-fixture";
 
 for (const budget of [1, 2]) {
   test(`bounded independent host model, depth eight, budget ${budget}`, async () => {
@@ -10,7 +11,7 @@ for (const budget of [1, 2]) {
     const queue = [{ state: initial, trace: firstTrace }];
     const seen = new Set([JSON.stringify(initial)]);
     let transitions = 0;
-    const store = policyStore();
+    const store = memoryStore({ leaseMs: 3000 });
 
     for (let index = 0; index < queue.length; index++) {
       const current = queue[index];

@@ -4,26 +4,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OwnershipError } from "@loopy/core";
 import { activateDurable, type DurableActivationResult } from "@loopy/runtime/host";
-import { SqlRunStore } from "@loopy/runtime/store/portable";
+import { makeSqliteRunStore, type SqlRunStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
-import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
 import { newRun } from "./fixture";
 import { PolicyProvider, policyGraph, policyRetry, policySuccess } from "./host-policy-fixture";
 import { initialModel, type ModelAction, modelStep } from "./host-policy-model";
-import { NEVER_ALIVE, runAt } from "./store-fixture";
-
-export function policyStore(file = ":memory:") {
-  return new SqlRunStore(new BunSqlDriver(file), { leaseMs: 3000, owner: NEVER_ALIVE });
-}
+import { runAt } from "./store-fixture";
 
 export async function withFilePolicyStore(use: (store: SqlRunStore) => Promise<void>) {
   const root = mkdtempSync(join(tmpdir(), "loopy-host-model-"));
-  const store = policyStore(join(root, "runs.sqlite"));
 
   try {
-    await use(store);
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.flatMap(makeSqliteRunStore(join(root, "runs.sqlite"), { leaseMs: 3000 }), (store) =>
+          Effect.promise(() => use(store)),
+        ),
+      ),
+    );
   } finally {
-    await Effect.runPromise(store.close());
     rmSync(root, { recursive: true, force: true });
   }
 }

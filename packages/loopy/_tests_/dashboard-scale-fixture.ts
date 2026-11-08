@@ -5,7 +5,7 @@ import { compile } from "@loopy/compiler";
 import { type NodeRun, type StoreEffect } from "@loopy/core";
 import { makeLocalService, Registry } from "@loopy/runtime/local";
 import { Effect } from "effect";
-import { fixtureSqlite, fixtureStore } from "./fixtures/service-runtime";
+import { fixtureStore } from "./fixtures/service-runtime";
 import { runAt } from "./store-fixture";
 
 export async function largeMapFixture() {
@@ -37,7 +37,7 @@ export default loopy("reindex-docs", {
 
   const registry = await Effect.runPromise(Registry.make(home, root));
   let now = Date.parse("2026-10-22T06:00:00.000Z");
-  const store = await fixtureSqlite(join(home, "runs.sqlite"));
+  const store = await fixtureStore(home);
   const onClock = runAt(() => now);
 
   const service = makeLocalService({

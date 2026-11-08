@@ -1,58 +1,32 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { nodeIdSchema } from "@loopy/contract";
 import type { RuntimeEvent, Store } from "@loopy/core";
-import { makeSqliteRunStore } from "@loopy/runtime/store";
-import { Effect, Exit, Schema, Scope } from "effect";
-import { subscribeStore } from "../../runtime/src/host/subscription";
+import { Effect, Schema } from "effect";
 import { newRun } from "./fixture";
-import { runAt } from "./store-fixture";
-
-const scopes: Scope.Closeable[] = [];
-
-afterEach(async () => {
-  for (const scope of scopes.splice(0).reverse()) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-  }
-});
-
-function fixtureScope() {
-  const scope = Scope.makeUnsafe();
-  scopes.push(scope);
-
-  return scope;
-}
+import { memoryStore, runAt } from "./store-fixture";
 
 const start = Date.parse(newRun().createdAt);
 
-const make = () =>
-  Effect.runPromise(
-    makeSqliteRunStore(":memory:").pipe(Effect.provideService(Scope.Scope, fixtureScope())),
-  );
-
 test("subscribers survive throwing listeners and unsubscribe after committed batches", async () => {
-  const store = await make();
+  const store = memoryStore();
 
   const batches: RuntimeEvent[][] = [];
   const reads: Promise<Effect.Success<ReturnType<Store["getRun"]>>>[] = [];
-  await Effect.runPromise(
-    subscribeStore(store, () => {
-      throw new Error("Listener failed.");
-    }).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
-  );
 
-  const subscription = fixtureScope();
-  await Effect.runPromise(
-    subscribeStore(store, (events) => {
-      batches.push(events);
-      reads.push(Effect.runPromise(store.getRun("run")));
-    }).pipe(Effect.provideService(Scope.Scope, subscription)),
-  );
+  store.subscribe(() => {
+    throw new Error("Listener failed.");
+  });
+
+  const unsubscribe = store.subscribe((events) => {
+    batches.push(events);
+    reads.push(Effect.runPromise(store.getRun("run")));
+  });
 
   await Effect.runPromise(store.createRun(newRun()));
   expect(await reads[0]).toEqual(newRun());
   await Effect.runPromise(store.claim("run", "owner"));
   expect(batches.map((batch) => batch.length)).toEqual([1, 1]);
-  await Effect.runPromise(Scope.close(subscription, Exit.void));
+  unsubscribe();
   await Effect.runPromise(
     store.apply({
       runId: "run",
@@ -73,7 +47,7 @@ test("subscribers survive throwing listeners and unsubscribe after committed bat
 test("retention keeps the exact 24-hour boundary and monotonic sequences", async () => {
   let time = start;
   const run = runAt(() => time);
-  const store = await make();
+  const store = memoryStore();
 
   await run(store.createRun(newRun()));
   time++;
@@ -87,24 +61,28 @@ test("retention keeps the exact 24-hour boundary and monotonic sequences", async
 });
 
 test("retention bounds recent rows to the newest 100000", async () => {
-  const store = await make();
+  const store = memoryStore();
 
   await Effect.runPromise(store.createRun(newRun()));
   await Effect.runPromise(store.claim("run", "owner"));
-
-  for (let index = 0; index < 100_001; index++) {
-    await Effect.runPromise(store.heartbeat("run", "owner"));
-  }
+  await Effect.runPromise(store.heartbeat("run", "owner"));
+  // Copies the committed heartbeat so the table reaches the cap in one statement.
+  store.driver.exec(`
+    WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM copies WHERE n < 100000)
+    INSERT INTO events(at,txn,entity,kind,run_id,record,node_id,slug,workspace)
+    SELECT at, txn || '-' || n, entity, kind, run_id, record, node_id, slug, workspace
+    FROM copies, events WHERE sequence = 3
+  `);
 
   expect(await Effect.runPromise(store.pruneEvents(newRun().createdAt))).toBe(3);
   const events = await Effect.runPromise(store.events(0, 100_010));
   expect(events).toHaveLength(100_000);
   expect(events[0]?.sequence).toBe(4);
   expect(events.at(-1)?.sequence).toBe(100_003);
-}, 30_000);
+});
 
 test("graph node, log and run events commit in reducer order within one transaction", async () => {
-  const store = await make();
+  const store = memoryStore();
   const run = runAt(() => start);
   await run(store.createRun(newRun()));
   await run(store.claim("run", "owner"));

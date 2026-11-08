@@ -105,7 +105,8 @@ export const makeDaemon = (options: DaemonOptions) =>
           (at) => (at === undefined ? [] : [Date.parse(at) - now]),
         );
 
-        // Active work wakes the loop itself, so the idle poll only covers deadlines and failures.
+        // A failed activation frees its slot without waking the loop, because a wake would re-admit
+        // the failing run at once. While work is active, polling at the backoff fills freed slots.
         const ceiling = pool.active > 0 && minimum > 0 ? minimum : IDLE_POLL_MS;
 
         return Math.max(minimum, Math.min(ceiling, ...deadlines));

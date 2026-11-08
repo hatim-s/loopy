@@ -1,7 +1,7 @@
 import { afterEach } from "bun:test";
 import type { Store } from "@loopy/core";
 import { type DaemonOptions, makeDaemon } from "@loopy/runtime/host";
-import { makeSqliteRunStore, openRunStore } from "@loopy/runtime/store";
+import { openRunStore } from "@loopy/runtime/store";
 import { Clock, Effect, Exit, Scope } from "effect";
 import { fixedClock } from "../store-fixture";
 
@@ -22,11 +22,6 @@ export function fixtureScope() {
 
 export const fixtureStore = (home: string) =>
   Effect.runPromise(openRunStore(home).pipe(Effect.provideService(Scope.Scope, fixtureScope())));
-
-export const fixtureSqlite = (file: string) =>
-  Effect.runPromise(
-    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
-  );
 
 // A real-time pause, so polling also makes progress while a TestClock holds Effect time still.
 const pause = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 1)));

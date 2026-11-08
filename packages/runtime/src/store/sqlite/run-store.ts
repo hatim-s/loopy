@@ -87,8 +87,8 @@ const DEFAULT_LEASE_MS = 60_000;
 /** The caller owns the connection, including Durable Object eviction and disposal. */
 export class SqlRunStore implements Store, DurableTurnStore, DashboardReader {
   readonly leaseMs: number;
-  protected readonly ctx: SqlContext;
-  protected readonly listeners = new EventListeners();
+  private readonly ctx: SqlContext;
+  private readonly listeners = new EventListeners();
 
   constructor(db: SqlDriver, options: SqlStoreOptions) {
     initializeSchema(db);

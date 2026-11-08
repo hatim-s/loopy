@@ -1,6 +1,5 @@
 import { StoreRejectedError } from "../../operation";
 import type { SqlDriver } from "../driver";
-import { SCHEDULE_OVERVIEW_INDEX } from "./fresh";
 
 // Frozen migration steps. They describe how old homes changed and never follow the fresh schema.
 const SCHEMA_13_TO_14 = `
@@ -113,8 +112,9 @@ export function upgradeLegacyHome(db: SqlDriver): void {
       );
     }
 
-    // Schema 15 homes may predate the schedule overview index.
-    db.exec(SCHEDULE_OVERVIEW_INDEX);
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS schedules_enabled_next ON schedules(enabled,next_fire_at,workspace,slug)",
+    );
     db.query("INSERT OR REPLACE INTO meta VALUES ('schema_version','15')").run();
     db.exec("PRAGMA user_version=0");
   }, "immediate");
