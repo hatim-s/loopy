@@ -30,7 +30,20 @@ function emitSchedule(
     throw new Error("Schedule disappeared before commit. Restore storage.");
   }
 
-  emit(write, { entity: "schedule", kind, runId: null, record: rowToSchedule(row) });
+  const failure =
+    write.db
+      .query<{ error: string; retryAt: string | null }, [string, string, number]>(
+        `SELECT error,retry_at AS retryAt FROM schedule_failures
+        WHERE workspace=? AND slug=? AND version=?`,
+      )
+      .get(row.workspace, row.slug, row.version) ?? null;
+
+  emit(write, {
+    entity: "schedule",
+    kind,
+    runId: null,
+    record: { ...rowToSchedule(row), failure },
+  });
 }
 
 export function readSchedules(ctx: SqlContext): Schedule[] {

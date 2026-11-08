@@ -203,7 +203,11 @@ function scheduleFailures(makeStore: StoreFactory): void {
     const disabled = { ...original, enabled: false, version: original.version + 1 };
     expect(await Effect.runPromise(store.listSchedules())).toEqual([disabled]);
     expect((await Effect.runPromise(store.events(0, 100))).slice(before.length)).toMatchObject([
-      { entity: "schedule", kind: "saved", record: disabled },
+      {
+        entity: "schedule",
+        kind: "saved",
+        record: { ...disabled, failure: { error: "boom", retryAt: null } },
+      },
     ]);
     expect(await Effect.runPromise(store.scheduleFailures(10))).toEqual([
       { ...failure, retryAt: null },
