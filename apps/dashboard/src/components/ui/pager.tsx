@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Page, Pager, ScanInfo } from "../../lib/view-models";
+import type { Pager, ScanInfo } from "../../lib/view-models";
 import { Icon } from "./icon";
 
 /**
@@ -8,11 +8,16 @@ import { Icon } from "./icon";
  */
 export function PagerFoot<Row, Extra>(props: {
   pager: Pager<Row, Extra>;
-  page: Page<Row>;
   noun: string;
   children?: ReactNode;
 }) {
-  const { pager, page, noun, children } = props;
+  const { pager, noun, children } = props;
+
+  if (pager.state !== "ready") {
+    return null;
+  }
+
+  const page = pager.data;
   const first = page.offset + 1;
   const last = page.offset + page.rows.length;
 
@@ -48,7 +53,6 @@ export function PagerFoot<Row, Extra>(props: {
   );
 }
 
-/** Where a bounded scan stopped and how far back the daemon keeps rows. */
 export function ScanNote({ scan, noun }: { scan: ScanInfo; noun: string }) {
   const parts: string[] = [];
 
@@ -58,10 +62,6 @@ export function ScanNote({ scan, noun }: { scan: ScanInfo; noun: string }) {
 
   if (scan.retained !== null) {
     parts.push(`The daemon keeps ${noun} from ${new Date(scan.retained.oldest).toLocaleString()}.`);
-  }
-
-  if (scan.newer !== null && scan.newer > 0) {
-    parts.push(`${scan.newer.toLocaleString()} newer ${noun} since this page loaded.`);
   }
 
   return <>{parts.join(" ")}</>;

@@ -10,7 +10,7 @@ import {
   startServer,
 } from "../../../packages/runtime/src/local/server/start-server";
 import { localHttpBackend } from "../src/backend/local-http";
-import { checkAccess } from "../src/lib/connection";
+import { checkAccess } from "../src/session/access";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 

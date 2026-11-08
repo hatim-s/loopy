@@ -7,47 +7,36 @@ import type {
   ScopeItemsQuery,
 } from "../backend/backend";
 
-/** The filters a paged run list is keyed by; the page cursor lives in the query itself. */
-export type RunFilters = Omit<RunsQuery, "before" | "limit">;
+/**
+ * Which stream events make a query stale. The stream patches run lists, snapshots and schedules
+ * in place; everything it cannot patch declares one of these and refetches.
+ * feed: every event. log: log lines. run: run transitions, of one run or of any (`null`).
+ * node: node events of one run. scope: node events inside a map or other scope of one run.
+ */
+export type Refresh =
+  | { on: "feed" }
+  | { on: "log" }
+  | { on: "run"; runId: string | null }
+  | { on: "node"; runId: string }
+  | { on: "scope"; runId: string };
 
-export type ExecutionFilters = Omit<ExecutionQuery, "after" | "limit">;
-
-export type ScopeItemsFilters = Omit<ScopeItemsQuery, "after" | "limit">;
-
-export type LogFilters = Omit<GlobalLogsQuery, "before" | "after" | "limit">;
-
-export type EventFilters = Omit<EventHistoryQuery, "before" | "after" | "limit">;
-
-/** Every Query key the dashboard uses. The stream reducer writes into the same keys. */
 export const keys = {
   overview: (query: OverviewQuery) => ["overview", query] as const,
-  overviews: ["overview"],
   loopies: ["loopies"],
   workspaceLoopies: (workspace: string | null) => ["loopies", workspace] as const,
   source: (slug: string, workspace: string) => ["source", "loopy", workspace, slug] as const,
   runPayload: (id: string | null) => ["run-payload", id] as const,
   runSource: (id: string) => ["source", "run", id] as const,
   executionPage: (id: string, query: ExecutionQuery | null) => ["executions", id, query] as const,
-  scopePage: (id: string, query: ScopeItemsQuery) => ["scope-items", id, query] as const,
-  logPage: (query: GlobalLogsQuery) => ["logs", query] as const,
-  eventPage: (query: EventHistoryQuery) => ["event-history", query] as const,
-  scopes: (id: string, parentScope: string) => ["scopes", id, parentScope] as const,
-  executionLists: (id: string) => ["executions", id] as const,
-  executions: (id: string, filters: ExecutionFilters) => ["executions", id, filters] as const,
-  executionDetails: (id: string) => ["execution", id] as const,
   execution: (id: string, key: string | undefined) => ["execution", id, key] as const,
-  scopeLists: (id: string) => ["scope-items", id] as const,
-  scopeItems: (id: string, filters: ScopeItemsFilters) => ["scope-items", id, filters] as const,
-  logLists: ["logs"],
-  logPages: (filters: LogFilters) => ["logs", filters] as const,
+  scopePage: (id: string, query: ScopeItemsQuery) => ["scope-items", id, query] as const,
+  scopes: (id: string, parentScope: string) => ["scopes", id, parentScope] as const,
+  logPage: (query: GlobalLogsQuery) => ["logs", query] as const,
   log: (id: number | undefined) => ["log", id] as const,
-  eventLists: ["event-history"],
-  eventPages: (filters: EventFilters) => ["event-history", filters] as const,
+  eventPage: (query: EventHistoryQuery) => ["event-history", query] as const,
   event: (sequence: number | undefined) => ["event", sequence] as const,
   runLists: ["runs"],
-  runPage: (query: RunsQuery) => ["runs", "page", query] as const,
-  runs: (query: RunsQuery) => ["runs", query] as const,
-  runPages: (filters: RunFilters) => ["runs", "pages", filters] as const,
+  runPage: (query: RunsQuery) => ["runs", query] as const,
   run: (id: string) => ["run", id] as const,
   loopyGraph: (slug: string, workspace: string) => ["graph", "loopy", workspace, slug] as const,
   runGraph: (id: string) => ["graph", "run", id] as const,
@@ -68,5 +57,6 @@ type QueryKey = DashboardKey extends infer Key
 declare module "@tanstack/react-query" {
   interface Register {
     queryKey: QueryKey;
+    queryMeta: { refresh?: Refresh };
   }
 }

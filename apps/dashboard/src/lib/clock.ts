@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-/** The current time, ticking once a second while the tab is visible. */
-export function useClock(): number {
+/** The current time, ticking every `intervalMs` while the tab is visible. */
+export function useClock(intervalMs = 1000): number {
   const [now, setNow] = useState(Date.now);
 
   useEffect(() => {
@@ -9,10 +9,10 @@ export function useClock(): number {
       if (document.visibilityState === "visible") {
         setNow(Date.now());
       }
-    }, 1000);
+    }, intervalMs);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [intervalMs]);
 
   return now;
 }

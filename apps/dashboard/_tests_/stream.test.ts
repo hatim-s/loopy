@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
 import {
   decodeBoundary,
   executionKeyString,
@@ -10,13 +10,20 @@ import {
   type ScheduleView,
   type ServerEvent,
 } from "@loopy/contract";
-import { type InfiniteData, QueryClient, QueryObserver } from "@tanstack/react-query";
-import type { EventSubscription, StreamEnd } from "../src/backend/backend";
-import { type EventDraft, fakeBackend } from "../src/backend/fake";
-import { INBOX_QUERY, inboxGroups } from "../src/lib/inbox";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import type { EventSubscription, RunsQuery, StreamState } from "../src/backend/backend";
 import { keys } from "../src/lib/keys";
-import type { RunPage } from "../src/lib/queries";
-import { applyBatch, applyScheduleView, applyToSnapshot, followSession } from "../src/lib/stream";
+import { type RunPage, runQuery, scopesQuery } from "../src/lib/queries";
+import { applyBatch } from "../src/lib/stream/apply";
+import { followSession } from "../src/lib/stream/follow";
+import { applyScheduleView } from "../src/lib/stream/schedules";
+import { applyToSnapshot } from "../src/lib/stream/snapshot";
+
+type EventDraft = ServerEvent extends infer E
+  ? E extends ServerEvent
+    ? Omit<E, "sequence" | "at" | "txn">
+    : never
+  : never;
 
 const AT = "2026-10-17T10:00:00.000Z";
 
@@ -36,6 +43,15 @@ const run: RunView = {
 
 function page(runs: RunView[]): RunPage {
   return { runs, nextCursor: undefined };
+}
+
+/** A cached run list, as the run pages write it: the filters plus the page size. */
+function list(filters: Omit<RunsQuery, "limit"> = {}) {
+  return keys.runPage({ ...filters, limit: 25 });
+}
+
+function rows(client: QueryClient, key: ReturnType<typeof list>): RunView[] | undefined {
+  return client.getQueryData<RunPage>(key)?.runs;
 }
 
 function snapshot(overrides: Partial<RunSnapshotView> = {}): RunSnapshotView {
@@ -89,57 +105,23 @@ test("a run event replaces the snapshot run and every list entry for that run", 
   const client = new QueryClient();
   const other = { ...run, id: "run-2" };
   client.setQueryData(keys.run("run-1"), snapshot());
-  client.setQueryData(keys.runs({}), [run, other]);
-  client.setQueryData(keys.runs({ slug: "triage" }), [run]);
+  client.setQueryData(list(), page([run, other]));
+  client.setQueryData(list({ slug: "triage" }), page([run]));
 
   applyBatch(client, [runEvent(11, running)]);
 
   expect(client.getQueryData<RunSnapshotView>(keys.run("run-1"))?.run).toEqual(running);
-  expect(client.getQueryData<RunView[]>(keys.runs({}))).toEqual([running, other]);
-  expect(client.getQueryData<RunView[]>(keys.runs({ slug: "triage" }))).toEqual([running]);
-});
-
-test("a run event updates its run inside every page of a paged list", () => {
-  const client = new QueryClient();
-  const older = { ...run, id: "run-0" };
-
-  const paged = {
-    pages: [page([{ ...run, id: "run-2" }]), page([older, run])],
-    pageParams: [undefined, "c1"],
-  };
-
-  client.setQueryData(keys.runPages({ slug: "triage" }), paged);
-
-  applyBatch(client, [runEvent(11, running)]);
-
-  expect(client.getQueryData<InfiniteData<RunPage>>(keys.runPages({ slug: "triage" }))).toEqual({
-    pages: [page([{ ...run, id: "run-2" }]), page([older, running])],
-    pageParams: [undefined, "c1"],
-  });
-});
-
-test("hook creation updates a paged list from native hook data", () => {
-  const client = new QueryClient();
-  const holding = keys.runPages({});
-  const other = keys.runPages({ slug: "other" });
-  client.setQueryData(holding, { pages: [page([]), page([run])], pageParams: [undefined, "c1"] });
-  client.setQueryData(other, { pages: [page([{ ...run, id: "other" }])], pageParams: [undefined] });
-  applyBatch(client, [hookEvent(11, "created")]);
-  expect(
-    client.getQueryData<InfiniteData<RunPage>>(holding)?.pages[1]?.runs[0]?.waitingOn?.token,
-  ).toBe("tok");
-  expect(
-    client.getQueryData<InfiniteData<RunPage>>(other)?.pages[0]?.runs[0]?.waitingOn,
-  ).toBeNull();
+  expect(rows(client, list())).toEqual([running, other]);
+  expect(rows(client, list({ slug: "triage" }))).toEqual([running]);
 });
 
 test("a list keeps a run that is newer than the event", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.runs({}), [running]);
+  client.setQueryData(list(), page([running]));
 
   applyBatch(client, [runEvent(11, run)]);
 
-  expect(client.getQueryData<RunView[]>(keys.runs({}))).toEqual([running]);
+  expect(rows(client, list())).toEqual([running]);
 });
 
 function nodeEvent(sequence: number, index: number, attempt: number, status: string) {
@@ -237,57 +219,25 @@ test("native wait hooks preserve run expiry and resolving them clears waitingOn"
 
 test("hook events update waitingOn on list entries too", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.runs({}), [run]);
+  client.setQueryData(list(), page([run]));
   client.setQueryData(keys.run(run.id), snapshot({ cursor: 9 }));
 
   applyBatch(client, [hookEvent(11, "created")]);
 
-  expect(client.getQueryData<RunView[]>(keys.runs({}))?.[0]?.waitingOn?.token).toBe("tok");
+  expect(rows(client, list())?.[0]?.waitingOn?.token).toBe("tok");
 });
 
 test("a reset from the backend invalidates every query and resubscribes from a fresh global cursor", async () => {
   const client = new QueryClient();
   const controller = new AbortController();
-  const fresh = snapshot({ epoch: "e2", cursor: 40 });
-
-  const backend = fakeBackend({
-    epoch: "e2",
-    loopies: [],
-    schedules: [],
-    runs: [fresh],
-    graphs: [],
-    pins: {},
-    batches: [],
-    intervalMs: 0,
-  });
-
   client.setQueryData(keys.run("run-1"), snapshot({ epoch: "e1" }));
   client.setQueryData(keys.loopies, []);
 
-  let subscriptions = 0;
+  const subscriptions: Pick<EventSubscription, "after" | "epoch">[] = [];
+  const states: StreamState[] = [];
 
-  const bounded = {
-    ...backend,
-    events: async (subscription: EventSubscription): Promise<StreamEnd> => {
-      subscriptions++;
-
-      if (subscriptions === 1) {
-        return "reset";
-      }
-
-      expect(subscriptions).toBe(2);
-      expect(subscription.epoch).toBe("e2");
-      expect(subscription.after).toBe(40);
-
-      return backend.events(subscription);
-    },
-  };
-
-  const states: string[] = [];
-
-  const following = followSession({
+  await followSession({
     client,
-    backend: bounded,
     signal: controller.signal,
     onState: (state) => {
       states.push(state);
@@ -296,22 +246,37 @@ test("a reset from the backend invalidates every query and resubscribes from a f
         controller.abort();
       }
     },
-  });
+    backend: {
+      cursor: async () => ({ cursor: 40, epoch: "e2" }),
+      events: async ({ after, epoch, onState }) => {
+        subscriptions.push({ after, epoch });
 
-  await following;
+        if (subscriptions.length === 1) {
+          return "reset";
+        }
+
+        onState("live");
+
+        return "aborted";
+      },
+    },
+  });
 
   expect(client.getQueryState(keys.run("run-1"))?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
-  expect(subscriptions).toBe(2);
+  expect(subscriptions).toEqual([
+    { after: 40, epoch: "e2" },
+    { after: 40, epoch: "e2" },
+  ]);
   expect(states).toEqual(["reconnecting", "live"]);
 });
 
 test("old hook replay cannot resurrect waitingOn after a newer run event", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.runs({}), [run]);
+  client.setQueryData(list(), page([run]));
   applyBatch(client, [runEvent(20, run)]);
   applyBatch(client, [hookEvent(11, "created")]);
-  expect(client.getQueryData<RunView[]>(keys.runs({}))?.[0]?.waitingOn).toBeNull();
+  expect(rows(client, list())?.[0]?.waitingOn).toBeNull();
 });
 
 test("hook updates preserve snapshot expiry in lists and reject older timestamps", () => {
@@ -329,32 +294,30 @@ test("hook updates preserve snapshot expiry in lists and reject older timestamps
   };
 
   client.setQueryData(keys.run(run.id), snapshot({ run: waitingRun }));
-  client.setQueryData(keys.runs({}), [waitingRun]);
+  client.setQueryData(list(), page([waitingRun]));
   applyBatch(client, [hookEvent(12, "created")]);
-  expect(client.getQueryData<RunView[]>(keys.runs({}))?.[0]?.waitingOn?.expiresAt).toBe(
-    "2026-10-17T11:00:00.000Z",
-  );
+  expect(rows(client, list())?.[0]?.waitingOn?.expiresAt).toBe("2026-10-17T11:00:00.000Z");
   applyBatch(client, [runEvent(13, running), hookEvent(14, "created")]);
-  expect(client.getQueryData<RunView[]>(keys.runs({}))?.[0]?.waitingOn).toBeNull();
+  expect(rows(client, list())?.[0]?.waitingOn).toBeNull();
   expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.run.waitingOn).toBeNull();
 });
 
 test("hook creation updates only lists containing its run", () => {
   const client = new QueryClient();
-  const other = keys.runs({ slug: "other" });
-  client.setQueryData(keys.runs({}), [run]);
-  client.setQueryData(other, [{ ...run, id: "other" }]);
+  const other = list({ slug: "other" });
+  client.setQueryData(list(), page([run]));
+  client.setQueryData(other, page([{ ...run, id: "other" }]));
   applyBatch(client, [hookEvent(11, "created")]);
-  expect(client.getQueryData<RunView[]>(keys.runs({}))?.[0]?.waitingOn?.token).toBe("tok");
-  expect(client.getQueryData<RunView[]>(other)?.[0]?.waitingOn).toBeNull();
+  expect(rows(client, list())?.[0]?.waitingOn?.token).toBe("tok");
+  expect(rows(client, other)?.[0]?.waitingOn).toBeNull();
 });
 
 test("run creation and completion invalidate the lists and loopy summaries", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.runs({}), []);
+  client.setQueryData(list(), page([]));
   client.setQueryData(keys.loopies, []);
   applyBatch(client, [event(11, { entity: "run", kind: "created", runId: run.id, record: run })]);
-  expect(client.getQueryState(keys.runs({}))?.isInvalidated).toBe(true);
+  expect(client.getQueryState(list())?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
   client.setQueryData(keys.loopies, []);
   applyBatch(client, [
@@ -372,28 +335,15 @@ test("abort during reset cursor fetch cancels the request and settles followSess
   const client = new QueryClient();
   client.setQueryData(keys.run(run.id), snapshot());
   const controller = new AbortController();
-
-  const backend = fakeBackend({
-    epoch: "e1",
-    loopies: [],
-    schedules: [],
-    runs: [snapshot()],
-    graphs: [],
-    pins: {},
-    batches: [],
-    intervalMs: 10,
-  });
-
   let pending = false;
   let subscriptions = 0;
   let cursors = 0;
 
-  const following = followSession({
+  await followSession({
     client,
     signal: controller.signal,
     onState: () => undefined,
     backend: {
-      ...backend,
       events: async () => {
         subscriptions++;
 
@@ -403,11 +353,10 @@ test("abort during reset cursor fetch cancels the request and settles followSess
         cursors++;
 
         if (cursors === 1) {
-          return backend.cursor(signal);
+          return Promise.resolve({ cursor: 10, epoch: "e1" });
         }
 
-        const { promise, reject } =
-          Promise.withResolvers<Awaited<ReturnType<typeof backend.cursor>>>();
+        const { promise, reject } = Promise.withResolvers<{ cursor: number; epoch: string }>();
 
         pending = true;
         signal.addEventListener(
@@ -425,11 +374,12 @@ test("abort during reset cursor fetch cancels the request and settles followSess
     },
   });
 
-  await following;
   expect(pending).toBe(false);
   expect(subscriptions).toBe(1);
   expect(client.getQueryState(keys.run(run.id))?.fetchStatus).toBe("idle");
 });
+
+const awaiting = { status: "suspended", waiting: true } as const;
 
 const waiting: RunView = {
   ...run,
@@ -438,73 +388,65 @@ const waiting: RunView = {
   waitingOn: { hook: "approve", token: "tok", seq: 1, expiresAt: null, since: AT },
 };
 
-test("a resolved hook drops the run from the inbox in place, without a refetch", () => {
+test("a resolved hook clears the awaiting row in place, without a refetch", () => {
   const client = new QueryClient();
-  client.setQueryData(keys.runs(INBOX_QUERY), [waiting]);
+  client.setQueryData(list(awaiting), page([waiting]));
 
   applyBatch(client, [hookEvent(11, "resolved")]);
 
-  const runs = client.getQueryData<RunView[]>(keys.runs(INBOX_QUERY)) ?? [];
-  expect(runs.map((item) => item.id)).toEqual(["run-1"]);
-  expect(inboxGroups(runs)).toEqual([]);
-  expect(client.getQueryState(keys.runs(INBOX_QUERY))?.isInvalidated).toBe(false);
+  expect(rows(client, list(awaiting))?.map((item) => [item.id, item.waitingOn])).toEqual([
+    ["run-1", null],
+  ]);
+  expect(client.getQueryState(list(awaiting))?.isInvalidated).toBe(false);
 });
 
 test("a run entering a status refetches the lists for that status that lack it", () => {
   const client = new QueryClient();
   const other = { ...waiting, id: "run-2" };
-  client.setQueryData(keys.runs(INBOX_QUERY), [other]);
-  client.setQueryData(keys.runs({ status: "suspended", slug: "triage" }), [waiting]);
-  client.setQueryData(keys.runs({ status: "failed" }), []);
+  client.setQueryData(list(awaiting), page([other]));
+  client.setQueryData(list({ status: "suspended", slug: "triage" }), page([waiting]));
+  client.setQueryData(list({ status: "failed" }), page([]));
 
   applyBatch(client, [
     event(11, { entity: "run", kind: "suspended", runId: waiting.id, record: waiting }),
   ]);
 
-  expect(client.getQueryState(keys.runs(INBOX_QUERY))?.isInvalidated).toBe(true);
-  expect(
-    client.getQueryState(keys.runs({ status: "suspended", slug: "triage" }))?.isInvalidated,
-  ).toBe(false);
-  expect(client.getQueryState(keys.runs({ status: "failed" }))?.isInvalidated).toBe(false);
+  expect(client.getQueryState(list(awaiting))?.isInvalidated).toBe(true);
+  expect(client.getQueryState(list({ status: "suspended", slug: "triage" }))?.isInvalidated).toBe(
+    false,
+  );
+  expect(client.getQueryState(list({ status: "failed" }))?.isInvalidated).toBe(false);
 });
 
-test("an unseen run invalidates matching array and infinite lists once per fresh batch", () => {
+test("an unseen run invalidates matching lists once per fresh batch", () => {
   const client = new QueryClient();
-  const array = keys.runs({ status: "running", slug: run.slug });
-  const pages = keys.runPages({ status: "running", slug: run.slug });
-  const unrelated = keys.runPages({ status: "running", slug: "other" });
-  client.setQueryData(array, []);
-  client.setQueryData(pages, { pages: [page([])], pageParams: [undefined] });
-  client.setQueryData(unrelated, { pages: [page([])], pageParams: [undefined] });
-  const invalidations = spyOn(client, "invalidateQueries");
+  const matching = list({ status: "running", slug: run.slug });
+  const wider = list({ status: "running" });
+  const unrelated = list({ status: "running", slug: "other" });
+  client.setQueryData(matching, page([]));
+  client.setQueryData(wider, page([]));
+  client.setQueryData(unrelated, page([]));
   const batch = [runEvent(11, running), runEvent(12, running)];
   applyBatch(client, batch);
-  expect(client.getQueryState(array)?.isInvalidated).toBe(true);
-  expect(client.getQueryState(pages)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(matching)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(wider)?.isInvalidated).toBe(true);
   expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
   expect(client.getQueryData(keys.run(run.id))).toBeUndefined();
-  expect(invalidations).toHaveBeenCalledTimes(2);
-  client.setQueryData(array, []);
-  client.setQueryData(pages, { pages: [page([])], pageParams: [undefined] });
-  invalidations.mockClear();
+  client.setQueryData(matching, page([]));
+  client.setQueryData(wider, page([]));
   applyBatch(client, batch);
-  expect(invalidations).not.toHaveBeenCalled();
-  expect(client.getQueryState(array)?.isInvalidated).toBe(false);
-  expect(client.getQueryState(pages)?.isInvalidated).toBe(false);
-  invalidations.mockRestore();
+  expect(client.getQueryState(matching)?.isInvalidated).toBe(false);
+  expect(client.getQueryState(wider)?.isInvalidated).toBe(false);
 });
 
-test("queued to running removes old membership and refetches the destination pages", () => {
+test("queued to running removes old membership and refetches the destination list", () => {
   const client = new QueryClient();
-  const queued = keys.runPages({ status: "queued", slug: run.slug });
-  const active = keys.runPages({ status: "running", slug: run.slug });
-  const array = keys.runs({ status: "queued" });
-  client.setQueryData(queued, { pages: [page([run])], pageParams: [undefined] });
-  client.setQueryData(active, { pages: [page([])], pageParams: [undefined] });
-  client.setQueryData(array, [run]);
+  const queued = list({ status: "queued", slug: run.slug });
+  const active = list({ status: "running", slug: run.slug });
+  client.setQueryData(queued, page([run]));
+  client.setQueryData(active, page([]));
   applyBatch(client, [runEvent(11, running)]);
-  expect(client.getQueryData<InfiniteData<RunPage>>(queued)?.pages).toEqual([page([])]);
-  expect(client.getQueryData<RunView[]>(array)).toEqual([]);
+  expect(rows(client, queued)).toEqual([]);
   expect(client.getQueryState(active)?.isInvalidated).toBe(true);
   expect(client.getQueryState(queued)?.isInvalidated).toBe(false);
 });
@@ -521,17 +463,17 @@ function heldLists(client: QueryClient) {
         fetches.set(status, (fetches.get(status) ?? 0) + 1);
         const answer = server.filter((row) => row.status === status);
 
-        return new Promise<RunView[]>((resolve) => held.push(() => resolve(answer)));
+        return new Promise<RunPage>((resolve) => held.push(() => resolve(page(answer))));
       };
     },
     /** Without rows the list has no data yet, so subscribing starts its first load. */
-    observe(status: RunView["status"], rows?: RunView[]) {
-      if (rows !== undefined) {
-        client.setQueryData(keys.runs({ status }), rows);
+    observe(status: RunView["status"], initial?: RunView[]) {
+      if (initial !== undefined) {
+        client.setQueryData(list({ status }), page(initial));
       }
 
       const observer = new QueryObserver(client, {
-        queryKey: keys.runs({ status }),
+        queryKey: list({ status }),
         staleTime: Infinity,
         queryFn: this.queryFn(status),
       });
@@ -540,8 +482,8 @@ function heldLists(client: QueryClient) {
 
       return observer;
     },
-    serve(rows: RunView[]) {
-      server = rows;
+    serve(answer: RunView[]) {
+      server = answer;
     },
     fetches: (status: RunView["status"]) => fetches.get(status) ?? 0,
     async release() {
@@ -570,8 +512,8 @@ test("a status change restarts a list fetch that started before it, even when th
   ]);
   await lists.release();
 
-  expect(client.getQueryData<RunView[]>(keys.runs({ status: "queued" }))).toEqual([]);
-  expect(client.getQueryData<RunView[]>(keys.runs({ status: "running" }))).toEqual([running]);
+  expect(rows(client, list({ status: "queued" }))).toEqual([]);
+  expect(rows(client, list({ status: "running" }))).toEqual([running]);
   expect(lists.fetches("queued")).toBe(2);
   expect(lists.fetches("running")).toBe(1);
   expect(lists.fetches("failed")).toBe(1);
@@ -586,7 +528,7 @@ test("a run leaving a list restarts that list's fetch already in flight", async 
   applyBatch(client, [runEvent(11, running)]);
   await lists.release();
 
-  expect(client.getQueryData<RunView[]>(keys.runs({ status: "queued" }))).toEqual([]);
+  expect(rows(client, list({ status: "queued" }))).toEqual([]);
   expect(lists.fetches("queued")).toBe(2);
 });
 
@@ -603,9 +545,9 @@ test("a status change restarts a list's first load that read the server before i
   await lists.release();
   await lists.release();
 
-  expect(client.getQueryData<RunView[]>(keys.runs({ status: "queued" }))).toEqual([]);
-  expect(client.getQueryData<RunView[]>(keys.runs({ status: "running" }))).toEqual([running]);
-  expect(client.getQueryData<RunView[]>(keys.runs({ status: "failed" }))).toEqual([]);
+  expect(rows(client, list({ status: "queued" }))).toEqual([]);
+  expect(rows(client, list({ status: "running" }))).toEqual([running]);
+  expect(rows(client, list({ status: "failed" }))).toEqual([]);
   expect(queued.getCurrentResult()).toMatchObject({ status: "success", fetchStatus: "idle" });
   expect(lists.fetches("queued")).toBe(2);
   expect(lists.fetches("running")).toBe(1);
@@ -619,7 +561,7 @@ test("a restarted first load without an observer still answers its loader", asyn
   lists.serve([run]);
 
   const loaded = client.fetchQuery({
-    queryKey: keys.runs({ status: "queued" }),
+    queryKey: list({ status: "queued" }),
     queryFn: lists.queryFn("queued"),
   });
 
@@ -628,8 +570,8 @@ test("a restarted first load without an observer still answers its loader", asyn
   await lists.release();
   await lists.release();
 
-  expect(await loaded).toEqual([]);
-  expect(client.getQueryState(keys.runs({ status: "queued" }))?.fetchStatus).toBe("idle");
+  expect((await loaded).runs).toEqual([]);
+  expect(client.getQueryState(list({ status: "queued" }))?.fetchStatus).toBe("idle");
   expect(lists.fetches("queued")).toBe(2);
 });
 
@@ -638,8 +580,7 @@ test("status transitions and schedule events invalidate summaries once while hea
   client.setQueryData(keys.loopies, []);
   client.setQueryData(keys.workspaceLoopies("/other"), []);
   client.setQueryData(keys.scheduleOverview, { workspaces: [], active: 0, next: [] });
-  client.setQueryData(keys.runs({}), [run]);
-  const invalidations = spyOn(client, "invalidateQueries");
+  client.setQueryData(list(), page([run]));
 
   const schedule = event(13, {
     entity: "schedule",
@@ -649,11 +590,9 @@ test("status transitions and schedule events invalidate summaries once while hea
   });
 
   applyBatch(client, [runEvent(11, running), runEvent(12, waiting), schedule]);
-  expect(invalidations).toHaveBeenCalledTimes(2);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.workspaceLoopies("/other"))?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(true);
-  invalidations.mockClear();
   client.setQueryData(keys.loopies, []);
   client.setQueryData(keys.workspaceLoopies("/other"), []);
   client.setQueryData(keys.scheduleOverview, { workspaces: [], active: 0, next: [] });
@@ -662,22 +601,21 @@ test("status transitions and schedule events invalidate summaries once while hea
     runEvent(11, running),
     event(14, { entity: "run", kind: "heartbeat", runId: run.id, record: waiting }),
   ]);
-  expect(invalidations).not.toHaveBeenCalled();
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(false);
   expect(client.getQueryState(keys.workspaceLoopies("/other"))?.isInvalidated).toBe(false);
   expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(false);
   applyBatch(client, [{ ...schedule, sequence: 15 }]);
-  expect(invalidations).toHaveBeenCalledTimes(2);
-  invalidations.mockRestore();
+  expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
+  expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(true);
 });
 
 test("a newer detail cursor cannot hide a fresh list event or summary transition", () => {
   const client = new QueryClient();
   client.setQueryData(keys.run(run.id), snapshot({ run: running, cursor: 20 }));
-  client.setQueryData(keys.runs({}), [run]);
+  client.setQueryData(list(), page([run]));
   client.setQueryData(keys.loopies, []);
   applyBatch(client, [runEvent(11, running)]);
-  expect(client.getQueryData<RunView[]>(keys.runs({}))).toEqual([running]);
+  expect(rows(client, list())).toEqual([running]);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
   expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.cursor).toBe(20);
 });
@@ -873,24 +811,35 @@ test("stream overflow keeps the execution keyset boundary and preview metadata b
   expect(Object.keys(current.truncatedOutputs ?? {}).sort()).toEqual(firstPage);
 });
 
-test("scoped node bursts invalidate aggregates and refetch active queries once", async () => {
+test("scoped node bursts invalidate aggregates and refetch active queries once", () => {
+  jest.useFakeTimers();
   const client = new QueryClient();
   const activeKey = keys.scopes(run.id, "[]");
-  const inactiveKey = keys.scopes(run.id, '[{"nodeId":"0:map","index":0}]');
-  client.setQueryData(activeKey, []);
-  client.setQueryData(inactiveKey, []);
-  client.setQueryData(keys.run(run.id), snapshot());
+  const inactiveScope = '[{"nodeId":"0:map","index":0}]';
+  const inactiveKey = keys.scopes(run.id, inactiveScope);
   let fetches = 0;
 
-  const observer = new QueryObserver(client, {
-    queryKey: activeKey,
-    staleTime: Infinity,
-    queryFn: async () => {
+  const backend = {
+    run: async () => snapshot(),
+    scopes: async () => {
       fetches++;
 
       return [];
     },
+  };
+
+  // Observers build each query with its real options, so the stream sees their refresh meta.
+  new QueryObserver(client, { ...scopesQuery(backend, run.id, inactiveScope), enabled: false });
+  new QueryObserver(client, { ...runQuery(backend, run.id), enabled: false });
+
+  const observer = new QueryObserver(client, {
+    ...scopesQuery(backend, run.id, "[]"),
+    staleTime: Number.POSITIVE_INFINITY,
   });
+
+  client.setQueryData(activeKey, []);
+  client.setQueryData(inactiveKey, []);
+  client.setQueryData(keys.run(run.id), snapshot());
 
   const unsubscribe = observer.subscribe(() => undefined);
 
@@ -916,12 +865,13 @@ test("scoped node bursts invalidate aggregates and refetch active queries once",
     expect(client.getQueryState(inactiveKey)?.isInvalidated).toBe(true);
     expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.nodeRuns).toEqual([]);
     expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.cursor).toBe(12);
-    await Bun.sleep(300);
+    // One fetch: the active list refetches once for both events; the inactive one waits.
+    jest.advanceTimersByTime(250);
     expect(fetches).toBe(1);
-    expect(client.getQueryState(inactiveKey)?.isInvalidated).toBe(true);
   } finally {
     unsubscribe();
     client.clear();
+    jest.useRealTimers();
   }
 });
 

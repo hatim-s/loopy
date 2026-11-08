@@ -1,7 +1,6 @@
 import { isTerminalRun, type RunView } from "@loopy/contract";
-import { elapsed } from "../../lib/format";
-import { runElapsed } from "../runs/run-table";
-import { runStatus, statusWord } from "../ui/status";
+import { elapsed, runElapsed } from "../../lib/format";
+import { runStatus, statusWord } from "../../lib/status";
 
 const SLOTS = 10;
 

@@ -36,11 +36,9 @@ test("rarer or malformed expressions have no reading", () => {
     "0 9 * * 5-1",
     "*/5 9 * * mon",
     "0 */2 1 * *",
+    "99 25 * * *",
+    "*/59 * * * *",
   ]) {
     expect(describeCron(expression)).toBeUndefined();
   }
-});
-
-test.each(["99 25 * * *", "*/59 * * * *"])("%s has no exact plain reading", (expression) => {
-  expect(describeCron(expression)).toBeUndefined();
 });

@@ -1,11 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import { BackendError, type LoopyBackend, type StreamState } from "../backend/backend";
-import { httpBaseUrl } from "../backend/config";
+import { followSession } from "../lib/stream/follow";
 import { useBackend } from "../router-context";
-import { followSession } from "./stream";
 
-/** idle: the application stream has not mounted yet. */
 export type ConnectionState = StreamState | "idle";
 
 /**
@@ -55,7 +53,10 @@ export function useAccess(): Access {
  * instead of an error in every widget. Other API errors open the dashboard, where each widget
  * reports its own failure.
  */
-export async function checkAccess(backend: LoopyBackend, token: string | null): Promise<Access> {
+export async function checkAccess(
+  backend: Pick<LoopyBackend, "cursor">,
+  token: string | null,
+): Promise<Access> {
   if (token === null) {
     access.set("missing");
 
@@ -86,11 +87,6 @@ export function closeOnUnauthorized(error: Error): void {
   }
 }
 
-/** Reads the bootstrap token from an address such as the one `loopy ui` prints. */
-export function addressToken(address: URL): string | null {
-  return new URLSearchParams(address.hash.slice(1)).get("token") || null;
-}
-
 export function useSessionStream(): void {
   const client = useQueryClient();
   const backend = useBackend();
@@ -106,7 +102,7 @@ export function useSessionStream(): void {
 
         stream.set("stale");
 
-        if (error instanceof BackendError) {
+        if (error instanceof Error) {
           closeOnUnauthorized(error);
         }
       },
@@ -117,42 +113,4 @@ export function useSessionStream(): void {
       stream.set("idle");
     };
   }, [client, backend]);
-}
-
-/** The fragment is a bootstrap secret, so remove it before touching storage. */
-export function browserConnection(options: {
-  baseUrl: string;
-  pageUrl: string;
-  storage: () => Pick<Storage, "getItem" | "setItem" | "removeItem">;
-  replaceUrl: (url: string) => void;
-}) {
-  const page = new URL(options.pageUrl);
-  const fragment = new URLSearchParams(page.hash.slice(1));
-  const token = addressToken(page);
-
-  if (fragment.has("token")) {
-    fragment.delete("token");
-    page.hash = fragment.toString();
-    options.replaceUrl(page.href);
-  }
-
-  const baseUrl = httpBaseUrl(options.baseUrl);
-  const key = `loopy-token:${baseUrl}`;
-  let stored: string | null = null;
-
-  try {
-    const storage = options.storage();
-
-    storage.removeItem("loopy-token");
-
-    if (token) {
-      storage.setItem(key, token);
-    }
-
-    stored = storage.getItem(key);
-  } catch {
-    // A blocked storage API must not leave the bootstrap token in the URL.
-  }
-
-  return { baseUrl, token: token ?? stored };
 }

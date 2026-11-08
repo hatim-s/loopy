@@ -1,16 +1,16 @@
-import type { NodeRunView } from "@loopy/contract";
-import { type ReactNode, useState } from "react";
+import type { NodeRunView, ScopeCountsView } from "@loopy/contract";
+import type { ReactNode } from "react";
 import type { GraphNodeModel } from "../../lib/graph";
 import { nodeFacts } from "../../lib/node-facts";
-import { useExecutions, useScopeItems } from "../../lib/ui-data";
-import type { Page, Pager, ScopeItemRow, ScopeSummary, ScopeTuple } from "../../lib/view-models";
+import { useExecutions } from "../../lib/pages";
+import type { ScopeTuple } from "../../lib/view-models";
 import { KindGlyph } from "../graph/kind-glyph";
 import { Icon } from "../ui/icon";
 import { Load } from "../ui/load";
 import { PagerFoot } from "../ui/pager";
-import { Segmented } from "../ui/segmented";
-import { StatusGlyph, StatusPill, statusTone, statusWord } from "../ui/status";
+import { StatusPill } from "../ui/status";
 import { ExecutionCard } from "./execution-card";
+import { type ItemPicker, ItemStrip, MapItems } from "./map-items";
 
 function Section({
   title,
@@ -29,240 +29,6 @@ function Section({
       </div>
       {children}
     </section>
-  );
-}
-
-const ITEM_FILTERS = ["all", "failed", "running", "retrying", "succeeded"] as const;
-
-type ItemFilter = (typeof ITEM_FILTERS)[number];
-
-const FILTER_STATUS = {
-  all: undefined,
-  failed: "failed",
-  running: "running",
-  retrying: "retrying",
-  succeeded: "succeeded",
-} satisfies Record<ItemFilter, NodeRunView["status"] | undefined>;
-
-const ITEM_PAGE = 50;
-
-/** One map's item list. The page owns it, so its page and filter outlive a change of node. */
-export type ItemPicker = {
-  mapId: GraphNodeModel["id"];
-  parentScope: ScopeTuple;
-  pager: Pager<ScopeItemRow>;
-  filter: ItemFilter;
-  setFilter: (filter: ItemFilter) => void;
-};
-
-/**
- * Holds a map's item pager while the reader moves between the map and the nodes inside it.
- * Key it by map and parent scope. Items load 50 at a time, only once something asks for them.
- */
-export function MapPicker(props: {
-  runId: string;
-  mapId: GraphNodeModel["id"];
-  parentScope: ScopeTuple;
-  children: (picker: ItemPicker) => ReactNode;
-}) {
-  const { runId, mapId, parentScope, children } = props;
-  const [filter, setFilter] = useState<ItemFilter>("all");
-  const pager = useScopeItems(runId, { nodeId: mapId, parentScope, status: FILTER_STATUS[filter] });
-
-  return children({ mapId, parentScope, pager, filter, setFilter });
-}
-
-const WORST_FIRST = [
-  "failed",
-  "retrying",
-  "running",
-  "rate_limited",
-  "waiting",
-  "sleeping",
-  "queued",
-  "cancelled",
-  "succeeded",
-  "skipped",
-] as const satisfies NodeRunView["status"][];
-
-/** The worst status among an item's executions, so a failed item reads as failed. */
-function itemStatus(counts: ScopeSummary["counts"]): NodeRunView["status"] | null {
-  return WORST_FIRST.find((status) => (counts[status] ?? 0) > 0) ?? null;
-}
-
-/**
- * How many items started and what their executions did. The daemon counts an item once it has
- * an execution, so the number is what the run reached, never the size of the list it maps over.
- */
-function ItemCounts({ summary, running }: { summary: ScopeSummary; running: boolean }) {
-  const counts = WORST_FIRST.flatMap((status) => {
-    const count = summary.counts[status] ?? 0;
-
-    return count > 0 ? [{ status, count }] : [];
-  });
-
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs">
-        <span className="font-medium tabular-nums">{summary.total.toLocaleString()}</span>{" "}
-        {summary.total === 1 ? "item" : "items"} started{running ? " so far" : ""}.{" "}
-        <span className="text-muted">
-          Counted from items with an execution, not from the list being mapped.
-        </span>
-      </p>
-      <ul aria-label="Executions inside the map by status" className="flex flex-wrap gap-1.5">
-        {counts.map(({ status, count }) => (
-          <li key={status} className={`pill pill-sm tone-${statusTone(status)}`}>
-            <StatusGlyph status={status} size={11} />
-            {statusWord(status)} <span className="tabular-nums">{count.toLocaleString()}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function ItemFoot({ picker, page }: { picker: ItemPicker; page: Page<ScopeItemRow> }) {
-  const first = page.offset + 1;
-
-  return (
-    <div className="flex h-9 items-center gap-1 border-t border-line pr-1 pl-3 text-xs text-muted">
-      <span className="flex-1 tabular-nums" aria-live="polite">
-        {page.rows.length === 0
-          ? "No items"
-          : `${first.toLocaleString()} to ${(page.offset + page.rows.length).toLocaleString()}`}
-      </span>
-      <button
-        type="button"
-        className="icon-btn size-7"
-        onClick={picker.pager.previous}
-        disabled={!page.hasPrevious}
-        aria-label={`Previous ${ITEM_PAGE} items`}
-      >
-        <Icon name="left" />
-      </button>
-      <button
-        type="button"
-        className="icon-btn size-7"
-        onClick={picker.pager.next}
-        disabled={!page.hasNext}
-        aria-label={`Next ${ITEM_PAGE} items`}
-      >
-        <Icon name="right" />
-      </button>
-    </div>
-  );
-}
-
-function MapItems(props: {
-  picker: ItemPicker;
-  summary: ScopeSummary | undefined;
-  running: boolean;
-  openIndex: number | null;
-  onOpen: (index: number) => void;
-  lead: ReactNode;
-}) {
-  const { picker, summary, running, openIndex, onOpen, lead } = props;
-
-  return (
-    <Section title="Items">
-      {lead}
-      {summary && <ItemCounts summary={summary} running={running} />}
-      <Segmented
-        label="Item status"
-        value={picker.filter}
-        options={ITEM_FILTERS.map((value) => ({
-          value,
-          label: value === "all" ? "All" : statusWord(value),
-        }))}
-        onChange={picker.setFilter}
-      />
-      <div className="overflow-hidden rounded-control border border-line">
-        <Load
-          value={picker.pager}
-          pending={<p className="p-3 text-xs text-muted">Loading items.</p>}
-        >
-          {(page, fetching) => (
-            <>
-              <ul className={`max-h-72 overflow-y-auto ${fetching ? "opacity-55" : ""}`}>
-                {page.rows.length === 0 && (
-                  <li className="p-3 text-xs text-muted">No item matches.</li>
-                )}
-                {page.rows.map((item) => {
-                  const status = itemStatus(item.counts);
-
-                  return (
-                    <li key={item.index}>
-                      <button
-                        type="button"
-                        aria-pressed={item.index === openIndex}
-                        onClick={() => onOpen(item.index)}
-                        className="flex h-8 w-full cursor-pointer items-center gap-2 border-b border-line px-3 text-left text-xs last:border-b-0 hover:bg-hover aria-pressed:bg-selected aria-pressed:shadow-[inset_2px_0_0_var(--lamp)]"
-                      >
-                        <span className="w-14 font-mono text-muted tabular-nums">
-                          #{item.index}
-                        </span>
-                        {status && <StatusGlyph status={status} />}
-                        <span className="flex-1 text-muted">
-                          {status ? statusWord(status) : "No executions"}
-                        </span>
-                        <Icon name="right" size={12} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              <ItemFoot picker={picker} page={page} />
-            </>
-          )}
-        </Load>
-      </div>
-    </Section>
-  );
-}
-
-/**
- * Which item a node inside a map is showing, with steps through the picker's current page and
- * a way back to the list at the same page.
- */
-function ItemStrip(props: {
-  picker: ItemPicker;
-  openIndex: number;
-  onOpen: (index: number) => void;
-  onShowItems: () => void;
-}) {
-  const { picker, openIndex, onOpen, onShowItems } = props;
-  const rows = picker.pager.state === "ready" ? picker.pager.data.rows : [];
-  const at = rows.findIndex((row) => row.index === openIndex);
-  const previous = at > 0 ? rows[at - 1] : undefined;
-  const next = at >= 0 ? rows[at + 1] : undefined;
-
-  return (
-    <div className="flex h-10 items-center gap-1 border-y border-line bg-sunken pr-2 pl-4 text-xs">
-      <span className="text-muted">Item</span>
-      <span className="font-mono tabular-nums">#{openIndex}</span>
-      <button
-        type="button"
-        className="icon-btn ml-1 size-7"
-        disabled={!previous}
-        onClick={() => previous && onOpen(previous.index)}
-        aria-label={previous ? `Item #${previous.index}` : "No earlier item on this page"}
-      >
-        <Icon name="left" size={14} />
-      </button>
-      <button
-        type="button"
-        className="icon-btn size-7"
-        disabled={!next}
-        onClick={() => next && onOpen(next.index)}
-        aria-label={next ? `Item #${next.index}` : "No later item on this page"}
-      >
-        <Icon name="right" size={14} />
-      </button>
-      <button type="button" className="link-btn ml-auto" onClick={onShowItems}>
-        All items
-      </button>
-    </div>
   );
 }
 
@@ -292,9 +58,7 @@ function Executions(props: {
                 openOutput={!control}
               />
             ))}
-            {(page.hasNext || page.hasPrevious) && (
-              <PagerFoot pager={pager} page={page} noun="executions" />
-            )}
+            {(page.hasNext || page.hasPrevious) && <PagerFoot pager={pager} noun="executions" />}
           </div>
         )
       }
@@ -332,14 +96,19 @@ function Definition({ node, open }: { node: GraphNodeModel; open: boolean }) {
   );
 }
 
-/** Where the selected node sits relative to the map that runs it, if any. */
+/**
+ * Where the selected node sits relative to the map that runs it. `map`: the node is a map and
+ * the picker lists its items. `inside`: the node runs per item of the picker's map.
+ * `unreachable`: an enclosing map has no item open, so nothing can be listed.
+ */
 export type MapPlace =
   | { kind: "none" }
-  /** The node is a map; the picker lists its items. */
-  | { kind: "map"; picker: ItemPicker; summary: ScopeSummary | undefined; running: boolean }
-  /** The node runs per item of the picker's map. `openIndex` is null until an item opens. */
-  | { kind: "inside"; picker: ItemPicker; summary: ScopeSummary | undefined; running: boolean }
-  /** The node runs per item, but an enclosing map has no item open, so nothing can be listed. */
+  | {
+      kind: "map" | "inside";
+      picker: ItemPicker;
+      summary: ScopeCountsView | undefined;
+      running: boolean;
+    }
   | { kind: "unreachable" };
 
 function Header({
@@ -378,13 +147,24 @@ function Header({
   );
 }
 
+/** A saved definition's node: its settings only. */
+export function NodeDetails({ node, onClose }: { node: GraphNodeModel; onClose: () => void }) {
+  return (
+    <aside aria-label={`Node ${node.title}`} className="flex min-h-0 flex-1 flex-col">
+      <Header node={node} status={null} onClose={onClose} />
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-line">
+        <Definition node={node} open />
+      </div>
+    </aside>
+  );
+}
+
 /**
- * The side panel for the selected node. `scope` is where its execution lives: the run's top
- * level, an open map item, or null when the node runs per item and no item is open. A run page
- * passes `runId`; a definition page passes null and gets the node's settings only.
+ * A run's node. `scope` is where its execution lives: the run's top level, an open map item, or
+ * null when the node runs per item and no item is open.
  */
-export function NodePanel(props: {
-  runId: string | null;
+export function RunNodePanel(props: {
+  runId: string;
   node: GraphNodeModel;
   scope: ScopeTuple | null;
   place: MapPlace;
@@ -414,20 +194,20 @@ export function NodePanel(props: {
       )}
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-line">
         {listing && (
-          <MapItems
-            picker={listing.picker}
-            summary={listing.summary}
-            running={listing.running}
-            openIndex={openItem}
-            onOpen={onOpenItem}
-            lead={
-              listing.kind === "inside" && (
-                <p className="text-xs text-muted">
-                  This node runs once per item. Pick an item to see its execution.
-                </p>
-              )
-            }
-          />
+          <Section title="Items">
+            {listing.kind === "inside" && (
+              <p className="text-xs text-muted">
+                This node runs once per item. Pick an item to see its execution.
+              </p>
+            )}
+            <MapItems
+              picker={listing.picker}
+              summary={listing.summary}
+              running={listing.running}
+              openIndex={openItem}
+              onOpen={onOpenItem}
+            />
+          </Section>
         )}
         {place.kind === "unreachable" && (
           <Section title="Execution">
@@ -437,7 +217,7 @@ export function NodePanel(props: {
             </p>
           </Section>
         )}
-        {runId !== null && scope !== null && (
+        {scope !== null && (
           <Section
             title={scope.length > 0 ? `Execution in item #${scope.at(-1)?.index}` : "Execution"}
           >
@@ -451,7 +231,7 @@ export function NodePanel(props: {
             />
           </Section>
         )}
-        <Definition node={node} open={runId === null} />
+        <Definition node={node} open={false} />
       </div>
     </aside>
   );

@@ -1,33 +1,31 @@
+import type { EventSummaryView } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
-import { shortId } from "../../lib/format";
+import { preciseTime, shortId } from "../../lib/format";
+import { isStatus, statusTone, TONE_BG, type Tone } from "../../lib/status";
 import { useEvent } from "../../lib/ui-data";
-import type { EventRow } from "../../lib/view-models";
 import { JsonBlock } from "../json-preview";
 import { Icon } from "../ui/icon";
 import { Load } from "../ui/load";
-import { preciseTime } from "./log-table";
 
-const KIND_TONE = new Map([
-  ["succeeded", "bg-success"],
-  ["resolved", "bg-success"],
-  ["failed", "bg-danger"],
-  ["expired", "bg-danger"],
-  ["retrying", "bg-attention"],
-  ["waiting", "bg-attention"],
-  ["sleeping", "bg-attention"],
-  ["suspended", "bg-attention"],
-  ["running", "bg-active"],
-  ["created", "bg-active"],
+// Event kinds that are not statuses, and `suspended`, which an event marks as needing attention.
+const KIND_TONE = new Map<string, Tone>([
+  ["resolved", "ok"],
+  ["expired", "bad"],
+  ["created", "blue"],
+  ["suspended", "warn"],
 ]);
 
-/** The entity in mono beside the kind with a dot in its tone: `node · running`. */
+function kindTone(kind: string): Tone {
+  return KIND_TONE.get(kind) ?? (isStatus(kind) ? statusTone(kind) : "neutral");
+}
+
 export function EventType({ entity, kind }: { entity: string; kind: string }) {
   return (
     <span className="inline-flex h-[22px] items-center overflow-hidden rounded-control font-mono text-xs whitespace-nowrap shadow-[inset_0_0_0_1px_var(--line)]">
       <span className="flex h-full items-center bg-sunken px-1.5 text-muted">{entity}</span>
       <span className="flex h-full items-center gap-1.5 pr-2 pl-1.5">
-        <i className={`size-1.5 rounded-full ${KIND_TONE.get(kind) ?? "bg-neutral"}`} />
+        <i className={`size-1.5 rounded-full ${TONE_BG[kindTone(kind)]}`} />
         {kind}
       </span>
     </span>
@@ -35,7 +33,7 @@ export function EventType({ entity, kind }: { entity: string; kind: string }) {
 }
 
 export function EventTable(props: {
-  rows: EventRow[];
+  rows: EventSummaryView[];
   busy: boolean;
   open: number | null;
   onOpen: (sequence: number | null) => void;
@@ -98,9 +96,8 @@ export function EventTable(props: {
   );
 }
 
-/** The event drawer. The record loads when it opens; links trace the event elsewhere. */
 export function EventDrawer(props: {
-  row: EventRow;
+  row: EventSummaryView;
   onClose: () => void;
   onSameTxn: (txn: string) => void;
   onRunEvents: (runId: string) => void;

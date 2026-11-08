@@ -1,23 +1,17 @@
 import { encodeRunCursor } from "@loopy/contract";
-import { infiniteQueryOptions, queryOptions, skipToken } from "@tanstack/react-query";
-import type { LoopyBackend, OverviewQuery, RunsQuery } from "../backend/backend";
-import { INBOX_QUERY, inboxGroups } from "./inbox";
-import {
-  type EventFilters,
-  type ExecutionFilters,
-  keys,
-  type LogFilters,
-  type RunFilters,
-  type ScopeItemsFilters,
-} from "./keys";
+import { queryOptions, skipToken } from "@tanstack/react-query";
+import type {
+  EventHistoryQuery,
+  ExecutionQuery,
+  GlobalLogsQuery,
+  LoopyBackend,
+  OverviewQuery,
+  RunsQuery,
+  ScopeItemsQuery,
+} from "../backend/backend";
+import { keys } from "./keys";
 
-export const RUN_PAGE_SIZE = 25;
-
-export const PAGE_SIZE = 50;
-
-export const MAX_CACHED_ROWS = 200;
-
-export const QUERY_GC_TIME = 60_000;
+const QUERY_GC_TIME = 60_000;
 
 export function loopiesQuery(backend: LoopyBackend) {
   return queryOptions({ queryKey: keys.loopies, queryFn: () => backend.loopies() });
@@ -31,7 +25,7 @@ export function workspaceLoopiesQuery(backend: LoopyBackend, workspace: string |
 }
 
 // The server page boundary survives stream removals, including removal of its oldest row.
-export function runPage(runs: Awaited<ReturnType<LoopyBackend["runs"]>>, limit = RUN_PAGE_SIZE) {
+export function runPage(runs: Awaited<ReturnType<LoopyBackend["runs"]>>, limit: number) {
   const oldest = runs.at(-1);
 
   return {
@@ -42,26 +36,24 @@ export function runPage(runs: Awaited<ReturnType<LoopyBackend["runs"]>>, limit =
 
 export type RunPage = ReturnType<typeof runPage>;
 
-export function runPagesQuery(backend: LoopyBackend, filters: RunFilters) {
-  return infiniteQueryOptions({
-    queryKey: keys.runPages(filters),
-    maxPages: MAX_CACHED_ROWS / RUN_PAGE_SIZE,
-    gcTime: QUERY_GC_TIME,
-    queryFn: async ({ pageParam }: { pageParam: RunsQuery["before"] }) =>
-      runPage(await backend.runs({ ...filters, limit: RUN_PAGE_SIZE, before: pageParam })),
-    initialPageParam: undefined,
-    getNextPageParam: (page) => page.nextCursor,
-    select: (data) => ({ ...data, pages: data.pages.map((page) => page.runs) }),
+// The stream keeps a shown page current by patching rows and refetching on membership changes.
+export function runPageQuery(backend: LoopyBackend, query: RunsQuery & { limit: number }) {
+  return queryOptions({
+    queryKey: keys.runPage(query),
+    queryFn: async () => runPage(await backend.runs(query), query.limit),
+    gcTime: 0,
+    placeholderData: (previous) => previous,
   });
 }
 
 /** The event stream keeps a loaded snapshot current, so it never goes stale by time. */
-export function runQuery(backend: LoopyBackend, id: string) {
+export function runQuery(backend: Pick<LoopyBackend, "run">, id: string) {
   return queryOptions({
     queryKey: keys.run(id),
     queryFn: ({ signal }) => backend.run(id, signal),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: QUERY_GC_TIME,
+    meta: { refresh: { on: "scope", runId: id } },
   });
 }
 
@@ -93,14 +85,6 @@ export function daemonQuery(backend: LoopyBackend) {
   });
 }
 
-export function inboxQuery(backend: LoopyBackend) {
-  return queryOptions({
-    queryKey: keys.runs(INBOX_QUERY),
-    queryFn: () => backend.runs(INBOX_QUERY),
-    select: inboxGroups,
-  });
-}
-
 export function scheduleOverviewQuery(backend: LoopyBackend) {
   return queryOptions({
     queryKey: keys.scheduleOverview,
@@ -120,6 +104,7 @@ export function overviewQuery(backend: LoopyBackend, query: OverviewQuery) {
     queryKey: keys.overview(query),
     queryFn: ({ signal }) => backend.overview(query, signal),
     gcTime: QUERY_GC_TIME,
+    meta: { refresh: { on: "run", runId: null } },
   });
 }
 
@@ -127,7 +112,7 @@ export function runSourceQuery(backend: LoopyBackend, id: string) {
   return queryOptions({
     queryKey: keys.runSource(id),
     queryFn: ({ signal }) => backend.runSource(id, signal),
-    staleTime: Infinity,
+    staleTime: Number.POSITIVE_INFINITY,
     gcTime: QUERY_GC_TIME,
   });
 }
@@ -140,15 +125,16 @@ export function loopySourceQuery(backend: LoopyBackend, slug: string, workspace:
   });
 }
 
-export function executionsQuery(backend: LoopyBackend, id: string, filters: ExecutionFilters) {
-  return infiniteQueryOptions({
-    queryKey: keys.executions(id, filters),
-    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-      backend.executions(id, { ...filters, after: pageParam, limit: PAGE_SIZE }, signal),
-    initialPageParam: undefined,
-    getNextPageParam: (page) => page.next ?? undefined,
-    maxPages: MAX_CACHED_ROWS / PAGE_SIZE,
-    gcTime: QUERY_GC_TIME,
+export function executionPageQuery(
+  backend: LoopyBackend,
+  id: string,
+  query: ExecutionQuery | null,
+) {
+  return queryOptions({
+    queryKey: keys.executionPage(id, query),
+    queryFn: query === null ? skipToken : ({ signal }) => backend.executions(id, query, signal),
+    gcTime: 0,
+    meta: { refresh: { on: "node", runId: id } },
   });
 }
 
@@ -157,30 +143,28 @@ export function executionQuery(backend: LoopyBackend, id: string, key: string | 
     queryKey: keys.execution(id, key),
     queryFn: key === undefined ? skipToken : ({ signal }) => backend.execution(id, { key }, signal),
     gcTime: QUERY_GC_TIME,
+    meta: { refresh: { on: "node", runId: id } },
   });
 }
 
-export function scopeItemsQuery(backend: LoopyBackend, id: string, filters: ScopeItemsFilters) {
-  return infiniteQueryOptions({
-    queryKey: keys.scopeItems(id, filters),
-    queryFn: ({ pageParam, signal }: { pageParam: number | undefined; signal: AbortSignal }) =>
-      backend.scopeItems(id, { ...filters, after: pageParam, limit: PAGE_SIZE }, signal),
-    initialPageParam: undefined,
-    getNextPageParam: (page) => page.next ?? undefined,
-    maxPages: MAX_CACHED_ROWS / PAGE_SIZE,
-    gcTime: QUERY_GC_TIME,
+export function scopePageQuery(backend: LoopyBackend, id: string, query: ScopeItemsQuery) {
+  return queryOptions({
+    queryKey: keys.scopePage(id, query),
+    queryFn: ({ signal }) => backend.scopeItems(id, query, signal),
+    gcTime: 0,
+    placeholderData: (previous) => previous,
+    meta: { refresh: { on: "node", runId: id } },
   });
 }
 
-export function logPagesQuery(backend: LoopyBackend, filters: LogFilters) {
-  return infiniteQueryOptions({
-    queryKey: keys.logPages(filters),
-    queryFn: ({ pageParam, signal }: { pageParam: number | undefined; signal: AbortSignal }) =>
-      backend.globalLogs({ ...filters, before: pageParam, limit: PAGE_SIZE }, signal),
-    initialPageParam: undefined,
-    getNextPageParam: (page) => (page.hasMore ? (page.next ?? undefined) : undefined),
-    maxPages: MAX_CACHED_ROWS / PAGE_SIZE,
-    gcTime: QUERY_GC_TIME,
+/** `live` keeps the page current while it is the newest page and the reader follows it. */
+export function logPageQuery(backend: LoopyBackend, query: GlobalLogsQuery, live: boolean) {
+  return queryOptions({
+    queryKey: keys.logPage(query),
+    queryFn: ({ signal }) => backend.globalLogs(query, signal),
+    gcTime: 0,
+    placeholderData: (previous) => previous,
+    meta: live ? { refresh: { on: "log" } } : {},
   });
 }
 
@@ -188,20 +172,19 @@ export function logQuery(backend: LoopyBackend, id: number | undefined) {
   return queryOptions({
     queryKey: keys.log(id),
     queryFn: id === undefined ? skipToken : ({ signal }) => backend.log(id, signal),
-    staleTime: Infinity,
+    staleTime: Number.POSITIVE_INFINITY,
     gcTime: QUERY_GC_TIME,
   });
 }
 
-export function eventPagesQuery(backend: LoopyBackend, filters: EventFilters) {
-  return infiniteQueryOptions({
-    queryKey: keys.eventPages(filters),
-    queryFn: ({ pageParam, signal }: { pageParam: number | undefined; signal: AbortSignal }) =>
-      backend.eventHistory({ ...filters, before: pageParam, limit: PAGE_SIZE }, signal),
-    initialPageParam: undefined,
-    getNextPageParam: (page) => (page.hasMore ? (page.next ?? undefined) : undefined),
-    maxPages: MAX_CACHED_ROWS / PAGE_SIZE,
-    gcTime: QUERY_GC_TIME,
+/** `live` keeps the page current while it is the newest page. */
+export function eventPageQuery(backend: LoopyBackend, query: EventHistoryQuery, live: boolean) {
+  return queryOptions({
+    queryKey: keys.eventPage(query),
+    queryFn: ({ signal }) => backend.eventHistory(query, signal),
+    gcTime: 0,
+    placeholderData: (previous) => previous,
+    meta: live ? { refresh: { on: "feed" } } : {},
   });
 }
 
@@ -209,16 +192,21 @@ export function eventQuery(backend: LoopyBackend, sequence: number | undefined) 
   return queryOptions({
     queryKey: keys.event(sequence),
     queryFn: sequence === undefined ? skipToken : ({ signal }) => backend.event(sequence, signal),
-    staleTime: Infinity,
+    staleTime: Number.POSITIVE_INFINITY,
     gcTime: QUERY_GC_TIME,
   });
 }
 
-export function scopesQuery(backend: LoopyBackend, id: string, parentScope: string) {
+export function scopesQuery(
+  backend: Pick<LoopyBackend, "scopes">,
+  id: string,
+  parentScope: string,
+) {
   return queryOptions({
     queryKey: keys.scopes(id, parentScope),
     queryFn: ({ signal }) => backend.scopes(id, { parentScope }, signal),
     gcTime: 0,
+    meta: { refresh: { on: "node", runId: id } },
   });
 }
 
@@ -227,5 +215,6 @@ export function runPayloadQuery(backend: LoopyBackend, id: string | null) {
     queryKey: keys.runPayload(id),
     queryFn: id === null ? skipToken : ({ signal }) => backend.runPayload(id, signal),
     gcTime: 0,
+    meta: id === null ? {} : { refresh: { on: "run", runId: id } },
   });
 }

@@ -1,72 +1,6 @@
-import type { LogRecord, NodeRunView, RunStatus, RunView } from "@loopy/contract";
+import type { LogRecord, RunView } from "@loopy/contract";
 import type { ReactNode } from "react";
-
-/**
- * Every state a pill can name. Runs, node executions and schedules share one vocabulary, so a
- * failed run and a failed node read the same everywhere. `awaiting` is a suspended run held on
- * a hook; `sleeping` is one held on a clock.
- */
-export type Status =
-  | Exclude<RunStatus, "suspended">
-  | NodeRunView["status"]
-  | "awaiting"
-  | "suspended"
-  | "active"
-  | "paused";
-
-type Tone = "ok" | "bad" | "warn" | "blue" | "neutral";
-
-type Glyph =
-  | "succeeded"
-  | "failed"
-  | "running"
-  | "ring"
-  | "cancelled"
-  | "hourglass"
-  | "retrying"
-  | "paused"
-  | "active";
-
-const STATUS = {
-  succeeded: { tone: "ok", glyph: "succeeded", word: "Succeeded" },
-  failed: { tone: "bad", glyph: "failed", word: "Failed" },
-  running: { tone: "blue", glyph: "running", word: "Running" },
-  queued: { tone: "neutral", glyph: "ring", word: "Queued" },
-  cancelled: { tone: "neutral", glyph: "cancelled", word: "Cancelled" },
-  skipped: { tone: "neutral", glyph: "cancelled", word: "Skipped" },
-  awaiting: { tone: "warn", glyph: "hourglass", word: "Awaiting" },
-  waiting: { tone: "warn", glyph: "hourglass", word: "Waiting" },
-  sleeping: { tone: "warn", glyph: "hourglass", word: "Sleeping" },
-  suspended: { tone: "neutral", glyph: "paused", word: "Suspended" },
-  rate_limited: { tone: "warn", glyph: "hourglass", word: "Rate limited" },
-  retrying: { tone: "warn", glyph: "retrying", word: "Retrying" },
-  active: { tone: "ok", glyph: "active", word: "Active" },
-  paused: { tone: "neutral", glyph: "paused", word: "Paused" },
-} as const satisfies Record<Status, { tone: Tone; glyph: Glyph; word: string }>;
-
-/**
- * A suspended run is awaiting a person when it holds a hook, sleeping when a clock will wake it,
- * and plainly suspended when neither holds it.
- */
-export function runStatus(run: RunView): Status {
-  if (run.status === "suspended") {
-    if (run.waitingOn !== null) {
-      return "awaiting";
-    }
-
-    return run.wakeAt === null ? "suspended" : "sleeping";
-  }
-
-  return run.status;
-}
-
-export function statusWord(status: Status): string {
-  return STATUS[status].word;
-}
-
-export function statusTone(status: Status): Tone {
-  return STATUS[status].tone;
-}
+import { type Glyph, runStatus, STATUS, type Status, type Tone } from "../../lib/status";
 
 const STROKE = {
   fill: "none",
@@ -147,7 +81,6 @@ export function StatusGlyph({ status, size = 12 }: { status: Status; size?: numb
   );
 }
 
-/** A tinted pill: glyph plus word. `word` overrides the default, as in "Awaiting approval". */
 export function StatusPill({
   status,
   word,
@@ -180,12 +113,3 @@ export function LevelPill({ level }: { level: LogRecord["level"] }) {
     <span className={`pill pill-sm pill-plain tone-${LEVEL[level].tone}`}>{LEVEL[level].word}</span>
   );
 }
-
-/** The text colour of a status, for marks that are not pills: chart keys, gutter rails. */
-export const TONE_TEXT = {
-  ok: "text-success",
-  bad: "text-danger",
-  warn: "text-attention",
-  blue: "text-active",
-  neutral: "text-neutral",
-} as const satisfies Record<Tone, string>;

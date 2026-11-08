@@ -1,27 +1,11 @@
-import { isTerminalRun, type RunView } from "@loopy/contract";
+import type { RunView } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
-import { ago, elapsed, shortId } from "../../lib/format";
+import { ago, bytes, elapsed, runElapsed, shortId } from "../../lib/format";
 import { TimeStamp } from "../time-stamp";
 import { RunPill } from "../ui/status";
 
-/** How long a run took, or has taken so far. Terminal runs end at their last update. */
-export function runElapsed(run: RunView, now: number): number {
-  return (isTerminalRun(run.status) ? Date.parse(run.updatedAt) : now) - Date.parse(run.createdAt);
-}
-
 const PREVIEW = 120;
 
-export function bytes(count: number): string {
-  if (count < 1024) {
-    return `${count} B`;
-  }
-
-  return count < 1_048_576
-    ? `${(count / 1024).toFixed(1)} KB`
-    : `${(count / 1_048_576).toFixed(1)} MB`;
-}
-
-/** One line that says how the run ended or what holds it. */
 export type RunResult = { text: string; tone: string };
 
 export function runResult(run: RunView): RunResult {
@@ -71,10 +55,7 @@ export function runResult(run: RunView): RunResult {
   }
 }
 
-/**
- * Runs as table rows. `withLoopy` drops the loopy column on a loopy's own page. `compact` shows
- * the start as an age and drops the duration, for narrow panels.
- */
+/** `compact` shows the start as an age and drops the duration, for narrow panels. */
 export function RunTable(props: {
   runs: RunView[];
   now: number;

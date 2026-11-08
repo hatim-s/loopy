@@ -1,36 +1,38 @@
 import {
   executionKeySchema,
   type GraphRevisionView,
-  type NodeRunView,
   type RunSnapshotView,
+  type ScopeCountsView,
 } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
-import { type ReactNode, useEffect, useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { SourcePane } from "../components/code/source-pane";
 import { ErrorBanner } from "../components/error-banner";
 import { GraphPane } from "../components/graph/pane";
 import { HookHistory, RunGuide } from "../components/run/guide";
 import { RunHeader } from "../components/run/header";
-import { MapPicker, type MapPlace, NodePanel } from "../components/run/node-panel";
+import { MapPicker } from "../components/run/map-items";
+import { type MapPlace, RunNodePanel } from "../components/run/node-panel";
 import { RunTimeline } from "../components/run/timeline";
 import { Icon } from "../components/ui/icon";
 import { Load } from "../components/ui/load";
 import { Segmented } from "../components/ui/segmented";
 import { useClock } from "../lib/clock";
-import { type GraphModel, graphModel } from "../lib/graph";
+import { type GraphModel, type GraphNode, graphModel } from "../lib/graph";
 import { layoutGraph } from "../lib/graph-layout";
-import { firstInside, owningMap, perItemNodes, runMarks } from "../lib/run-marks";
+import { useNodeSelection } from "../lib/node-selection";
+import { useExecutions } from "../lib/pages";
+import { firstInside, mapRunning, runMarks } from "../lib/run-marks";
 import { searchField } from "../lib/search";
 import {
-  useExecutions,
   useLoopyGraph,
   useRunGraph,
   useRunSnapshot,
   useRunSource,
   useScopes,
 } from "../lib/ui-data";
-import type { ScopeSummary, ScopeTuple } from "../lib/view-models";
+import type { ScopeTuple } from "../lib/view-models";
 
 const VIEWS = ["code", "split", "graph"] as const;
 
@@ -62,8 +64,6 @@ const FIXED_HEIGHT = "h-[clamp(400px,calc(100dvh-var(--head-h)-240px),640px)]";
 
 const SIDE_HEIGHT = "max-h-[70vh] lg:max-h-[clamp(400px,calc(100dvh-var(--head-h)-240px),640px)]";
 
-const SETTLED = new Set<NodeRunView["status"]>(["succeeded", "failed", "cancelled", "skipped"]);
-
 function sameScope(a: ScopeTuple, b: ScopeTuple): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -92,23 +92,22 @@ function ItemChip({ item, onClose }: { item: ScopeTuple; onClose: () => void }) 
 
 /** Where the selected map or the map around the selected node sits, and its picker scope. */
 function focusOf(options: {
-  graph: GraphRevisionView["graph"];
   model: GraphModel;
   selected: string;
   scopeOf: (nodeId: string) => ScopeTuple | null;
 }): {
-  mapId: GraphModel["nodes"][number]["id"];
+  mapId: GraphNode["id"];
   parentScope: ScopeTuple | null;
   inside: boolean;
 } | null {
-  const { graph, model, selected, scopeOf } = options;
+  const { model, selected, scopeOf } = options;
   const node = model.nodes.find((item) => item.id === selected);
 
   if (node?.node.kind === "map") {
     return { mapId: node.id, parentScope: scopeOf(node.id), inside: false };
   }
 
-  const mapId = owningMap(graph, selected);
+  const mapId = node?.maps.at(-1) ?? null;
 
   return mapId === null ? null : { mapId, parentScope: scopeOf(mapId), inside: true };
 }
@@ -116,13 +115,13 @@ function focusOf(options: {
 function Workspace(props: {
   snapshot: RunSnapshotView;
   graph: GraphRevisionView;
-  rootScopes: ScopeSummary[];
+  rootScopes: ScopeCountsView[];
+  now: number;
 }) {
-  const { snapshot, graph, rootScopes } = props;
+  const { snapshot, graph, rootScopes, now } = props;
   const { runId } = Route.useParams();
   const { node: selected = null, item = null, view = "code" } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const now = useClock();
   const source = useRunSource(runId);
   const latest = useLoopyGraph(snapshot.run.slug, snapshot.run.workspace);
 
@@ -146,16 +145,18 @@ function Workspace(props: {
     [snapshot.nodeRuns, itemRuns],
   );
 
-  const perItem = useMemo(() => perItemNodes(graph.graph), [graph.graph]);
+  const definition = useMemo(() => graphModel(graph.graph, null), [graph.graph]);
+  const layout = useMemo(() => layoutGraph(definition), [definition]);
 
   // Where a node executes: the top level, or the open item of the map that owns it. Null when
   // it runs per item and that map has no item open.
   const scopeOf = (nodeId: string): ScopeTuple | null => {
-    if (!perItem.has(nodeId)) {
+    const owner = definition.nodes.find((node) => node.id === nodeId)?.maps.at(-1);
+
+    if (owner === undefined) {
       return [];
     }
 
-    const owner = owningMap(graph.graph, nodeId);
     const depth = item?.findIndex((part) => part.nodeId === owner) ?? -1;
 
     return item && depth >= 0 ? item.slice(0, depth + 1) : null;
@@ -204,34 +205,16 @@ function Workspace(props: {
     ],
   );
 
-  const layout = useMemo(() => layoutGraph(graphModel(graph.graph, null)), [graph.graph]);
-
   const marks = useMemo(
-    () => runMarks({ model, perItem, itemOpen: item !== null, scopes, now }),
-    [model, perItem, item, scopes, now],
+    () => runMarks({ model, itemOpen: item !== null, scopes, now }),
+    [model, item, scopes, now],
   );
 
   // A key set to undefined clears it; a key left out keeps its value.
   const setSearch = (patch: Partial<Schema.Schema.Type<typeof searchSchema>>) =>
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
-  const select = (id: string | null) => setSearch({ node: id ?? undefined });
-
-  useEffect(() => {
-    if (selected === null) {
-      return;
-    }
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) {
-        select(null);
-      }
-    };
-
-    document.addEventListener("keydown", onKey);
-
-    return () => document.removeEventListener("keydown", onKey);
-  });
+  const select = useNodeSelection(selected, (node) => setSearch({ node }));
 
   const inspected = model.nodes.find((node) => node.id === selected);
 
@@ -239,7 +222,7 @@ function Workspace(props: {
     (node) => node.state.kind === "ran" && node.state.status === "failed",
   );
 
-  const focus = selected ? focusOf({ graph: graph.graph, model, selected, scopeOf }) : null;
+  const focus = selected ? focusOf({ model, selected, scopeOf }) : null;
   const openEntry = focus ? item?.find((part) => part.nodeId === focus.mapId) : undefined;
   const mapModel = focus ? model.nodes.find((node) => node.id === focus.mapId) : undefined;
 
@@ -297,7 +280,7 @@ function Workspace(props: {
 
   const panel = (place: MapPlace) =>
     inspected && (
-      <NodePanel
+      <RunNodePanel
         runId={runId}
         node={inspected}
         scope={scopeOf(inspected.id)}
@@ -342,7 +325,7 @@ function Workspace(props: {
             summary: scopes.find(
               (summary) => summary.nodeId === mapId && sameScope(summary.parentScope, parentScope),
             ),
-            running: mapModel?.state.kind === "ran" ? !SETTLED.has(mapModel.state.status) : false,
+            running: mapRunning(mapModel),
           })
         }
       </MapPicker>
@@ -407,6 +390,7 @@ function RunPage() {
   const graph = useRunGraph(runId);
   const rootScopes = useScopes(runId, []);
   const scopes = rootScopes.state === "ready" ? rootScopes.data : [];
+  const now = useClock();
 
   return (
     <div className="flex w-full flex-col gap-3 px-6 pt-5 pb-10 max-md:px-3">
@@ -419,7 +403,7 @@ function RunPage() {
                 snapshot={run}
                 revision={null}
                 olderThanLatest={false}
-                now={Date.now()}
+                now={now}
                 onShowFailure={null}
               />
               <ErrorBanner error={graph.error} />
@@ -429,7 +413,9 @@ function RunPage() {
               value={graph}
               pending={<p className="text-muted">Loading the graph this run pinned.</p>}
             >
-              {(pinned) => <Workspace snapshot={run} graph={pinned} rootScopes={scopes} />}
+              {(pinned) => (
+                <Workspace snapshot={run} graph={pinned} rootScopes={scopes} now={now} />
+              )}
             </Load>
           )
         }

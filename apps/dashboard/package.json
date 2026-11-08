@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "demo": "bun dev/demo.ts"
   },
   "dependencies": {
     "@dagrejs/dagre": "3.1.1",

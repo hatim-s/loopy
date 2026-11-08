@@ -1,12 +1,12 @@
 import { executionKeyString, type NodeRunView } from "@loopy/contract";
 import { type ReactNode, useId, useState } from "react";
-import { clockTime, elapsed, timestamp } from "../../lib/format";
-import { useExecution, useLogPages } from "../../lib/ui-data";
+import { bytes, clockTime, elapsed, timestamp } from "../../lib/format";
+import { useLogPages } from "../../lib/pages";
+import { useExecution } from "../../lib/ui-data";
 import type { ExecutionRow, LogRow } from "../../lib/view-models";
 import { Countdown } from "../countdown";
 import { JsonBlock } from "../json-preview";
 import { LogDetail } from "../observability/log-table";
-import { bytes } from "../runs/run-table";
 import { Load } from "../ui/load";
 import { PagerFoot, ScanNote } from "../ui/pager";
 import { LevelPill, StatusPill } from "../ui/status";
@@ -26,7 +26,7 @@ function Pending({ children }: { children: ReactNode }) {
   return <p className="text-xs text-muted">{children}</p>;
 }
 
-/** The output, from the list row when it fits inline, else from the execution detail. */
+// The output comes from the list row when it fits inline, else from the execution detail.
 function OutputTab({ runId, row }: { runId: string; row: ExecutionRow }) {
   const { execution, truncatedOutputBytes } = row;
 
@@ -48,9 +48,7 @@ function OutputTab({ runId, row }: { runId: string; row: ExecutionRow }) {
       value={detail}
       pending={<Pending>Loading the full output, {bytes(truncatedOutputBytes)}.</Pending>}
     >
-      {(data) =>
-        data.execution.status === "succeeded" ? <JsonBlock value={data.execution.output} /> : null
-      }
+      {(data) => (data.node.status === "succeeded" ? <JsonBlock value={data.node.output} /> : null)}
     </Load>
   );
 }
@@ -61,21 +59,23 @@ function InputTab({ runId, execution }: { runId: string; execution: NodeRunView 
   return (
     <Load value={detail} pending={<Pending>Loading the input.</Pending>}>
       {(data) => {
-        switch (data.input.state) {
-          case "recorded": {
-            return <JsonBlock value={data.input.value} />;
+        const input = data.node.inputView;
+
+        switch (input?.state) {
+          case "available": {
+            return <JsonBlock value={input.value} />;
           }
 
           case "truncated": {
             return (
               <Pending>
-                The input was {bytes(data.input.bytes)}, over the inline limit, so the daemon kept
-                only its size.
+                The input was {bytes(input.bytes)}, over the inline limit, so the daemon kept only
+                its size.
               </Pending>
             );
           }
 
-          default: {
+          case undefined: {
             return (
               <Pending>The daemon did not record the resolved input for this execution.</Pending>
             );
@@ -109,11 +109,11 @@ function AttemptsTab({ runId, execution }: { runId: string; execution: NodeRunVi
                       title={timestamp(attempt.startedAt)}
                     >
                       {clockTime(attempt.startedAt)}
-                      {attempt.endedAt &&
+                      {"endedAt" in attempt &&
                         `, ${elapsed(Date.parse(attempt.endedAt) - Date.parse(attempt.startedAt))}`}
                     </span>
                   </span>
-                  {attempt.error && (
+                  {"error" in attempt && (
                     <p className="mt-1 font-mono whitespace-pre-wrap text-danger">
                       {attempt.error.code}: {attempt.error.message}
                     </p>
@@ -132,7 +132,7 @@ function AttemptsTab({ runId, execution }: { runId: string; execution: NodeRunVi
   );
 }
 
-/** One log line. It opens to the stored record, because pages carry a bounded message. */
+// A line opens to the stored record, because pages carry a bounded message.
 function LogLine({ log, attempt }: { log: LogRow; attempt: number }) {
   const [open, setOpen] = useState(false);
 
@@ -149,9 +149,7 @@ function LogLine({ log, attempt }: { log: LogRow; attempt: number }) {
         </time>
         <LevelPill level={log.level} />
         <span className="line-clamp-3 break-words whitespace-pre-wrap">
-          {log.attempt !== null && log.attempt !== attempt && (
-            <span className="text-faint">try {log.attempt} </span>
-          )}
+          {log.attempt !== attempt && <span className="text-faint">try {log.attempt} </span>}
           {log.message}
         </span>
       </button>
@@ -198,7 +196,7 @@ function LogsTab({ runId, execution }: { runId: string; execution: NodeRunView }
               </ol>
             )}
             <div className="-mx-3 mt-2 -mb-3">
-              <PagerFoot pager={pager} page={page} noun="lines">
+              <PagerFoot pager={pager} noun="lines">
                 <ScanNote scan={page} noun="lines" />
               </PagerFoot>
             </div>
@@ -209,10 +207,7 @@ function LogsTab({ runId, execution }: { runId: string; execution: NodeRunView }
   );
 }
 
-/**
- * One execution of the selected node. The record's status, timing and error show at once.
- * Output, input, attempts and logs load only when their tab opens.
- */
+/** The record's status, timing and error show at once; each tab loads when it opens. */
 export function ExecutionCard(props: {
   runId: string;
   row: ExecutionRow;
@@ -222,7 +217,7 @@ export function ExecutionCard(props: {
   const { runId, row, now, openOutput } = props;
   const { execution } = row;
 
-  // Only an inline output opens by itself; a large one, such as a map's item array, waits for a click.
+  // A large output, such as a map's item array, waits for a click.
   const [tab, setTab] = useState<Tab | null>(
     openOutput && execution.status === "succeeded" && row.truncatedOutputBytes === null
       ? "output"

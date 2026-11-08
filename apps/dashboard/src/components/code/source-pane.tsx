@@ -1,14 +1,15 @@
-import type { GraphView } from "@loopy/contract";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import type { GraphView, SourceArtifact } from "@loopy/contract";
+import { type ReactNode, useMemo, useState } from "react";
 import { OUTLINE_FILE, printOutline } from "../../lib/outline";
-import type { Loaded, SourceFile, SourceRange, SourceView } from "../../lib/view-models";
-import { CodeView, type NodeMark } from "./code-view";
+import type { NodeMark } from "../../lib/run-marks";
+import type { Loaded, SourceFile, SourceRange } from "../../lib/view-models";
+import { CodeView } from "./code-view";
 
 const UNAVAILABLE = {
   not_captured: "Source was not captured when this revision was saved.",
   too_large: "Source for this revision was over the capture limit.",
   redacted: "Source for this revision held a stored secret value, so it was not kept.",
-} satisfies Record<Extract<SourceView, { status: "unavailable" }>["reason"], string>;
+} satisfies Record<Extract<SourceArtifact, { status: "unavailable" }>["reason"], string>;
 
 type Listing = {
   files: SourceFile[];
@@ -17,7 +18,7 @@ type Listing = {
   outline: string | null;
 };
 
-function listing(source: Loaded<SourceView>, graph: GraphView): Listing | null {
+function listing(source: Loaded<SourceArtifact>, graph: GraphView): Listing | null {
   if (source.state === "loading") {
     return null;
   }
@@ -40,13 +41,9 @@ function listing(source: Loaded<SourceView>, graph: GraphView): Listing | null {
   };
 }
 
-/**
- * The code half of a run or definition page: the pinned source with execution marks, or an
- * outline printed from the compiled graph when no source exists, labelled as such. Selecting
- * a node in another file switches to that file.
- */
+/** Without captured source, the pane prints an outline of the compiled graph and says so. */
 export function SourcePane(props: {
-  source: Loaded<SourceView>;
+  source: Loaded<SourceArtifact>;
   graph: GraphView;
   marks: ReadonlyMap<string, NodeMark>;
   selected: string | null;
@@ -55,16 +52,19 @@ export function SourcePane(props: {
 }) {
   const { source, graph, marks, selected, onSelect, toolbar } = props;
   const list = useMemo(() => listing(source, graph), [source, graph]);
-  const [fileId, setFileId] = useState<string | null>(null);
-
   const entryFile = list?.ranges.find((range) => range.nodeId === graph.entry)?.fileId;
   const selectedFile = list?.ranges.find((range) => range.nodeId === selected)?.fileId;
+  const [fileId, setFileId] = useState(selectedFile ?? null);
+  const [followed, setFollowed] = useState(selectedFile);
 
-  useEffect(() => {
+  // Selecting a node in another file opens that file; a tab picked by hand holds until then.
+  if (selectedFile !== followed) {
+    setFollowed(selectedFile);
+
     if (selectedFile !== undefined) {
       setFileId(selectedFile);
     }
-  }, [selectedFile]);
+  }
 
   if (list === null) {
     return <p className="p-4 text-muted">Loading the source this revision pinned.</p>;

@@ -1,23 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { Fragment, useState } from "react";
-import { shortId } from "../../lib/format";
+import { Fragment, type ReactNode, useState } from "react";
+import { preciseTime, shortId } from "../../lib/format";
+import { nodeIdParts } from "../../lib/node-id";
 import { useLog } from "../../lib/ui-data";
 import type { LogRow } from "../../lib/view-models";
 import { JsonBlock } from "../json-preview";
 import { Load } from "../ui/load";
 import { LevelPill } from "../ui/status";
-
-const TIME = new Intl.DateTimeFormat(undefined, {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  fractionalSecondDigits: 3,
-  hourCycle: "h23",
-});
-
-export function preciseTime(at: string): string {
-  return TIME.format(new Date(at));
-}
 
 /**
  * The full line, fetched when it opens. Pages carry only the first 1,024 characters of each
@@ -48,6 +37,15 @@ export function LogDetail({ id, preview }: { id: number; preview: string }) {
   );
 }
 
+const COLUMNS = [
+  { key: "time", label: "Time", className: "w-32" },
+  { key: "level", label: "Level", className: "w-20" },
+  { key: "run", label: "Run", className: "w-48" },
+  { key: "node", label: "Node", className: "w-44" },
+  { key: "message", label: "Message" },
+  { key: "open", label: <span className="sr-only">Full line</span>, className: "w-16" },
+] satisfies { key: string; label: ReactNode; className?: string }[];
+
 export function LogTable({
   rows,
   busy,
@@ -58,30 +56,18 @@ export function LogTable({
   withRun: boolean;
 }) {
   const [open, setOpen] = useState<number | null>(null);
+  const columns = COLUMNS.filter((column) => withRun || column.key !== "run");
 
   return (
     <div className="table-scroll">
       <table className={`data dense ${busy ? "busy" : ""}`}>
         <thead>
           <tr>
-            <th scope="col" className="w-32">
-              Time
-            </th>
-            <th scope="col" className="w-20">
-              Level
-            </th>
-            {withRun && (
-              <th scope="col" className="w-48">
-                Run
+            {columns.map((column) => (
+              <th key={column.key} scope="col" className={column.className}>
+                {column.label}
               </th>
-            )}
-            <th scope="col" className="w-44">
-              Node
-            </th>
-            <th scope="col">Message</th>
-            <th scope="col" className="w-16">
-              <span className="sr-only">Full line</span>
-            </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -115,10 +101,8 @@ export function LogTable({
                       search={{ node: log.nodeId }}
                       className="text-ink hover:text-active"
                     >
-                      {log.nodeId.replace(/^\d+:/, "")}
-                      {log.attempt !== null && log.attempt > 1 && (
-                        <span className="text-faint"> try {log.attempt}</span>
-                      )}
+                      {nodeIdParts(log.nodeId).local}
+                      {log.attempt > 1 && <span className="text-faint"> try {log.attempt}</span>}
                     </Link>
                   )}
                 </td>
@@ -138,7 +122,7 @@ export function LogTable({
               </tr>
               {open === log.id && (
                 <tr className="hover:bg-transparent">
-                  <td colSpan={withRun ? 6 : 5} className="bg-sunken">
+                  <td colSpan={columns.length} className="bg-sunken">
                     <LogDetail id={log.id} preview={log.message} />
                   </td>
                 </tr>

@@ -1,20 +1,9 @@
 import { type CSSProperties, memo, useEffect, useMemo, useRef } from "react";
 import { lineOwners, type TokenKind, tokenize } from "../../lib/code-lines";
+import type { NodeMark } from "../../lib/run-marks";
+import { statusTone, statusWord, TONE_BG } from "../../lib/status";
 import type { SourceFile, SourceRange } from "../../lib/view-models";
-import { type Status, StatusGlyph, statusTone, statusWord } from "../ui/status";
-
-/** What the code view says about one node. A definition view passes marks without status. */
-export type NodeMark = {
-  title: string;
-  /** Null when the node has no execution in what the page shows. */
-  status: Status | null;
-  /** The run finished without reaching this node, so its lines draw dimmed. */
-  skipped: boolean;
-  /** A short read-out beside the node's first line: "4/4", "try 2 of 3", "1.2s". */
-  note: string | null;
-  /** The first line of the node's error, printed under its last line. */
-  error: string | null;
-};
+import { StatusGlyph } from "../ui/status";
 
 const TOKEN_CLASS = {
   plain: "",
@@ -25,15 +14,6 @@ const TOKEN_CLASS = {
   call: "font-medium",
 } satisfies Record<TokenKind, string>;
 
-const RAIL = {
-  ok: "bg-success",
-  bad: "bg-danger",
-  warn: "bg-attention",
-  blue: "bg-active",
-  neutral: "bg-neutral",
-} as const;
-
-/** The node's chip on its first line: status, title and a short read-out. */
 function Chip(props: {
   nodeId: string;
   mark: NodeMark;
@@ -63,7 +43,7 @@ function Chip(props: {
 
 function railClass(range: SourceRange | null, mark: NodeMark | null): string {
   if (mark?.status) {
-    return RAIL[statusTone(mark.status)];
+    return TONE_BG[statusTone(mark.status)];
   }
 
   return range ? "bg-line" : "";
@@ -101,7 +81,6 @@ function stickyFill(selected: boolean, hoverable: boolean) {
 
 const GUTTER = "grid-cols-[calc(3.25rem+4px)_minmax(0,1fr)_auto]";
 
-/** Line number and rail, pinned left so they stay beside the code while it scrolls. */
 function Gutter(props: {
   number: number | null;
   rail: string;
@@ -187,11 +166,7 @@ const Line = memo(function Line(props: {
   );
 });
 
-/**
- * A source file with the run drawn into it. Each node's lines carry a rail in its status colour,
- * a chip on its first line pinned to the visible right edge, and its error under its last. Lines no range covers stay plain: the
- * view never guesses which node a line belongs to. Clicking a node's lines selects the node.
- */
+// Lines no range covers stay plain: the view never guesses which node a line belongs to.
 export function CodeView(props: {
   file: SourceFile;
   ranges: SourceRange[];
@@ -213,7 +188,6 @@ export function CodeView(props: {
 
   const scroller = useRef<HTMLDivElement>(null);
 
-  // Bring a node selected elsewhere (graph, timeline, a link) into view.
   useEffect(() => {
     const range = ranges.find((item) => item.nodeId === selected && item.fileId === file.id);
     const target = range && scroller.current?.querySelector(`[data-line="${range.startLine}"]`);

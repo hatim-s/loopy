@@ -39,7 +39,6 @@ export function trackPath(points: Point[]): string {
   return `${path}L${f(b.x)},${f(b.y)}`;
 }
 
-/** A small chevron at the end of the track, turned along its last segment. */
 function arrowPath(points: Point[]): string {
   const end = points.at(-1);
   const before = points.at(-2);
