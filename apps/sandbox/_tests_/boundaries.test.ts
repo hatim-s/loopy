@@ -93,13 +93,14 @@ test("injected Docker absence yields uncertain result without reissuing work", (
 
 test("loopback authority HTTP keeps exact command and rejection envelopes", async () => {
   const seen: unknown[] = [];
+  const namespaces: (string | null)[] = [];
   let reject = false;
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch: async (request) => {
-      expect(request.headers.get("X-Loopy-Receipts-Namespace")).toBe("fixture");
+      namespaces.push(request.headers.get("X-Loopy-Receipts-Namespace"));
       seen.push(await request.json());
 
       return reject
@@ -125,6 +126,7 @@ test("loopback authority HTTP keeps exact command and rejection envelopes", asyn
       { operation: "status", input: {} },
       { operation: "status", input: {} },
     ]);
+    expect(namespaces).toEqual(["fixture", "fixture"]);
   } finally {
     await server.stop(true);
   }

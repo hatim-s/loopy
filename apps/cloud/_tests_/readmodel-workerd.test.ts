@@ -7,7 +7,7 @@ import {
   checkCountHistory,
   checkScopePages,
 } from "../../../packages/runtime/_tests_/fixtures/readmodel-assertions";
-import { probeRuntime } from "./fixtures/workerd-probe";
+import { probeRuntime } from "./fixtures/workerd";
 
 let runtime: Miniflare;
 

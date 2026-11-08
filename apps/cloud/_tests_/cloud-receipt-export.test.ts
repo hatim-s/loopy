@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Effect } from "effect";
+import { authorityContract } from "../../sandbox/_tests_/fixtures/authority-contract";
 import { type ReceiptHarness, receiptHarness } from "./fixtures/receipt-harness";
 
 let harness: ReceiptHarness;
@@ -11,6 +12,17 @@ beforeAll(async () => {
 afterAll(async () => {
   await harness?.close();
 });
+
+// Registered first, so the restart and paging assertions run before other tests add history.
+authorityContract("Durable Object", async () => ({
+  get authority() {
+    return harness.authority;
+  },
+  resultsFor: (workspace) => harness.authority.resultsFor(workspace),
+  plan: (runId, attempt) => harness.plan(runId, attempt),
+  restart: () => harness.reopen(),
+  unknownExportToken: "missing",
+}));
 
 async function finished(runId: string) {
   const authority = harness.authority;
@@ -35,68 +47,6 @@ async function finished(runId: string) {
 
   return { session, plan };
 }
-
-test("export guards exclude new same-volume admissions across restart and release under the current session", async () => {
-  const { session, plan } = await finished("export");
-  const request = { session, attemptId: plan.id, token: "export-guard" };
-  const granted = await Effect.runPromise(harness.authority.beginExport(request));
-  expect(granted).toMatchObject({
-    kind: "granted",
-    record: { volume: plan.volume, helper: `loopy-artifact-${plan.id}`, session },
-  });
-  expect(await Effect.runPromise(harness.authority.beginExport(request))).toEqual(granted);
-  const next = await harness.plan("export", 2);
-  expect(await Effect.runPromise(harness.authority.admit({ session, plan: next }))).toEqual({
-    kind: "rejected",
-    code: "workspace_busy",
-  });
-  await harness.reopen();
-
-  const successor = await Effect.runPromise(
-    harness.authority.openSession({
-      expectedEpoch: session.epoch,
-      nonce: "export-successor",
-    }),
-  );
-
-  expect(
-    await Effect.runPromise(harness.authority.recoverable({ after: null, limit: 200 })),
-  ).toMatchObject({
-    exports: [{ token: request.token, session }],
-  });
-  await expect(
-    Effect.runPromise(harness.authority.endExport({ session, token: request.token })),
-  ).rejects.toMatchObject({ code: "stale_session" });
-  expect(
-    await Effect.runPromise(harness.authority.admit({ session: successor, plan: next })),
-  ).toEqual({
-    kind: "rejected",
-    code: "workspace_busy",
-  });
-  expect(
-    await Effect.runPromise(
-      harness.authority.admit({ session: successor, plan: await harness.plan("other-volume") }),
-    ),
-  ).toMatchObject({ kind: "created" });
-  // The test never creates a helper. The current trusted bridge may confirm that absence and release.
-  await Effect.runPromise(
-    harness.authority.endExport({ session: successor, token: request.token }),
-  );
-  await Effect.runPromise(
-    harness.authority.endExport({ session: successor, token: request.token }),
-  );
-  expect(
-    await Effect.runPromise(harness.authority.beginExport({ ...request, session: successor })),
-  ).toEqual({
-    kind: "rejected",
-    code: "invalid_state",
-  });
-  expect(
-    await Effect.runPromise(harness.authority.admit({ session: successor, plan: next })),
-  ).toMatchObject({
-    kind: "created",
-  });
-});
 
 test("racing same-volume admission and export cannot both obtain authority", async () => {
   const { session, plan } = await finished("race");
@@ -182,4 +132,44 @@ test("export-only HTTP recovery filters an exact volume and excludes released gu
       harness.authority.exportGuards({ after: null, limit: 1, volume: plan.volume }),
     ),
   ).toEqual({ exports: [], next: null });
+});
+
+test("real workerd recovery plans seek indexes through terminal and released history", async () => {
+  const ns = await harness.runtime.getDurableObjectNamespace("PROBE", "rollback");
+
+  const response = await ns.get(ns.idFromName("recovery")).fetch("http://probe/recovery", {
+    method: "POST",
+    body: JSON.stringify({
+      session: { epoch: 1, nonce: "recovery" },
+      plan: await harness.plan("recovery"),
+    }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    counts: {
+      attempts: [{ kind: "finished", count: 1001 }],
+      exports: [
+        { active: 0, count: 1000 },
+        { active: 1, count: 1 },
+      ],
+    },
+    attempts: [
+      {
+        detail:
+          "SEARCH receipt_attempts USING COVERING INDEX receipt_attempt_recovery (kind=? AND id>?)",
+      },
+    ],
+    exports: [
+      { detail: "SEARCH receipt_exports USING COVERING INDEX receipt_export_recovery (token>?)" },
+    ],
+    busy: [{ detail: "SEARCH receipt_exports USING INDEX receipt_export_volume (volume=?)" }],
+    recovered: { attempts: [], exports: [{ token: "active" }], next: null },
+    malformed: expect.stringContaining('Expected { "kind": "started"'),
+    volumePagePlan: [
+      { detail: "SEARCH receipt_exports USING INDEX receipt_export_volume (volume=?)" },
+    ],
+    exactVolume: { exports: [{ token: "active" }], next: null },
+    otherVolume: { exports: [], next: null },
+  });
 });

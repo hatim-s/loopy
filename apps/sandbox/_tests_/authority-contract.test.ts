@@ -14,7 +14,26 @@ import { Result, Schema } from "effect";
 import { FilesystemAuthority } from "../src/filesystem/authority";
 import { stateLayout } from "../src/state-root";
 import { authorityFixture, successful, uncertain } from "./fixtures/authority";
+import { authorityContract } from "./fixtures/authority-contract";
 import { run } from "./fixtures/run";
+
+authorityContract("filesystem", async () => {
+  const { authority, config, plan, resultsFor } = await authorityFixture();
+  let current = authority;
+
+  return {
+    get authority() {
+      return current;
+    },
+    resultsFor,
+    plan: (runId, attempt) => plan(attempt, runId),
+    async restart() {
+      await run(current.close());
+      current = new FilesystemAuthority(config.stateRoot);
+    },
+    unknownExportToken: "released",
+  };
+});
 
 function resultReference(result: ExecutionResult) {
   const bytes = resultBytes(result);
@@ -74,58 +93,6 @@ test("filesystem authority deduplicates, rejects stale/changed requests and seal
   expect(
     await readFile(join(stateLayout(config.stateRoot).receipts, `${input.plan.id}.json`), "utf8"),
   ).toBe(before);
-});
-
-test("export guards persist, block only their volume and release older guards under the current caller session", async () => {
-  const { authority, resultsFor, plan, config } = await authorityFixture();
-  const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "first" }));
-  const first = await plan();
-  await run(authority.admit({ session, plan: first }));
-  await run(
-    authority.complete({
-      session,
-      id: first.id,
-      requestHash: first.requestHash,
-      result: await run(resultsFor(first.workspace).put(successful)),
-    }),
-  );
-
-  const guard = await run(
-    authority.beginExport({ session, attemptId: first.id, token: "guard-one" }),
-  );
-
-  expect(guard.kind).toBe("granted");
-  expect(guard.kind === "granted" && guard.record.helper).toBe(`loopy-artifact-${first.id}`);
-  expect(await run(authority.admit({ session, plan: await plan(2) }))).toEqual({
-    kind: "rejected",
-    code: "workspace_busy",
-  });
-  expect((await run(authority.admit({ session, plan: await plan(1, "other") }))).kind).toBe(
-    "created",
-  );
-  expect((await run(authority.admit({ session, plan: first }))).kind).toBe("existing");
-  await run(authority.close());
-  const second = new FilesystemAuthority(config.stateRoot);
-  const next = await run(second.openSession({ expectedEpoch: 0, nonce: "second" }));
-  expect((await run(second.recoverable({ after: null, limit: 200 }))).exports).toHaveLength(1);
-  await expect(run(second.endExport({ session, token: "guard-one" }))).rejects.toEqual(
-    new AuthorityError("stale_session"),
-  );
-  await run(second.endExport({ session: next, token: "foreign-token" }));
-  expect((await run(second.recoverable({ after: null, limit: 200 }))).exports).toHaveLength(1);
-  await run(second.endExport({ session: next, token: "guard-one" }));
-  await run(second.endExport({ session: next, token: "guard-one" }));
-  expect(
-    await run(second.beginExport({ session: next, attemptId: first.id, token: "guard-one" })),
-  ).toEqual({ kind: "rejected", code: "invalid_state" });
-  expect(
-    (await run(second.beginExport({ session: next, attemptId: first.id, token: "guard-two" })))
-      .kind,
-  ).toBe("granted");
-  await run(second.endExport({ session: next, token: "guard-one" }));
-  expect((await run(second.recoverable({ after: null, limit: 200 }))).exports).toHaveLength(1);
-  await run(second.endExport({ session: next, token: "guard-two" }));
-  expect((await run(second.admit({ session: next, plan: await plan(2) }))).kind).toBe("created");
 });
 
 test("legacy receipts decode without rewriting, missing/corrupt results never become absence, and recovery pages cover every entry", async () => {

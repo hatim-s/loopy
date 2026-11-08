@@ -6,7 +6,7 @@ import { Schema } from "effect";
 import type { Miniflare } from "miniflare";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
 import type { SummaryProbeRequest } from "./fixtures/summary-workerd";
-import { probeRuntime } from "./fixtures/workerd-probe";
+import { probeRuntime } from "./fixtures/workerd";
 
 let runtime: Miniflare;
 

@@ -10,13 +10,14 @@ import {
 import { canonicalJson, type Json } from "@loopy/core";
 import { RegistryError, readBoundedBody } from "@loopy/runtime/service";
 import { Cause, Effect, Exit } from "effect";
-import { Miniflare } from "miniflare";
+import type { Miniflare } from "miniflare";
 import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
 import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { readBoundedText } from "../src/http";
 import { SandboxProvider } from "../src/provider";
+import { cloudWorker, startWorkerd } from "./fixtures/workerd";
 
 const root = resolve(import.meta.dir, "../../..");
 
@@ -37,19 +38,8 @@ beforeAll(async () => {
   stateRoot = resolve(directory, "sandbox");
   await bundleForBrowser([resolve(root, "apps/cloud/src/worker.ts")], directory);
 
-  runtime = new Miniflare({
-    host: "127.0.0.1",
-    port: 0,
-    modules: true,
-    scriptPath: resolve(directory, "worker.js"),
-    compatibilityDate: "2026-07-30",
-    durableObjects: {
-      WORKSPACES: { className: "Workspace", useSQLite: true },
-      SANDBOX_RECEIPTS: { className: "SandboxReceipts", useSQLite: true },
-    },
-    r2Buckets: ["ARTIFACTS", "RECEIPT_RESULTS"],
-    bindings: {
-      LOOPY_STAGE: "local",
+  runtime = await startWorkerd(
+    cloudWorker(directory, {
       LOCAL_AUTH: JSON.stringify([
         { workspace: "alpha", token: "synthetic-cloud-native-principal-0001" },
       ]),
@@ -59,10 +49,9 @@ beforeAll(async () => {
       RECEIPTS_TOKEN: token,
       RECEIPTS_NAMESPACE: "native",
       RECEIPTS_ROOT: stateRoot,
-    },
-  });
+    }),
+  );
   onCleanup(() => runtime.dispose(), scope);
-  await runtime.ready;
 });
 
 async function command(operation: string, input: Json = {}) {

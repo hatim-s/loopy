@@ -11,6 +11,7 @@ import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bun
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
 import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { bounded } from "../../../packages/runtime/_tests_/fixtures/wait";
+import { cloudWorker } from "./fixtures/workerd";
 import {
   type QueueProofDetails,
   type QueueProofEvent,
@@ -51,19 +52,7 @@ test("production Workspace queues runs, loopies and event history during provide
       const provider = readQueueProvider(mode, record);
 
       const runtime = new Miniflare({
-        modulesRoot: join(directory, "bundle"),
-        name: `read-queue-${mode}`,
-        host: "127.0.0.1",
-        port: 0,
-        modules: true,
-        scriptPath: join(directory, "bundle/worker.js"),
-        compatibilityDate: "2026-07-30",
-        durableObjects: { WORKSPACES: { className: "Workspace", useSQLite: true } },
-        durableObjectsPersist: join(directory, mode, "do"),
-        r2Buckets: { ARTIFACTS: `read-queue-${mode}` },
-        r2Persist: join(directory, mode, "r2"),
-        bindings: {
-          LOOPY_STAGE: "local",
+        ...cloudWorker(join(directory, "bundle"), {
           LOCAL_AUTH: JSON.stringify([
             { token, workspace: mode },
             { token: controlToken, workspace: "control" },
@@ -71,7 +60,13 @@ test("production Workspace queues runs, loopies and event history during provide
           CONCURRENCY: "1",
           SANDBOX_URL: provider.url,
           SANDBOX_TOKEN: "read-queue-synthetic-provider",
-        },
+        }),
+        modulesRoot: join(directory, "bundle"),
+        name: `read-queue-${mode}`,
+        host: "127.0.0.1",
+        port: 0,
+        durableObjectsPersist: join(directory, mode, "do"),
+        r2Persist: join(directory, mode, "r2"),
       });
 
       const api = async (

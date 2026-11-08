@@ -143,7 +143,7 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
   const dependenciesClosing = Promise.withResolvers<void>();
   const releaseDependency = Promise.withResolvers<void>();
   let drained = false;
-  let dependencyCloses = 0;
+  const drainedAtClose: boolean[] = [];
 
   const dependencies: AttemptDependencies = {
     authority: fixture.authority,
@@ -179,8 +179,7 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
     },
     close: () =>
       Effect.gen(function* () {
-        dependencyCloses++;
-        expect(drained).toBe(true);
+        drainedAtClose.push(drained);
         dependenciesClosing.resolve();
         yield* Effect.promise(() => releaseDependency.promise);
         yield* fixture.authority.close();
@@ -216,7 +215,7 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
       "stopping",
     );
     expect(await Bun.file(stateLayout(fixture.config.stateRoot).lock).exists()).toBe(true);
-    expect(dependencyCloses).toBe(0);
+    expect(drainedAtClose).toHaveLength(0);
     finish.resolve();
     await within(dependenciesClosing.promise, "Shutdown did not drain before dependency close");
     expect(drained).toBe(true);
@@ -224,7 +223,7 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
     releaseDependency.resolve();
     await within(closing, "Shutdown did not finish after safe drain");
     await request;
-    expect(dependencyCloses).toBe(1);
+    expect(drainedAtClose).toEqual([true]);
     expect(await Bun.file(stateLayout(fixture.config.stateRoot).lock).exists()).toBe(false);
   } finally {
     finish.resolve();

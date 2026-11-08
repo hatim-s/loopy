@@ -16,7 +16,8 @@ test("helper cleanup checks exact name and labels, then verifies absence after r
   let present = true;
   let wrongOwner = false;
   let removeWorks = false;
-  let removals = 0;
+  const listings: string[][] = [];
+  const removals: string[][] = [];
 
   const runner: CommandRunner = (argv) =>
     Effect.gen(function* () {
@@ -24,7 +25,7 @@ test("helper cleanup checks exact name and labels, then verifies absence after r
       let stdout = "";
 
       if (command[0] === "container" && command[1] === "ls") {
-        expect(command).toContain(`name=^/${helper}$`);
+        listings.push(command);
         stdout = present ? helper : "";
       } else if (command[0] === "container" && command[1] === "inspect") {
         stdout = JSON.stringify([
@@ -39,8 +40,7 @@ test("helper cleanup checks exact name and labels, then verifies absence after r
           },
         ]);
       } else if (command[0] === "rm") {
-        expect(command).toEqual(["rm", "--force", helper]);
-        removals++;
+        removals.push(command);
 
         if (removeWorks) {
           present = false;
@@ -56,15 +56,23 @@ test("helper cleanup checks exact name and labels, then verifies absence after r
     const reader = new DockerArtifacts(config, new DockerClient(config, runner));
     wrongOwner = true;
     await expect(run(reader.cleanup(receipt))).rejects.toThrow("ownership");
-    expect(removals).toBe(0);
+    expect(removals).toHaveLength(0);
     wrongOwner = false;
     await expect(run(reader.cleanup(receipt))).rejects.toThrow("not yet confirmed");
-    expect(removals).toBe(1);
+    expect(removals).toHaveLength(1);
     removeWorks = true;
     await run(reader.cleanup(receipt));
     expect(present).toBe(false);
     await run(reader.cleanup(receipt));
-    expect(removals).toBe(2);
+    expect(removals).toEqual([
+      ["rm", "--force", helper],
+      ["rm", "--force", helper],
+    ]);
+    expect(listings.length).toBeGreaterThan(0);
+
+    for (const listing of listings) {
+      expect(listing).toContain(`name=^/${helper}$`);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }

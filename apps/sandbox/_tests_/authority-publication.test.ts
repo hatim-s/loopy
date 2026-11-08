@@ -153,15 +153,13 @@ test("failed helper cleanup holds its guard across requests and restart while un
 test("dependency construction happens under the process lock, which a failed open releases", async () => {
   const { config } = await authorityFixture();
   const lock = stateLayout(config.stateRoot).lock;
-  let called = false;
+  const owners: string[] = [];
 
   const opened = await run(
     Effect.scoped(
       Attempts.open(config, () =>
         Effect.gen(function* () {
-          called = true;
-          const owner = yield* Effect.promise(() => Bun.file(lock).text());
-          expect(owner.split(" ")[0]).toBe(String(process.pid));
+          owners.push(yield* Effect.promise(() => Bun.file(lock).text()));
 
           return yield* Effect.fail(failure("fixture", new Error("Factory failed")));
         }),
@@ -170,7 +168,7 @@ test("dependency construction happens under the process lock, which a failed ope
   );
 
   expect(Exit.isFailure(opened)).toBe(true);
-  expect(called).toBe(true);
+  expect(owners.map((owner) => owner.split(" ")[0])).toEqual([String(process.pid)]);
   expect(await Bun.file(lock).exists()).toBe(false);
 });
 
@@ -213,7 +211,7 @@ test("artifact export uses terminal authority without reading unavailable result
   const authority = new FilesystemAuthority(config.stateRoot);
   let reads = 0;
   let cleanups = 0;
-  let exports = 0;
+  const guardsDuringExport: number[] = [];
 
   const service = await openAttemptsWith(config, {
     authority,
@@ -231,10 +229,10 @@ test("artifact export uses terminal authority without reading unavailable result
     artifactReader: {
       read: (plan, path) =>
         Effect.gen(function* () {
-          exports++;
-          expect(
-            (yield* authority.exportGuards({ after: null, limit: 1, volume: plan.volume })).exports,
-          ).toHaveLength(1);
+          guardsDuringExport.push(
+            (yield* authority.exportGuards({ after: null, limit: 1, volume: plan.volume })).exports
+              .length,
+          );
 
           return yield* artifactReader.read(plan, path);
         }),
@@ -263,7 +261,7 @@ test("artifact export uses terminal authority without reading unavailable result
     await run(artifactReader.read(await plan(), "out.txt")),
   );
   expect(reads).toBe(1);
-  expect(exports).toBe(1);
+  expect(guardsDuringExport).toEqual([1]);
   expect(cleanups).toBe(1);
   expect(
     (await run(authority.exportGuards({ after: null, limit: 1, volume: (await plan()).volume })))

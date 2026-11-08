@@ -333,7 +333,7 @@ test("restart reconciles the saved container and never starts another attempt", 
   // Restore the durable point that a killed service leaves before committing completion.
   await writeFile(join(stateLayout(config.stateRoot).receipts, `${saved.id}.json`), startedRecord);
   const original = saved;
-  let recovered = 0;
+  const recovered: DockerAttemptPlan[] = [];
 
   const second = await open(config, {
     start: () =>
@@ -344,15 +344,14 @@ test("restart reconciles the saved container and never starts another attempt", 
       }),
     recover: (plan) =>
       Effect.gen(function* () {
-        expect(plan).toEqual(original);
-        recovered += 1;
+        recovered.push(plan);
 
         return succeeded;
       }),
   });
 
   await run(second.drain());
-  expect(recovered).toBe(1);
+  expect(recovered).toEqual([original]);
   expect(await run(second.lookup(value))).toEqual({ kind: "finished", result: succeeded });
   expect(await run(second.start(value))).toEqual({ kind: "finished", result: succeeded });
 });
@@ -412,12 +411,12 @@ function dockerState(
 test("Docker create enforces isolation and recovery reads the original bounded result", async () => {
   const { config, saved, input } = await capturedReceipt();
   const calls: string[][] = [];
+  const environments: (Record<string, string> | undefined)[] = [];
 
   const runner: CommandRunner = (argv, options) =>
     Effect.gen(function* () {
       calls.push(argv);
-      expect(argv.slice(0, 3)).toEqual(["docker", "--context", "colima-loopy-cloud-phase1"]);
-      expect(options.env).not.toHaveProperty("LOOPY_SANDBOX_TOKEN");
+      environments.push(options.env);
       const operation = argv[3];
 
       return {
@@ -434,6 +433,14 @@ test("Docker create enforces isolation and recovery reads the original bounded r
     });
 
   expect(await run(dockerBackend(config, runner).start(saved, input))).toEqual(succeeded);
+  expect(new Set(calls.map((argv) => argv.slice(0, 3).join(" ")))).toEqual(
+    new Set(["docker --context colima-loopy-cloud-phase1"]),
+  );
+
+  for (const environment of environments) {
+    expect(environment).not.toHaveProperty("LOOPY_SANDBOX_TOKEN");
+  }
+
   const create = calls.find((args) => args[3] === "create" && args.includes(saved.container));
   expect(create).toBeDefined();
   expect(create).toContain("--read-only");
@@ -624,7 +631,7 @@ test("artifact export requires its finished receipt and fences same-run admissio
   const secondCompletion = Promise.withResolvers<ExecutionResult>();
   const read = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  let exports = 0;
+  const exportedVolumes: string[] = [];
   let starts = 0;
 
   const service = await open(
@@ -647,8 +654,7 @@ test("artifact export requires its finished receipt and fences same-run admissio
       cleanup: () => Effect.void,
       read: (plan, path) =>
         Effect.gen(function* () {
-          exports += 1;
-          expect(plan.volume).toMatch(/^loopy-workspace-[a-f0-9]{64}$/);
+          exportedVolumes.push(plan.volume);
           read.resolve();
           yield* Effect.promise(() => release.promise);
 
@@ -690,10 +696,10 @@ test("artifact export requires its finished receipt and fences same-run admissio
     size: 2,
     bytes: "aGk=",
   });
-  expect(exports).toBe(1);
+  expect(exportedVolumes).toEqual([expect.stringMatching(/^loopy-workspace-[a-f0-9]{64}$/)]);
   await run(service.start({ ...input, attempt: 2 }));
   expect((await handler(artifactLookup(input, "out.txt"))).status).toBe(409);
-  expect(exports).toBe(1);
+  expect(exportedVolumes).toEqual([expect.stringMatching(/^loopy-workspace-[a-f0-9]{64}$/)]);
   secondCompletion.resolve(succeeded);
   await run(service.drain());
 });
