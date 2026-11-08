@@ -168,6 +168,7 @@ test("stash, tag, remote, revParse and lsFiles parse their captures", async () =
     "unstaged.txt",
   ]);
 });
+
 test.each([
   ["status", parseStatus],
   ["log", parseLog],

@@ -66,6 +66,7 @@ test("sha256 parses hashes and filenames", async () => {
   });
   expect(entries[1]?.file).toBe("space name.txt");
 });
+
 test("checksum escaping and jq JSON streams retain their values", async () => {
   expect(parseSha256(result(`\\${"a".repeat(64)}  line\\nbreak\\\\file\n`))).toEqual([
     { hash: "a".repeat(64), file: "line\nbreak\\file" },
