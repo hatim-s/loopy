@@ -1,44 +1,13 @@
 import {
   executionKeyString,
-  type Json,
   type NodeRun,
+  PAGE_LIMIT,
   type RunSnapshotView,
   type RunView,
   type ServerEvent,
 } from "@loopy/contract";
 
-export const SNAPSHOT_RECORD_LIMIT = 200;
-
-const SNAPSHOT_VALUE_BYTES = 16_384;
-
 export type HookEvent = Extract<ServerEvent, { entity: "hook" }>;
-
-function jsonBytes(value: Json): number {
-  return new TextEncoder().encode(JSON.stringify(value)).length;
-}
-
-export function previewRun(run: RunView): RunView {
-  const inputBytes = jsonBytes(run.input);
-  const outputBytes = run.status === "succeeded" ? jsonBytes(run.output) : 0;
-
-  if (inputBytes <= SNAPSHOT_VALUE_BYTES && outputBytes <= SNAPSHOT_VALUE_BYTES) {
-    return run;
-  }
-
-  const next = { ...run, truncatedFields: { ...run.truncatedFields } };
-
-  if (inputBytes > SNAPSHOT_VALUE_BYTES) {
-    next.input = null;
-    next.truncatedFields.input = inputBytes;
-  }
-
-  if (outputBytes > SNAPSHOT_VALUE_BYTES && next.status === "succeeded") {
-    next.output = null;
-    next.truncatedFields.output = outputBytes;
-  }
-
-  return next;
-}
 
 export function newer(current: RunView, next: RunView): boolean {
   return next.updatedAt >= current.updatedAt;
@@ -68,7 +37,7 @@ function withNodeRun(runs: NodeRun[], record: NodeRun): NodeRun[] {
     ? runs.map((run) => (executionKeyString(run.key) === key ? record : run))
     : [...runs, record]
         .sort((a, b) => (executionKeyString(a.key) < executionKeyString(b.key) ? -1 : 1))
-        .slice(0, SNAPSHOT_RECORD_LIMIT);
+        .slice(0, PAGE_LIMIT);
 }
 
 function withSnapshotHook(snapshot: RunSnapshotView, event: HookEvent): RunSnapshotView {
@@ -81,8 +50,8 @@ function withSnapshotHook(snapshot: RunSnapshotView, event: HookEvent): RunSnaps
       event.record,
       (hook) => hook.token === event.record.token,
       (hook) => hook.seq,
-    ).slice(-SNAPSHOT_RECORD_LIMIT),
-    hooksTruncated: snapshot.hooksTruncated || snapshot.hooks.length >= SNAPSHOT_RECORD_LIMIT,
+    ).slice(-PAGE_LIMIT),
+    hooksTruncated: snapshot.hooksTruncated || snapshot.hooks.length >= PAGE_LIMIT,
     run: event.at >= run.updatedAt ? { ...run, waitingOn: waitingAfter(run, event) } : run,
   };
 }
@@ -95,16 +64,8 @@ function withSnapshotNode(
     return snapshot;
   }
 
-  const record = { ...event.record };
-  delete record.inputView;
-
-  const bytes =
-    record.status === "succeeded" ? (event.truncatedOutputBytes ?? jsonBytes(record.output)) : 0;
-
-  if (bytes > SNAPSHOT_VALUE_BYTES && record.status === "succeeded") {
-    record.output = null;
-  }
-
+  // Live frames already carry the server's output preview and its byte count.
+  const record = event.record;
   const nodeRuns = withNodeRun(snapshot.nodeRuns, record);
 
   const inserted = !snapshot.nodeRuns.some(
@@ -114,7 +75,7 @@ function withSnapshotNode(
   const last = nodeRuns.at(-1);
   let nodeRunsNext = snapshot.nodeRunsNext;
 
-  if (inserted && snapshot.nodeRuns.length >= SNAPSHOT_RECORD_LIMIT && last) {
+  if (inserted && snapshot.nodeRuns.length >= PAGE_LIMIT && last) {
     nodeRunsNext = executionKeyString(last.key);
   }
 
@@ -125,7 +86,7 @@ function withSnapshotNode(
     ]),
   );
 
-  retained.set(executionKeyString(record.key), bytes > SNAPSHOT_VALUE_BYTES ? bytes : undefined);
+  retained.set(executionKeyString(record.key), event.truncatedOutputBytes);
 
   const truncatedOutputs = Object.fromEntries(
     [...retained].flatMap(([key, size]) => (size === undefined ? [] : [[key, size]])),
@@ -146,7 +107,7 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
   const next = { ...snapshot, cursor: event.sequence };
 
   if (event.entity === "run") {
-    next.run = newer(snapshot.run, event.record) ? previewRun(event.record) : snapshot.run;
+    next.run = newer(snapshot.run, event.record) ? event.record : snapshot.run;
   } else if (event.entity === "node") {
     return withSnapshotNode(next, event);
   } else if (event.entity === "log") {
@@ -157,7 +118,7 @@ export function applyToSnapshot(snapshot: RunSnapshotView, event: ServerEvent): 
       log,
       (log) => log.seq === event.record.seq,
       (log) => log.seq,
-    ).slice(-SNAPSHOT_RECORD_LIMIT);
+    ).slice(-PAGE_LIMIT);
   } else if (event.entity === "hook") {
     return withSnapshotHook(next, event);
   }

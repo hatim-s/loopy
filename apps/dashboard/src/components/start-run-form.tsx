@@ -118,7 +118,10 @@ export function StartRunForm({ loopy }: { loopy: LoopyView }) {
   const navigate = useNavigate();
 
   const start = useRunMutation((backend, input: Json) =>
-    backend.startRun(loopy.slug, input, loopy.workspace),
+    backend.call("startRun", {
+      params: { slug: loopy.slug },
+      body: { input, workspace: loopy.workspace },
+    }),
   );
 
   const submit = (input: Json) =>

@@ -1,6 +1,5 @@
 import type { LoopyView, RunStatus } from "@loopy/contract";
 import { countTotal } from "./format";
-import type { LoopyRow } from "./view-models";
 
 export const LOOPY_FILTERS = ["all", "scheduled", "failing", "active"] as const;
 
@@ -21,7 +20,7 @@ const MATCH = {
   scheduled: (loopy) => loopy.schedule?.enabled === true,
   failing: (loopy) => loopy.lastRun?.status === "failed",
   active: (loopy) => loopy.counts.running + loopy.counts.queued + loopy.counts.suspended > 0,
-} satisfies Record<LoopyFilter, (loopy: LoopyRow) => boolean>;
+} satisfies Record<LoopyFilter, (loopy: LoopyView) => boolean>;
 
 // Lower ranks need a person sooner: a failure, then work held or in flight, then the rest.
 const RANK = {
@@ -35,7 +34,7 @@ const RANK = {
 
 const NEVER = 5;
 
-function nextFire(loopy: LoopyRow): string | null {
+function nextFire(loopy: LoopyView): string | null {
   return loopy.schedule?.enabled ? loopy.schedule.nextFireAt : null;
 }
 
@@ -57,12 +56,12 @@ const COMPARE = {
 
     return left.localeCompare(right);
   },
-} satisfies Record<LoopySort, (a: LoopyRow, b: LoopyRow) => number>;
+} satisfies Record<LoopySort, (a: LoopyView, b: LoopyView) => number>;
 
 export type LoopyTableQuery = { q: string; show: LoopyFilter; sort: LoopySort; desc: boolean };
 
 /** Filters, counts per filter for the tabs, and sorted rows. The slug breaks every tie. */
-export function loopyTable(loopies: LoopyRow[], query: LoopyTableQuery) {
+export function loopyTable(loopies: LoopyView[], query: LoopyTableQuery) {
   const needle = query.q.trim().toLowerCase();
 
   const matching = loopies.filter(

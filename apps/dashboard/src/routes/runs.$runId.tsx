@@ -336,6 +336,7 @@ function Workspace(props: {
     <>
       <RunHeader
         snapshot={snapshot}
+        graph={graph.graph}
         revision={graph.revision}
         olderThanLatest={latest.state === "ready" && latest.data.revision !== graph.revision}
         now={now}
@@ -401,6 +402,7 @@ function RunPage() {
             <>
               <RunHeader
                 snapshot={run}
+                graph={null}
                 revision={null}
                 olderThanLatest={false}
                 now={now}

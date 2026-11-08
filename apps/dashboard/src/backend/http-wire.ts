@@ -1,5 +1,4 @@
-import { boundaryOptions, errorBodySchema } from "@loopy/contract";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { BackendError } from "./backend";
 
 export async function runRequest<A>(
@@ -15,37 +14,6 @@ export async function runRequest<A>(
   throw signal?.aborted ? signal.reason : Cause.squash(exit.cause);
 }
 
-export function decodeBody<S extends Schema.Codec<unknown, unknown>>(
-  schema: S,
-  text: string,
-  path: string,
-) {
-  const malformed = () =>
-    new BackendError(
-      "malformed_response",
-      `${path} answered with a body that does not match the contract.`,
-    );
-
-  return Effect.try({ try: () => JSON.parse(text), catch: malformed }).pipe(
-    Effect.flatMap((json) => Schema.decodeUnknownEffect(schema, boundaryOptions)(json)),
-    Effect.mapError(malformed),
-  );
-}
-
-export function errorFrom(status: number, text: string) {
-  return decodeBody(errorBodySchema, text, "error response").pipe(
-    Effect.map((body) => new BackendError(body.error.code, body.error.message)),
-    Effect.catch(() =>
-      Effect.succeed(
-        new BackendError(
-          "malformed_response",
-          `The server answered ${status} without a readable error.`,
-        ),
-      ),
-    ),
-  );
-}
-
 export const readText = (response: Response) =>
   Effect.tryPromise({
     try: () => response.text(),
@@ -53,7 +21,7 @@ export const readText = (response: Response) =>
   });
 
 export function httpRequests(base: string, headers: Record<string, string>) {
-  function withResponse<A>(
+  return function withResponse<A>(
     url: string,
     init: RequestInit,
     use: (response: Response) => Effect.Effect<A, BackendError>,
@@ -82,14 +50,5 @@ export function httpRequests(base: string, headers: Record<string, string>) {
         return yield* use(response);
       }),
     );
-  }
-
-  const fetchText = (url: string, init: RequestInit) =>
-    withResponse(url, init, (response) =>
-      readText(response).pipe(
-        Effect.map((text) => ({ ok: response.ok, status: response.status, text })),
-      ),
-    );
-
-  return { withResponse, fetchText };
+  };
 }

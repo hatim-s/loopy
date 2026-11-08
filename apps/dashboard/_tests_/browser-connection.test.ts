@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { routes } from "@loopy/contract";
-import { httpTransport, localHttpBackend } from "../src/backend/local-http";
+import { localHttpBackend } from "../src/backend/local-http";
 import { bootSession, httpBaseUrl } from "../src/session/boot";
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -46,7 +45,9 @@ test("redirects never forward a bearer token, including same-origin redirects", 
   for (const location of [destination.url.href, new URL("/other", source.url).href]) {
     target = location;
     await expect(
-      localHttpBackend({ baseUrl: source.url.origin, token: "isolated" }).cursor(
+      localHttpBackend({ baseUrl: source.url.origin, token: "isolated" }).call(
+        "cursor",
+        {},
         AbortSignal.timeout(1000),
       ),
     ).rejects.toMatchObject({ code: "unreachable" });
@@ -72,16 +73,16 @@ test("base URL prefix is preserved and URL credentials or selectors are rejected
   await localHttpBackend({
     baseUrl: httpBaseUrl(`${server.url.origin}/loopy/`),
     token: null,
-  }).cursor(AbortSignal.timeout(1000));
+  }).call("cursor", {}, AbortSignal.timeout(1000));
   expect(path).toBe("/loopy/api/cursor");
-  const transport = httpTransport({ baseUrl: server.url.origin, token: null });
-  await expect(
-    transport.send(routes.log, { params: { id: 17 }, query: {}, body: undefined }),
-  ).rejects.toMatchObject({ code: "malformed_response" });
+  const backend = localHttpBackend({ baseUrl: server.url.origin, token: null });
+  await expect(backend.call("log", { params: { id: 17 } })).rejects.toMatchObject({
+    code: "malformed_response",
+  });
   expect(path).toBe("/api/logs/17");
-  await expect(
-    transport.send(routes.event, { params: { sequence: 23 }, query: {}, body: undefined }),
-  ).rejects.toMatchObject({ code: "malformed_response" });
+  await expect(backend.call("event", { params: { sequence: 23 } })).rejects.toMatchObject({
+    code: "malformed_response",
+  });
   expect(path).toBe("/api/event-history/23");
 
   for (const url of [

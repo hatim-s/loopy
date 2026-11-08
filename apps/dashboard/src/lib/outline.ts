@@ -1,7 +1,6 @@
-import type { GraphView } from "@loopy/contract";
+import { type GraphView, nodeIdParts } from "@loopy/contract";
 import type { GraphNode } from "./graph";
 import { predicateText, refText, valueText } from "./graph-text";
-import { nodeIdParts } from "./node-id";
 import type { SourceRange } from "./view-models";
 
 export type Outline = { content: string; ranges: SourceRange[] };

@@ -5,19 +5,21 @@ import {
   type NodeRun,
   nodeRunSchema,
   type RunSnapshotView,
+  type RunsQuery,
   type RunView,
   type Schedule,
   type ScheduleView,
   type ServerEvent,
 } from "@loopy/contract";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import type { EventSubscription, RunsQuery, StreamState } from "../src/backend/backend";
+import type { EventSubscription, StreamState } from "../src/backend/backend";
 import { keys } from "../src/lib/keys";
 import { type RunPage, runQuery, scopesQuery } from "../src/lib/queries";
 import { applyBatch } from "../src/lib/stream/apply";
 import { followSession } from "../src/lib/stream/follow";
 import { applyScheduleView } from "../src/lib/stream/schedules";
 import { applyToSnapshot } from "../src/lib/stream/snapshot";
+import { stubBackend } from "./backend-stub";
 
 type EventDraft = ServerEvent extends infer E
   ? E extends ServerEvent
@@ -245,9 +247,9 @@ test("a reset from the backend invalidates every query and resubscribes from a f
         controller.abort();
       }
     },
-    backend: {
-      cursor: async () => ({ cursor: 40, epoch: "e2" }),
-      events: async ({ after, epoch, onState }) => {
+    backend: stubBackend(
+      { cursor: async () => ({ cursor: 40, epoch: "e2" }) },
+      async ({ after, epoch, onState }) => {
         subscriptions.push({ after, epoch });
 
         if (subscriptions.length === 1) {
@@ -258,7 +260,7 @@ test("a reset from the backend invalidates every query and resubscribes from a f
 
         return "aborted";
       },
-    },
+    ),
   });
 
   expect(client.getQueryState(keys.run("run-1"))?.isInvalidated).toBe(true);
@@ -342,35 +344,41 @@ test("abort during reset cursor fetch cancels the request and settles followSess
     client,
     signal: controller.signal,
     onState: () => undefined,
-    backend: {
-      events: async () => {
+    backend: stubBackend(
+      {
+        cursor: (...[, signal]) => {
+          if (signal === undefined) {
+            throw new Error("followSession passes its signal to the cursor request.");
+          }
+
+          cursors++;
+
+          if (cursors === 1) {
+            return Promise.resolve({ cursor: 10, epoch: "e1" });
+          }
+
+          const { promise, reject } = Promise.withResolvers<{ cursor: number; epoch: string }>();
+
+          pending = true;
+          signal.addEventListener(
+            "abort",
+            () => {
+              pending = false;
+              reject(new Error("cancelled"));
+            },
+            { once: true },
+          );
+          queueMicrotask(() => controller.abort());
+
+          return promise;
+        },
+      },
+      async () => {
         subscriptions++;
 
         return "reset";
       },
-      cursor: (signal) => {
-        cursors++;
-
-        if (cursors === 1) {
-          return Promise.resolve({ cursor: 10, epoch: "e1" });
-        }
-
-        const { promise, reject } = Promise.withResolvers<{ cursor: number; epoch: string }>();
-
-        pending = true;
-        signal.addEventListener(
-          "abort",
-          () => {
-            pending = false;
-            reject(new Error("cancelled"));
-          },
-          { once: true },
-        );
-        queueMicrotask(() => controller.abort());
-
-        return promise;
-      },
-    },
+    ),
   });
 
   expect(pending).toBe(false);
@@ -577,7 +585,6 @@ test("a restarted first load without an observer still answers its loader", asyn
 test("status transitions and schedule events invalidate summaries once while heartbeat and replay do not", () => {
   const client = new QueryClient();
   client.setQueryData(keys.loopies, []);
-  client.setQueryData(keys.workspaceLoopies("/other"), []);
   client.setQueryData(keys.scheduleOverview, { workspaces: [], active: 0, next: [] });
   client.setQueryData(list(), page([run]));
 
@@ -590,10 +597,8 @@ test("status transitions and schedule events invalidate summaries once while hea
 
   applyBatch(client, [runEvent(11, running), runEvent(12, waiting), schedule]);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
-  expect(client.getQueryState(keys.workspaceLoopies("/other"))?.isInvalidated).toBe(true);
   expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(true);
   client.setQueryData(keys.loopies, []);
-  client.setQueryData(keys.workspaceLoopies("/other"), []);
   client.setQueryData(keys.scheduleOverview, { workspaces: [], active: 0, next: [] });
   applyBatch(client, [
     schedule,
@@ -601,7 +606,6 @@ test("status transitions and schedule events invalidate summaries once while hea
     event(14, { entity: "run", kind: "heartbeat", runId: run.id, record: waiting }),
   ]);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(false);
-  expect(client.getQueryState(keys.workspaceLoopies("/other"))?.isInvalidated).toBe(false);
   expect(client.getQueryState(keys.scheduleOverview)?.isInvalidated).toBe(false);
   applyBatch(client, [{ ...schedule, sequence: 15 }]);
   expect(client.getQueryState(keys.loopies)?.isInvalidated).toBe(true);
@@ -818,14 +822,14 @@ test("scoped node bursts invalidate aggregates and refetch active queries once",
   const inactiveKey = keys.scopes(run.id, inactiveScope);
   let fetches = 0;
 
-  const backend = {
+  const backend = stubBackend({
     run: async () => snapshot(),
     scopes: async () => {
       fetches++;
 
       return [];
     },
-  };
+  });
 
   // Observers build each query with its real options, so the stream sees their refresh meta.
   new QueryObserver(client, { ...scopesQuery(backend, run.id, inactiveScope), enabled: false });
@@ -872,29 +876,4 @@ test("scoped node bursts invalidate aggregates and refetch active queries once",
     client.clear();
     jest.useRealTimers();
   }
-});
-
-test("large streamed outputs stay previews while detail queries remain lazy", () => {
-  const root = nodeEvent(11, 0, 1, "succeeded");
-
-  if (root.entity !== "node" || root.record.status !== "succeeded") {
-    throw new Error("Expected a completed node fixture.");
-  }
-
-  const value = "x".repeat(20_000);
-
-  const next = applyToSnapshot(snapshot(), {
-    ...root,
-    record: {
-      ...root.record,
-      output: value,
-      inputView: { state: "available", value: { private: "input" } },
-    },
-  });
-
-  const node = next.nodeRuns[0];
-  expect(node?.status === "succeeded" ? node.output : undefined).toBeNull();
-  expect(node?.inputView).toBeUndefined();
-  expect(Object.values(next.truncatedOutputs ?? {})).toEqual([20_002]);
-  expect(next.cursor).toBe(11);
 });

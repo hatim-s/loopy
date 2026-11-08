@@ -1,4 +1,12 @@
-import { isTerminalRun, type RunSnapshotView, type RunView } from "@loopy/contract";
+import {
+  canCancelRun,
+  cancelRefusal,
+  canResumeRun,
+  type GraphView,
+  isTerminalRun,
+  type RunSnapshotView,
+  type RunView,
+} from "@loopy/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { bytes, elapsed, runElapsed, timestamp } from "../../lib/format";
@@ -13,15 +21,6 @@ import { RespondRow } from "../respond";
 import { Load } from "../ui/load";
 import { RunPill } from "../ui/status";
 
-/** A running run can be resumed only once its owner's lease lapsed; the server recovers it. */
-function resumable(run: RunView): boolean {
-  return (
-    run.status === "queued" ||
-    run.status === "suspended" ||
-    (run.status === "running" && run.ownerStale)
-  );
-}
-
 type RunAction = "resume" | "cancel" | "again";
 
 /** One mutation for the header's actions, so only one runs at a time and its error shows. */
@@ -31,15 +30,18 @@ function useRunAction(run: RunView) {
   const mutation = useRunMutation((backend, action: RunAction) => {
     switch (action) {
       case "resume": {
-        return backend.resumeRun(run.id);
+        return backend.call("resumeRun", { params: { id: run.id } });
       }
 
       case "cancel": {
-        return backend.cancelRun(run.id);
+        return backend.call("cancelRun", { params: { id: run.id } });
       }
 
       case "again": {
-        return backend.startRun(run.slug, run.input, run.workspace);
+        return backend.call("startRun", {
+          params: { slug: run.slug },
+          body: { input: run.input, workspace: run.workspace },
+        });
       }
     }
   });
@@ -58,20 +60,27 @@ function useRunAction(run: RunView) {
   };
 }
 
-function RunActions({ run }: { run: RunView }) {
+function RunActions({ snapshot, graph }: { snapshot: RunSnapshotView; graph: GraphView | null }) {
+  const { run } = snapshot;
   const action = useRunAction(run);
   const busy = action.pending !== null;
   const truncated = run.truncatedFields?.input !== undefined;
+  const refusal = cancelRefusal(snapshot.nodeRuns, graph ?? { nodes: [] });
 
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap justify-end gap-2">
-        {!isTerminalRun(run.status) && (
-          <Button variant="danger" disabled={busy} onClick={() => action.start("cancel")}>
+        {canCancelRun(run) && (
+          <Button
+            variant="danger"
+            disabled={busy || refusal !== null}
+            title={refusal ?? "Cancel this run"}
+            onClick={() => action.start("cancel")}
+          >
             {action.pending === "cancel" ? "Cancelling" : "Cancel run"}
           </Button>
         )}
-        {resumable(run) && (
+        {canResumeRun(run) && (
           <Button
             disabled={busy}
             title={
@@ -180,12 +189,13 @@ function RunPayload({ run }: { run: RunView }) {
 
 export function RunHeader(props: {
   snapshot: RunSnapshotView;
+  graph: GraphView | null;
   revision: string | null;
   olderThanLatest: boolean;
   now: number;
   onShowFailure: (() => void) | null;
 }) {
-  const { snapshot, revision, olderThanLatest, now, onShowFailure } = props;
+  const { snapshot, graph, revision, olderThanLatest, now, onShowFailure } = props;
   const { run } = snapshot;
 
   return (
@@ -196,6 +206,7 @@ export function RunHeader(props: {
             <Link
               to="/loopies/$slug"
               params={{ slug: run.slug }}
+              search={{ workspace: run.workspace }}
               className="text-ink hover:text-active"
             >
               {run.slug}
@@ -241,7 +252,7 @@ export function RunHeader(props: {
             )}
           </p>
         </div>
-        <RunActions run={run} />
+        <RunActions snapshot={snapshot} graph={graph} />
       </div>
       {run.status === "suspended" && isWaiting(run) && <Waiting run={run} now={now} />}
       {run.status === "failed" && (

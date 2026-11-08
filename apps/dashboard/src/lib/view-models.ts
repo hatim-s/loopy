@@ -2,10 +2,8 @@ import type {
   ExecutionDetail,
   LogRecord,
   LogSummaryView,
-  LoopyView,
   NodeRun,
   RunStatus,
-  RunView,
   ScopeItemsPage,
   ServerEvent,
   SourceArtifact,
@@ -34,8 +32,6 @@ export type Pager<Row, Extra = object> = Loaded<Page<Row> & Extra> & {
 };
 
 export type StatusCounts = Record<RunStatus, number>;
-
-export type LoopyRow = LoopyView & { latestRuns: RunView[] };
 
 export type RunListFilters = {
   slug?: string;
@@ -70,18 +66,13 @@ export type SourceFile = Extract<SourceArtifact, { status: "available" }>["files
 
 export type SourceRange = Extract<SourceArtifact, { status: "available" }>["ranges"][number];
 
-export const LOG_LEVELS = ["info", "warn", "error"] as const satisfies LogRecord["level"][];
-
-export type LogRow = Omit<LogSummaryView, "nodeId" | "executionKey" | "dataBytes"> & {
-  nodeId: string | null;
-  executionKey: string | null;
-  hasData: boolean;
-};
+export type LogRow = Omit<LogSummaryView, "dataBytes"> & { hasData: boolean };
 
 export type LogFilters = {
   /** Absent means every retained log, including executions older than the preset windows. */
   period?: Period;
   slug?: string;
+  workspace?: string;
   runId?: string;
   nodeId?: string;
   executionKey?: string;
@@ -107,6 +98,7 @@ export type EventFilters = {
   period: Period;
   status?: RunStatus;
   slug?: string;
+  workspace?: string;
   runId?: string;
   nodeId?: string;
   entity?: EventEntity;

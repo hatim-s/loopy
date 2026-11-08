@@ -1,3 +1,4 @@
+import type { LoopyView } from "@loopy/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { LastRuns } from "../components/loopies/last-runs";
@@ -18,7 +19,6 @@ import {
 } from "../lib/loopy-table";
 import { searchField } from "../lib/search";
 import { useLoopyRows } from "../lib/ui-data";
-import type { LoopyRow } from "../lib/view-models";
 
 const searchSchema = Schema.Struct({
   q: searchField(Schema.String),
@@ -68,7 +68,7 @@ function SortHeader(props: {
   );
 }
 
-function ScheduleCell({ loopy }: { loopy: LoopyRow }) {
+function ScheduleCell({ loopy }: { loopy: LoopyView }) {
   if (loopy.schedule === null) {
     return <span className="pill pill-sm pill-outline">Manual</span>;
   }
@@ -76,7 +76,7 @@ function ScheduleCell({ loopy }: { loopy: LoopyRow }) {
   return <CronReading cron={loopy.schedule.cron} tz={loopy.schedule.tz} />;
 }
 
-function NextCell({ loopy, now }: { loopy: LoopyRow; now: number }) {
+function NextCell({ loopy, now }: { loopy: LoopyView; now: number }) {
   const schedule = loopy.schedule;
 
   if (schedule === null) {
@@ -94,7 +94,7 @@ function NextCell({ loopy, now }: { loopy: LoopyRow; now: number }) {
   );
 }
 
-function LoopyRows({ rows, now }: { rows: LoopyRow[]; now: number }) {
+function LoopyRows({ rows, now }: { rows: LoopyView[]; now: number }) {
   return (
     <div className="table-scroll">
       <table className="data">
@@ -124,6 +124,7 @@ function LoopyRows({ rows, now }: { rows: LoopyRow[]; now: number }) {
                   <Link
                     to="/loopies/$slug"
                     params={{ slug: loopy.slug }}
+                    search={{ workspace: loopy.workspace }}
                     className="row-link cell-main"
                   >
                     {loopy.slug}

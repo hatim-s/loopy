@@ -37,7 +37,6 @@ async function fixture() {
   const service = makeLocalService({
     store,
     home,
-    cwd: root,
     clock: { now: Date.now },
   });
 
@@ -46,14 +45,15 @@ async function fixture() {
     service,
     cwd: root,
     assets: join(root, "assets"),
+    port: 0,
     token: "isolated-test-token",
-    daemon: { startedAt: new Date(0).toISOString(), concurrency: 1 },
+    daemon: { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 1 },
   };
 }
 
 async function launch(allowedOrigins?: string[]) {
   const options = await fixture();
-  const server = startServer({ ...options, port: 0, allowedOrigins });
+  const server = startServer({ ...options, allowedOrigins });
   cleanups.push(() => server.stop());
 
   return { ...options, baseUrl: new URL(server.url).origin };
@@ -79,7 +79,7 @@ test("remote adapter authenticates against an isolated real server with explicit
 
   try {
     const backend = localHttpBackend({ baseUrl: f.baseUrl, token: f.token });
-    expect(await backend.cursor(AbortSignal.timeout(1000))).toMatchObject({
+    expect(await backend.call("cursor", {}, AbortSignal.timeout(1000))).toMatchObject({
       cursor: 0,
       epoch: expect.any(String),
     });
@@ -89,10 +89,18 @@ test("remote adapter authenticates against an isolated real server with explicit
       referrerPolicy: "no-referrer",
     });
     await expect(
-      localHttpBackend({ baseUrl: f.baseUrl, token: null }).cursor(AbortSignal.timeout(1000)),
+      localHttpBackend({ baseUrl: f.baseUrl, token: null }).call(
+        "cursor",
+        {},
+        AbortSignal.timeout(1000),
+      ),
     ).rejects.toMatchObject({ code: "unauthorized" });
     await expect(
-      localHttpBackend({ baseUrl: f.baseUrl, token: "wrong" }).cursor(AbortSignal.timeout(1000)),
+      localHttpBackend({ baseUrl: f.baseUrl, token: "wrong" }).call(
+        "cursor",
+        {},
+        AbortSignal.timeout(1000),
+      ),
     ).rejects.toMatchObject({ code: "unauthorized" });
   } finally {
     observed.mockRestore();
@@ -132,7 +140,9 @@ test("remote adapter authenticates against an isolated real server with explicit
   expect(stream.headers.get("content-type")).toBe("text/event-stream");
   controller.abort();
   await expect(
-    localHttpBackend({ baseUrl: f.baseUrl, token: f.token }).cancelRun("missing"),
+    localHttpBackend({ baseUrl: f.baseUrl, token: f.token }).call("cancelRun", {
+      params: { id: "missing" },
+    }),
   ).rejects.toMatchObject({ code: "not_found" });
 });
 

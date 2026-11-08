@@ -1,11 +1,5 @@
-import type {
-  EventHistoryQuery,
-  ExecutionQuery,
-  GlobalLogsQuery,
-  OverviewQuery,
-  RunsQuery,
-  ScopeItemsQuery,
-} from "../backend/backend";
+import type { RunsQuery } from "@loopy/contract";
+import type { ApiQuery } from "../backend/backend";
 
 /**
  * Which stream events make a query stale. The stream patches run lists, snapshots and schedules
@@ -21,19 +15,20 @@ export type Refresh =
   | { on: "scope"; runId: string };
 
 export const keys = {
-  overview: (query: OverviewQuery) => ["overview", query] as const,
+  overview: (query: ApiQuery<"overview">) => ["overview", query] as const,
   loopies: ["loopies"],
-  workspaceLoopies: (workspace: string | null) => ["loopies", workspace] as const,
+  workspaceLoopies: (workspace: string) => ["loopies", workspace] as const,
   source: (slug: string, workspace: string) => ["source", "loopy", workspace, slug] as const,
   runPayload: (id: string | null) => ["run-payload", id] as const,
   runSource: (id: string) => ["source", "run", id] as const,
-  executionPage: (id: string, query: ExecutionQuery | null) => ["executions", id, query] as const,
+  executionPage: (id: string, query: ApiQuery<"executions"> | null) =>
+    ["executions", id, query] as const,
   execution: (id: string, key: string | undefined) => ["execution", id, key] as const,
-  scopePage: (id: string, query: ScopeItemsQuery) => ["scope-items", id, query] as const,
+  scopePage: (id: string, query: ApiQuery<"scopeItems">) => ["scope-items", id, query] as const,
   scopes: (id: string, parentScope: string) => ["scopes", id, parentScope] as const,
-  logPage: (query: GlobalLogsQuery) => ["logs", query] as const,
+  logPage: (query: ApiQuery<"globalLogs">) => ["logs", query] as const,
   log: (id: number | undefined) => ["log", id] as const,
-  eventPage: (query: EventHistoryQuery) => ["event-history", query] as const,
+  eventPage: (query: ApiQuery<"eventHistory">) => ["event-history", query] as const,
   event: (sequence: number | undefined) => ["event", sequence] as const,
   runLists: ["runs"],
   runPage: (query: RunsQuery) => ["runs", query] as const,

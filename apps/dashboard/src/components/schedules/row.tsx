@@ -82,6 +82,7 @@ export function ScheduleRow({
           <Link
             to="/loopies/$slug"
             params={{ slug: schedule.slug }}
+            search={{ workspace: schedule.workspace }}
             className="cell-main text-ink hover:text-active"
           >
             {schedule.slug}
