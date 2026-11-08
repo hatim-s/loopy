@@ -381,3 +381,33 @@ test("graph wire views reject paths and hashes, including command parser hashes"
     )._tag === "Success",
   ).toBe(false);
 });
+
+test("schedule events reach the wire as schedule views with a null last fire key", () => {
+  const event: core.RuntimeEvent = {
+    entity: "schedule",
+    kind: "saved",
+    runId: null,
+    sequence: 1,
+    txn: "t1",
+    at: now,
+    record: {
+      workspace: "/work",
+      slug: "triage",
+      cron: "*/5 * * * *",
+      tz: "UTC",
+      input: {},
+      enabled: true,
+      nextFireAt: now,
+      version: 1,
+      failure: null,
+    },
+  };
+
+  const wire = contract.serverEvent(event, () => {
+    throw new Error("Schedule events carry no run.");
+  });
+
+  expect(wire).toEqual({ ...event, record: { ...event.record, lastFireKey: null } });
+  expect(contract.decodeBoundary(contract.serverEventSchema)(wire)).toEqual(wire);
+  expect(() => contract.decodeBoundary(contract.serverEventSchema)(event)).toThrow();
+});

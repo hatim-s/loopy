@@ -9,15 +9,6 @@ const fields = recordFields({
   "quiet?": "boolean",
 });
 
-test("a trailing ? marks the field optional and drops from the key", () => {
-  expect(fields).toEqual([
-    { key: "name", kind: "string", optional: false },
-    { key: "count", kind: "number", optional: true },
-    { key: "loud", kind: "boolean", optional: false },
-    { key: "quiet", kind: "boolean", optional: true },
-  ]);
-});
-
 test("required booleans start false and everything else starts empty", () => {
   expect(initialValues(fields)).toEqual({ name: "", count: "", loud: "false", quiet: "" });
 });

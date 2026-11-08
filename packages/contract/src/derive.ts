@@ -170,6 +170,12 @@ export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunVi
       return nodeEventPreview(event);
     }
 
+    case "schedule": {
+      return event.kind === "deleted"
+        ? event
+        : { ...event, record: { ...event.record, lastFireKey: event.record.lastFireKey ?? null } };
+    }
+
     default: {
       return event;
     }

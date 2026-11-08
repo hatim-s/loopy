@@ -113,11 +113,16 @@ export const daemonViewSchema = struct({
 
 export type DaemonView = Schema.Schema.Type<typeof daemonViewSchema>;
 
-// The wire swaps the stored run record for its view.
+// The wire swaps the stored run and schedule records for their views.
 export const serverEventSchema = runtimeEventSchema
   .mapMembers(
     Tuple.evolve([
       (run) => run.mapFields(Struct.assign({ record: Schema.mutableKey(runViewSchema) })),
+      (node) => node,
+      (log) => log,
+      (hook) => hook,
+      (schedule) =>
+        schedule.mapFields(Struct.assign({ record: Schema.mutableKey(scheduleViewSchema) })),
     ]),
   )
   .mapMembers(

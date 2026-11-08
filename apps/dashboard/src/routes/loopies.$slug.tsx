@@ -15,6 +15,7 @@ import { PagerFoot } from "../components/ui/pager";
 import { useClock } from "../lib/clock";
 import { graphModel } from "../lib/graph";
 import { layoutGraph } from "../lib/graph-layout";
+import { loopyInWorkspace } from "../lib/loopy-table";
 import { useNodeSelection } from "../lib/node-selection";
 import { useRunPages } from "../lib/pages";
 import { definitionMarks } from "../lib/run-marks";
@@ -274,11 +275,7 @@ function LoopyPage() {
     <div className="flex w-full flex-col gap-4 px-6 pt-5 pb-10 max-md:px-3">
       <Load value={loopies} pending={<p className="text-muted">Loading loopy.</p>}>
         {(data) => {
-          // Every workspace sees a global definition, so its row may name another workspace.
-          const loopy = data.find(
-            (item) =>
-              item.slug === slug && (item.workspace === workspace || item.scope === "global"),
-          );
+          const loopy = loopyInWorkspace(data, slug, workspace);
 
           return loopy ? (
             <LoopyDetail loopy={loopy} />

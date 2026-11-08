@@ -616,7 +616,6 @@ type ScheduleRecord = Exclude<
   { kind: "deleted" }
 >["record"];
 
-/** A schedule as the store emits it; the view adds a null lastFireKey. */
 const record: ScheduleRecord = {
   workspace: "/work",
   slug: "triage",
@@ -626,10 +625,11 @@ const record: ScheduleRecord = {
   enabled: true,
   nextFireAt: "2026-10-17T10:05:00.000Z",
   version: 2,
+  lastFireKey: null,
   failure: null,
 };
 
-const scheduled: ScheduleView = { ...record, lastFireKey: null };
+const scheduled: ScheduleView = record;
 
 function scheduleSaved(sequence: number, saved: ScheduleRecord) {
   return event(sequence, { entity: "schedule", kind: "saved", runId: null, record: saved });
