@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { localDaemon, Registry, readDaemonFile } from "@loopy/runtime/local";
 import { openRunStore } from "@loopy/runtime/store";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { fixture } from "../../compiler/_tests_/fixtures/project";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { object } from "../../runtime/_tests_/fixtures/project";
@@ -40,6 +40,38 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
   const text = await cli(f, "graph", "compiled", "--format", "text");
   expect(text.code).toBe(0);
   expect(text.stdout).toContain("0:log log [next -> 1:join]");
+});
+
+test("graph text names each control arm and the node it enters", async () => {
+  const f = fixture("arms", "run: () => null");
+  writeFileSync(
+    f.file,
+    `import { branch, eq, loopy, map, switch_ } from "loopy";
+export default loopy("arms", {
+  input: { kind: "string", items: "string[]" },
+  run: ({ input }) => {
+    branch(eq(input.get("kind"), "a"), { yes: () => 1, no: () => 2 });
+    switch_(input.get("kind"), { a: () => 1, default: () => 2 });
+    return map(input.get("items"), (item) => item, { onError: "fail" });
+  },
+});`,
+  );
+  const result = await cli(f, "graph", f.file, "--format", "text");
+  expect(result).toMatchObject({ code: 0, stderr: "" });
+  const view = object((await cli(f, "graph", f.file)).stdout);
+
+  const nodes = Schema.decodeUnknownSync(
+    Schema.Array(Schema.Struct({ id: Schema.String, kind: Schema.String })),
+  )(view.nodes);
+
+  const id = (kind: string) => nodes.find((node) => node.kind === kind)?.id;
+
+  const line = (kind: string) =>
+    result.stdout.split("\n").find((text) => text.trim().startsWith(`${id(kind)} ${kind}`));
+
+  expect(line("branch")).toMatch(/arm yes -> \S+, arm no -> \S+\]$/);
+  expect(line("switch")).toMatch(/arm a -> \S+, arm default -> \S+\]$/);
+  expect(line("map")).toMatch(/arm each -> \S+\]$/);
 });
 
 test("HTTP commands queue schema-validated graph runs and pin the saved revision", async () => {

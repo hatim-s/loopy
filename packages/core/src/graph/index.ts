@@ -3,6 +3,8 @@ import { counter, struct } from "../codec";
 import { nodeSchema } from "./nodes";
 import { graphRecord, nodeIdSchema, recordSpecSchema, refSchema } from "./values";
 
+export { arms } from "./context";
+
 export * from "./key";
 
 export * from "./node-id";
