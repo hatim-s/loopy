@@ -102,7 +102,7 @@ export function completionEvent(
     : { ...base, kind: "execution_completed", result };
 }
 
-/** Admits a dispatch that has no receipt yet. Rate admission follows persistence and never repeats started work. */
+// Rate admission follows persistence and never repeats started work.
 export function admitDispatch(options: {
   graph: Graph;
   store: Store;
