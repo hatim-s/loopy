@@ -58,6 +58,10 @@ export interface Store {
   epoch(): Effect.Effect<string, StorageError>;
   eventCursor(): Effect.Effect<{ cursor: number; epoch: string }, StorageError>;
   pruneEvents(now: string): Effect.Effect<number, StorageError>;
+  /**
+   * Delivers each non-empty batch after it commits through this store instance. Writes from
+   * another connection are not observed; the daemon is the only writer of a local home.
+   */
   subscribe(listener: (events: RuntimeEvent[]) => void): () => void;
   acquireRateLimit(
     key: string,

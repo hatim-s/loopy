@@ -8,4 +8,4 @@ Local homes created before `meta.schema_version` became the only schema marker r
 
 Remove `upgradeLegacyHome` and its fixtures once no supported local home still has a non-zero `user_version`. Opening such a home after removal must keep rejecting it without resetting it.
 
-Schema 15 stores, local homes and cloud workspace objects alike, gain the `schedule_failures` and `run_turns` tables through the frozen step in `store/schema/upgrade.ts` when they open. Remove that step once no supported store still records schema 15. Opening such a store after removal must keep rejecting it without resetting it.
+Schema 15 stores, local homes and cloud workspace objects alike, gain the `schedule_failures` and `run_turns` tables, drop the unused `runs.next_retry_at` column and rewrite retained run event records to the schema 16 run shape through the frozen step in `store/schema/upgrade.ts` when they open. Remove that step once no supported store still records schema 15. Opening such a store after removal must keep rejecting it without resetting it.

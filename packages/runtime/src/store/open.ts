@@ -9,6 +9,8 @@ import { upgradeLegacyHome } from "./schema/legacy";
 
 type LocalOptions = { leaseMs?: number };
 
+// Subscribers see only commits made through this connection. SQLite has no cross-connection
+// change signal, so a second writer's commits reach them only through a later re-read.
 export const makeSqliteRunStore = (file: string, options: LocalOptions = {}) =>
   Effect.acquireRelease(
     storageOperation("open", () => {

@@ -9,7 +9,7 @@ const FRESH_SCHEMA = `
   CREATE TABLE runs (
     id TEXT PRIMARY KEY, slug TEXT NOT NULL, revision TEXT NOT NULL, workspace TEXT NOT NULL,
     input_json TEXT NOT NULL, status TEXT NOT NULL, output_json TEXT, error TEXT,
-    wake_at TEXT, next_retry_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    wake_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     owner_token TEXT, owner_pid INTEGER, owner_host TEXT, heartbeat_at TEXT
   );
   CREATE INDEX runs_workspace_created_id ON runs(workspace,created_at DESC,id DESC);
