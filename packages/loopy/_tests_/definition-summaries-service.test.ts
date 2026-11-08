@@ -39,7 +39,7 @@ test("definition projection hides graph, bundles and secrets and displays JSON i
   expect(decodeBoundary(definitionSummarySchema)(summary)).toEqual(summary);
   expect((await Effect.runPromise(f.service.listLoopies(f.a)))[0]).toMatchObject({
     input: "schema",
-    description: saved.description,
+    description: saved.graph.meta.description,
   });
 });
 
@@ -101,8 +101,8 @@ test("run metadata fetches each selected slug once per canonical workspace and c
   await f.run("missing-alias", "alias", "removed", "queued");
   const runs = await Effect.runPromise(f.service.listRuns({ limit: 200 }));
   expect(runs.filter((run) => run.slug === "chosen").map((run) => run.loopy.description)).toEqual([
-    saved.description,
-    saved.description,
+    saved.graph.meta.description,
+    saved.graph.meta.description,
   ]);
   expect(
     runs.filter((run) => run.slug === "removed").every((run) => run.loopy.description === null),
@@ -162,7 +162,7 @@ test("native adapter distinguishes absence from corrupt existing files", async (
   ).rejects.toMatchObject({
     code: "not_found",
   });
-  writeFileSync(join(f.a, ".loopy", "loopies", "native.json"), JSON.stringify({ version: 2 }));
+  writeFileSync(join(f.a, ".loopy", "loopies", "native.json"), JSON.stringify({ version: 3 }));
   await expect(Effect.runPromise(service.startRun("native", {}, f.a))).rejects.toHaveProperty(
     "_tag",
     "RegistryError",

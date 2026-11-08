@@ -114,8 +114,8 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
           executor: new LocalExecutor({
             home: f.home,
             workspace: f.cwd,
-            mode: saved.mode,
-            secrets: saved.secrets,
+            mode: saved.graph.meta.mode,
+            secrets: saved.graph.meta.secrets,
             bundlePath: (hash) => registry.bundlePath(hash),
           }),
         });

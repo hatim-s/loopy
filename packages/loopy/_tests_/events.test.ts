@@ -51,8 +51,7 @@ test("node and run outbox events publish one isolated transaction and parse over
     const wire = serverEvent(event, (run) =>
       runView({
         run,
-        steps: [],
-        hooks: [],
+        hook: undefined,
         loopy: { slug: run.slug, description: null },
         now: run.updatedAt,
         leaseMs: store.leaseMs,

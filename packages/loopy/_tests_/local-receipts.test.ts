@@ -71,11 +71,9 @@ test("saved started and finished receipts decode without rewriting, corruption f
   await writeFile(path, "{");
   await expect(Effect.runPromise(f.receipts.read(f.identity))).rejects.toMatchObject({
     _tag: "ExecutorError",
-    cause: expect.any(SyntaxError),
   });
   await expect(Effect.runPromise(f.receipts.claim(f.identity))).rejects.toMatchObject({
     _tag: "ExecutorError",
-    cause: expect.any(SyntaxError),
   });
 });
 

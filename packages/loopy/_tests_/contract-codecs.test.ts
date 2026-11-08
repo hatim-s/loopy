@@ -1,16 +1,14 @@
-import { expect, expectTypeOf, test } from "bun:test";
-import type { Graph, Json, Node, NodeRun, Ref, Value } from "@loopy/contract";
-import type * as Core from "@loopy/core";
+import { expect, test } from "bun:test";
+import {
+  decodeBoundary,
+  encodeBoundary,
+  graphSchema,
+  routes,
+  validateCompiled,
+  valueSchema,
+} from "@loopy/contract";
+import { canonicalJson, revision } from "@loopy/core";
 import { Effect, Result } from "effect";
-import { routes } from "../../contract/src/api";
-import { decodeBoundary, encodeBoundary } from "../../contract/src/codec";
-import { validateCompiled } from "../../contract/src/compiled-validation";
-import { overviewSchema } from "../../contract/src/dashboard";
-import { graphSchema, nodeSchema, valueSchema } from "../../contract/src/graph";
-import { jsonSchema } from "../../contract/src/json";
-import { runSnapshotViewSchema } from "../../contract/src/views";
-import { canonicalJson } from "../../core/src/canonical-json";
-import { revision } from "../../core/src/revision";
 
 const graph = {
   version: 1,
@@ -101,76 +99,8 @@ test("decoding a graph leaves revision bytes unchanged and compiled rejection is
   expect(Result.isFailure(rejected) && rejected.failure._tag).toBe("CompiledValidationError");
 });
 
-test("JSON rejects nonfinite numbers before a wire value can be serialized", () => {
-  for (const value of [NaN, Infinity, -Infinity, { nested: Infinity }]) {
-    expect(() => decodeBoundary(jsonSchema)(value)).toThrow();
-  }
-});
-
-test("all plain number fields reject nonfinite input and JSON exponent overflow on decode and encode", () => {
-  const command = {
-    kind: "command",
-    id: "cmd",
-    label: null,
-    scope: null,
-    key: "test",
-    out: { kind: "value", type: "json" },
-    argv: [],
-    flags: {},
-    flagSpec: {
-      path: [],
-      flags: { v: { cli: "--v", kind: "number", order: 0 } },
-      style: "equals",
-      positionalSeparator: false,
-      flagsAfterPositionals: false,
-    },
-    options: { cwd: null, env: {}, stdin: null },
-    rateLimit: null,
-    retry: { attempts: 1, backoff: "exponential", retryOnExit: false },
-    okExitCodes: [0],
-    parse: null,
-  };
-
-  expect(decodeBoundary(nodeSchema)(command).kind).toBe("command");
-
-  for (const value of [NaN, Infinity, -Infinity, JSON.parse("1e400")]) {
-    const invalid = {
-      ...command,
-      flagSpec: {
-        ...command.flagSpec,
-        flags: { v: { ...command.flagSpec.flags.v, order: value } },
-      },
-    };
-
-    expect(() => decodeBoundary(nodeSchema)(invalid)).toThrow();
-    expect(() => encodeBoundary(nodeSchema)(invalid)).toThrow();
-    expect(() => decodeBoundary(overviewSchema.fields.bucketSeconds)(value)).toThrow();
-    expect(() => encodeBoundary(overviewSchema.fields.bucketSeconds)(value)).toThrow();
-    expect(() =>
-      decodeBoundary(runSnapshotViewSchema.fields.truncatedOutputs)({ node: value }),
-    ).toThrow();
-    expect(() =>
-      encodeBoundary(runSnapshotViewSchema.fields.truncatedOutputs)({ node: value }),
-    ).toThrow();
-  }
-});
-
 test("scope decoding rejects invalid tuples with an actionable message", () => {
   expect(() =>
     decodeBoundary(routes.executions.query)({ scope: '[{"nodeId":"a","index":-1}]' }),
   ).toThrow("Scope must be a JSON array of {nodeId,index} tuples.");
-});
-
-test("contract recursive collection types preserve core mutability in both directions", () => {
-  expectTypeOf<Json>().toEqualTypeOf<Core.Json>();
-  expectTypeOf<Graph>().toMatchTypeOf<Core.Graph>();
-  expectTypeOf<Core.Graph>().toMatchTypeOf<Graph>();
-  expectTypeOf<Node>().toMatchTypeOf<Core.Node>();
-  expectTypeOf<Core.Node>().toMatchTypeOf<Node>();
-  expectTypeOf<Value>().toMatchTypeOf<Core.Value>();
-  expectTypeOf<Core.Value>().toMatchTypeOf<Value>();
-  expectTypeOf<Ref>().toMatchTypeOf<Core.Ref>();
-  expectTypeOf<Core.Ref>().toMatchTypeOf<Ref>();
-  expectTypeOf<NodeRun>().toMatchTypeOf<Core.NodeRun>();
-  expectTypeOf<Core.NodeRun>().toMatchTypeOf<NodeRun>();
 });

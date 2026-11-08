@@ -13,13 +13,14 @@ import {
 import { join, resolve } from "node:path";
 import {
   decodeBoundary,
+  type ExecutionResult,
   nodeIdSchema,
   type SandboxAttemptRequest,
-  type SandboxExecutionResult,
   sandboxArtifactSchema,
   sandboxAttemptRequestSchema,
 } from "@loopy/contract";
-import { CommandExecutionError, canonicalJson } from "@loopy/core";
+import { canonicalJson } from "@loopy/core";
+import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Result, Schema } from "effect";
 import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
 import type { Attempts } from "../../../apps/sandbox/src/attempt";
@@ -40,7 +41,7 @@ const services: Attempts[] = [];
 
 const token = "sandbox-fixture-token-32-characters";
 
-const succeeded: SandboxExecutionResult = { kind: "succeeded", output: { ok: true }, logs: [] };
+const succeeded: ExecutionResult = { kind: "succeeded", output: { ok: true }, logs: [] };
 
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => run(service.close())));
@@ -120,7 +121,7 @@ function lookup(value: SandboxAttemptRequest) {
 
 test("authenticated admission fsyncs once, joins duplicate starts, rejects changed content and replays completion", async () => {
   const config = await fixture();
-  const completed = Promise.withResolvers<SandboxExecutionResult>();
+  const completed = Promise.withResolvers<ExecutionResult>();
   let starts = 0;
   let stored: StartedReceipt | undefined;
 
@@ -596,8 +597,8 @@ function artifactLookup(input: SandboxAttemptRequest, path: string) {
 
 test("artifact export requires its finished receipt and fences same-run admissions", async () => {
   const config = await fixture();
-  const completion = Promise.withResolvers<SandboxExecutionResult>();
-  const secondCompletion = Promise.withResolvers<SandboxExecutionResult>();
+  const completion = Promise.withResolvers<ExecutionResult>();
+  const secondCompletion = Promise.withResolvers<ExecutionResult>();
   const read = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let exports = 0;

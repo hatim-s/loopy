@@ -143,7 +143,7 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
 
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
-    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
+    node.retry = { attempts: 1, retryOnExit: false };
     const store = new MemoryStore();
     await Effect.runPromise(store.createRun({ ...newRun(), input: { subject: "test" } }));
 
@@ -215,7 +215,7 @@ for (const ending of ["timeout", "success"] as const) {
 
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
-    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
+    node.retry = { attempts: 1, retryOnExit: false };
     const runs = new MemoryStore();
     await Effect.runPromise(runs.createRun({ ...newRun(), input: { subject: "test" } }));
 
@@ -291,7 +291,7 @@ for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const)
 
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
-    node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
+    node.retry = { attempts: 1, retryOnExit: false };
     const runs = new MemoryStore();
     await Effect.runPromise(runs.createRun({ ...newRun(), input: { subject: "test" } }));
 

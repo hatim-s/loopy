@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import {
   decodeBoundary,
   encodeRunCursor,
-  nodeRunViewSchema,
+  nodeRunSchema,
   type RunSnapshotView,
   type RunView,
   type ServerEvent,
@@ -39,7 +39,7 @@ const running: RunView = { ...queued, status: "running", updatedAt: "2026-10-17T
 const heartbeat: RunView = { ...running, updatedAt: "2026-10-17T10:00:02.000Z" };
 
 function snapshot(run: RunView): RunSnapshotView {
-  return { run, nodeRuns: [], steps: [], logs: [], hooks: [], cursor: 10, epoch: "e1" };
+  return { run, nodeRuns: [], logs: [], hooks: [], cursor: 10, epoch: "e1" };
 }
 
 function event(record: RunView, sequence: number, kind: "claimed" | "heartbeat"): ServerEvent {
@@ -224,7 +224,7 @@ test("the displayed run page keeps its next cursor after the oldest row leaves",
 
 test("map item pagination retains at most 200 rows and continues numeric cursors", async () => {
   const nodeRuns = Array.from(Array.from({ length: 250 }).keys(), (index) =>
-    decodeBoundary(nodeRunViewSchema)({
+    decodeBoundary(nodeRunSchema)({
       key: { runId: queued.id, nodeId: "1:work", scope: [{ nodeId: "0:map", index }] },
       status: "running",
       attempt: 1,

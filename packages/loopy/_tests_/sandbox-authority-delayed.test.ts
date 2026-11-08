@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import type { SandboxExecutionResult } from "@loopy/contract";
+import type { ExecutionResult } from "@loopy/contract";
 import { Effect } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
@@ -44,7 +44,7 @@ for (const trigger of ["start", "lookup"] as const) {
   test(`delayed admission commit after absent resolving read starts once on later ${trigger}`, async () => {
     const { config, request, resultsFor } = await fixture();
     const authority = new DelayedCommit(config.stateRoot);
-    const completed = Promise.withResolvers<SandboxExecutionResult>();
+    const completed = Promise.withResolvers<ExecutionResult>();
     let starts = 0;
     let recoveries = 0;
 

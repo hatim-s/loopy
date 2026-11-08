@@ -1,12 +1,8 @@
 import { expect, expectTypeOf, test } from "bun:test";
-import type { SavedLoopy } from "@loopy/contract";
 import * as contract from "@loopy/contract";
 import type * as core from "@loopy/core";
 import { Option, Schema } from "effect";
 import { newRun } from "./fixture";
-import { approveDemoGraph } from "./fixtures/graphs";
-
-type Flatten<T> = T extends unknown ? { [Key in keyof T]: T[Key] } : never;
 
 const now = newRun().createdAt;
 
@@ -14,63 +10,17 @@ const leaseMs = 60_000;
 
 const loopy = { slug: "test", description: null };
 
-function view(run: core.RunRecord, steps: core.StepRecord[] = [], hooks: core.HookRecord[] = []) {
-  return contract.runView({ run, loopy, steps, hooks, now, leaseMs });
+function view(run: core.RunRecord, hook?: core.PendingHook) {
+  return contract.runView({ run, loopy, hook, now, leaseMs });
 }
 
-test("schema outputs exactly match core records and the wire owner projection", () => {
-  expectTypeOf<contract.Json>().toEqualTypeOf<core.Json>();
-  expectTypeOf<contract.RunStatus>().toEqualTypeOf<core.RunStatus>();
-  expectTypeOf<contract.RunOutcome>().toEqualTypeOf<core.RunOutcome>();
-  expectTypeOf<contract.StepRecord>().toEqualTypeOf<Flatten<core.StepRecord>>();
-  expectTypeOf<contract.LogPosition>().toEqualTypeOf<core.LogPosition>();
-  expectTypeOf<contract.LogRecord>().toEqualTypeOf<core.LogRecord>();
-  expectTypeOf<contract.HookRecord>().toEqualTypeOf<core.HookRecord>();
-  expectTypeOf<contract.Schedule>().toEqualTypeOf<core.Schedule>();
-  expectTypeOf<contract.RunView["owner"]>().toEqualTypeOf<Omit<
-    NonNullable<core.RunRecord["owner"]>,
-    "token"
-  > | null>();
-
-  type WireEvent =
-    | Exclude<core.RuntimeEvent, { entity: "run" | "step" | "node" }>
-    | (Omit<Extract<core.RuntimeEvent, { entity: "node" }>, "record"> & {
-        record: Flatten<core.NodeRun>;
-      })
-    | Exclude<never, never>
-    | (Omit<Extract<core.RuntimeEvent, { entity: "step" }>, "record"> & {
-        record: Flatten<core.StepRecord>;
-      })
-    | (Omit<Extract<core.RuntimeEvent, { entity: "run" }>, "record"> & {
-        record: contract.RunView;
-      });
-
-  expectTypeOf<contract.ServerEvent>().toEqualTypeOf<
-    Flatten<WireEvent & { truncatedOutputBytes?: number }>
-  >();
-  expectTypeOf<SavedLoopy & { workspace: string }>().toMatchTypeOf<
-    Parameters<typeof contract.loopyView>[0]
-  >();
-});
-
-const waiting: core.StepRecord = {
-  runId: "run",
-  seq: 2,
-  key: "hook:approve",
-  kind: "hook",
-  input: { name: "approve", token: "hook" },
-  status: "waiting",
-  attempt: 1,
-  maxAttempts: 1,
-  startedAt: now,
-};
-
-const hook: core.HookRecord = {
+const hook: core.PendingHook = {
   token: "hook",
   runId: "run",
   seq: 2,
   name: "approve",
   createdAt: now,
+  expiresAt: null,
 };
 
 test("views strip fencing tokens and derive staleness at the lease boundary", () => {
@@ -97,8 +47,7 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
     contract.runView({
       run,
       loopy,
-      steps: [],
-      hooks: [],
+      hook: undefined,
       now: new Date(Date.parse(now) + leaseMs).toISOString(),
       leaseMs,
     }).ownerStale,
@@ -107,8 +56,7 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
     contract.runView({
       run,
       loopy,
-      steps: [],
-      hooks: [],
+      hook: undefined,
       now: new Date(Date.parse(now) + leaseMs + 1).toISOString(),
       leaseMs,
     }).ownerStale,
@@ -116,54 +64,29 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
   expect(view(newRun())).toMatchObject({ owner: null, ownerStale: false });
 });
 
-test("waitingOn uses only the latest waiting hook step and an unresolved unexpired hook", () => {
-  const run = {
-    ...newRun(),
-    status: "suspended",
-    updatedAt: "2099-01-01T00:00:00.000Z",
-  } satisfies core.RunRecord;
+test("waitingOn names the run's pending hook and is null without one", () => {
+  const run = { ...newRun(), status: "suspended" } satisfies core.RunRecord;
 
-  expect(view(run, [waiting], [hook]).waitingOn).toEqual({
+  expect(view(run, hook).waitingOn).toEqual({
     hook: "approve",
     token: "hook",
     seq: 2,
     expiresAt: null,
     since: hook.createdAt,
   });
-  const future = new Date(Date.parse(now) + 1000).toISOString();
-  expect(view(run, [{ ...waiting, wakeAt: future }], [hook]).waitingOn?.expiresAt).toBe(future);
-  expect(view(run, [{ ...waiting, wakeAt: now }], [hook]).waitingOn).toBeNull();
-  expect(view(run, [waiting], [{ ...hook, resolvedAt: now }]).waitingOn).toBeNull();
-  expect(view(run, [waiting], [{ ...hook, expiredAt: now }]).waitingOn).toBeNull();
-  expect(view(run, [waiting], [{ ...hook, runId: "other" }]).waitingOn).toBeNull();
-  expect(view(run, [waiting], [{ ...hook, seq: 1 }]).waitingOn).toBeNull();
-  expect(view(run, [waiting], []).waitingOn).toBeNull();
-  expect(view(run, [], [hook]).waitingOn).toBeNull();
-  expect(view(run, [{ ...waiting, kind: "sleep" }], [hook]).waitingOn).toBeNull();
-  expect(
-    view(run, [waiting, { ...waiting, seq: 3, status: "running" }], [hook]).waitingOn,
-  ).toBeNull();
-  expect(
-    view(run, [{ ...waiting, seq: 3, status: "running" }, waiting], [hook]).waitingOn,
-  ).toBeNull();
+  expect(view(run).waitingOn).toBeNull();
 });
 
 test("loopy views count matching runs and choose the newest without leaking registry fields", () => {
-  const saved: SavedLoopy = {
+  const saved = {
     slug: "test",
+    workspace: "/workspace",
     scope: "project",
     input: { value: "number" },
     mode: "sandbox",
-    source: "/private/source",
-    secrets: ["SECRET"],
-    version: 2,
-    graph: approveDemoGraph,
-    revision: "private",
-    bundles: [],
     description: null,
     schedule: null,
-    savedAt: now,
-  };
+  } satisfies Parameters<typeof contract.loopyView>[0];
 
   const newer = view({
     ...newRun(),
@@ -184,7 +107,7 @@ test("loopy views count matching runs and choose the newest without leaking regi
     nextFireAt: now,
   };
 
-  const result = contract.loopyView({ ...saved, workspace: "/workspace" }, schedule, [
+  const result = contract.loopyView(saved, schedule, [
     newer,
     view(newRun()),
     view({ ...newRun(), slug: "other" }),
@@ -205,11 +128,8 @@ test("loopy views count matching runs and choose the newest without leaking regi
     enabled: true,
     nextFireAt: now,
   });
-  expect(result).not.toHaveProperty("source");
-  expect(result).not.toHaveProperty("secrets");
-  expect(result).not.toHaveProperty("bundleHash");
   expect(contract.decodeBoundary(contract.loopyViewSchema)(result)).toEqual(result);
-  expect(contract.loopyView({ ...saved, workspace: "/workspace" }, null, [])).toMatchObject({
+  expect(contract.loopyView(saved, null, [])).toMatchObject({
     workspace: "/workspace",
     lastRun: null,
     schedule: null,
@@ -250,28 +170,23 @@ test("serialized loopy and snapshot views exclude private registry and owner key
     owner: { token: "private", pid: 1, host: "host", heartbeatAt: now },
   });
 
-  const saved: SavedLoopy = {
-    slug: "test",
-    scope: "project",
-    mode: "sandbox",
-    input: {},
-    source: "/private/source",
-    secrets: ["SECRET"],
-    version: 2,
-    graph: approveDemoGraph,
-    revision: "private",
-    bundles: [],
-    description: null,
-    schedule: null,
-    savedAt: now,
-  };
-
-  const loopy = contract.loopyView({ ...saved, workspace: "/workspace" }, null, [run]);
+  const loopy = contract.loopyView(
+    {
+      slug: "test",
+      workspace: "/workspace",
+      scope: "project",
+      mode: "sandbox",
+      input: {},
+      description: null,
+      schedule: null,
+    },
+    null,
+    [run],
+  );
 
   const snapshot: contract.RunSnapshotView = {
     nodeRuns: [],
     run,
-    steps: [],
     logs: [],
     hooks: [],
     cursor: 0,
@@ -307,8 +222,7 @@ test("strict edges reject misspelled request keys and injected view tokens", () 
   const described = contract.runView({
     run: newRun(),
     loopy: { slug: "test", description: "Review approvals" },
-    steps: [],
-    hooks: [],
+    hook: undefined,
     now,
     leaseMs,
   });
@@ -344,14 +258,7 @@ test("run cursors preserve timestamp ties and reject timestamp-only paging", () 
   ).toBe(false);
 });
 
-test("schedule wire fields normalize core nullability and preserve every field", () => {
-  expectTypeOf<contract.ScheduleView>().toEqualTypeOf<
-    Flatten<
-      Omit<core.Schedule, "lastFireKey"> & {
-        lastFireKey: string | null;
-      }
-    >
-  >();
+test("schedule bodies reject mistyped and unknown fields", () => {
   expect(contract.decodeBoundary(contract.putScheduleBodySchema)({})).toEqual({});
 
   for (const body of [
@@ -384,7 +291,8 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
     scope: "project",
     mode: "sandbox",
     input: {},
-    schedule: { cron: "0 * * * *" },
+    description: null,
+    schedule: { cron: "0 * * * *", tz: "UTC" },
   } satisfies Parameters<typeof contract.loopyView>[0];
 
   expect(contract.loopyView(saved, null, []).schedule).toEqual({

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { decodeBoundary } from "@loopy/contract";
-import { CommandExecutionError } from "@loopy/core";
+import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { sandboxConfigSchema } from "../../../sandbox/src/config";
 import { FixtureError, fixtureFailure } from "../../dev/fixture-effect";

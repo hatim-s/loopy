@@ -139,14 +139,12 @@ class Registry implements Pick<R2ArtifactRegistry, "get" | "revisionGraph"> {
     const hash = await revision(graph);
     this.graphs.set(hash, graph);
     this.current.set(graph.name, {
-      version: 2,
+      version: 3,
       slug: graph.name,
       graph,
       revision: hash,
       source: "/fixture.ts",
       savedAt: new Date().toISOString(),
-      ...graph.meta,
-      input: graph.input,
       bundles: [],
     });
 

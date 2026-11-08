@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { CommandExecutionError } from "@loopy/core";
+import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect } from "effect";
 import { withBundleSandbox } from "../../runtime/src/local/sandbox/bundle";
 import { fixture } from "./fixtures/executor";

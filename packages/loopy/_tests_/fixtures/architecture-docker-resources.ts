@@ -7,7 +7,7 @@ import {
   type SandboxAttemptRequest,
   sandboxAttemptRequestSchema,
 } from "@loopy/contract";
-import { CommandExecutionError } from "@loopy/core";
+import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Exit, Scope } from "effect";
 import { z } from "zod";
 import { attemptHash } from "../../../../apps/sandbox/src/admission";

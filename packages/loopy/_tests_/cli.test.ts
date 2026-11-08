@@ -54,7 +54,7 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
   expect(text.stdout).toContain("0:log log [next -> 1:join]");
   const entry = await registryEntry(f.home, f.cwd, "compiled");
   expect(entry).toMatchObject({
-    version: 2,
+    version: 3,
     graph: { name: "compiled" },
     revision: expect.stringMatching(/^[a-f0-9]{64}$/),
     bundles: [],
@@ -200,7 +200,7 @@ test("save preserves every author option from graph meta", async () => {
   );
   expect(await cli(f, "save", f.file)).toMatchObject({ code: 0, stderr: "" });
   const saved = await registryEntry(f.home, f.cwd, "metadata");
-  expect(saved).toMatchObject({ ...meta, input: { count: "number" }, graph: { meta } });
+  expect(saved).toMatchObject({ graph: { meta, input: { count: "number" } } });
 });
 
 test("HTTP schedule enable, disable and off persist their state", async () => {

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import {
   decodeBoundary,
+  receiptSchema,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
-  sandboxReceiptSchema,
 } from "@loopy/contract";
 import { Effect } from "effect";
 import { type Bridge, type DockerResources, input } from "./architecture-docker-resources";
@@ -32,7 +32,7 @@ export function client(service: Bridge, owned: DockerResources) {
 
       assert.equal(response.status, expected, await response.clone().text());
 
-      return expected === 202 ? decodeBoundary(sandboxReceiptSchema)(await response.json()) : null;
+      return expected === 202 ? decodeBoundary(receiptSchema)(await response.json()) : null;
     },
     async lookup(request: SandboxAttemptRequest) {
       const response = await fetch(url(request, "/attempts"), {
@@ -42,7 +42,7 @@ export function client(service: Bridge, owned: DockerResources) {
 
       assert.equal(response.status, 200);
 
-      return decodeBoundary(sandboxReceiptSchema)(await response.json());
+      return decodeBoundary(receiptSchema)(await response.json());
     },
     async artifact(request: SandboxAttemptRequest, path: string, authenticated = true) {
       const target = url(request, "/artifacts");

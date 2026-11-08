@@ -41,7 +41,7 @@ test("normalized graph metadata and schema do not retain caller-owned arrays or 
     mode: "sandbox",
     scope: "project",
     secrets: ["TOKEN"],
-    schedule: { cron: "0 * * * *" },
+    schedule: { cron: "0 * * * *", tz: "UTC" },
   });
   secrets.push("OTHER");
   schedule.cron = "* * * * *";

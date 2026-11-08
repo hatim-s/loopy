@@ -1,9 +1,9 @@
 import {
   decodeBoundary,
   type Json,
+  receiptSchema,
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
-  sandboxReceiptSchema,
 } from "@loopy/contract";
 
 export type QueueProofDetails = Record<string, Json | undefined>;
@@ -84,7 +84,7 @@ export function readQueueProvider(
             await hold();
           }
 
-          return Response.json(decodeBoundary(sandboxReceiptSchema)({ kind: "none" }));
+          return Response.json(decodeBoundary(receiptSchema)({ kind: "none" }));
         }
 
         const id = JSON.stringify([identity.workspace, identity.executionKey, identity.attempt]);
@@ -96,7 +96,7 @@ export function readQueueProvider(
         }
 
         return Response.json(
-          decodeBoundary(sandboxReceiptSchema)({
+          decodeBoundary(receiptSchema)({
             kind: "finished",
             result: {
               kind: "succeeded",

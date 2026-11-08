@@ -114,7 +114,7 @@ test("stale registry entries are ignored and replaced without preserving the old
   expect(() => Effect.runSync(registry.get("saved"))).toThrow("No saved loopy");
   Effect.runSync(registry.save(await compiledBody("saved", f.source)));
   expect(Effect.runSync(registry.get("saved"))).toMatchObject({
-    version: 2,
+    version: 3,
     graph: { name: "saved" },
   });
   expect(Effect.runSync(registry.get("saved"))).not.toHaveProperty("bundleHash");
