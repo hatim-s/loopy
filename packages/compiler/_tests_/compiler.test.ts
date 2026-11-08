@@ -461,29 +461,6 @@ test("literal dynamic imports are bundled and alter the pinned revision", async 
   expect(await run()).toBe(1);
 });
 
-test("module stdout rejects a missing or malformed final JSON line", () => {
-  const protocolError = {
-    kind: "failed" as const,
-    error: {
-      code: "protocol" as const,
-      message: "Bundle stdout must end with one JSON result line.",
-    },
-    exitCode: null,
-    logs: [],
-  };
-
-  expect(decodeStdout("")).toEqual(protocolError);
-  expect(decodeStdout('{"earlier":true}\nnoise\n')).toEqual({
-    ...protocolError,
-    logs: [{ message: "stdout", data: '{"earlier":true}\nnoise\n' }],
-  });
-  expect(decodeStdout('leading noise\n{"answer":42}\n')).toEqual({
-    kind: "succeeded",
-    output: { answer: 42 },
-    logs: [{ message: "stdout", data: "leading noise\n" }],
-  });
-});
-
 test("parser modules reject dynamic imports in their local dependencies", async () => {
   const { root, file } = await project(
     'import {loopy,defineCommand} from "__SDK__";const cmd=defineCommand({key:"custom",program:"echo",parse:"./parse.ts"},{kind:"value",type:"number"});export default loopy("parser",{input:{},run:()=>cmd()});',

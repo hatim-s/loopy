@@ -3,7 +3,8 @@ import { nodeIdSchema } from "@loopy/contract";
 import type { RuntimeEvent, Store } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
-import { memoryStore, runAt } from "./fixtures/stores";
+import { runAt } from "./fixtures/clock";
+import { memoryStore } from "./fixtures/stores";
 
 const start = Date.parse(newRun().createdAt);
 

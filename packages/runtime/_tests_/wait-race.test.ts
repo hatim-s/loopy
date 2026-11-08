@@ -8,8 +8,8 @@ import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";
 import { makeSqliteRunStore } from "../src/store";
+import { runAt } from "./fixtures/clock";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { runAt } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
 
 const at = "2026-10-20T00:00:00.000Z";

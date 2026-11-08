@@ -9,9 +9,10 @@ import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";
 import { makeLocalService, Registry } from "../src/local";
 import { makeSqliteRunStore } from "../src/store";
+import { runAt } from "./fixtures/clock";
 import { withBundles } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { MemorySqlStore, runAt } from "./fixtures/stores";
+import { MemorySqlStore } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
 
 async function fixture() {

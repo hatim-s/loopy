@@ -5,9 +5,10 @@ import { code, loopy, parallel, sh, wait } from "@loopy/sdk/graph";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { activateDurable } from "../src/host";
+import { runAt } from "./fixtures/clock";
 import { withBundles } from "./fixtures/compiled";
 import { PolicyProvider, policyGraph, policySuccess } from "./fixtures/host-policy";
-import { MemorySqlStore, memoryStore, runAt } from "./fixtures/stores";
+import { MemorySqlStore, memoryStore } from "./fixtures/stores";
 
 test("targeted node reads preserve ordered scopes and detach nested data", async () => {
   const store = memoryStore();

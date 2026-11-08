@@ -5,8 +5,9 @@ import { type NodeRun, type Store } from "@loopy/core";
 import { Cause, Effect, Exit, Schema, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { makeSqliteRunStore } from "../src/store";
+import { runAt } from "./fixtures/clock";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { memoryStore, runAt } from "./fixtures/stores";
+import { memoryStore } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
 
 const at = "2026-10-20T00:00:00.000Z";

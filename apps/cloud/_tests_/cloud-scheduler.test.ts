@@ -2,23 +2,19 @@ import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { PAGE_LIMIT, type SavedLoopy } from "@loopy/contract";
 import {
   type ExecutionKey,
-  executionKeyString,
   type Graph,
   type Json,
-  type Receipt,
   revision,
   StorageError,
   type Store,
 } from "@loopy/core";
-import {
-  type DurableExecutionProvider,
-  DurableProviderError,
-  SCHEDULE_POLICY,
-} from "@loopy/runtime/host";
+import { DurableProviderError, SCHEDULE_POLICY } from "@loopy/runtime/host";
 import { RegistryError } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { code, loopy, sleep, wait } from "@loopy/sdk/graph";
 import { Cause, Effect } from "effect";
+import { withBundles } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { PolicyProvider } from "../../../packages/runtime/_tests_/fixtures/host-policy";
 import { BunSqlDriver } from "../../../packages/runtime/src/store/bun-driver";
 import type { R2ArtifactRegistry } from "../src/artifacts";
 import { SCHEDULER, type SchedulerStorage, WorkspaceScheduler } from "../src/scheduler";
@@ -169,29 +165,16 @@ class Registry implements Pick<R2ArtifactRegistry, "get" | "revisionGraph"> {
   }
 }
 
-class Provider implements DurableExecutionProvider {
-  receipts = new Map<string, Receipt>();
-  starts: string[] = [];
+/** Also records how many executions the store holds as running at each start. */
+class Provider extends PolicyProvider {
   runningCounts: number[] = [];
-  result: Receipt = { kind: "started" };
 
-  constructor(private readonly store: SqlRunStore) {}
-
-  lookup(key: ExecutionKey, attempt: number) {
-    return Effect.sync(
-      (): Receipt => this.receipts.get(`${executionKeyString(key)}/${attempt}`) ?? { kind: "none" },
-    );
+  constructor(private readonly store: SqlRunStore) {
+    super();
   }
 
-  start(key: ExecutionKey, attempt: number) {
-    return Effect.gen({ self: this }, function* () {
-      const id = `${executionKeyString(key)}/${attempt}`;
-      this.starts.push(id);
-      this.runningCounts.push(yield* this.store.runningCount());
-      this.receipts.set(id, this.result);
-
-      return this.result;
-    }).pipe(
+  override start(key: ExecutionKey, attempt: number) {
+    return this.store.runningCount().pipe(
       Effect.mapError(
         (cause) =>
           new DurableProviderError({
@@ -201,16 +184,9 @@ class Provider implements DurableExecutionProvider {
             cause,
           }),
       ),
+      Effect.tap((count) => Effect.sync(() => this.runningCounts.push(count))),
+      Effect.andThen(super.start(key, attempt)),
     );
-  }
-
-  finishAll() {
-    for (const id of this.starts) {
-      this.receipts.set(id, {
-        kind: "finished",
-        result: { kind: "succeeded", output: 1, logs: [] },
-      });
-    }
   }
 }
 
@@ -219,15 +195,7 @@ function work(label = "work") {
 }
 
 function graph(name: string, run: Parameters<typeof loopy>[1]["run"] = () => work()) {
-  const graph = loopy(name, { input: {}, run });
-
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
-
-  return graph;
+  return withBundles(loopy(name, { input: {}, run }));
 }
 
 function fixture(concurrency = 3) {

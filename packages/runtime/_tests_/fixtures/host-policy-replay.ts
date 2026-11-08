@@ -5,10 +5,10 @@ import { Effect } from "effect";
 import { newRun } from "../../../core/_tests_/fixtures/run";
 import { activateDurable, type DurableActivationResult } from "../../src/host";
 import { makeSqliteRunStore, type SqlRunStore } from "../../src/store";
+import { runAt } from "./clock";
 import { PolicyProvider, policyGraph, policyRetry, policySuccess } from "./host-policy";
 import { initialModel, type ModelAction, modelStep } from "./host-policy-model";
 import { qualityTestRoot } from "./quality-test-root";
-import { runAt } from "./stores";
 
 export async function withFilePolicyStore(use: (store: SqlRunStore) => Promise<void>) {
   const root = qualityTestRoot("host-model");
