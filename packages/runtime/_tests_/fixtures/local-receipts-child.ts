@@ -1,14 +1,12 @@
+import { executionKeySchema } from "@loopy/contract";
 import { Effect, Schema } from "effect";
-import { FilesystemReceipts, receiptSchema } from "../../src/executor/receipts";
+import { FilesystemReceipts } from "../../src/executor/receipts";
 import { waitForFile } from "./wait";
 
 const request = Schema.decodeUnknownSync(
   Schema.Struct({
     home: Schema.String,
-    identity: Schema.Struct({
-      executionKey: receiptSchema.members[0].fields.executionKey,
-      attempt: receiptSchema.members[0].fields.attempt,
-    }),
+    identity: Schema.Struct({ executionKey: executionKeySchema, attempt: Schema.Number }),
     ready: Schema.String,
     finish: Schema.String,
   }),

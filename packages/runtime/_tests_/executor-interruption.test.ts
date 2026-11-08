@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { chmod, readFile, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { Cause, Effect, Fiber, Schema } from "effect";
 import { ExecutionWorker } from "../src/executor/execution";
 import { FilesystemReceipts } from "../src/executor/receipts";
-import { workerFailure } from "../src/executor/worker-protocol";
 import { commandSpec, fixture } from "./fixtures/executor";
-import { waitForFile } from "./fixtures/wait";
+import { onCleanup } from "./fixtures/test-scope";
+import { waitForExit, waitForFile } from "./fixtures/wait";
 
 const activeProgram =
   'require("node:fs").appendFileSync("runs", "x"); await Bun.write("ready.json", JSON.stringify({pid: process.pid})); await Bun.write("ready", "ready"); setInterval(() => {}, 1000);';
@@ -136,7 +136,7 @@ for (const kind of ["command", "code", "parser"] as const) {
     }
   });
 
-  test(`actual worker signal stops ${kind} work, then dead-worker lookup seals uncertainty without replay`, async () => {
+  test(`a signalled ${kind} worker stops its author, and the caller seals the attempt as uncertain without replay`, async () => {
     const f = await fixture();
     await writeFile(f.bundle, activeProgram);
 
@@ -153,63 +153,41 @@ for (const kind of ["command", "code", "parser"] as const) {
 
     const receipts = new FilesystemReceipts(f.home);
 
-    const request = {
-      options: {
-        home: f.home,
-        workspace: f.workspace,
-        mode: "sandbox",
-        secrets: [],
-        bundles: { ["a".repeat(64)]: f.bundle },
-      },
-      key: f.key,
-      attempt: 1,
-      spec,
-    };
+    const controller = new AbortController();
 
-    const worker = Bun.spawn(
-      [process.execPath, "--no-env-file", resolve(import.meta.dir, "../src/executor/worker.ts")],
-      {
-        cwd: f.workspace,
-        env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: f.home, TMPDIR: f.root, LANG: "C" },
-        stdin: new Blob([JSON.stringify(request)]),
-        stdout: "pipe",
-        stderr: "pipe",
-      },
+    const running = Effect.runPromise(
+      Effect.exit(f.executor.execute(f.key, 1, spec, controller.signal)),
     );
 
-    try {
-      const author = await waitForAuthor(f.workspace);
-      expect(
-        await Effect.runPromise(receipts.read({ executionKey: f.key, attempt: 1 })),
-      ).toMatchObject({ kind: "started", pid: worker.pid });
-      worker.kill(kind === "parser" ? "SIGINT" : "SIGTERM");
-      expect(await worker.exited).toBe(1);
-      expect(workerFailure(await new Response(worker.stdout).text())).toMatchObject({
-        kind: "executor_error",
-        operation: "execute",
-      });
-      expect(await new Response(worker.stderr).text()).toBe("");
-      expect(() => process.kill(worker.pid, 0)).toThrow();
-      expect(() => process.kill(author.pid, 0)).toThrow();
-      expect(
-        await Effect.runPromise(receipts.read({ executionKey: f.key, attempt: 1 })),
-      ).toMatchObject({ kind: "started", pid: worker.pid });
-      const reconciled = await Effect.runPromise(f.executor.lookup(f.key, 1));
-      expect(reconciled).toMatchObject({
-        kind: "finished",
-        result: { kind: "failed", error: { code: "uncertain" } },
-      });
-      expect(
-        await Effect.runPromise(f.executor.execute(f.key, 1, spec, new AbortController().signal)),
-      ).toMatchObject({ kind: "failed", error: { code: "uncertain" } });
-      expect(await readFile(join(f.workspace, "runs"), "utf8")).toBe("x");
-    } finally {
-      if (worker.exitCode === null) {
-        worker.kill("SIGTERM");
-      }
+    onCleanup(async () => {
+      controller.abort();
+      await running;
+    });
+    const author = await waitForAuthor(f.workspace);
+    const claimed = await Effect.runPromise(receipts.read({ executionKey: f.key, attempt: 1 }));
 
-      await worker.exited;
+    if (claimed?.kind !== "started") {
+      throw new Error("Expected an active worker claim.");
     }
+
+    process.kill(claimed.pid, kind === "parser" ? "SIGINT" : "SIGTERM");
+    const exit = await running;
+    expect(exit).toMatchObject({
+      _tag: "Failure",
+      cause: {
+        reasons: [{ _tag: "Fail", error: { _tag: "ExecutorError", operation: "execute" } }],
+      },
+    });
+    await waitForExit(claimed.pid);
+    expect(() => process.kill(author.pid, 0)).toThrow();
+    expect(await Effect.runPromise(f.executor.lookup(f.key, 1))).toMatchObject({
+      kind: "finished",
+      result: { kind: "failed", error: { code: "uncertain" } },
+    });
+    expect(
+      await Effect.runPromise(f.executor.execute(f.key, 1, spec, new AbortController().signal)),
+    ).toMatchObject({ kind: "failed", error: { code: "uncertain" } });
+    expect(await readFile(join(f.workspace, "runs"), "utf8")).toBe("x");
   });
 }
 

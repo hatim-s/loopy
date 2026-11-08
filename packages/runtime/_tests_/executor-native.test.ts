@@ -9,6 +9,7 @@ import { FilesystemReceipts, receiptPath } from "../src/executor/receipts";
 import { secretRedactor } from "../src/os/secret-redactor";
 import { SecretStore } from "../src/os/secrets";
 import { commandSpec, fixture } from "./fixtures/executor";
+import { onCleanup } from "./fixtures/test-scope";
 import { until, waitForFile } from "./fixtures/wait";
 
 test("code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt", async () => {
@@ -97,34 +98,34 @@ test("a worker finishes its receipt after the caller process is killed", async (
     f.bundle,
     'while (!(await Bun.file("release").exists())) { await Bun.sleep(10); } process.stdout.write("42\\n");',
   );
-  const caller = join(f.root, "caller.ts");
-  await writeFile(
-    caller,
-    `import {Effect} from ${JSON.stringify(Bun.resolveSync("effect", import.meta.dir))}; import {LocalExecutor} from ${JSON.stringify(resolve(import.meta.dir, "../src/executor/index.ts"))}; const executor = new LocalExecutor({home: ${JSON.stringify(f.home)}, workspace: ${JSON.stringify(f.workspace)}, mode: "sandbox", secrets: [], bundlePath: () => ${JSON.stringify(f.bundle)}}); await Effect.runPromise(executor.execute(${JSON.stringify(f.key)}, 1, ${JSON.stringify(f.spec)}, new AbortController().signal));`,
+  const { home, workspace, bundle, key, spec } = f;
+
+  const caller = Bun.spawn(
+    [process.execPath, "--no-env-file", resolve(import.meta.dir, "fixtures/executor-caller.ts")],
+    {
+      stdin: new Response(JSON.stringify({ home, workspace, bundle, key, spec })),
+      stdout: "ignore",
+      stderr: "ignore",
+    },
   );
 
-  const process = Bun.spawn([Bun.which("bun") ?? "bun", "--no-env-file", caller], {
-    stdout: "ignore",
-    stderr: "ignore",
+  onCleanup(async () => {
+    caller.kill();
+    await caller.exited;
   });
 
-  try {
-    await until(
-      "the worker to claim its receipt",
-      async () => (await Effect.runPromise(f.executor.lookup(f.key, 1))).kind === "started",
-    );
-    process.kill("SIGKILL");
-    await process.exited;
-    await writeFile(join(f.workspace, "release"), "release");
+  await until(
+    "the worker to claim its receipt",
+    async () => (await Effect.runPromise(f.executor.lookup(f.key, 1))).kind === "started",
+  );
+  caller.kill("SIGKILL");
+  await caller.exited;
+  await writeFile(join(f.workspace, "release"), "release");
 
-    // Execute waits for the surviving worker's receipt instead of running the attempt again.
-    expect(
-      await Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
-    ).toMatchObject({ kind: "succeeded", output: 42 });
-  } finally {
-    process.kill();
-    await process.exited;
-  }
+  // Execute waits for the surviving worker's receipt instead of running the attempt again.
+  expect(
+    await Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
+  ).toMatchObject({ kind: "succeeded", output: 42 });
 });
 
 test("only declared secrets reach bundles and receipts contain redacted results and logs", async () => {

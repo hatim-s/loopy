@@ -7,6 +7,7 @@ import {
   type FinishedLocalReceipt,
 } from "../src/executor/receipts";
 import { receiptsFixture } from "./fixtures/local-receipts";
+import { onCleanup } from "./fixtures/test-scope";
 import { waitForFile } from "./fixtures/wait";
 
 test("parent rereads completion published between its started read and confirmed child death", async () => {
@@ -29,6 +30,13 @@ test("parent rereads completion published between its started read and confirmed
     },
   );
 
+  onCleanup(async () => {
+    child.kill("SIGKILL");
+    await child.exited;
+  });
+
+  let childExit: number | undefined;
+
   class PublicationRaceReceipts extends FilesystemReceipts {
     private released = false;
 
@@ -43,7 +51,7 @@ test("parent rereads completion published between its started read and confirmed
           if (!this.released && receipt?.kind === "started") {
             this.released = true;
             yield* Effect.promise(() => Bun.write(finish, "publish"));
-            expect(yield* Effect.promise(() => child.exited)).toBe(0);
+            childExit = yield* Effect.promise(() => child.exited);
           }
 
           return receipt;
@@ -51,23 +59,19 @@ test("parent rereads completion published between its started read and confirmed
     }
   }
 
-  try {
-    await waitForFile(ready);
-    const receipts = new PublicationRaceReceipts(f.home);
+  await waitForFile(ready);
+  const receipts = new PublicationRaceReceipts(f.home);
 
-    expect(await Effect.runPromise(receipts.reconcile(f.identity))).toEqual({
+  expect(await Effect.runPromise(receipts.reconcile(f.identity))).toEqual({
+    kind: "finished",
+    source: "stored",
+    receipt: {
+      ...f.identity,
       kind: "finished",
-      source: "stored",
-      receipt: {
-        ...f.identity,
-        kind: "finished",
-        result: { kind: "succeeded", output: 42, logs: [] },
-      },
-    });
-  } finally {
-    child.kill("SIGKILL");
-    await child.exited;
-  }
+      result: { kind: "succeeded", output: 42, logs: [] },
+    },
+  });
+  expect(childExit).toBe(0);
 });
 
 test("a stored completion wins over an aborted caller", async () => {
