@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { FilesystemAuthority } from "../../sandbox/src/filesystem/authority";
-import { FilesystemResults } from "../../sandbox/src/immutable-results";
+import { FilesystemResults } from "../../sandbox/src/filesystem/results";
+import { resolveResult } from "../../sandbox/src/receipt-view";
 
 /** Read retained fixture state without opening a writer session or changing its format. */
 export function filesystemReceipt(root: string, id: string) {
@@ -15,10 +16,10 @@ export function filesystemReceipt(root: string, id: string) {
       return { ...record.plan, kind: "started" as const };
     }
 
-    const result =
-      record.result.kind === "inline"
-        ? record.result.value
-        : yield* new FilesystemResults(root, record.plan.workspace).get(record.result.ref);
+    const result = yield* resolveResult(
+      (workspace) => new FilesystemResults(root, workspace),
+      record,
+    );
 
     return { ...record.plan, kind: "finished" as const, result };
   });

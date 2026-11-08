@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { Effect } from "effect";
 import type { CommandRunner, ProcessOptions } from "../../../sandbox/src/process";
 import { runCommand } from "../../../sandbox/src/process";
@@ -114,7 +113,7 @@ export class TransportFaults {
       return yield* withWaitClient(
         Effect.sync(() => {
           const child = Bun.spawn(argv, {
-            cwd: options.cwd ?? resolve(this.config.worktree),
+            cwd: options.cwd,
             env: options.env,
             stdin: "ignore",
             stdout: "pipe",

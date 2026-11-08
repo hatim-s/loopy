@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type DockerAttemptPlan,
   decodeBoundary,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptRequest,
@@ -10,13 +11,13 @@ import {
 import { CommandExecutionError } from "@loopy/core";
 import { Effect, Result, Schema } from "effect";
 import type { SandboxConfig } from "../config";
+import { bundleFile, CONTAINER } from "../container-layout";
 import type { SandboxOperationError } from "../operations";
 import { checked, failure, io } from "../operations";
-import { type CommandRunner, runCommand } from "../process";
-import type { StartedReceipt } from "../receipts";
-import { boundedResult, failed } from "../result";
-import { DockerClient } from "./client";
-import { attemptContainerArgs, inputContainerArgs } from "./plan";
+import { failed } from "../result";
+import { stateLayout } from "../state-root";
+import type { DockerClient } from "./client";
+import { attemptContainerArgs, inputContainerArgs, inputHelperName } from "./plan";
 
 const inspectionSchema = Schema.Array(
   Schema.Struct({
@@ -32,12 +33,12 @@ const inspectionSchema = Schema.Array(
 
 export interface AttemptBackend {
   start(
-    receipt: StartedReceipt,
+    plan: DockerAttemptPlan,
     request: SandboxAttemptRequest,
     signal?: AbortSignal,
   ): Effect.Effect<SandboxExecutionResult, SandboxOperationError | CommandExecutionError>;
   recover(
-    receipt: StartedReceipt,
+    plan: DockerAttemptPlan,
     signal?: AbortSignal,
   ): Effect.Effect<SandboxExecutionResult, SandboxOperationError | CommandExecutionError>;
 }
@@ -45,25 +46,15 @@ export interface AttemptBackend {
 export class DockerBackend implements AttemptBackend {
   constructor(
     private readonly config: SandboxConfig,
-    private readonly runner: CommandRunner = runCommand,
+    private readonly docker: DockerClient,
   ) {}
 
-  private inspect(client: DockerClient, receipt: StartedReceipt) {
+  private inspect(plan: DockerAttemptPlan, signal: AbortSignal | undefined) {
     return Effect.gen({ self: this }, function* () {
-      const output = yield* client.call(["container", "inspect", receipt.container]);
+      const output = yield* this.docker.call(["container", "inspect", plan.container], { signal });
 
       if (output.exitCode !== 0) {
-        const listed = yield* client.required([
-          "container",
-          "ls",
-          "--all",
-          "--filter",
-          `name=^/${receipt.container}$`,
-          "--format",
-          "{{.Names}}",
-        ]);
-
-        if (!listed.stdout.trim()) {
+        if (!(yield* this.docker.exists(plan.container, signal))) {
           return null;
         }
 
@@ -76,11 +67,7 @@ export class DockerBackend implements AttemptBackend {
         Schema.decodeUnknownSync(inspectionSchema)(JSON.parse(output.stdout)),
       ))[0];
 
-      if (
-        !container ||
-        container.Config.Labels["loopy.sandbox.owner"] !== client.owner ||
-        container.Config.Labels["loopy.sandbox.request"] !== receipt.requestHash
-      ) {
+      if (!container || !this.docker.owns(container.Config.Labels, plan.requestHash)) {
         return yield* Effect.fail(
           failure(
             "docker",
@@ -93,16 +80,19 @@ export class DockerBackend implements AttemptBackend {
     });
   }
 
-  start(receipt: StartedReceipt, request: SandboxAttemptRequest, signal?: AbortSignal) {
+  start(plan: DockerAttemptPlan, request: SandboxAttemptRequest, signal?: AbortSignal) {
     return Effect.gen({ self: this }, function* () {
-      const client = new DockerClient(this.config, this.runner, signal);
+      const docker = this.docker;
+      const labels = docker.labels(plan.requestHash);
 
       const early = yield* Effect.acquireUseRelease(
-        io("staging directory", () => mkdtemp(join(this.config.stateRoot, "staging", "attempt-"))),
+        io("staging directory", () =>
+          mkdtemp(join(stateLayout(this.config.stateRoot).staging, "attempt-")),
+        ),
         (directory) =>
           Effect.gen({ self: this }, function* () {
             yield* io("staging", () =>
-              writeFile(join(directory, "request.json"), JSON.stringify(request.spec), {
+              writeFile(join(directory, CONTAINER.request), JSON.stringify(request.spec), {
                 mode: 0o444,
               }),
             ).pipe(Effect.uninterruptible);
@@ -110,26 +100,30 @@ export class DockerBackend implements AttemptBackend {
             for (const bundle of request.bundles) {
               yield* io("staging", () =>
                 writeFile(
-                  join(directory, `${bundle.hash}.mjs`),
+                  join(directory, bundleFile(bundle.hash)),
                   Buffer.from(bundle.bytes, "base64"),
-                  { mode: 0o444 },
+                  {
+                    mode: 0o444,
+                  },
                 ),
               ).pipe(Effect.uninterruptible);
             }
 
             // Docker cannot copy into a read-only root. A stopped helper fills a dedicated
             // volume, then the execution container mounts that input volume read-only.
-            const helper = `${receipt.container}-input`;
-            yield* client.required(inputContainerArgs(this.config, receipt, client.owner));
-            yield* client.required(["cp", `${directory}/.`, `${helper}:/input/`]);
-            yield* client.required(["rm", helper]);
-            yield* client.required(attemptContainerArgs(this.config, receipt, client.owner));
+            const helper = inputHelperName(plan);
+            yield* docker.required(inputContainerArgs(this.config, plan, labels), { signal });
+            yield* docker.required(["cp", `${directory}/.`, `${helper}:${CONTAINER.input}/`], {
+              signal,
+            });
+            yield* docker.required(["rm", helper], { signal });
+            yield* docker.required(attemptContainerArgs(this.config, plan, labels), { signal });
 
-            if (Date.now() >= receipt.deadline) {
+            if (Date.now() >= plan.deadline) {
               return failed("execution", "Attempt timed out before its container started.");
             }
 
-            yield* client.required(["start", receipt.container]);
+            yield* docker.required(["start", plan.container], { signal });
           }),
         (directory) =>
           Effect.gen({ self: this }, function* () {
@@ -141,13 +135,13 @@ export class DockerBackend implements AttemptBackend {
         return early;
       }
 
-      return yield* this.recover(receipt, signal);
+      return yield* this.recover(plan, signal);
     });
   }
 
-  private waitForWorker(client: DockerClient, receipt: StartedReceipt) {
+  private waitForWorker(plan: DockerAttemptPlan, signal: AbortSignal | undefined) {
     return Effect.gen({ self: this }, function* () {
-      const remaining = receipt.deadline - Date.now();
+      const remaining = plan.deadline - Date.now();
 
       const waited = yield* (
         remaining <= 0
@@ -159,7 +153,11 @@ export class DockerBackend implements AttemptBackend {
                 cause: undefined,
               }),
             )
-          : client.required(["wait", receipt.container], { timeoutMs: remaining, maxBytes: 1024 })
+          : this.docker.required(["wait", plan.container], {
+              timeoutMs: remaining,
+              maxBytes: 1024,
+              signal,
+            })
       ).pipe(Effect.result);
 
       if (Result.isFailure(waited)) {
@@ -169,13 +167,13 @@ export class DockerBackend implements AttemptBackend {
           return yield* Effect.fail(waited.failure);
         }
 
-        const current = yield* this.inspect(client, receipt);
+        const current = yield* this.inspect(plan, signal);
 
         if (current?.Running) {
-          yield* client.required(["kill", receipt.container]);
+          yield* this.docker.required(["kill", plan.container], { signal });
         }
 
-        const stopped = yield* this.inspect(client, receipt);
+        const stopped = yield* this.inspect(plan, signal);
 
         if (stopped?.Running) {
           return yield* Effect.fail(
@@ -190,16 +188,16 @@ export class DockerBackend implements AttemptBackend {
     });
   }
 
-  recover(receipt: StartedReceipt, signal?: AbortSignal) {
+  recover(plan: DockerAttemptPlan, signal?: AbortSignal) {
     return Effect.gen({ self: this }, function* () {
-      const client = new DockerClient(this.config, this.runner, signal);
-      const state = yield* this.inspect(client, receipt);
+      const docker = this.docker;
+      const state = yield* this.inspect(plan, signal);
 
       if (state?.Status === "created") {
         // Removing a never-started container also fences a Docker start whose acknowledgement was lost.
-        yield* client.required(["rm", "--force", receipt.container]);
+        yield* docker.required(["rm", "--force", plan.container], { signal });
 
-        if ((yield* this.inspect(client, receipt)) !== null) {
+        if ((yield* this.inspect(plan, signal)) !== null) {
           return yield* Effect.fail(
             failure("docker", new Error("Attempt container removal is not yet confirmed.")),
           );
@@ -213,11 +211,11 @@ export class DockerBackend implements AttemptBackend {
         );
       }
 
-      if (state.Running && (yield* this.waitForWorker(client, receipt)) === "timed_out") {
+      if (state.Running && (yield* this.waitForWorker(plan, signal)) === "timed_out") {
         return failed("execution", "Attempt timed out. Its owned container was killed.");
       }
 
-      const final = yield* this.inspect(client, receipt);
+      const final = yield* this.inspect(plan, signal);
 
       if (final?.Running) {
         return yield* Effect.fail(
@@ -233,13 +231,14 @@ export class DockerBackend implements AttemptBackend {
       }
 
       const terminal = yield* Effect.gen(function* () {
-        const output = yield* client.required(["logs", receipt.container], {
+        const output = yield* docker.required(["logs", plan.container], {
           timeoutMs: 30_000,
           maxBytes: SANDBOX_MAX_CAPTURE_BYTES,
+          signal,
         });
 
         return yield* checked("worker result", () =>
-          boundedResult(decodeBoundary(sandboxExecutionResultSchema)(JSON.parse(output.stdout))),
+          decodeBoundary(sandboxExecutionResultSchema)(JSON.parse(output.stdout)),
         );
       }).pipe(Effect.result);
 

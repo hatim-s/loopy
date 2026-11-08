@@ -3,7 +3,8 @@ import { readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Result, Schema } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
-import { resultReference } from "../../../apps/sandbox/src/immutable-results";
+import { resultReference } from "../../../apps/sandbox/src/filesystem/results";
+import { stateLayout } from "../../../apps/sandbox/src/state-root";
 import { AuthorityError } from "../../contract/src/sandbox-journal";
 import type { AuthorityOutput } from "../../contract/src/sandbox-journal-rpc";
 import { authorityCommandSchema } from "../../contract/src/sandbox-journal-rpc";
@@ -55,7 +56,7 @@ test("filesystem authority deduplicates, rejects stale/changed requests and seal
   });
 
   const before = await readFile(
-    join(config.stateRoot, "receipts", `${input.plan.id}.json`),
+    join(stateLayout(config.stateRoot).receipts, `${input.plan.id}.json`),
     "utf8",
   );
 
@@ -66,9 +67,9 @@ test("filesystem authority deduplicates, rejects stale/changed requests and seal
   expect(next.epoch).toBe(session.epoch);
   expect(next.nonce).not.toBe(session.nonce);
   expect((await run(second.read(input.plan.id)))?.session).toEqual(session);
-  expect(await readFile(join(config.stateRoot, "receipts", `${input.plan.id}.json`), "utf8")).toBe(
-    before,
-  );
+  expect(
+    await readFile(join(stateLayout(config.stateRoot).receipts, `${input.plan.id}.json`), "utf8"),
+  ).toBe(before);
 });
 
 test("export guards persist, block only their volume and release older guards under the current caller session", async () => {
@@ -125,7 +126,7 @@ test("legacy receipts decode without rewriting, missing/corrupt results never be
   const { authority, config, plan, resultsFor } = await fixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "session" }));
   const legacy = { ...plan(), kind: "finished", result: successful };
-  const path = join(config.stateRoot, "receipts", `${legacy.id}.json`);
+  const path = join(stateLayout(config.stateRoot).receipts, `${legacy.id}.json`);
   const content = JSON.stringify(legacy);
   await writeFile(path, content);
   const decoded = await run(authority.read(legacy.id));
@@ -185,12 +186,12 @@ test("legacy receipts decode without rewriting, missing/corrupt results never be
   expect((await run(authority.read(plan(2).id)))?.kind).toBe("started");
   await run(resultsFor("fixture").put(successful));
 
-  const resultFile = (await readdir(join(config.stateRoot, "results"))).find((name) =>
+  const resultFile = (await readdir(stateLayout(config.stateRoot).results)).find((name) =>
     name.endsWith(`${missingRef.sha256}.json`),
   );
 
   expect(resultFile).toBeDefined();
-  await writeFile(join(config.stateRoot, "results", resultFile ?? "unexpected"), "{}");
+  await writeFile(join(stateLayout(config.stateRoot).results, resultFile ?? "unexpected"), "{}");
   await expect(run(resultsFor("fixture").get(missingRef))).rejects.toThrow("immutable");
   await writeFile(path, "{malformed");
   await expect(run(authority.read(legacy.id))).rejects.toThrow();
@@ -237,7 +238,7 @@ test("export-only recovery filters exact volume metadata without reading receipt
 
   // Export discovery reads metadata. Cleanup still must resolve and validate the attempt.
   for (const guard of expected) {
-    await unlink(join(config.stateRoot, "receipts", `${guard.attemptId}.json`));
+    await unlink(join(stateLayout(config.stateRoot).receipts, `${guard.attemptId}.json`));
   }
 
   for (const target of expected) {

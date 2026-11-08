@@ -19,9 +19,9 @@ const config = decodeBoundary(sandboxConfigSchema)({
   port: 0,
 });
 
-const argv = ["docker", "--context", "fixture", "info"];
+const argv: [string, ...string[]] = ["docker", "--context", "fixture", "info"];
 
-const options = { timeoutMs: 1000 };
+const options = { cwd: "/synthetic/worktree", env: {}, timeoutMs: 1000 };
 
 test("typed runner failures retain their cause and release active call accounting", async () => {
   const failure = new CommandExecutionError({

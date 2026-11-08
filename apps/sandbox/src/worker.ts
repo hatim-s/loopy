@@ -10,6 +10,7 @@ import { CommandExecutionError, durationMs, type Json } from "@loopy/core";
 import { bundleResult } from "@loopy/runtime/executor/protocol";
 import { renderCommand } from "@loopy/runtime/local/execution-host";
 import { Effect } from "effect";
+import { bundleFile, CONTAINER, containerEnvironment } from "./container-layout";
 import { io } from "./operations";
 import { runCommand } from "./process";
 import { boundedResult, failed } from "./result";
@@ -17,15 +18,14 @@ import { boundedResult, failed } from "./result";
 const environment = {
   PATH: "/usr/local/bin:/usr/bin:/bin",
   LANG: "C.UTF-8",
-  HOME: "/workspace",
-  TMPDIR: "/tmp",
+  ...containerEnvironment,
 };
 
 function bundle(hash: string, input: Json, timeoutMs: number) {
   return Effect.gen(function* () {
-    const raw = yield* runCommand(["bun", `/input/${hash}.mjs`], {
+    const raw = yield* runCommand(["bun", `${CONTAINER.input}/${bundleFile(hash)}`], {
       stdin: JSON.stringify(input),
-      cwd: "/workspace",
+      cwd: CONTAINER.workspace,
       env: environment,
       timeoutMs,
       maxBytes: SANDBOX_MAX_CAPTURE_BYTES,
@@ -37,9 +37,11 @@ function bundle(hash: string, input: Json, timeoutMs: number) {
 
 function command(spec: Extract<SandboxExecutionSpec, { kind: "command" }>) {
   return Effect.gen(function* () {
-    const cwd = yield* io("worker cwd", () => realpath(resolve("/workspace", spec.cwd ?? ".")));
+    const cwd = yield* io("worker cwd", () =>
+      realpath(resolve(CONTAINER.workspace, spec.cwd ?? ".")),
+    );
 
-    if (cwd !== "/workspace" && !cwd.startsWith("/workspace/")) {
+    if (cwd !== CONTAINER.workspace && !cwd.startsWith(`${CONTAINER.workspace}/`)) {
       return failed("validation", "Command cwd must resolve inside /workspace.");
     }
 
@@ -84,7 +86,7 @@ function command(spec: Extract<SandboxExecutionSpec, { kind: "command" }>) {
   });
 }
 
-export function executeSpec(spec: SandboxExecutionSpec) {
+function executeSpec(spec: SandboxExecutionSpec) {
   return (
     spec.kind === "code" ? bundle(spec.bundleHash, spec.input, spec.timeoutMs) : command(spec)
   ).pipe(
@@ -104,7 +106,7 @@ export function executeSpec(spec: SandboxExecutionSpec) {
 
 if (import.meta.main) {
   const spec = decodeBoundary(sandboxExecutionSpecSchema)(
-    await Bun.file("/input/request.json").json(),
+    await Bun.file(`${CONTAINER.input}/${CONTAINER.request}`).json(),
   );
 
   process.stdout.write(JSON.stringify(await Effect.runPromise(executeSpec(spec))));

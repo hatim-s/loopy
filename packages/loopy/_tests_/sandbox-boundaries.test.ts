@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { readdir, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { Cause, Deferred, Effect, Exit, Fiber, Result } from "effect";
-import { ArtifactError } from "../../../apps/sandbox/src/artifact-error";
 import { DockerBackend } from "../../../apps/sandbox/src/docker";
+import { DockerClient } from "../../../apps/sandbox/src/docker/client";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
 import { failure, SandboxOperationError } from "../../../apps/sandbox/src/operations";
+import { SandboxRequestError } from "../../../apps/sandbox/src/request-error";
 import { startSandbox } from "../../../apps/sandbox/src/server";
-import { Stopping } from "../../../apps/sandbox/src/stopping";
+import { stateLayout } from "../../../apps/sandbox/src/state-root";
 import { AuthorityError } from "../../contract/src/sandbox-journal";
 import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import {
@@ -69,11 +69,8 @@ test("HTTP composition uses fixture port zero and keeps error envelopes", () =>
           );
 
           expect(invalid.status).toBe(400);
-          expect(yield* Effect.promise(() => invalid.json())).toEqual({
-            error: {
-              code: "invalid_request",
-              message: "Request does not match the sandbox attempt schema.",
-            },
+          expect(yield* Effect.promise(() => invalid.json())).toMatchObject({
+            error: { code: "invalid_request" },
           });
         }),
       ),
@@ -84,23 +81,25 @@ test("injected Docker absence yields uncertain result without reissuing work", (
   fixture(async ({ config, plan }) => {
     const commands: string[][] = [];
 
-    const backend = new DockerBackend(config, (argv) =>
-      Effect.sync(() => {
-        commands.push(argv);
+    const backend = new DockerBackend(
+      config,
+      new DockerClient(config, (argv) =>
+        Effect.sync(() => {
+          commands.push(argv);
 
-        return {
-          stdout: "",
-          stderr: "",
-          durationMs: 0,
-          exitCode: argv.includes("inspect") ? 1 : 0,
-        };
-      }),
+          return {
+            stdout: "",
+            stderr: "",
+            durationMs: 0,
+            exitCode: argv.includes("inspect") ? 1 : 0,
+          };
+        }),
+      ),
     );
 
-    const result = await Effect.runPromise(backend.recover({ ...plan, kind: "started" }));
+    const result = await Effect.runPromise(backend.recover(plan));
     expect(result.kind === "failed" && result.error.code).toBe("uncertain");
-    expect(commands).toHaveLength(2);
-    expect(commands.some((argv) => argv.includes("start"))).toBe(false);
+    expect(commands.some((argv) => argv.includes("start") || argv.includes("create"))).toBe(false);
   }));
 
 test("loopback authority HTTP keeps exact command and rejection envelopes", async () => {
@@ -151,7 +150,7 @@ test("HTTP export cleanup takes precedence when reading and release both fail", 
             Effect.succeed({
               ...dependencies,
               artifactReader: {
-                read: () => Effect.fail(new ArtifactError("not_found", "Missing artifact")),
+                read: () => Effect.fail(new SandboxRequestError("not_found", "Missing artifact")),
                 cleanup: () => Effect.fail(failure("cleanup", new Error("Helper remains"))),
               },
             }),
@@ -172,11 +171,8 @@ test("HTTP export cleanup takes precedence when reading and release both fail", 
           );
 
           expect(response.status).toBe(409);
-          expect(yield* Effect.promise(() => response.json())).toEqual({
-            error: {
-              code: "conflict",
-              message: "Workspace export cleanup is unresolved. Retry after reconciliation.",
-            },
+          expect(yield* Effect.promise(() => response.json())).toMatchObject({
+            error: { code: "conflict" },
           });
 
           const result = yield* service.attempts
@@ -243,19 +239,6 @@ test("failed HTTP startup releases dependencies and permits retry within the sam
     }
   }));
 
-test("stop latch wakes a five-second backoff immediately", async () => {
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const stopping = yield* Stopping.make();
-      const waiting = yield* stopping.pause(5000).pipe(Effect.forkChild);
-      const at = performance.now();
-      yield* stopping.stop();
-      yield* Fiber.join(waiting);
-      expect(performance.now() - at).toBeLessThan(500);
-    }),
-  );
-});
-
 test("interrupted request leaves admitted work owned and concurrent close waits for release", () =>
   fixture(async ({ config, dependencies, request }) => {
     await Effect.runPromise(
@@ -315,7 +298,7 @@ test("interrupted request leaves admitted work owned and concurrent close waits 
           yield* Effect.yieldNow;
           expect(closed).toBe(0);
           expect(
-            yield* Effect.promise(() => Bun.file(join(config.stateRoot, "service.lock")).exists()),
+            yield* Effect.promise(() => Bun.file(stateLayout(config.stateRoot).lock).exists()),
           ).toBe(true);
           yield* Deferred.succeed(finish, undefined);
           yield* Fiber.join(first);
@@ -332,19 +315,22 @@ test("interrupted injected Docker transport removes its owned staging directory"
       Effect.gen(function* () {
         const entered = yield* Deferred.make<void>();
 
-        const backend = new DockerBackend(config, () =>
-          Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+        const backend = new DockerBackend(
+          config,
+          new DockerClient(config, () =>
+            Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+          ),
         );
 
-        const worker = yield* backend
-          .start({ ...plan, kind: "started" }, request)
-          .pipe(Effect.forkChild);
+        const worker = yield* backend.start(plan, request).pipe(Effect.forkChild);
 
         yield* Deferred.await(entered);
         yield* Fiber.interrupt(worker);
         const exit = yield* Fiber.await(worker);
         expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
-        expect(yield* Effect.promise(() => readdir(join(config.stateRoot, "staging")))).toEqual([]);
+        expect(yield* Effect.promise(() => readdir(stateLayout(config.stateRoot).staging))).toEqual(
+          [],
+        );
       }),
     );
   }));

@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AttemptRecord, ExportRecord } from "@loopy/contract";
+import { errnoCode } from "@loopy/core";
 
 export async function syncDirectory(path: string) {
   const directory = await open(path, "r");
@@ -14,8 +15,12 @@ export async function syncDirectory(path: string) {
   }
 }
 
-export function missing(cause: unknown) {
-  return cause instanceof Error && "code" in cause && cause.code === "ENOENT";
+export async function ignoreMissing(operation: Promise<void>) {
+  await operation.catch((cause: unknown) => {
+    if (errnoCode(cause) !== "ENOENT") {
+      throw cause;
+    }
+  });
 }
 
 export async function readBytes(path: string, limit = 2 * 1024 * 1024) {
@@ -26,7 +31,9 @@ export async function readBytes(path: string, limit = 2 * 1024 * 1024) {
       const stat = await file.stat();
 
       if (!stat.isFile() || stat.size > limit) {
-        throw new Error("Sandbox journal requires a bounded regular file.");
+        throw new Error(
+          `Sandbox state file ${path} must be a regular file of at most ${limit} bytes.`,
+        );
       }
 
       return await file.readFile();
@@ -34,7 +41,7 @@ export async function readBytes(path: string, limit = 2 * 1024 * 1024) {
       await file.close();
     }
   } catch (cause) {
-    if (missing(cause)) {
+    if (errnoCode(cause) === "ENOENT") {
       return null;
     }
 
@@ -57,10 +64,6 @@ export async function writeAtomic(path: string, value: AttemptRecord | ExportRec
     await rename(temporary, path);
     await syncDirectory(dirname(path));
   } finally {
-    await unlink(temporary).catch((cause: unknown) => {
-      if (!missing(cause)) {
-        throw cause;
-      }
-    });
+    await ignoreMissing(unlink(temporary));
   }
 }

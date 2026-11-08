@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { decodeBoundary, sandboxAttemptRequestSchema } from "@loopy/contract";
 import { Cause, Effect, Exit } from "effect";
+import { DockerArtifacts } from "../../../sandbox/src/artifacts";
 import { Attempts } from "../../../sandbox/src/attempt";
 import { DockerBackend } from "../../../sandbox/src/docker";
-import { filesystemDependencies } from "../../../sandbox/src/filesystem";
+import { DockerClient } from "../../../sandbox/src/docker/client";
+import { filesystemStorage } from "../../../sandbox/src/filesystem";
 import { fixtureFailure } from "../fixture-effect";
 import { registerFixtureCleanup } from "../fixture-lifetime";
 import { assert, equal } from "../journey/client";
@@ -50,13 +52,17 @@ export function scenario(config: Config, mode: FaultMode) {
     Effect.gen(function* () {
       config.maxTimeoutMs = mode === "kill_wait_client" ? 20_000 : 12_000;
       const faults = new TransportFaults(config, mode);
-      const backend = () => new DockerBackend(config, faults.runner);
+
+      const dependencies = () => () =>
+        Effect.sync(() => ({
+          ...filesystemStorage(config.stateRoot),
+          backend: new DockerBackend(config, new DockerClient(config, faults.runner)),
+          artifactReader: new DockerArtifacts(config, new DockerClient(config)),
+        }));
+
       const input = request(mode);
 
-      let service = yield* Attempts.open(
-        config,
-        filesystemDependencies(config, { backend: backend() }),
-      );
+      let service = yield* Attempts.open(config, dependencies());
 
       const initialService = service;
       let cleanupEvidence: Effect.Success<ReturnType<typeof cleanup>> | undefined;
@@ -124,10 +130,7 @@ export function scenario(config: Config, mode: FaultMode) {
             faults.restore();
             reopenedAt = Date.now();
             assert(reopenedAt < original.deadline, "reopened_after_deadline");
-            service = yield* Attempts.open(
-              config,
-              filesystemDependencies(config, { backend: backend() }),
-            );
+            service = yield* Attempts.open(config, dependencies());
             assert(service !== initialService, "service_was_not_reconstructed");
           } else {
             faults.restore();

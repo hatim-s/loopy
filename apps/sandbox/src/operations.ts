@@ -5,8 +5,7 @@ import type {
 } from "@loopy/contract";
 import type { CommandExecutionError } from "@loopy/core";
 import { Data, Effect } from "effect";
-import type { AttemptConflict, InvalidAttempt } from "./admission";
-import type { ArtifactError, ExportCleanupError } from "./artifact-error";
+import type { ExportCleanupError, SandboxRequestError } from "./request-error";
 
 export class SandboxOperationError extends Data.TaggedError("SandboxOperationError")<{
   operation: string;
@@ -19,9 +18,7 @@ export type SandboxFailure =
   | SandboxOperationError
   | AuthorityError
   | ExportCleanupError
-  | ArtifactError
-  | AttemptConflict
-  | InvalidAttempt;
+  | SandboxRequestError;
 
 type Native<T, E> = {
   [K in keyof T]: T[K] extends (...args: infer A) => Promise<infer B>
@@ -47,7 +44,6 @@ export function failure(
     : new SandboxOperationError({ operation, cause, message });
 }
 
-// These adapters are for individual filesystem and codec boundaries.
 export const io = <A>(operation: string, run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => failure(operation, cause) });
 

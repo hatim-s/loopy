@@ -6,19 +6,9 @@ import {
   type SandboxAttemptRequest,
 } from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
-import { Data } from "effect";
-
-export class InvalidAttempt extends Data.TaggedError("InvalidAttempt")<{ message: string }> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
-
-export class AttemptConflict extends Data.TaggedError("AttemptConflict")<{ message: string }> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+import { Effect } from "effect";
+import { verifiedBytes } from "./bytes";
+import { SandboxRequestError } from "./request-error";
 
 export function attemptHash(
   value:
@@ -34,32 +24,40 @@ export function attemptId(root: string, identity: SandboxAttemptIdentity) {
 }
 
 export function validateBundles(request: SandboxAttemptRequest) {
-  const required =
-    request.spec.kind === "code"
-      ? [request.spec.bundleHash]
-      : request.spec.parse
-        ? [request.spec.parse.bundleHash]
-        : [];
+  return Effect.gen(function* () {
+    const required =
+      request.spec.kind === "code"
+        ? [request.spec.bundleHash]
+        : request.spec.parse
+          ? [request.spec.parse.bundleHash]
+          : [];
 
-  const supplied = new Set<string>();
+    const supplied = new Set<string>();
 
-  for (const bundle of request.bundles) {
-    const bytes = Buffer.from(bundle.bytes, "base64");
+    for (const bundle of request.bundles) {
+      const bytes = verifiedBytes(bundle.bytes, bundle.hash);
 
-    if (
-      bytes.byteLength > SANDBOX_MAX_BUNDLE_BYTES ||
-      supplied.has(bundle.hash) ||
-      !required.includes(bundle.hash) ||
-      bytes.toString("base64") !== bundle.bytes ||
-      createHash("sha256").update(bytes).digest("hex") !== bundle.hash
-    ) {
-      throw new InvalidAttempt("Supply each required bundle once with matching SHA-256 bytes.");
+      if (
+        bytes === null ||
+        bytes.byteLength > SANDBOX_MAX_BUNDLE_BYTES ||
+        supplied.has(bundle.hash) ||
+        !required.includes(bundle.hash)
+      ) {
+        return yield* Effect.fail(
+          new SandboxRequestError(
+            "invalid_request",
+            "Supply each required bundle once with matching SHA-256 bytes.",
+          ),
+        );
+      }
+
+      supplied.add(bundle.hash);
     }
 
-    supplied.add(bundle.hash);
-  }
-
-  if (required.some((value) => !supplied.has(value))) {
-    throw new InvalidAttempt("A required execution bundle is missing.");
-  }
+    if (required.some((value) => !supplied.has(value))) {
+      return yield* Effect.fail(
+        new SandboxRequestError("invalid_request", "A required execution bundle is missing."),
+      );
+    }
+  });
 }

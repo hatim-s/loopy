@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
-import { join } from "node:path";
 import { Effect } from "effect";
 import type { AttemptDependencies } from "../../../apps/sandbox/src/attempt/dependencies";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
+import { stateLayout } from "../../../apps/sandbox/src/state-root";
 import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import {
   artifactReader,
@@ -107,14 +107,14 @@ test("server close aborts an outage-bound admission handler and successor only r
 
   try {
     await within(authority.reconciling.promise, "POST handler did not reach reconciliation");
-    expect(await Bun.file(join(fixture.config.stateRoot, "service.lock")).exists()).toBe(true);
+    expect(await Bun.file(stateLayout(fixture.config.stateRoot).lock).exists()).toBe(true);
     closing = run(service.close());
     await within(closing, "Server shutdown waited for unavailable admission reconciliation");
     await within(pending, "HTTP request remained pending after server close");
     expect(authority.unavailable).toBe(true);
     expect(starts).toBe(0);
     expect(dependencyCloses).toBe(1);
-    expect(await Bun.file(join(fixture.config.stateRoot, "service.lock")).exists()).toBe(false);
+    expect(await Bun.file(stateLayout(fixture.config.stateRoot).lock).exists()).toBe(false);
 
     const successor = await openSandbox(fixture.config, () =>
       Effect.promise(async () => ({
@@ -137,7 +137,7 @@ test("server close aborts an outage-bound admission handler and successor only r
       await run(successor.close());
     }
   } finally {
-    // Drain even when the original ordering is temporarily restored as a negative control.
+    // Close every owner even when an assertion above failed, so the fixture root can be removed.
     await run(service.attempts.close());
     await closing;
     await run(service.close());
@@ -225,17 +225,17 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
     await expect(run(service.attempts.start({ ...fixture.request, attempt: 2 }))).rejects.toThrow(
       "stopping",
     );
-    expect(await Bun.file(join(fixture.config.stateRoot, "service.lock")).exists()).toBe(true);
+    expect(await Bun.file(stateLayout(fixture.config.stateRoot).lock).exists()).toBe(true);
     expect(dependencyCloses).toBe(0);
     finish.resolve();
     await within(dependenciesClosing.promise, "Shutdown did not drain before dependency close");
     expect(drained).toBe(true);
-    expect(await Bun.file(join(fixture.config.stateRoot, "service.lock")).exists()).toBe(true);
+    expect(await Bun.file(stateLayout(fixture.config.stateRoot).lock).exists()).toBe(true);
     releaseDependency.resolve();
     await within(closing, "Shutdown did not finish after safe drain");
     await request;
     expect(dependencyCloses).toBe(1);
-    expect(await Bun.file(join(fixture.config.stateRoot, "service.lock")).exists()).toBe(false);
+    expect(await Bun.file(stateLayout(fixture.config.stateRoot).lock).exists()).toBe(false);
   } finally {
     finish.resolve();
     releaseDependency.resolve();

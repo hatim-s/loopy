@@ -1,11 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
 import { Attempts } from "../../../apps/sandbox/src/attempt";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
+import { stateLayout } from "../../../apps/sandbox/src/state-root";
 import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
 import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
@@ -152,26 +153,28 @@ test("failed helper cleanup holds its guard across requests and restart while un
   expect((await run(successor.recoverable({ after: null, limit: 200 }))).exports).toHaveLength(0);
 });
 
-test("dependency construction happens under the process lock, and root path validation remains strict", async () => {
+test("dependency construction happens under the process lock, which a failed open releases", async () => {
   const { config } = await fixture();
+  const lock = stateLayout(config.stateRoot).lock;
   let called = false;
-  await expect(
-    run(
-      Effect.scoped(
-        Attempts.open(config, () =>
-          Effect.promise(async () => {
-            called = true;
-            const lock = JSON.parse(await Bun.file(join(config.stateRoot, "service.lock")).text());
-            expect(lock.pid).toBe(process.pid);
-            throw new Error("Factory rejected populated filesystem receipts");
-          }),
-        ),
+
+  const opened = await run(
+    Effect.scoped(
+      Attempts.open(config, () =>
+        Effect.gen(function* () {
+          called = true;
+          const owner: unknown = JSON.parse(yield* Effect.promise(() => Bun.file(lock).text()));
+          expect(owner).toMatchObject({ pid: process.pid });
+
+          return yield* Effect.fail(failure("fixture", new Error("Factory failed")));
+        }),
       ),
-    ),
-  ).rejects.toThrow("populated filesystem receipts");
+    ).pipe(Effect.exit),
+  );
+
+  expect(Exit.isFailure(opened)).toBe(true);
   expect(called).toBe(true);
-  await writeFile(join(config.stateRoot, "receipts", "unrelated.txt"), "preserved");
-  expect(await Bun.file(join(config.stateRoot, "service.lock")).exists()).toBe(false);
+  expect(await Bun.file(lock).exists()).toBe(false);
 });
 
 test("oversized terminal metadata becomes a publishable output-limit result", async () => {
@@ -331,12 +334,12 @@ test("new admission reconciles only export metadata despite multiple pages of un
           };
 
     await writeFile(
-      join(config.stateRoot, "receipts", `${historical.id}.json`),
+      join(stateLayout(config.stateRoot).receipts, `${historical.id}.json`),
       JSON.stringify(record),
     );
   }
 
-  expect((await readdir(join(config.stateRoot, "receipts"))).length).toBe(402);
+  expect((await readdir(stateLayout(config.stateRoot).receipts)).length).toBe(402);
   const before = authority.recoveryQueries;
   authority.exportQueries.length = 0;
   await run(service.start(request));

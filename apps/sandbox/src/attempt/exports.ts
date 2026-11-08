@@ -1,35 +1,39 @@
 import { randomUUID } from "node:crypto";
-import type { AuthorityOutput, SandboxArtifactRequest } from "@loopy/contract";
-import {
-  type AttemptRecord,
-  type AuthoritySession,
-  artifactHelperName,
-  type ExportRecord,
+import type {
+  AttemptRecord,
+  AuthoritySession,
+  ExportRecord,
+  SandboxArtifactRequest,
 } from "@loopy/contract";
 import { Effect, Result, Semaphore } from "effect";
-import { ArtifactError, ExportCleanupError } from "../artifact-error";
 import type { ArtifactReader } from "../artifacts";
-import type { SandboxAttemptAuthority } from "../operations";
+import type { SandboxAttemptAuthority, SandboxFailure } from "../operations";
+import { ExportCleanupError, SandboxRequestError } from "../request-error";
 
-export function recoveryRecords(authority: SandboxAttemptAuthority) {
+function collectPages<Page extends { next: string | null }>(
+  fetch: (after: string | null) => Effect.Effect<Page, SandboxFailure>,
+) {
   return Effect.gen(function* () {
-    const attempts: Extract<AttemptRecord, { kind: "started" }>[] = [];
-    const exports: ExportRecord[] = [];
+    const pages: Page[] = [];
     let after: string | null = null;
 
     do {
-      const page: AuthorityOutput<"recoverable"> = yield* authority.recoverable({
-        after,
-        limit: 200,
-      });
-
-      attempts.push(...page.attempts);
-      exports.push(...page.exports);
+      const page: Page = yield* fetch(after);
+      pages.push(page);
       after = page.next;
     } while (after !== null);
 
-    return { attempts, exports };
+    return pages;
   });
+}
+
+export function recoveryRecords(authority: SandboxAttemptAuthority) {
+  return collectPages((after) => authority.recoverable({ after, limit: 200 })).pipe(
+    Effect.map((pages) => ({
+      attempts: pages.flatMap((page) => page.attempts),
+      exports: pages.flatMap((page) => page.exports),
+    })),
+  );
 }
 
 export class AttemptExports {
@@ -44,44 +48,31 @@ export class AttemptExports {
     return Effect.gen({ self: this }, function* () {
       const record = yield* this.authority.read(guard.attemptId);
 
-      if (
-        !record ||
-        record.plan.volume !== guard.volume ||
-        guard.helper !== artifactHelperName(record.plan.id)
-      ) {
+      if (!record || record.plan.volume !== guard.volume) {
         return yield* Effect.fail(
-          new ArtifactError(
+          new SandboxRequestError(
             "conflict",
             "Export guard does not match its attempt. Inspect durable state.",
           ),
         );
       }
 
-      yield* this.reader.cleanup(record.plan, guard.helper);
+      yield* this.reader.cleanup(record.plan);
       yield* this.authority.endExport({ session: this.session, token: guard.token });
     });
   }
   reconcile(volume: string) {
     return Effect.gen({ self: this }, function* () {
-      const exports: ExportRecord[] = [];
-      let after: string | null = null;
+      const pages = yield* collectPages((after) =>
+        this.authority.exportGuards({ after, limit: 200, volume }),
+      );
 
-      do {
-        const page: AuthorityOutput<"exportGuards"> = yield* this.authority.exportGuards({
-          after,
-          limit: 200,
-          volume,
-        });
-
-        exports.push(...page.exports);
-        after = page.next;
-      } while (after !== null);
+      const exports = pages.flatMap((page) => page.exports);
 
       if (yield* this.reconcileGuards(exports)) {
         return yield* Effect.fail(
-          new ArtifactError(
-            "conflict",
-            "Workspace export cleanup is unresolved. Retry after reconciliation.",
+          new ExportCleanupError(
+            new Error(`Export guards for volume ${volume} remain unreleased.`),
           ),
         );
       }
@@ -124,7 +115,7 @@ export class AttemptExports {
 
         if (reply.kind === "rejected") {
           return yield* Effect.fail(
-            new ArtifactError("conflict", `Workspace export was rejected: ${reply.code}.`),
+            new SandboxRequestError("conflict", `Workspace export was rejected: ${reply.code}.`),
           );
         }
 
