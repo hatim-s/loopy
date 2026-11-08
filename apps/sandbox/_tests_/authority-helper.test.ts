@@ -4,7 +4,7 @@ import { artifactHelperName } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { DockerArtifacts } from "../src/artifacts";
 import { DockerClient } from "../src/docker/client";
-import { ownerOf } from "../src/docker/identity";
+import { ownerOf, SANDBOX_LABELS } from "../src/docker/identity";
 import type { CommandRunner } from "../src/process";
 import { authorityFixture } from "./fixtures/authority";
 import { run } from "./fixtures/run";
@@ -32,9 +32,9 @@ test("helper cleanup checks exact name and labels, then verifies absence after r
           {
             Config: {
               Labels: {
-                "loopy.sandbox.owner": wrongOwner ? "foreign" : ownerOf(config.stateRoot),
-                "loopy.sandbox.request": receipt.requestHash,
-                "loopy.sandbox.role": "artifact",
+                [SANDBOX_LABELS.owner]: wrongOwner ? "foreign" : ownerOf(config.stateRoot),
+                [SANDBOX_LABELS.request]: receipt.requestHash,
+                [SANDBOX_LABELS.role]: "artifact",
               },
             },
           },

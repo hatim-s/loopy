@@ -7,7 +7,13 @@ import { Effect } from "effect";
 import { FilesystemAuthority } from "../src/filesystem/authority";
 import { failure } from "../src/operations";
 import { stateLayout } from "../src/state-root";
-import { artifactReader, authorityFixture, successful, uncertain } from "./fixtures/authority";
+import {
+  artifactReader,
+  authorityFixture,
+  CountingBackend,
+  successful,
+  uncertain,
+} from "./fixtures/authority";
 import { openAttemptsWith, run } from "./fixtures/run";
 
 class FaultAuthority extends FilesystemAuthority {
@@ -58,39 +64,25 @@ test("lost admission acknowledgement and unavailable resolving reads retain one 
   const { config, request, resultsFor } = await authorityFixture();
   const authority = new FaultAuthority(config.stateRoot);
   const complete = Promise.withResolvers<ExecutionResult>();
-  let starts = 0;
-  let recoveries = 0;
+  const counting = new CountingBackend(Effect.promise(() => complete.promise));
 
   const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,
     close: () => authority.close(),
-    backend: {
-      start: () =>
-        Effect.gen(function* () {
-          starts++;
-
-          return yield* Effect.promise(() => complete.promise);
-        }),
-      recover: () =>
-        Effect.gen(function* () {
-          recoveries++;
-
-          return uncertain;
-        }),
-    },
+    backend: counting,
   });
 
   authority.drop = true;
   const first = run(service.start(request));
   await authority.dropped.promise;
   const second = run(service.start(request));
-  expect(starts).toBe(0);
+  expect(counting.starts).toBe(0);
   authority.unavailable = false;
   expect(await first).toEqual({ kind: "started" });
   expect(await second).toEqual({ kind: "started" });
-  expect(starts).toBe(1);
+  expect(counting.starts).toBe(1);
   const reads = authority.reads;
 
   for (let index = 0; index < 20; index++) {
@@ -101,8 +93,8 @@ test("lost admission acknowledgement and unavailable resolving reads retain one 
   complete.resolve(successful);
   await run(service.drain());
   expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: successful });
-  expect(starts).toBe(1);
-  expect(recoveries).toBe(0);
+  expect(counting.starts).toBe(1);
+  expect(counting.recoveries).toBe(0);
   expect(
     (await readdir(stateLayout(config.stateRoot).receipts)).filter((name) =>
       name.endsWith(".json"),
@@ -113,52 +105,28 @@ test("lost admission acknowledgement and unavailable resolving reads retain one 
 test("pre-commit failure has no backend effect and the next request can admit normally", async () => {
   const { config, request, resultsFor } = await authorityFixture();
   const authority = new FaultAuthority(config.stateRoot);
-  let starts = 0;
+  const counting = new CountingBackend();
 
   const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,
-    backend: {
-      start: () =>
-        Effect.gen(function* () {
-          starts++;
-
-          return successful;
-        }),
-      recover: () =>
-        Effect.gen(function* () {
-          return uncertain;
-        }),
-    },
+    backend: counting,
   });
 
   authority.failBeforeCommit = true;
   await expect(run(service.start(request))).rejects.toThrow("Before commit");
-  expect(starts).toBe(0);
+  expect(counting.starts).toBe(0);
   expect(await run(service.lookup(request))).toEqual({ kind: "none" });
   await run(service.start(request));
   await run(service.drain());
-  expect(starts).toBe(1);
+  expect(counting.starts).toBe(1);
 });
 
 test("shutdown ends unresolved admission before lock release and a successor only recovers the old admission", async () => {
   const { config, request, resultsFor } = await authorityFixture();
   const authority = new FaultAuthority(config.stateRoot);
-  let starts = 0;
-
-  const backend = {
-    start: () =>
-      Effect.gen(function* () {
-        starts++;
-
-        return successful;
-      }),
-    recover: () =>
-      Effect.gen(function* () {
-        return uncertain;
-      }),
-  };
+  const backend = new CountingBackend();
 
   const first = await openAttemptsWith(config, {
     authority,
@@ -175,27 +143,19 @@ test("shutdown ends unresolved admission before lock release and a successor onl
   await pending;
   await expect(run(first.start(request))).rejects.toThrow("stopping");
   const successor = new FilesystemAuthority(config.stateRoot);
-  let recoveries = 0;
+  const recovering = new CountingBackend();
 
   const second = await openAttemptsWith(config, {
     authority: successor,
     resultsFor,
     artifactReader,
-    backend: {
-      start: backend.start,
-      recover: () =>
-        Effect.gen(function* () {
-          recoveries++;
-
-          return uncertain;
-        }),
-    },
+    backend: recovering,
   });
 
   await run(second.drain());
   expect(await run(second.start(request))).toEqual({ kind: "finished", result: uncertain });
-  expect(starts).toBe(0);
-  expect(recoveries).toBe(1);
+  expect(backend.starts + recovering.starts).toBe(0);
+  expect(recovering.recoveries).toBe(1);
 });
 
 test("ambiguous admission resolved to another admitting session recovers without a start", async () => {
@@ -227,32 +187,18 @@ test("ambiguous admission resolved to another admitting session recovers without
   }
 
   const authority = new OlderAdmission(config.stateRoot);
-  let starts = 0;
-  let recovered = 0;
+  const counting = new CountingBackend();
 
   const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,
-    backend: {
-      start: () =>
-        Effect.gen(function* () {
-          starts++;
-
-          return successful;
-        }),
-      recover: () =>
-        Effect.gen(function* () {
-          recovered++;
-
-          return uncertain;
-        }),
-    },
+    backend: counting,
   });
 
   await run(service.start(request));
   await run(service.drain());
-  expect(starts).toBe(0);
-  expect(recovered).toBe(1);
+  expect(counting.starts).toBe(0);
+  expect(counting.recoveries).toBe(1);
   expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: uncertain });
 });

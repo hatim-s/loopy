@@ -67,8 +67,8 @@ test("filesystem authority keeps the admitting session and receipt bytes across 
   ).toBe(before);
 });
 
-test("legacy receipts decode without rewriting and missing or corrupt results never become absence", async () => {
-  const { authority, config, plan, resultsFor } = await authorityFixture();
+test("legacy receipts decode without rewriting and accept a matching completion", async () => {
+  const { authority, config, plan } = await authorityFixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "session" }));
   const legacy = { ...(await plan()), kind: "finished", result: successful };
   const path = join(stateLayout(config.stateRoot).receipts, `${legacy.id}.json`);
@@ -92,20 +92,25 @@ test("legacy receipts decode without rewriting and missing or corrupt results ne
       )
     ).kind,
   ).toBe("finished");
+});
 
-  await run(authority.admit({ session, plan: await plan(2) }));
+test("missing or corrupt results and receipts never become absence", async () => {
+  const { authority, config, plan, resultsFor } = await authorityFixture();
+  const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "session" }));
+  const target = await plan();
+  await run(authority.admit({ session, plan: target }));
   const missingRef = await resultReference(successful);
   await expect(
     run(
       authority.complete({
         session,
-        id: (await plan(2)).id,
-        requestHash: (await plan(2)).requestHash,
+        id: target.id,
+        requestHash: target.requestHash,
         result: missingRef,
       }),
     ),
   ).rejects.toThrow("missing");
-  expect((await run(authority.read({ id: (await plan(2)).id })))?.kind).toBe("started");
+  expect((await run(authority.read({ id: target.id })))?.kind).toBe("started");
   await run(resultsFor("fixture").put(successful));
 
   const resultFile = (await readdir(stateLayout(config.stateRoot).results)).find((name) =>
@@ -115,8 +120,8 @@ test("legacy receipts decode without rewriting and missing or corrupt results ne
   expect(resultFile).toBeDefined();
   await writeFile(join(stateLayout(config.stateRoot).results, resultFile ?? "unexpected"), "{}");
   await expect(run(resultsFor("fixture").get(missingRef))).rejects.toThrow("immutable");
-  await writeFile(path, "{malformed");
-  await expect(run(authority.read({ id: legacy.id }))).rejects.toThrow();
+  await writeFile(join(stateLayout(config.stateRoot).receipts, `${target.id}.json`), "{malformed");
+  await expect(run(authority.read({ id: target.id }))).rejects.toThrow();
 });
 
 test("export-only recovery filters exact volume metadata without reading receipts", async () => {

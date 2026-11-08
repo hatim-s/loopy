@@ -1,14 +1,16 @@
 import { expect, test } from "bun:test";
+import { readdir } from "node:fs/promises";
 import type { DockerAttemptPlan } from "@loopy/contract/sandbox";
 import { CommandExecutionError } from "@loopy/runtime/os";
-import { Effect } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { Attempts } from "../src/attempt";
 import type { SandboxConfig } from "../src/config";
 import { type AttemptBackend, DockerBackend } from "../src/docker";
 import { DockerClient } from "../src/docker/client";
-import { ownerOf } from "../src/docker/identity";
+import { ownerOf, SANDBOX_DOCKER_CONTEXT, SANDBOX_LABELS } from "../src/docker/identity";
 import type { CommandRunner } from "../src/process";
+import { stateLayout } from "../src/state-root";
 import {
   attemptServices,
   dependencies,
@@ -17,6 +19,7 @@ import {
   request,
   succeeded,
 } from "./fixtures/attempts";
+import { authorityFixture } from "./fixtures/authority";
 import { run } from "./fixtures/run";
 
 const { services, open } = attemptServices();
@@ -63,8 +66,8 @@ function dockerState(
     {
       Config: {
         Labels: {
-          "loopy.sandbox.owner": ownerOf(config.stateRoot),
-          "loopy.sandbox.request": saved.requestHash,
+          [SANDBOX_LABELS.owner]: ownerOf(config.stateRoot),
+          [SANDBOX_LABELS.request]: saved.requestHash,
         },
       },
       State: {
@@ -102,7 +105,7 @@ test("Docker create enforces isolation and recovery reads the original bounded r
 
   expect(await run(dockerBackend(config, runner).start(saved, input))).toEqual(succeeded);
   expect(new Set(calls.map((argv) => argv.slice(0, 3).join(" ")))).toEqual(
-    new Set(["docker --context colima-loopy-cloud-phase1"]),
+    new Set([`docker --context ${SANDBOX_DOCKER_CONTEXT}`]),
   );
 
   for (const environment of environments) {
@@ -291,4 +294,32 @@ test("lost Docker start acknowledgement and wait transport failure retain starte
       ).pipe(Effect.provide(TestClock.layer())),
     );
   }
+});
+
+test("interrupted injected Docker transport removes its owned staging directory", async () => {
+  const { config, request, plan: planFor } = await authorityFixture();
+  const plan = await planFor();
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+
+      const backend = new DockerBackend(
+        config,
+        new DockerClient(config, () =>
+          Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+        ),
+      );
+
+      const worker = yield* backend.start(plan, request).pipe(Effect.forkChild);
+
+      yield* Deferred.await(entered);
+      yield* Fiber.interrupt(worker);
+      const exit = yield* Fiber.await(worker);
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+      expect(yield* Effect.promise(() => readdir(stateLayout(config.stateRoot).staging))).toEqual(
+        [],
+      );
+    }),
+  );
 });
