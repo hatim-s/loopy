@@ -2,12 +2,10 @@ import {
   codeNodeSchema,
   commandNodeSchema,
   DIAGNOSTIC_CODES,
-  graphRecord,
   graphSchema,
   nodeIdSchema,
   nodeSchema,
   struct,
-  valueSchema,
 } from "@loopy/core";
 import { Schema } from "effect";
 
@@ -25,7 +23,8 @@ export const nodeViewSchema = Schema.Union([
   struct({ ...codeNodeSchema.fields, module: struct({ name: Schema.String }) }),
   struct({
     ...commandNodeSchema.fields,
-    parse: Schema.NullOr(struct({ input: graphRecord(Schema.mutableKey(valueSchema)) })),
+    // Whether a parser shapes the output in place of the raw command result.
+    parse: Schema.Boolean,
   }),
   ...nodeSchema.members.filter(isPublicNode),
 ]);

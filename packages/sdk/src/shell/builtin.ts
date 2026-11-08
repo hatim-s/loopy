@@ -1,4 +1,4 @@
-import type { CommandResult, Json, OutSchema } from "@loopy/core";
+import type { CommandResult, OutSchema } from "@loopy/core";
 import type { CommandDeclaration, Prepare } from "../descriptor";
 import {
   type CallMode,
@@ -8,8 +8,7 @@ import {
 } from "../graph/nodes/command";
 import type { Infer } from "../graph/types";
 
-/** Built-in parsers receive the prepared operands; only wc reads them. */
-export type Parser<R> = (result: CommandResult, input: { args?: readonly Json[] }) => R;
+export type Parser<R> = (result: CommandResult) => R;
 
 /** Most built-ins take any number of file operands. */
 export const PATHS = [{ name: "paths", optional: true, variadic: true }] as const;

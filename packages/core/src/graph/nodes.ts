@@ -110,7 +110,6 @@ export const commandNodeSchema = struct({
     struct({
       module: Schema.NullOr(Schema.String),
       bundleHash: Schema.NullOr(Schema.String),
-      input: values,
     }),
   ),
 });

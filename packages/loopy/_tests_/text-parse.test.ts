@@ -9,20 +9,16 @@ import {
 } from "../../sdk/src/shell/parse/text";
 import { fixture, result } from "./shell-parse-fixture";
 
-test("wc drops only the aggregate row for multiple file operands", async () => {
-  expect(
-    parseWc(result(await fixture("text", "wc")), { args: ["words.txt", "space name.txt"] }),
-  ).toEqual([
+test("wc drops the total row only when it prints one row per operand plus a total", async () => {
+  expect(parseWc(result(await fixture("text", "wc")))).toEqual([
     { lines: 3, words: 5, bytes: 28, file: "words.txt" },
     { lines: 1, words: 1, bytes: 7, file: "space name.txt" },
   ]);
   expect(parseWc(result(" 0 0 0\n"))).toEqual([{ lines: 0, words: 0, bytes: 0 }]);
-  expect(parseWc(result(" 1 2 3 total\n"), { args: ["total"] })).toEqual([
+  expect(parseWc(result(" 1 2 3 total\n"))).toEqual([
     { lines: 1, words: 2, bytes: 3, file: "total" },
   ]);
-  expect(
-    parseWc(result(" 1 2 3 total\n 4 5 6 other\n 5 7 9 total\n"), { args: ["total", "other"] }),
-  ).toEqual([
+  expect(parseWc(result(" 1 2 3 total\n 4 5 6 other\n 5 7 9 total\n"))).toEqual([
     { lines: 1, words: 2, bytes: 3, file: "total" },
     { lines: 4, words: 5, bytes: 6, file: "other" },
   ]);

@@ -37,7 +37,7 @@ for (const kind of ["command", "code", "parser"] as const) {
           );
 
     if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), input: {}, timeoutMs: 300_000 };
+      spec.parse = { bundleHash: "a".repeat(64), timeoutMs: 300_000 };
     }
 
     const receipts = new FilesystemReceipts(f.home);
@@ -98,7 +98,7 @@ for (const kind of ["command", "code", "parser"] as const) {
           );
 
     if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), input: {}, timeoutMs: 300_000 };
+      spec.parse = { bundleHash: "a".repeat(64), timeoutMs: 300_000 };
     }
 
     const receipts = new FilesystemReceipts(f.home);
@@ -153,7 +153,7 @@ for (const kind of ["command", "code", "parser"] as const) {
           );
 
     if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), input: {}, timeoutMs: 300_000 };
+      spec.parse = { bundleHash: "a".repeat(64), timeoutMs: 300_000 };
     }
 
     const receipts = new FilesystemReceipts(f.home);

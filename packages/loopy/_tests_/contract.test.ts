@@ -372,7 +372,7 @@ test("graph wire views reject paths and hashes, including command parser hashes"
     }
 
     if (node.kind === "command") {
-      return { ...node, parse: node.parse === null ? null : { input: node.parse.input } };
+      return { ...node, parse: node.parse !== null };
     }
 
     return node;
