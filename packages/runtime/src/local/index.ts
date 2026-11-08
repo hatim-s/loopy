@@ -7,11 +7,13 @@ export {
 
 export { compilerLauncher } from "./compiler-launcher";
 
-export { localDaemon } from "./daemon";
+export { LocalDaemonError, localDaemon } from "./daemon";
 
 export { daemonUrl, readDaemonFile } from "./daemon/file";
 
 export { daemonStatus, installDaemon, uninstallDaemon } from "./daemon/install";
+
+export { DaemonInstallError } from "./daemon/install-files";
 
 export { defaultHome } from "./home";
 
