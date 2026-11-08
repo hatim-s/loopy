@@ -1,12 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { localDaemon, Registry, readDaemonFile } from "@loopy/runtime/local";
 import { openRunStore } from "@loopy/runtime/store";
 import { Effect, Exit, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
-import { cli, fixture, object, roots } from "../../runtime/_tests_/fixtures/project";
+import { fixture, object } from "../../runtime/_tests_/fixtures/project";
+import { cli } from "./fixtures/cli";
 
 const daemons: {
   stop(): Promise<void>;
@@ -14,10 +15,6 @@ const daemons: {
 
 afterEach(async () => {
   await Promise.all(daemons.splice(0).map((daemon) => daemon.stop()));
-
-  for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
 });
 
 async function graphFixture(name = "compiled") {

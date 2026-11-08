@@ -1,50 +1,25 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   chmodSync,
   linkSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { Effect, Exit, Scope } from "effect";
-import { localDaemon } from "../src/local";
+import { join } from "node:path";
+import { Effect } from "effect";
 import { secretRedactor } from "../src/os/secret-redactor";
 import { SecretStore } from "../src/os/secrets";
-import { openRunStore } from "../src/store";
-
-const scopes: Scope.Closeable[] = [];
-
-function fixtureScope() {
-  const scope = Scope.makeUnsafe();
-  scopes.push(scope);
-
-  return scope;
-}
-
-const directories: string[] = [];
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 function setup() {
-  const directory = mkdtempSync(join(tmpdir(), "loopy-secrets-"));
-  directories.push(directory);
+  const directory = qualityTestRoot("secrets");
 
   return { directory, store: new SecretStore(join(directory, "home")) };
 }
-
-afterEach(async () => {
-  for (const scope of scopes.splice(0).reverse()) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-  }
-
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
 
 test("private CRUD preserves other secrets and lists names only", () => {
   const { store } = setup();
@@ -132,66 +107,6 @@ test("malformed stores and invalid values never echo secret contents", () => {
     _tag: "SecretError",
     cause: expect.objectContaining({ message: expect.stringContaining("no NUL") }),
   });
-});
-
-test("CLI stdin entry and name-only listing do not disclose values", async () => {
-  const { directory, store } = setup();
-  mkdirSync(join(directory, ".loopy", "loopies"), { recursive: true });
-  const scope = fixtureScope();
-
-  const runStore = await Effect.runPromise(
-    openRunStore(store.directory).pipe(Effect.provideService(Scope.Scope, scope)),
-  );
-
-  const daemon = await Effect.runPromise(
-    localDaemon({
-      home: store.directory,
-      cwd: directory,
-      store: runStore,
-      concurrency: 4,
-      port: 0,
-      assets: join(directory, "assets"),
-    }).pipe(Effect.provideService(Scope.Scope, scope)),
-  );
-
-  await Effect.runPromise(daemon.start);
-
-  const command = [
-    process.execPath,
-    "--no-env-file",
-    resolve(import.meta.dir, "../../cli/src/index.ts"),
-  ];
-
-  const env = {
-    PATH: process.env.PATH,
-    LANG: "C.UTF-8",
-    HOME: directory,
-    LOOPY_HOME: store.directory,
-  };
-
-  const child = Bun.spawn(
-    [...command, "secrets", "set", "orbit-cookie", "--stdin", "--home", store.directory],
-    { cwd: directory, env, stdin: "pipe", stdout: "pipe", stderr: "pipe" },
-  );
-
-  child.stdin.write("sensitive-marker\n");
-  child.stdin.end();
-  expect(await child.exited).toBe(0);
-  expect(await new Response(child.stdout).text()).not.toContain("sensitive-marker");
-  expect(await new Response(child.stderr).text()).not.toContain("sensitive-marker");
-  expect(Effect.runSync(store.values(["orbit-cookie"]))).toEqual({
-    "orbit-cookie": "sensitive-marker",
-  });
-
-  const listed = Bun.spawn([...command, "secrets", "list", "--home", store.directory], {
-    cwd: directory,
-    env,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  expect(await listed.exited).toBe(0);
-  expect(JSON.parse(await new Response(listed.stdout).text())).toEqual(["orbit-cookie"]);
 });
 
 test("redaction handles overlapping values, regex punctuation and truncated secrets", () => {

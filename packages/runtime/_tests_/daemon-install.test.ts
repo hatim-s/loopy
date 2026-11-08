@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
-import { decodeOptions } from "../../cli/src/command";
-import { daemonCommand } from "../../cli/src/entry";
-import { parseCommandLine } from "../../cli/src/parse";
-import { COMMANDS } from "../../cli/src/table";
 import { installDaemon, uninstallDaemon } from "../src/local/daemon/install";
 import type { DaemonExecResult, DaemonOperations } from "../src/local/daemon/install-files";
 
@@ -174,29 +170,6 @@ test("install rejects relative paths and line injection before writing", async (
     Effect.runPromise(installDaemon({ ...options, home: "/data/loopy\nRestart=no" })),
   ).rejects.toThrow("Service values cannot contain NUL or line breaks.");
   expect(files.size).toBe(0);
-});
-
-test("the service argv the CLI installs parses back to daemon run with the same flags", async () => {
-  const [, , ...args] = daemonCommand({
-    home: "/data/loopy",
-    port: 4999,
-    concurrency: 7,
-    leaseMs: 5000,
-  });
-
-  const parsed = await Effect.runPromise(parseCommandLine(COMMANDS, args));
-
-  if (parsed.kind !== "command") {
-    throw new Error("The daemon argv must name a command.");
-  }
-
-  expect(parsed.command.path).toEqual(["daemon", "run"]);
-  expect(parsed.globals.home).toBe("/data/loopy");
-  expect(await Effect.runPromise(decodeOptions(parsed.command.options, parsed.arguments))).toEqual({
-    port: 4999,
-    concurrency: 7,
-    "lease-ms": 5000,
-  });
 });
 
 test("failed install and uninstall report errors without deleting the definition", async () => {

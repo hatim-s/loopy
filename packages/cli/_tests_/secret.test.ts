@@ -1,30 +1,23 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { localDaemon } from "@loopy/runtime/local";
+import { openRunStore } from "@loopy/runtime/store";
+import { Effect } from "effect";
+import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
+import { onCleanup, runScoped } from "../../runtime/_tests_/fixtures/test-scope";
+import { SecretStore } from "../../runtime/src/os/secrets";
+import { cli, spawnCli } from "./fixtures/cli";
+
+const READER = resolve(import.meta.dir, "fixtures/secret-reader.ts");
 
 // The terminal fixture requires python3 and its standard-library pty module on PATH.
 for (const mode of ["pipe", "terminal"] as const) {
   test(`interrupting a ${mode} secret reader releases fixture stdin`, async () => {
-    const root = mkdtempSync(join(tmpdir(), "loopy-secret-interrupt-"));
-    const script = join(root, "reader.ts");
-    writeFileSync(
-      script,
-      `import {Effect,Fiber} from ${JSON.stringify(Bun.resolveSync("effect", import.meta.dir))};
-import {readSecret} from ${JSON.stringify(resolve(import.meta.dir, "../src/secret-entry.ts"))};
-await Effect.runPromise(Effect.gen(function* () {
-  const before=process.stdin.listenerCount("data");
-  const rawBefore=process.stdin.isRaw ?? false;
-  const fiber=yield* Effect.forkChild(readSecret(${mode === "pipe"}));
-  yield* Effect.yieldNow;
-  yield* Fiber.interrupt(fiber);
-  console.log(JSON.stringify({before,after:process.stdin.listenerCount("data"),paused:process.stdin.isPaused(),rawBefore,rawAfter:process.stdin.isRaw ?? false}));
-}));`,
-    );
+    const root = qualityTestRoot("secret-interrupt");
 
     const argv =
       mode === "pipe"
-        ? [process.execPath, "--no-env-file", script]
+        ? [process.execPath, "--no-env-file", READER, mode]
         : [
             "python3",
             "-c",
@@ -36,14 +29,15 @@ def drain():
  except OSError: pass
 threading.Thread(target=drain,daemon=True).start()
 try:
- result=subprocess.run([sys.argv[1],"--no-env-file",sys.argv[2]],stdin=slave,stderr=slave,stdout=subprocess.PIPE,timeout=10)
+ result=subprocess.run([sys.argv[1],"--no-env-file",sys.argv[2],sys.argv[3]],stdin=slave,stderr=slave,stdout=subprocess.PIPE,timeout=10)
  sys.stdout.buffer.write(result.stdout)
  sys.exit(result.returncode)
 finally:
  os.close(slave)
  os.close(master)`,
             process.execPath,
-            script,
+            READER,
+            mode,
           ];
 
     const child = Bun.spawn(argv, {
@@ -54,53 +48,66 @@ finally:
       stderr: "pipe",
     });
 
-    try {
-      const stdout = await new Response(child.stdout).text();
-      expect(await child.exited).toBe(0);
-      const state = JSON.parse(stdout);
-      expect(state.after).toBe(state.before);
-      expect(state.paused).toBe(true);
-      expect(state.rawAfter).toBe(state.rawBefore);
-    } finally {
+    onCleanup(async () => {
       child.stdin.end();
       child.kill();
       await child.exited;
-      rmSync(root, { recursive: true, force: true });
-    }
+    });
+
+    const stdout = await new Response(child.stdout).text();
+    expect(await child.exited).toBe(0);
+    const state = JSON.parse(stdout);
+    expect(state.after).toBe(state.before);
+    expect(state.paused).toBe(true);
+    expect(state.rawAfter).toBe(state.rawBefore);
   });
 }
 
 test("oversized endless secret input releases stdin and exits with a typed failure", async () => {
-  const root = mkdtempSync(join(tmpdir(), "loopy-secret-overflow-"));
-  const env = { PATH: process.env.PATH, HOME: root, TMPDIR: root, LOOPY_HOME: root };
-  const producer = Bun.spawn(["yes"], { cwd: root, env, stdout: "pipe", stderr: "ignore" });
+  const root = qualityTestRoot("secret-overflow");
+  const producer = Bun.spawn(["yes"], { cwd: root, stdout: "pipe", stderr: "ignore" });
 
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      "--no-env-file",
-      resolve(import.meta.dir, "../src/index.ts"),
-      "--home",
-      root,
-      "secrets",
-      "set",
-      "FOO_TOKEN",
-      "--stdin",
-    ],
-    { cwd: root, env, stdin: producer.stdout, stdout: "pipe", stderr: "pipe" },
+  const child = spawnCli(
+    { cwd: root, home: root },
+    ["secrets", "set", "FOO_TOKEN", "--stdin"],
+    producer.stdout,
   );
 
-  const deadline = setTimeout(() => child.kill(), 5000);
-
-  try {
-    const stderr = await new Response(child.stderr).text();
-    expect(await child.exited).toBe(1);
-    expect(stderr).toContain("Secret input exceeds 64 KiB.");
-  } finally {
-    clearTimeout(deadline);
+  onCleanup(async () => {
     child.kill();
     producer.kill();
     await Promise.all([child.exited, producer.exited]);
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
+
+  // A real deadline: the failure under test is the reader never stopping.
+  const deadline = setTimeout(() => child.kill(), 5000);
+  onCleanup(() => clearTimeout(deadline));
+  const stderr = await new Response(child.stderr).text();
+  expect(await child.exited).toBe(1);
+  expect(stderr).toContain("Secret input exceeds 64 KiB.");
+});
+
+test("CLI stdin entry and name-only listing do not disclose values", async () => {
+  const cwd = qualityTestRoot("secret-cli");
+  const home = join(cwd, "home");
+  const store = await runScoped(openRunStore(home));
+
+  const daemon = await runScoped(
+    localDaemon({ home, cwd, store, concurrency: 4, port: 0, assets: join(cwd, "assets") }),
+  );
+
+  await runScoped(daemon.start);
+  const child = spawnCli({ cwd, home }, ["secrets", "set", "orbit-cookie", "--stdin"], "pipe");
+  child.stdin.write("sensitive-marker\n");
+  child.stdin.end();
+  expect(await child.exited).toBe(0);
+  expect(await new Response(child.stdout).text()).not.toContain("sensitive-marker");
+  expect(await new Response(child.stderr).text()).not.toContain("sensitive-marker");
+  expect(Effect.runSync(new SecretStore(home).values(["orbit-cookie"]))).toEqual({
+    "orbit-cookie": "sensitive-marker",
+  });
+
+  const listed = await cli({ cwd, home }, "secrets", "list");
+  expect(listed.code).toBe(0);
+  expect(JSON.parse(listed.stdout)).toEqual(["orbit-cookie"]);
 });

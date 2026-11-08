@@ -1,6 +1,5 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import { requireRecord } from "@loopy/core";
 import { Effect } from "effect";
@@ -8,43 +7,20 @@ import { LocalExecutor } from "../../src/executor";
 import { activate } from "../../src/host";
 import { makeLocalService, Registry } from "../../src/local";
 import { openRunStore } from "../../src/store";
+import { qualityTestRoot } from "./quality-test-root";
 
-export const roots: string[] = [];
-
-export const CLI = resolve(import.meta.dir, "../../../cli/src/index.ts");
-
-export const SDK = "loopy";
-
+/** A project directory holding one author definition and its Loopy home. */
 export function fixture(name: string, definition: string) {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-cli-sdk-")));
-  roots.push(root);
-  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
+  const root = qualityTestRoot("project");
   const home = join(root, "home");
   const file = join(root, `${name}.loopy.ts`);
   writeFileSync(
     file,
-    `import { loopy, log, sh, code, sleep, wait } from ${JSON.stringify(SDK)};
+    `import { loopy, log, sh, code, sleep, wait } from "loopy";
 export default loopy(${JSON.stringify(name)}, { input: {}, ${definition} });`,
   );
 
   return { cwd: root, home, file };
-}
-
-export async function cli(f: ReturnType<typeof fixture>, ...args: string[]) {
-  const child = Bun.spawn([process.execPath, CLI, "--home", f.home, ...args], {
-    cwd: f.cwd,
-    env: { PATH: process.env.PATH, HOME: f.cwd, TMPDIR: f.cwd, LOOPY_HOME: f.home },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-
-  return { stdout, stderr, code };
 }
 
 export function object(text: string) {

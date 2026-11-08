@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { compile } from "@loopy/compiler";
 import { Effect } from "effect";
+import { generateCommand } from "../src/local/typegen/generate";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
@@ -340,4 +341,16 @@ test("captured gh flags accept repeated labels, assignees and reviewers", async 
     reviewer: { repeatable: true },
   });
   expect(warnings.some((warning) => warning.includes("Could not parse option"))).toBe(false);
+});
+
+test("typegen preserves help printed by a nonzero command and types spawn failure", async () => {
+  const root = qualityTestRoot("typegen");
+  const binary = join(root, "fixture-cli");
+  await writeFile(binary, '#!/bin/sh\necho "usage: fixture" >&2\nexit 1\n', { mode: 0o755 });
+  expect((await Effect.runPromise(generateCommand(binary, []))).help).toBe("usage: fixture");
+  const failure = await Effect.runPromiseExit(generateCommand(join(root, "missing"), []));
+  expect(failure).toMatchObject({
+    _tag: "Failure",
+    cause: { reasons: [{ _tag: "Fail", error: { _tag: "TypeGenerationError" } }] },
+  });
 });

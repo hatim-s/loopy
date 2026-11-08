@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
+import { decodeOptions } from "../src/command";
+import { daemonCommand } from "../src/entry";
 import { parseCommandLine } from "../src/parse";
 import { COMMANDS } from "../src/table";
 
@@ -93,4 +95,27 @@ test("ambiguous, incomplete or unknown arguments fail before execution", () => {
   ] as const) {
     expect(failure([...args])).toStartWith(message);
   }
+});
+
+test("the service argv the CLI installs parses back to daemon run with the same flags", async () => {
+  const [, , ...args] = daemonCommand({
+    home: "/data/loopy",
+    port: 4999,
+    concurrency: 7,
+    leaseMs: 5000,
+  });
+
+  const parsed = await Effect.runPromise(parseCommandLine(COMMANDS, args));
+
+  if (parsed.kind !== "command") {
+    throw new Error("The daemon argv must name a command.");
+  }
+
+  expect(parsed.command.path).toEqual(["daemon", "run"]);
+  expect(parsed.globals.home).toBe("/data/loopy");
+  expect(await Effect.runPromise(decodeOptions(parsed.command.options, parsed.arguments))).toEqual({
+    port: 4999,
+    concurrency: 7,
+    "lease-ms": 5000,
+  });
 });

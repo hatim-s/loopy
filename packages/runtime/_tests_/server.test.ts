@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { get, type IncomingMessage } from "node:http";
 import { join } from "node:path";
 import {
@@ -30,7 +30,7 @@ import {
   ServiceError,
 } from "../src/local";
 import { apiRoutes, dispatch, eventStream } from "../src/service";
-import { CLI, fixture, object, roots, runFixture, save } from "./fixtures/project";
+import { fixture, object, runFixture, save } from "./fixtures/project";
 import { countPasses, fixtureStore, nextPass, waitUntil } from "./fixtures/service-runtime";
 import { fixtureScope } from "./fixtures/test-scope";
 
@@ -40,10 +40,6 @@ const servers: Awaited<ReturnType<typeof startDaemon>>[] = [];
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
-
-  for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
 });
 
 async function startDaemon(options: { home: string; cwd: string; port: number; assets?: string }) {
@@ -628,38 +624,6 @@ test("SSE keeps a node transaction whole across the replay batch limit", async (
     expect(frames).toHaveLength(1);
   } finally {
     await Effect.runPromise(store.close());
-  }
-});
-
-test("daemon run stdout never contains its bearer token", async () => {
-  const f = fixture("private-output", "run: () => 1");
-
-  const child = Bun.spawn(
-    [process.execPath, CLI, "--home", f.home, "daemon", "run", "--port", "0"],
-    {
-      cwd: f.cwd,
-      env: { PATH: process.env.PATH, HOME: f.cwd, LOOPY_HOME: f.home },
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-
-  try {
-    for (let attempt = 0; attempt < 100 && !readDaemonFile(f.home); attempt++) {
-      await Bun.sleep(20);
-    }
-
-    const record = readDaemonFile(f.home);
-    expect(record).toBeDefined();
-    child.kill("SIGTERM");
-    expect(await child.exited).toBe(0);
-    const output = await new Response(child.stdout).text();
-    expect(output).toContain(`http://127.0.0.1:${record!.port}`);
-    expect(output).toContain("loopy ui");
-    expect(output).not.toContain(record!.token);
-  } finally {
-    child.kill();
-    await child.exited;
   }
 });
 

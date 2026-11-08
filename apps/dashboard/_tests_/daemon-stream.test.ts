@@ -1,5 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema, routes } from "@loopy/contract";
 import { localDaemon, makeLocalService } from "@loopy/runtime/local";
@@ -8,19 +7,12 @@ import { newRun } from "../../../packages/core/_tests_/fixtures/run";
 import {
   fixture,
   object,
-  roots,
   runFixture,
   save,
 } from "../../../packages/runtime/_tests_/fixtures/project";
 import { fixtureStore } from "../../../packages/runtime/_tests_/fixtures/service-runtime";
 import { fixtureScope } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { applyToSnapshot } from "../src/lib/stream/snapshot";
-
-afterEach(async () => {
-  for (const root of roots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 test("the cache retains the server's streamed output preview size", async () => {
   const f = fixture("stream-preview", "run: () => null");
