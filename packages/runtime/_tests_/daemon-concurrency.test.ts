@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Executor } from "@loopy/core";
-import { loopy, sh } from "@loopy/sdk/graph";
+import { loopy, sh } from "@loopy/sdk";
 import { Deferred, Effect, Fiber } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { makeDaemon } from "../src/host";

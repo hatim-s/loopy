@@ -1,5 +1,5 @@
-import { compile } from "@loopy/compiler";
 import { Effect } from "effect";
+import { compile } from "../../src";
 
 /** Compiles an author file a test wrote, failing the test with the diagnostics when it is invalid. */
 export async function compileOrThrow(file: string) {

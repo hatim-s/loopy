@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { type Executor, LeaseReleaseFailed, OwnershipError, StorageError } from "@loopy/core";
-import { code, loopy, parallel } from "@loopy/sdk/graph";
+import { code, loopy, parallel } from "@loopy/sdk";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";

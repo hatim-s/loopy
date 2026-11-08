@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import type { DashboardReader } from "@loopy/contract";
 import type { RunRecord, Schedule } from "@loopy/core";
-import { loopy } from "@loopy/sdk/graph";
+import { loopy } from "@loopy/sdk";
 import type { Cause } from "effect";
 import { Effect, Scope } from "effect";
 import { TestClock } from "effect/testing";

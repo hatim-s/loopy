@@ -16,6 +16,7 @@ import {
   scheduleViewSchema,
   splitSseFrames,
 } from "@loopy/contract";
+import { log, loopy } from "@loopy/sdk";
 import { Effect, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { localDaemon, readDaemonFile, ServiceError } from "../src/local";
@@ -50,7 +51,16 @@ async function startDaemon(options: { home: string; cwd: string; port: number; a
 }
 
 test("API returns run records, step traces and cursor logs", async () => {
-  const f = fixture("api", `run: () => { log("first"); log("second"); return 2; }`);
+  const f = fixture(
+    loopy("api", {
+      input: {},
+      run: () => {
+        log("first");
+        log("second");
+        return 2;
+      },
+    }),
+  );
   await save(f);
   const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
@@ -75,7 +85,7 @@ test("API returns run records, step traces and cursor logs", async () => {
 });
 
 test("the daemon server requires its token and origin, serves pinned assets and serves authenticated API reads", async () => {
-  const f = fixture("dashboard", "run: () => 1");
+  const f = fixture(loopy("dashboard", { input: {}, run: () => 1 }));
   await save(f);
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
@@ -110,7 +120,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
 });
 
 test("API distinguishes invalid cursors from registry failures", async () => {
-  const f = fixture("server-errors", "run: () => 1");
+  const f = fixture(loopy("server-errors", { input: {}, run: () => 1 }));
   await save(f);
   const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
@@ -133,7 +143,15 @@ test("API distinguishes invalid cursors from registry failures", async () => {
 });
 
 test("API returns the contract snapshot, rejects unknown query keys and keeps cursor log reads", async () => {
-  const f = fixture("summary", 'run: () => { log("hello"); return 1; }');
+  const f = fixture(
+    loopy("summary", {
+      input: {},
+      run: () => {
+        log("hello");
+        return 1;
+      },
+    }),
+  );
   await save(f);
   const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
@@ -152,7 +170,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
 });
 
 test("contract routes start, snapshot, resume and cancel without exposing owner tokens", async () => {
-  const f = fixture("contract", "run: () => null");
+  const f = fixture(loopy("contract", { input: {}, run: () => null }));
   await save(f);
   const initialStore = await fixtureStore(f.home);
   await Effect.runPromise(
@@ -213,7 +231,7 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
 });
 
 test("SPA routes fall back to pinned index but missing files stay 404", async () => {
-  const f = fixture("spa", "run: () => 1");
+  const f = fixture(loopy("spa", { input: {}, run: () => 1 }));
   await save(f);
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
@@ -232,7 +250,7 @@ test("SPA routes fall back to pinned index but missing files stay 404", async ()
 });
 
 test("native definition routes return 404 for absence and 500 for corrupt saved data", async () => {
-  const f = fixture("corrupt-definition", "run: () => 1");
+  const f = fixture(loopy("corrupt-definition", { input: {}, run: () => 1 }));
   await save(f);
   writeFileSync(join(f.cwd, ".loopy", "loopies", "corrupt-definition.json"), "{invalid");
   const server = await startDaemon({ ...f, port: 0 });
@@ -379,7 +397,7 @@ test("schedule PUT publishes a saved SSE frame", async () => {
 });
 
 test("cursor endpoint bootstraps an empty dashboard and follows new events", async () => {
-  const f = fixture("cursor", "run: () => 1");
+  const f = fixture(loopy("cursor", { input: {}, run: () => 1 }));
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
   servers.push(server);
   const url = new URL(server.url);

@@ -11,7 +11,7 @@ import {
 import { DurableProviderError, SCHEDULE_POLICY } from "@loopy/runtime/host";
 import { RegistryError } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
-import { code, loopy, sleep, wait } from "@loopy/sdk/graph";
+import { code, loopy, sleep, wait } from "@loopy/sdk";
 import { Cause, Effect } from "effect";
 import { withBundles } from "../../../packages/runtime/_tests_/fixtures/compiled";
 import { PolicyProvider } from "../../../packages/runtime/_tests_/fixtures/host-policy";

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { decodeBoundary, encodeRunCursor, graphView, routes } from "@loopy/contract";
 import type { Graph } from "@loopy/core";
 import { revision } from "@loopy/core";
-import { loopy } from "@loopy/sdk/graph";
+import { loopy } from "@loopy/sdk";
 import { Effect } from "effect";
 import { FakeExecutor, runIn } from "../../core/_tests_/fixtures/run";
 import { makeLocalService, Registry } from "../src/local";

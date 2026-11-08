@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { cloudRoutes, WORKSPACE_HEADER } from "@loopy/contract/sandbox";
 import { revision } from "@loopy/core";
-import { log, loopy, wait } from "@loopy/sdk/graph";
+import { log, loopy, wait } from "@loopy/sdk";
 import type { Miniflare } from "miniflare";
 import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";

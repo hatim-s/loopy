@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loopy, sh } from "@loopy/sdk/graph";
+import { loopy, sh } from "@loopy/sdk";
 import { Effect } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { activateDurable } from "../src/host";

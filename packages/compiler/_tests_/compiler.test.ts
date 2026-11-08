@@ -272,7 +272,12 @@ test("parser module bundles are hashed and preserve their module bindings", asyn
   });
 });
 
-for (const name of ["hello", "review", "asset-sync", "www-sync"]) {
+for (const [name, graphName] of [
+  ["hello", "hello"],
+  ["review", "review"],
+  ["asset-sync", "uacode-asset-sync"],
+  ["www-sync", "www-uacode-sync"],
+] as const) {
   test(`compile the ${name} graph example with its module and parser bundles`, async () => {
     const result = await compile(
       resolve(import.meta.dir, `../../sdk/_tests_/fixtures/graph-examples/${name}.ts`),
@@ -283,6 +288,7 @@ for (const name of ["hello", "review", "asset-sync", "www-sync"]) {
     }
 
     expect(validateGraph(result.graph)).toEqual([]);
+    expect(result.graph.name).toBe(graphName);
     expect(result.bundles.length).toBeGreaterThan(0);
   });
 }

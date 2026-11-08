@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { PutLoopyBody, SourceArtifact } from "@loopy/contract";
 import { revision } from "@loopy/core";
-import { code, loopy } from "@loopy/sdk/graph";
+import { code, loopy } from "@loopy/sdk";
 import type { Miniflare } from "miniflare";
 import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";

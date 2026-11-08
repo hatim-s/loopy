@@ -19,7 +19,7 @@ import {
   subgraph,
   switch_,
   wait,
-} from "@loopy/sdk/graph";
+} from "@loopy/sdk";
 
 const text = { kind: "value", type: "string" } as const;
 

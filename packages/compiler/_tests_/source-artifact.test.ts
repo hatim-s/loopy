@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { compile } from "@loopy/compiler";
 import {
   decodeBoundary,
   MAX_SOURCE_BYTES,
@@ -10,13 +9,14 @@ import {
   sourceArtifactOrUnavailable,
   sourceArtifactSchema,
 } from "@loopy/contract";
+import { Registry } from "@loopy/runtime/local";
+import { SecretStore } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
-import { Registry } from "../src/local";
-import { saveCompiled } from "../src/local/save-compiled";
-import { SecretStore } from "../src/os";
+import { compiledBody } from "../../runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
+import { saveCompiled } from "../../runtime/src/local/save-compiled";
+import { compile } from "../src";
 import { compileOrThrow } from "./fixtures/compile";
-import { compiledBody } from "./fixtures/compiled";
-import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const sdk = "loopy";
 

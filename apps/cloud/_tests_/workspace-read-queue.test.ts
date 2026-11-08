@@ -2,7 +2,7 @@ import { beforeAll, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { revision } from "@loopy/core";
-import { loopy, sh } from "@loopy/sdk/graph";
+import { loopy, sh } from "@loopy/sdk";
 import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
 import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";

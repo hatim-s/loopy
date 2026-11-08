@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ExecutionKey, OwnershipError, StorageError } from "@loopy/core";
-import { code, loopy, sh } from "@loopy/sdk/graph";
+import { code, loopy, sh } from "@loopy/sdk";
 import { Cause, Effect, Fiber } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { LocalExecutor } from "../src/executor";

@@ -1,6 +1,6 @@
 import type { ExecutionKey, ExecutionResult, Receipt } from "@loopy/core";
 import { executionKeyString } from "@loopy/core";
-import { code, loopy, parallel, wait } from "@loopy/sdk/graph";
+import { code, loopy, parallel, wait } from "@loopy/sdk";
 import { Deferred, Effect } from "effect";
 import type { DurableExecutionProvider, DurableProviderError } from "../../src/host";
 import { withBundles } from "./compiled";

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Executor } from "@loopy/core";
-import { loopy, parallel, sh, sleep, wait } from "@loopy/sdk/graph";
+import { loopy, parallel, sh, sleep, wait } from "@loopy/sdk";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { newRun } from "../../core/_tests_/fixtures/run";

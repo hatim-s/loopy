@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Json } from "@loopy/core";
 import { revision } from "@loopy/core";
-import { loopy } from "@loopy/sdk/graph";
+import { loopy } from "@loopy/sdk";
 import { Effect } from "effect";
 import { FakeExecutor } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";

@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { decodeBoundary, nodeIdSchema, runSnapshotViewSchema } from "@loopy/contract";
 import { type Executor, type StoreEffect } from "@loopy/core";
-import { code, finally_, loopy, parallel, sleep, uuid, wait } from "@loopy/sdk/graph";
+import { code, finally_, loopy, parallel, sleep, uuid, wait } from "@loopy/sdk";
 import { Deferred, Effect, Exit, Schema, Scope } from "effect";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";
