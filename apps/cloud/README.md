@@ -43,8 +43,6 @@ bun --no-env-file apps/cloud/dev/journey/artifact.ts
 bun --no-env-file apps/cloud/dev/failures/index.ts
 env -i PATH="$PATH" HOME="$HOME" LANG=C.UTF-8 \
   bun --no-env-file apps/cloud/dev/transport-failure/index.ts
-LOOPY_SANDBOX_DOCKER_CONTEXT=colima-loopy-cloud-phase1 \
-  bun test packages/loopy/_tests_/cloud-sandbox.test.ts
 bun run check
 ```
 

@@ -1,16 +1,18 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import { type NodeRun, type StoreEffect } from "@loopy/core";
-import { makeLocalService, Registry } from "@loopy/runtime/local";
-import { Effect } from "effect";
-import { fixtureStore } from "./fixtures/service-runtime";
+import { makeLocalService, openRunStore, Registry } from "@loopy/runtime/local";
+import { Effect, Scope } from "effect";
 import { runAt } from "./store-fixture";
 
-export async function largeMapFixture() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-map-")));
-  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
+// The dashboard-scale test and the apps/cloud/dev/dashboard-queries.ts benchmark both seed these
+// datasets, so the caller owns the root and the scope.
+const openStore = (home: string, scope: Scope.Scope) =>
+  Effect.runPromise(openRunStore(home).pipe(Effect.provideService(Scope.Scope, scope)));
+
+/** Seeds one finished 10,000-item map run in `root`, which must hold a registry marker. */
+export async function largeMapFixture(root: string, scope: Scope.Scope) {
   const home = join(root, "home");
   mkdirSync(home, { recursive: true });
   const source = join(root, "reindex-docs.loopy.ts");
@@ -37,7 +39,7 @@ export default loopy("reindex-docs", {
 
   const registry = await Effect.runPromise(Registry.make(home, root));
   let now = Date.parse("2026-10-22T06:00:00.000Z");
-  const store = await fixtureStore(home);
+  const store = await openStore(home, scope);
   const onClock = runAt(() => now);
 
   const service = makeLocalService({
@@ -163,11 +165,10 @@ export default loopy("reindex-docs", {
   };
 }
 
-export async function manyRunsFixture() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-runs-")));
-  mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
+/** Seeds 10,000 terminal runs of one loopy in `root`, which must hold a registry marker. */
+export async function manyRunsFixture(root: string, scope: Scope.Scope) {
   const home = join(root, "home");
-  const store = await fixtureStore(home);
+  const store = await openStore(home, scope);
 
   const service = makeLocalService({
     store,
