@@ -653,8 +653,8 @@ test("the public SDK entry compiles through the same graph builder", async () =>
   }
 });
 
-for (const specifier of ["@loopy/sdk", "@loopy/sdk/graph"]) {
-  test(`author builders reject private package ${specifier}`, async () => {
+for (const specifier of ["@loopy/sdk", "@loopy/sdk/graph", "loopy/graph"]) {
+  test(`author builders reject ${specifier}`, async () => {
     const { file } = await project(
       `import {loopy} from ${JSON.stringify(specifier)}; export default loopy("private-sdk", {input: {}, run: () => 1});`,
     );

@@ -1,4 +1,4 @@
-import { branch, code, defineCommand, eq, log, loopy, map, parallel, sh } from "loopy/graph";
+import { branch, code, defineCommand, eq, log, loopy, map, parallel, sh } from "loopy";
 
 const printf = defineCommand({
   key: "fixture.printf",

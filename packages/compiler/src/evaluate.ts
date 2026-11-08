@@ -13,7 +13,7 @@ import {
   compilerIO,
   graphDiagnostics,
 } from "./errors";
-import { SDK_SPECIFIERS } from "./restrict";
+import { SDK_SPECIFIER } from "./restrict";
 import { typescriptPaths } from "./source-paths";
 import type { AuthorModule } from "./types";
 
@@ -56,7 +56,7 @@ export const evaluate = Effect.fn(function* (
                 name: "restricted-author-source",
                 setup(build) {
                   build.onResolve({ filter: /^loopy/ }, ({ path }) =>
-                    SDK_SPECIFIERS.includes(path) ? { path: graphEntry() } : undefined,
+                    path === SDK_SPECIFIER ? { path: graphEntry() } : undefined,
                   );
                   build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, ({ path }) => {
                     const source = sources.get(path);

@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import type { Infer } from "loopy/graph";
+import type { Infer } from "loopy";
 
 export type Input = Infer<{
   kind: "record";

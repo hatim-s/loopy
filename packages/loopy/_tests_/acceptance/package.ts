@@ -96,8 +96,7 @@ async function verifyPackedDistribution() {
     await Bun.write(
       join(fixture, "consumer.ts"),
       `
-import {loopy} from "loopy";
-import type {Ref} from "loopy/graph";
+import {loopy, type Ref} from "loopy";
 import * as contract from "loopy/contract";
 import * as engine from "loopy/engine";
 import * as local from "loopy/local";

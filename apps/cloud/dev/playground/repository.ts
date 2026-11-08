@@ -117,8 +117,8 @@ async function readCatalog(group: Group, root: string): Promise<readonly Catalog
 
     const source = await readFile(file, "utf8");
 
-    if (!/(?:from\s*|import\s*\()\s*["']loopy\/graph["']/.test(source)) {
-      throw new Error(`Catalog fixture must import loopy/graph as supplied: ${entry.file}`);
+    if (!/(?:from\s*|import\s*\()\s*["']loopy["']/.test(source)) {
+      throw new Error(`Catalog fixture must import loopy as supplied: ${entry.file}`);
     }
   }
 

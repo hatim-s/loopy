@@ -1,4 +1,4 @@
-import { code, log, loopy, wait } from "loopy/graph";
+import { code, log, loopy, wait } from "loopy";
 
 export default loopy("cloud-journey-approval", {
   input: { name: "string" },

@@ -1,4 +1,4 @@
-import { loopy, sh } from "loopy/graph";
+import { loopy, sh } from "loopy";
 
 export default loopy("cloud-failure-command", {
   input: {},
