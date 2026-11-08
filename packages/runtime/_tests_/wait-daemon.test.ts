@@ -4,8 +4,9 @@ import { type Cause, Effect, Fiber, Queue } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { makeDaemon } from "../src/host";
-import { waitUntil } from "./fixtures/service-runtime";
+import {} from "./fixtures/service-runtime";
 import { MemorySqlStore } from "./fixtures/stores";
+import { eventually } from "./fixtures/wait";
 
 test("daemon leaves an indefinite sleep when a durable approval signal wakes its run", async () => {
   await Effect.runPromise(
@@ -45,7 +46,8 @@ test("daemon leaves an indefinite sleep when a durable approval signal wakes its
         });
 
         const running = yield* Effect.forkChild(daemon.run);
-        yield* waitUntil(
+        yield* eventually(
+          "the run to suspend unowned",
           Effect.map(store.getRun("run"), (run) => run?.status === "suspended" && !run.owner),
         );
         const hook = (yield* store.getWaits("run"))[0];

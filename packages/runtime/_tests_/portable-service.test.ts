@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  CLOUD_MAX_REQUEST_BYTES,
   decodeBoundary,
   definitionSummary,
   graphView,
@@ -104,7 +105,6 @@ function fixture() {
   const service = makeService({
     store,
     registry: () => Effect.succeed(registry),
-    clock: { now: () => now },
     canonicalWorkspace: (workspace) => Effect.succeed(workspace),
     secrets: { list: unsupported, set: unsupported, remove: unsupported },
     generateTypes: unsupported,
@@ -194,7 +194,7 @@ test("portable schedules use registry workspace identity", async () => {
   expect(await Effect.runPromise(service.listSchedules("alias"))).toEqual([]);
 });
 
-test("portable routes use explicit daemon identity and return unsupported operation errors", async () => {
+test("portable routes use explicit daemon identity", async () => {
   const { service, store } = fixture();
 
   const table = apiRoutes({
@@ -202,6 +202,7 @@ test("portable routes use explicit daemon identity and return unsupported operat
     store,
     cwd: "cloud-workspace",
     daemon: { pid: 0, startedAt: new Date(now).toISOString(), concurrency: 4 },
+    maxBodyBytes: CLOUD_MAX_REQUEST_BYTES,
   });
 
   const daemonRequest = new Request("https://loopy.example/api/daemon");
@@ -210,23 +211,6 @@ test("portable routes use explicit daemon identity and return unsupported operat
     pid: 0,
     running: 0,
   });
-
-  for (const request of [
-    new Request("https://loopy.example/api/secrets"),
-    new Request("https://loopy.example/api/secrets/TOKEN", {
-      method: "PUT",
-      body: JSON.stringify({ value: "private" }),
-    }),
-    new Request("https://loopy.example/api/secrets/TOKEN", { method: "DELETE" }),
-    new Request("https://loopy.example/api/types", {
-      method: "POST",
-      body: JSON.stringify({ binary: "tool", path: [], name: null }),
-    }),
-  ]) {
-    const response = await dispatch(table, request, new URL(request.url));
-    expect(response.status).toBe(501);
-    expect(await response.json()).toMatchObject({ error: { code: "not_yet" } });
-  }
 
   for (const [method, suffix, body] of [
     ["POST", "runs", { input: {} }],
@@ -335,4 +319,27 @@ test("portable SSE rejects partial transaction cursors, epoch changes and pruned
       eventStream(store, service, { after: before.cursor, epoch: before.epoch }, signal),
     ),
   ).rejects.toMatchObject({ code: "stale_cursor" });
+});
+
+test("portable routes refuse a request body over their limit before parsing it", async () => {
+  const { service, store } = fixture();
+
+  const table = apiRoutes({
+    service,
+    store,
+    cwd: "cloud-workspace",
+    daemon: { pid: 0, startedAt: new Date(now).toISOString(), concurrency: 4 },
+    maxBodyBytes: 64,
+  });
+
+  const request = new Request("https://loopy.example/api/loopies/absent/schedule", {
+    method: "PUT",
+    body: JSON.stringify({ cron: "* * * * *", input: { padding: "x".repeat(100) } }),
+  });
+
+  const response = await dispatch(table, request, new URL(request.url));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "bad_request", message: "Body exceeds its 64 byte limit. Send a smaller body." },
+  });
 });

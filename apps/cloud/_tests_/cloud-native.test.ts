@@ -8,7 +8,8 @@ import {
   resultOperations,
 } from "@loopy/contract/sandbox";
 import { canonicalJson, type Json } from "@loopy/core";
-import { RegistryError, readBoundedBody } from "@loopy/runtime/service";
+import { readBoundedBody } from "@loopy/runtime/http";
+import { RegistryError } from "@loopy/runtime/service";
 import { Cause, Effect, Exit } from "effect";
 import type { Miniflare } from "miniflare";
 import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";

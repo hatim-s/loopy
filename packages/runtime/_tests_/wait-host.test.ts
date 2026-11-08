@@ -1,15 +1,15 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { runSnapshotViewSchema, runViewSchema } from "@loopy/contract";
-import { type Executor } from "@loopy/core";
+import { decodeBoundary, nodeIdSchema, runSnapshotViewSchema } from "@loopy/contract";
+import { type Executor, type StoreEffect } from "@loopy/core";
 import { code, finally_, loopy, parallel, sleep, uuid, wait } from "@loopy/sdk/graph";
 import { Deferred, Effect, Exit, Schema, Scope } from "effect";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";
 import { makeLocalService, Registry } from "../src/local";
-import { apiRoutes, dispatch } from "../src/service";
 import { makeSqliteRunStore } from "../src/store";
+import { withBundles } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { MemorySqlStore, runAt } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
@@ -30,7 +30,7 @@ async function fixture() {
     makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, scope)),
   );
 
-  const service = makeLocalService({ home, store, clock });
+  const service = makeLocalService({ home, store });
 
   const graph = loopy("approval", {
     input: {},
@@ -61,7 +61,7 @@ async function fixture() {
   };
 }
 
-test("approval suspends without executing, named HTTP signal wakes once, and restart continues", async () => {
+test("approval suspends without executing, a named signal wakes once, and restart continues", async () => {
   const f = await fixture();
   await Effect.runPromise(
     f.store.createRun({ ...newRun(), slug: "approval", input: {}, workspace: f.home }),
@@ -73,36 +73,16 @@ test("approval suspends without executing, named HTTP signal wakes once, and res
   expect(
     await Effect.runPromise(f.store.dueRuns(new Date(f.clock.now()).toISOString())),
   ).toHaveLength(0);
-  const view = (await Effect.runPromise(f.service.runSnapshot("run"))).run;
+  const view = (await f.run(f.service.runSnapshot("run"))).run;
   expect(view.waitingOn?.hook).toBe("approve");
 
-  const table = apiRoutes({
-    ...f,
-    cwd: f.home,
-    daemon: { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 1 },
-  });
-
-  const url = new URL("http://localhost/api/runs/run/hooks/approve");
-
   const send = (approved: boolean | string) =>
-    dispatch(
-      table,
-      new Request(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payload: { approved } }),
-      }),
-      url,
-    );
+    f.run(f.service.resolveNamedHook("run", "approve", { approved }));
 
-  expect((await send("bad")).status).toBe(400);
-  const response = await send(true);
-  expect(response.status).toBe(200);
-  expect(Schema.decodeUnknownSync(runViewSchema)(await response.json()).waitingOn).toBeNull();
-  expect((await send(false)).status).toBe(404);
-  Schema.decodeUnknownSync(runSnapshotViewSchema)(
-    await Effect.runPromise(f.service.runSnapshot("run")),
-  );
+  await expect(send("bad")).rejects.toMatchObject({ code: "bad_request" });
+  expect((await send(true)).waitingOn).toBeNull();
+  await expect(send(false)).rejects.toMatchObject({ code: "unknown_hook" });
+  Schema.decodeUnknownSync(runSnapshotViewSchema)(await f.run(f.service.runSnapshot("run")));
   await Effect.runPromise(Scope.close(f.scope, Exit.void));
   const reopenScope = fixtureScope();
 
@@ -116,7 +96,7 @@ test("approval suspends without executing, named HTTP signal wakes once, and res
   expect(executor.calls).toEqual([]);
 });
 
-test("opaque token HTTP route resolves and timeout rehydration preserves the original deadline", async () => {
+test("an opaque token resolves and timeout rehydration preserves the original deadline", async () => {
   const f = await fixture();
   await Effect.runPromise(f.store.createRun({ ...newRun(), input: {}, workspace: f.home }));
   const executor = new FakeExecutor();
@@ -133,25 +113,7 @@ test("opaque token HTTP route resolves and timeout rehydration preserves the ori
     throw new Error("Missing hook.");
   }
 
-  const table = apiRoutes({
-    ...f,
-    cwd: f.home,
-    daemon: { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 1 },
-  });
-
-  const url = new URL(`http://localhost/api/hooks/${hook.token}`);
-
-  const result = await dispatch(
-    table,
-    new Request(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload: { approved: false } }),
-    }),
-    url,
-  );
-
-  expect(result.status).toBe(200);
+  await f.run(f.service.resolveHook(hook.token, { approved: false }));
   expect(await f.run(activate({ ...f, executor, runId: "run" }))).toEqual({
     status: "succeeded",
     output: { approved: false },
@@ -212,11 +174,7 @@ test("a signal accepted while a parallel execution runs survives its completion"
       }),
   });
 
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
+  withBundles(graph);
 
   await Effect.runPromise(f.store.createRun({ ...newRun(), input: {} }));
 
@@ -268,11 +226,7 @@ test("parallel dispatches run concurrently and sampling completes without an exe
       }),
   });
 
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
+  withBundles(graph);
 
   const executor: Executor = {
     lookup: () => {
@@ -311,14 +265,12 @@ test("cancelling a suspended approval expires its token and cancels its pending 
     throw new Error("Missing wait.");
   }
 
-  expect((await Effect.runPromise(f.service.cancelRun("run"))).status).toBe("cancelled");
+  expect((await f.run(f.service.cancelRun("run"))).status).toBe("cancelled");
   expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([
     { status: "cancelled" },
   ]);
   expect((await Effect.runPromise(f.store.getWaits("run")))[0]?.expiredAt).toBeDefined();
-  await expect(
-    Effect.runPromise(f.service.resolveHook(wait.token, { approved: true })),
-  ).rejects.toMatchObject({
+  await expect(f.run(f.service.resolveHook(wait.token, { approved: true }))).rejects.toMatchObject({
     code: "unknown_hook",
   });
 });
@@ -341,7 +293,7 @@ test("cancellation refuses suspended finally graphs without changing their wait"
   );
   await f.run(activate({ ...f, graph, executor: new FakeExecutor(), runId: "run" }));
   const before = await Effect.runPromise(f.store.dashboardSnapshot("run"));
-  await expect(Effect.runPromise(f.service.cancelRun("run"))).rejects.toMatchObject({
+  await expect(f.run(f.service.cancelRun("run"))).rejects.toMatchObject({
     code: "not_claimable",
     message:
       "This run requires finally cleanup. Cancellation with cleanup is not available; resume the run instead.",
@@ -424,3 +376,61 @@ test("an indefinite signal advances its branch before a long sibling completes",
     output: { approval: 1, long: 2 },
   });
 }, 1000);
+
+test("a named signal skips a timed-out wait the reducer has not expired yet", async () => {
+  const f = await fixture();
+  await f.run(f.store.createRun({ ...newRun(), slug: "approval", input: {}, workspace: f.home }));
+  await f.run(f.store.claim("run", "owner"));
+  const at = new Date(f.clock.now()).toISOString();
+
+  const waiting = (nodeId: string, wakeAt: string | null): StoreEffect[] => {
+    const key = { runId: "run", nodeId: decodeBoundary(nodeIdSchema)(nodeId), scope: [] };
+
+    return [
+      {
+        kind: "write_node_run",
+        nodeRun: {
+          key,
+          attempt: 1,
+          maxAttempts: 1,
+          startedAt: at,
+          status: "waiting",
+          wakeAt,
+          receipt: "none",
+        },
+      },
+      {
+        kind: "register_wait",
+        executionKey: key,
+        name: "approve",
+        payload: { kind: "record", fields: { approved: "boolean" } },
+        at,
+      },
+    ];
+  };
+
+  const deadline = new Date(f.clock.now() + 1000).toISOString();
+  await f.run(
+    f.store.apply({
+      runId: "run",
+      token: "owner",
+      effects: [
+        ...waiting("0:timed", deadline),
+        ...waiting("0:open", null),
+        { kind: "suspend_run", wakeAt: deadline },
+      ],
+    }),
+  );
+  await f.run(f.store.release("run", "owner"));
+  const send = () => f.run(f.service.resolveNamedHook("run", "approve", { approved: true }));
+  await expect(send()).rejects.toMatchObject({ code: "bad_request" });
+  f.advance(1000);
+  await send();
+
+  const waits = await f.run(f.store.getWaits("run"));
+  expect(waits.map((wait) => [wait.executionKey.nodeId, wait.resolvedAt ?? null])).toEqual([
+    ["0:timed", null],
+    ["0:open", new Date(f.clock.now()).toISOString()],
+  ]);
+  await expect(send()).rejects.toMatchObject({ code: "unknown_hook" });
+});

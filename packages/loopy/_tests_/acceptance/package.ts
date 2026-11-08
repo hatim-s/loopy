@@ -141,18 +141,10 @@ export default loopy("packed", {input: {}, run: () => {
       "graph",
       "entry.ts",
     ]);
-    const consumer = await Bun.file(join(import.meta.dir, "packed-consumer.ts")).text();
-
-    const vendored = consumer.replace(
-      '"@loopy/compiler"',
-      '"./node_modules/loopy/dist/compiler/src/index.js"',
+    await Bun.write(
+      join(fixture, "execute.ts"),
+      Bun.file(join(import.meta.dir, "packed-consumer.ts")),
     );
-
-    if (vendored === consumer) {
-      throw new Error("packed-consumer.ts no longer imports @loopy/compiler; update package.ts.");
-    }
-
-    await Bun.write(join(fixture, "execute.ts"), vendored);
     console.log(await run(["execute.ts", home, fixture]));
   } finally {
     await rm(fixture, { recursive: true, force: true });

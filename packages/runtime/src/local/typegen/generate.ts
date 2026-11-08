@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import { type CommandResult, errorMessage } from "@loopy/core";
+import { errorMessage, type ParserInput } from "@loopy/core";
 import { Data, Effect } from "effect";
 import { spawnCaptured } from "../../os";
 import { identifier } from "./names";
@@ -17,7 +17,7 @@ export class TypeGenerationError extends Data.TaggedError("TypeGenerationError")
   }
 }
 
-const combined = ({ stdout, stderr }: CommandResult) => `${stdout}\n${stderr}`.trim();
+const combined = ({ stdout, stderr }: ParserInput) => `${stdout}\n${stderr}`.trim();
 
 /** Many CLIs print help to stderr or exit nonzero, so any captured output counts. */
 function outputOf(binary: string, args: string[]) {

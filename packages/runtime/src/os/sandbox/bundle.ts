@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { copyFile, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CommandResult } from "@loopy/core";
+import type { ParserInput } from "@loopy/core";
 import { Effect } from "effect";
 import type { CommandExecutionError } from "../command-error";
 import { unstarted } from "../spawn";
@@ -21,7 +21,7 @@ export function withBundleSandbox(
   execute: (launch: {
     program: string;
     args: string[];
-  }) => Effect.Effect<CommandResult, CommandExecutionError>,
+  }) => Effect.Effect<ParserInput, CommandExecutionError>,
 ) {
   return Effect.acquireUseRelease(
     filesystem(() => mkdtemp(join(tmpdir(), "loopy-bundle-"))),

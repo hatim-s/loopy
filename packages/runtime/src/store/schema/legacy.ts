@@ -1,5 +1,6 @@
 import type { SqlDriver } from "../driver";
 import { StoreRejectedError } from "../operation";
+import { runScript } from "./fresh";
 
 // Frozen migration steps. They describe how old homes changed and never follow the fresh schema.
 const SCHEMA_13_TO_14 = `
@@ -77,14 +78,6 @@ const SCHEMA_14_TO_15 = `
     FROM logs GROUP BY execution_key,attempt;
 `;
 
-function run(db: SqlDriver, script: string): void {
-  for (const statement of script.split(";")) {
-    if (statement.trim().length > 0) {
-      db.query(statement).run();
-    }
-  }
-}
-
 /**
  * Local homes from before the meta marker record their version in PRAGMA user_version.
  * This upgrades schema 13 and 14 and moves schema 15 homes onto the meta marker, keeping
@@ -101,11 +94,11 @@ export function upgradeLegacyHome(db: SqlDriver): void {
     }
 
     if (version === 13) {
-      run(db, SCHEMA_13_TO_14);
+      runScript(db, SCHEMA_13_TO_14);
     }
 
     if (version === 13 || version === 14) {
-      run(db, SCHEMA_14_TO_15);
+      runScript(db, SCHEMA_14_TO_15);
     } else if (version !== 15) {
       throw new StoreRejectedError(
         `Database schema ${version} cannot be opened by this runtime. Preserve this home and migrate its saved definitions into a separate home.`,

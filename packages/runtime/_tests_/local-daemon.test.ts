@@ -9,31 +9,32 @@ import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const directory = () => qualityTestRoot("local-daemon");
 
+const daemonIn = (home: string, cwd: string, port = 0) =>
+  Effect.gen(function* () {
+    const store = yield* openRunStore(home);
+
+    return yield* localDaemon({
+      home,
+      cwd,
+      store,
+      port,
+      concurrency: 1,
+      assets: join(cwd, "assets"),
+    });
+  });
+
 test("failed discovery publication closes its listener and permanently rejects restart", async () => {
   const home = directory();
   const cwd = directory();
   const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("probe") });
   const port = probe.port ?? 0;
   await probe.stop(true);
+  // A directory where discovery belongs fails publication after the listener binds.
+  mkdirSync(join(home, "daemon.json"), { recursive: true });
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const store = yield* openRunStore(home);
-
-        const daemon = yield* localDaemon({
-          home,
-          cwd,
-          store,
-          port,
-          concurrency: 1,
-          // Insert a real publication fault after discovery reads and before listener creation.
-          get assets() {
-            mkdirSync(join(home, "daemon.json"));
-
-            return join(cwd, "missing-assets");
-          },
-        });
-
+        const daemon = yield* daemonIn(home, cwd, port);
         const first = yield* Effect.flip(daemon.start);
         expect(first.message).toContain("Cannot start daemon");
         rmSync(join(home, "daemon.json"), { recursive: true });
@@ -48,47 +49,40 @@ test("failed discovery publication closes its listener and permanently rejects r
         });
 
         yield* Effect.promise(() => rebound.stop(true));
+        // The failed start released the home, so another daemon can take it.
+        const next = yield* daemonIn(home, cwd);
+        yield* next.start;
       }),
     ),
   );
 });
 
-test("an already published daemon starts again without touching a contested startup lock", async () => {
+test("one daemon owns a home until it stops, and starting it again returns its address", async () => {
   const home = directory();
   const cwd = directory();
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const store = yield* openRunStore(home);
-
-        const daemon = yield* localDaemon({
-          home,
-          cwd,
-          store,
-          port: 0,
-          concurrency: 1,
-          assets: join(cwd, "assets"),
-        });
-
+        const daemon = yield* daemonIn(home, cwd);
         const url = yield* daemon.start;
-        const lock = join(home, "daemon-start.lock");
-        mkdirSync(lock);
+        expect(yield* daemon.start).toBe(url);
+        const record = readDaemonFile(home);
 
-        try {
-          expect(yield* daemon.start).toBe(url);
-          const record = readDaemonFile(home);
-          expect(record).toBeDefined();
+        const response = yield* Effect.promise(() =>
+          fetch(`http://127.0.0.1:${record?.port}/api/daemon`, {
+            headers: { Authorization: `Bearer ${record?.token}` },
+          }),
+        );
 
-          const response = yield* Effect.promise(() =>
-            fetch(`http://127.0.0.1:${record?.port}/api/daemon`, {
-              headers: { Authorization: `Bearer ${record?.token}` },
-            }),
-          );
-
-          expect(response.status).toBe(200);
-        } finally {
-          rmSync(lock, { recursive: true });
-        }
+        expect(response.status).toBe(200);
+        const rival = yield* daemonIn(home, cwd);
+        expect((yield* Effect.flip(rival.start)).message).toContain(
+          "A daemon is already running for this home",
+        );
+        yield* daemon.stop;
+        expect(readDaemonFile(home)).toBeUndefined();
+        const successor = yield* daemonIn(home, cwd);
+        expect(yield* successor.start).not.toBe(url);
       }),
     ),
   );

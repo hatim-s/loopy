@@ -9,6 +9,7 @@
     "./store/portable": "./src/store/portable.ts",
     "./executor": "./src/executor/index.ts",
     "./service": "./src/service/index.ts",
+    "./http": "./src/http/index.ts",
     "./local": "./src/local/index.ts",
     "./executor/protocol": "./src/executor/protocol.ts",
     "./os": "./src/os/index.ts"

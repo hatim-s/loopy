@@ -4,8 +4,6 @@ export { ServiceError } from "./error";
 
 export { type EventReader, eventStream } from "./events";
 
-export { BodyLimitError, BodyReadError, bearerMatches, readBoundedBody } from "./http-edge";
-
 export {
   type ArtifactRegistry,
   ArtifactValidationError,

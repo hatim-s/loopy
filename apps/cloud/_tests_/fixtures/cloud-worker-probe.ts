@@ -3,7 +3,7 @@ import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import type { RunRecord, StoreEffect } from "@loopy/core";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Clock, Effect } from "effect";
-import { EVENT_RETENTION } from "../../../../packages/runtime/src/store/event-outbox";
+import { EVENT_RETENTION } from "../../../../packages/runtime/src/store/events";
 import { ImmutableBucket, r2Key } from "../../src/artifacts/storage";
 import { DurableSqlDriver } from "../../src/sql-driver";
 import { paginationResponse } from "./cloud-pagination-probe";

@@ -5,6 +5,7 @@ import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { activate, makeDaemon } from "../src/host";
+import { withBundles } from "./fixtures/compiled";
 import {
   policyGraph,
   policyRetry,
@@ -108,11 +109,7 @@ test("retry beside sleep keeps activation until both persisted deadlines settle"
         run: () => parallel({ work: policyWork, nap: () => sleep("2s") }),
       });
 
-      for (const node of graph.nodes) {
-        if (node.kind === "code") {
-          node.module.bundleHash = "a".repeat(64);
-        }
-      }
+      withBundles(graph);
 
       const executor: Executor = {
         lookup: () => Effect.succeed({ kind: "none" }),

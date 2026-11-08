@@ -9,6 +9,9 @@ const dictionary = Schema.Record(Schema.String, Schema.mutableKey(jsonSchema));
 /** Commands without a declared timeout and every parser get this budget. */
 export const DEFAULT_TIMEOUT_MS = 300_000;
 
+/** Commands without a declared output cap and every code bundle may capture this much. */
+export const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+
 // Covers worker startup, bundle staging and receipt publication around the attempt's own budget.
 const ATTEMPT_GRACE_MS = 30_000;
 
@@ -31,7 +34,7 @@ export const executionSpecSchema = Schema.Union([
     env: Schema.Record(Schema.String, Schema.mutableKey(Schema.String)),
     stdin: Schema.NullOr(Schema.String),
     timeoutMs: positiveInt,
-    maxOutputBytes: Schema.NullOr(positiveInt),
+    maxOutputBytes: positiveInt,
     okExitCodes: Schema.Array(Schema.Int).pipe(Schema.mutable),
     parse: Schema.NullOr(struct({ bundleHash: hashSchema, timeoutMs: positiveInt })),
   }),

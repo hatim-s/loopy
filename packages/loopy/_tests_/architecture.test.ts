@@ -22,22 +22,24 @@ const ALLOWED: Record<Package, readonly Package[]> = {
   loopy: ["core", "contract", "sdk", "runtime", "compiler", "cli"],
 };
 
-const RUNTIME_LAYERS = ["os", "host", "store", "executor", "service", "local"] as const;
+const RUNTIME_LAYERS = ["os", "http", "host", "store", "executor", "service", "local"] as const;
 
 type RuntimeLayer = (typeof RUNTIME_LAYERS)[number];
 
 const RUNTIME_IMPORTS: Record<RuntimeLayer, readonly RuntimeLayer[]> = {
   os: [],
+  http: [],
   host: [],
   store: ["os"],
   executor: ["os"],
-  service: [],
-  local: ["os", "host", "store", "executor", "service"],
+  service: ["http"],
+  local: ["os", "http", "host", "store", "executor", "service"],
 };
 
 // Engine lives in core, so host needs no other package; only local composes the SDK.
 const RUNTIME_PACKAGES: Record<RuntimeLayer, readonly Package[]> = {
   os: ["core"],
+  http: [],
   host: ["core"],
   store: ["core", "contract"],
   executor: ["core", "contract"],
@@ -45,16 +47,25 @@ const RUNTIME_PACKAGES: Record<RuntimeLayer, readonly Package[]> = {
   local: ["core", "contract", "sdk"],
 };
 
-interface Manifest {
-  name: string;
-  private?: boolean;
-  exports: Record<string, string | Record<string, string>>;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-}
+const strings = Schema.Record(Schema.String, Schema.String);
 
-function manifest(directory: string): Manifest {
-  return JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+const decodeManifest = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      name: Schema.String,
+      private: Schema.optional(Schema.Boolean),
+      exports: Schema.optional(
+        Schema.Record(Schema.String, Schema.Union([Schema.String, strings])),
+      ),
+      dependencies: Schema.optional(strings),
+      devDependencies: Schema.optional(strings),
+      scripts: Schema.optional(strings),
+    }),
+  ),
+);
+
+function manifest(directory: string) {
+  return decodeManifest(readFileSync(join(directory, "package.json"), "utf8"));
 }
 
 function packageRoot(owner: Package): string {
@@ -193,6 +204,18 @@ function runtimeViolations(file: string, target: string): string[] {
   return [];
 }
 
+// The build publishes every package directory, so a package or runtime layer missing here would skip every check.
+test("every package and runtime layer directory has an import rule", () => {
+  const directories = (path: string) =>
+    readdirSync(path, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+  expect(directories(join(ROOT, "packages"))).toEqual([...PACKAGES].sort());
+  expect(directories(sourceRoot("runtime"))).toEqual([...RUNTIME_LAYERS].sort());
+});
+
 test("workspace source imports follow package ownership and explicit exports", () => {
   const violations: string[] = [];
 
@@ -245,7 +268,7 @@ test("workspace source imports follow package ownership and explicit exports", (
           violations.push(`${name} in runtime ${layer} may not import ${imported.owner}.`);
         }
 
-        if (!Object.hasOwn(manifest(packageRoot(imported.owner)).exports, imported.key)) {
+        if (!Object.hasOwn(manifest(packageRoot(imported.owner)).exports ?? {}, imported.key)) {
           violations.push(`${name} imports an undeclared export (${specifier}).`);
         }
 
@@ -278,21 +301,13 @@ test("private manifests expose explicit existing source entries and declare the 
       violations.push(`Root tests need ${config.name} as a workspace dependency.`);
     }
 
-    const exports = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(
-      config.exports,
-    );
-
-    for (const [key, entry] of Object.entries(exports)) {
-      const targets = [entry];
-
+    // Private packages export plain source paths, never conditions.
+    for (const [key, entry] of Object.entries(Schema.decodeUnknownSync(strings)(config.exports))) {
       if (
         key.includes("*") ||
-        targets.some(
-          (target) =>
-            target.includes("*") ||
-            !target.startsWith("./src/") ||
-            !existsSync(resolve(packageRoot(owner), target)),
-        )
+        entry.includes("*") ||
+        !entry.startsWith("./src/") ||
+        !existsSync(resolve(packageRoot(owner), entry))
       ) {
         violations.push(`${owner} has an invalid explicit source export (${key}).`);
       }
@@ -335,7 +350,7 @@ test("apps use public workspace exports and dashboard uses only contract", () =>
 
           if (
             imported.owner === "loopy" ||
-            !Object.hasOwn(target.exports, imported.key) ||
+            !Object.hasOwn(target.exports ?? {}, imported.key) ||
             (app === "dashboard" && imported.owner !== "contract")
           ) {
             violations.push(
@@ -387,9 +402,7 @@ test("the entries tsconfig.portable.json typechecks without Bun also bundle for 
 });
 
 test("the test script runs every package, app and examples test root", () => {
-  const { scripts } = Schema.decodeUnknownSync(
-    Schema.Struct({ scripts: Schema.Struct({ test: Schema.String }) }),
-  )(manifest(ROOT));
+  const test = manifest(ROOT).scripts?.test ?? "";
 
   const roots = [
     ...["packages", "apps"].flatMap((parent) =>
@@ -398,7 +411,7 @@ test("the test script runs every package, app and examples test root", () => {
     "examples/_tests_",
   ].filter((root) => existsSync(join(ROOT, root)));
 
-  expect(roots.filter((root) => !scripts.test.split(" ").includes(`./${root}`))).toEqual([]);
+  expect(roots.filter((root) => !test.split(" ").includes(`./${root}`))).toEqual([]);
 });
 
 test("the published manifest depends on exactly the vendored packages' external dependencies", () => {

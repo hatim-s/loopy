@@ -123,7 +123,6 @@ test("native adapter distinguishes absence from corrupt existing files", async (
 
   const service = makeLocalService({
     store: f.store,
-    clock: { now: Date.now },
     home: f.home,
   });
 
@@ -135,15 +134,15 @@ test("native adapter distinguishes absence from corrupt existing files", async (
   ).rejects.toMatchObject({
     code: "not_found",
   });
+  // An old-format entry is corrupt saved data, never an absent definition.
   writeFileSync(join(f.a, ".loopy", "loopies", "obsolete.json"), JSON.stringify({ version: 1 }));
   await expect(Effect.runPromise(service.startRun("obsolete", {}, f.a))).rejects.toMatchObject({
-    code: "not_found",
+    _tag: "RegistryError",
+    message: expect.stringContaining("uses an old format"),
   });
   await expect(
     Effect.runPromise(service.putSchedule("obsolete", { cron: "* * * * *" }, f.a)),
-  ).rejects.toMatchObject({
-    code: "not_found",
-  });
+  ).rejects.toHaveProperty("_tag", "RegistryError");
   writeFileSync(join(f.a, ".loopy", "loopies", "native.json"), JSON.stringify({ version: 3 }));
   await expect(Effect.runPromise(service.startRun("native", {}, f.a))).rejects.toHaveProperty(
     "_tag",

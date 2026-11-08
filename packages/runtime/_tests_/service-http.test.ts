@@ -5,16 +5,15 @@ import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { StorageError } from "@loopy/core";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { Registry } from "../src/local/registry";
-import { startServer } from "../src/local/server/start-server";
 import { makeLocalService } from "../src/local/service";
 import { makeService, ServiceError } from "../src/service";
 import { makeSqliteRunStore } from "../src/store";
 import { compiledBody } from "./fixtures/compiled";
+import { serveHttp } from "./fixtures/http-server";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { onCleanup, runScoped } from "./fixtures/test-scope";
+import { runScoped } from "./fixtures/test-scope";
 
 async function fixture(options: { concurrency?: number } = {}) {
-  const causes: Cause.Cause<unknown>[] = [];
   const root = qualityTestRoot("services-effect");
   const home = join(root, "home");
   await mkdir(home);
@@ -26,38 +25,8 @@ async function fixture(options: { concurrency?: number } = {}) {
   const body = await compiledBody("workflow", source);
   await Effect.runPromise(registry.save(body));
 
-  const service = makeLocalService({
-    store,
-    home,
-    clock: { now: () => Date.parse("2026-10-17T00:00:00.000Z") },
-  });
-
-  const server = startServer({
-    service,
-    store,
-    token: "fixture-token",
-    cwd: root,
-    port: 0,
-    assets: join(root, "assets"),
-    daemon: {
-      pid: process.pid,
-      startedAt: new Date(0).toISOString(),
-      concurrency: options.concurrency ?? 4,
-    },
-    onError: (cause) => causes.push(cause),
-  });
-
-  onCleanup(() => server.stop());
-
-  const request = (path: string, init: RequestInit = {}) =>
-    fetch(`http://127.0.0.1:${server.port}/api${path}`, {
-      ...init,
-      headers: {
-        Authorization: "Bearer fixture-token",
-        "Content-Type": "application/json",
-        ...init.headers,
-      },
-    });
+  const service = makeLocalService({ store, home });
+  const { request, causes } = serveHttp({ service, store, cwd: root, ...options });
 
   return { root, home, store, service, request, causes };
 }
@@ -107,7 +76,7 @@ test("a storage outage stays internal and its cause never appears in the HTTP fa
   expect(await response.text()).not.toContain("private-password");
 });
 
-test("hook resolution is atomic and SSE refuses a cursor inside a commit", async () => {
+test("hook routes resolve once and SSE refuses a cursor inside a commit", async () => {
   const f = await fixture();
   const run = await Effect.runPromise(f.service.startRun("workflow", {}, f.root));
   const at = "2026-10-17T00:00:00.000Z";
@@ -152,21 +121,20 @@ test("hook resolution is atomic and SSE refuses a cursor inside a commit", async
   await Effect.runPromise(f.store.release(run.id, "fixture-owner"));
   const wait = (await Effect.runPromise(f.store.getWaits(run.id)))[0]!;
 
-  const rejected = await Effect.runPromiseExit(
-    f.service.resolveHook(wait.token, { ok: "invalid" }),
-  );
-
-  expect(Exit.isFailure(rejected)).toBe(true);
+  const resolve = (route: string, ok: boolean | string) =>
+    f.request(route, { method: "POST", body: JSON.stringify({ payload: { ok } }) });
 
   const stored = async () =>
     (await Effect.runPromise(f.store.getWaits(run.id))).find((hook) => hook.token === wait.token);
 
-  expect((await stored())?.resolvedAt).toBeFalsy();
-  await Effect.runPromise(f.service.resolveHook(wait.token, { ok: true }));
-  expect((await stored())?.resolvedAt).toBe(at);
-  expect(
-    Exit.isFailure(await Effect.runPromiseExit(f.service.resolveHook(wait.token, { ok: false }))),
-  ).toBe(true);
+  expect((await resolve(`/runs/${run.id}/hooks/approval`, "invalid")).status).toBe(400);
+  expect((await resolve(`/hooks/${wait.token}`, "invalid")).status).toBe(400);
+  expect((await stored())?.resolvedAt).toBeUndefined();
+  const started = Date.now();
+  expect((await resolve(`/hooks/${wait.token}`, true)).status).toBe(200);
+  expect(Date.parse((await stored())?.resolvedAt ?? "")).toBeGreaterThanOrEqual(started);
+  expect((await resolve(`/hooks/${wait.token}`, false)).status).toBe(404);
+  expect((await resolve(`/runs/${run.id}/hooks/approval`, false)).status).toBe(404);
 });
 
 test("successful cancellation commits and releases ownership", async () => {
@@ -208,7 +176,8 @@ for (const failApply of [false, true]) {
     expect(await response.text()).not.toContain("private");
     expect(f.causes).toHaveLength(1);
     const failures = f.causes[0]!.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
-    expect(failures).toEqual(failApply ? [applyError, releaseError] : [releaseError]);
+    const released = { _tag: "LeaseReleaseFailed", runId: run.id, cause: releaseError };
+    expect(failures).toMatchObject(failApply ? [applyError, released] : [released]);
   });
 }
 
@@ -327,24 +296,13 @@ test("typed unsupported secret and type-generation operations preserve HTTP501",
 
   const service = makeService({
     store: f.store,
-    clock: { now: Date.now },
     registry: () => Effect.die("unused registry"),
     canonicalWorkspace: () => Effect.die("unused workspace"),
     secrets: { list: unsupported, set: unsupported, remove: unsupported },
     generateTypes: unsupported,
   });
 
-  const server = startServer({
-    service,
-    store: f.store,
-    token: "fixture-token",
-    cwd: f.root,
-    port: 0,
-    assets: join(f.root, "assets"),
-    daemon: { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 4 },
-  });
-
-  onCleanup(() => server.stop());
+  const { request } = serveHttp({ service, store: f.store, cwd: f.root });
 
   for (const [path, method, body] of [
     ["/secrets", "GET", undefined],
@@ -352,9 +310,8 @@ test("typed unsupported secret and type-generation operations preserve HTTP501",
     ["/secrets/TOKEN", "DELETE", undefined],
     ["/types", "POST", { binary: "fixture-tool", path: [], name: null }],
   ] as const) {
-    const response = await fetch(`http://127.0.0.1:${server.port}/api${path}`, {
+    const response = await request(path, {
       method,
-      headers: { Authorization: "Bearer fixture-token", "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
 

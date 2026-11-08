@@ -14,6 +14,7 @@ import { Effect, Schema } from "effect";
 import { Registry } from "../src/local";
 import { saveCompiled } from "../src/local/save-compiled";
 import { SecretStore } from "../src/os";
+import { compileOrThrow } from "./fixtures/compile";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 
@@ -36,11 +37,7 @@ function artifact(revision: string, content: string): SourceArtifact {
 }
 
 async function compiled(file: string, root: string) {
-  const result = await Effect.runPromise(compile(file));
-
-  if (!result.ok) {
-    throw new Error(JSON.stringify(result.diagnostics));
-  }
+  const result = await compileOrThrow(file);
 
   return {
     ...result,

@@ -1,5 +1,5 @@
 import { SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract/sandbox";
-import { bearerMatches, readBoundedBody } from "@loopy/runtime/service";
+import { bearerMatches, readBoundedBody } from "@loopy/runtime/http";
 import { Effect } from "effect";
 import type { Environment } from "../environment";
 import { cloudConfig } from "../environment";

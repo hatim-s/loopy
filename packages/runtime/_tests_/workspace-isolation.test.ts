@@ -30,7 +30,7 @@ async function fixture() {
   }
 
   const store = await runScoped(openRunStore(home));
-  const service = makeLocalService({ store, home, clock: { now: Date.now } });
+  const service = makeLocalService({ store, home });
 
   for (const workspace of [workspaceA, workspaceB]) {
     const body = await compiledBody(SLUG, join(workspaceA, `${SLUG}.loopy.ts`), { workspace });

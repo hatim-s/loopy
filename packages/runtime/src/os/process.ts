@@ -11,8 +11,6 @@ import { envArgs, resolveProgram, within } from "./sandbox/paths";
 import type { Launch } from "./spawn";
 import { aborted, rejected, spawnCaptured } from "./spawn";
 
-const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
-
 export type LocalExecutionOptions = {
   workspace: string;
   mode: ExecutionMode;
@@ -174,18 +172,17 @@ export function executeLocalCommand(command: ResolvedCommand, options: LocalExec
       return yield* Effect.fail(aborted(options.signal));
     }
 
-    const limits = {
-      timeoutMs: command.timeoutMs,
-      maxOutputBytes: command.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
-    };
-
     return yield* Effect.acquireUseRelease(
       prepareLaunch(command, options),
       (launch) =>
         Effect.exit(
           options.signal?.aborted
             ? Effect.fail(aborted(options.signal))
-            : spawnCaptured(launch, { ...limits, signal: options.signal }),
+            : spawnCaptured(launch, {
+                timeoutMs: command.timeoutMs,
+                maxOutputBytes: command.maxOutputBytes,
+                signal: options.signal,
+              }),
         ),
       (launch, primary) => removeScratch(launch.scratch, primary),
     ).pipe(Effect.flatMap((primary) => primary));

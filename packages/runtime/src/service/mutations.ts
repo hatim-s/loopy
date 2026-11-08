@@ -1,5 +1,11 @@
 import { cancelRefusal, isTerminalRun, type Json } from "@loopy/contract";
-import type { RunRecord, StoreEffect } from "@loopy/core";
+import {
+  executionKeyString,
+  isPendingWait,
+  type RunRecord,
+  type StoreEffect,
+  withLease,
+} from "@loopy/core";
 import { Effect } from "effect";
 import type { ServiceContext } from "./context";
 import { requireDefinition } from "./definition";
@@ -18,6 +24,8 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
     const saved = yield* requireDefinition(yield* context.registry(workspace), slug);
     const validated = yield* validateDefinitionInput(saved, input);
 
+    const createdAt = yield* now;
+
     const run: RunRecord = {
       id: crypto.randomUUID(),
       slug,
@@ -25,8 +33,8 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
       workspace: yield* context.canonicalWorkspace(workspace),
       revision: saved.revision,
       status: "queued",
-      createdAt: now(),
-      updatedAt: now(),
+      createdAt,
+      updatedAt: createdAt,
     };
 
     yield* store.createRun(run);
@@ -41,7 +49,7 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
       return yield* Effect.fail(new ServiceError("not_claimable"));
     }
 
-    yield* store.claim(id, token).pipe(
+    return yield* store.claim(id, token).pipe(
       Effect.catchTag("OwnershipError", () =>
         Effect.fail(
           new ServiceError(
@@ -67,7 +75,7 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
   });
 
   const resumeRun = Effect.fn("mutations.resumeRun")(function* (id: string) {
-    const code = yield* store.wakeRun(id, now());
+    const code = yield* store.wakeRun(id, yield* now);
 
     if (code) {
       return yield* Effect.fail(new ServiceError(code));
@@ -99,13 +107,13 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
     }
 
     yield* cancellableNodes(id);
-    const token = crypto.randomUUID();
-    yield* Effect.acquireUseRelease(
-      claim(id, token),
-      () =>
+    yield* withLease(
+      { claim, release: (runId, token) => store.release(runId, token) },
+      id,
+      (token) =>
         Effect.gen(function* () {
           const nodes = yield* cancellableNodes(id);
-          const at = now();
+          const at = yield* now;
 
           const effects: StoreEffect[] = nodes.flatMap((node) =>
             node.status === "waiting" ||
@@ -133,7 +141,6 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
           effects.push({ kind: "finish_run", outcome: { status: "cancelled" }, at });
           yield* store.apply({ runId: id, token, effects });
         }),
-      () => store.release(id, token),
     );
 
     return yield* view(yield* requireRun(id));
@@ -144,10 +151,19 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
     name: string,
     payload: Json,
   ) {
-    yield* requireRun(id);
+    const run = yield* requireRun(id);
+    const at = yield* now;
+    const named = (yield* store.getWaits(id)).filter((wait) => wait.name === name);
 
-    const waits = (yield* store.getWaits(id)).filter(
-      (wait) => wait.name === name && !wait.resolvedAt && !wait.expiredAt,
+    const nodes = new Map(
+      (named.length === 0 ? [] : yield* store.getNodeRuns(id)).map((node) => [
+        executionKeyString(node.key),
+        node,
+      ]),
+    );
+
+    const waits = named.filter((wait) =>
+      isPendingWait({ wait, node: nodes.get(executionKeyString(wait.executionKey)), run, at }),
     );
 
     if (waits.length > 1) {
@@ -169,7 +185,7 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
   });
 
   const resolveHook = Effect.fn("mutations.resolveHook")(function* (token: string, payload: Json) {
-    const result = yield* store.resolveWait({ token, payload, at: now() });
+    const result = yield* store.resolveWait({ token, payload, at: yield* now });
 
     if (result.kind === "rejected") {
       return yield* Effect.fail(new ServiceError(result.code, result.message));

@@ -45,14 +45,12 @@ test("HTTP commands queue schema-validated graph runs and pin the saved revision
   const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   expect((await cli(f, "run", "compiled", "--count", "bad")).code).toBe(1);
-  expect(
-    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: new Date().toISOString() })),
-  ).toEqual([]);
+  expect(JSON.parse((await cli(f, "runs")).stdout)).toEqual([]);
   const queued = await cli(f, "run", "compiled", "--count", "2");
   expect(queued).toMatchObject({ code: 0, stderr: "" });
   const run = object(queued.stdout);
   expect(run).toMatchObject({ status: "queued", input: { count: 2 } });
-  expect(await Effect.runPromise(f.store.getRun(String(run.id)))).toMatchObject({
+  expect(await runGraph(f.home, String(run.id))).toMatchObject({
     revision: (await registryEntry(f.home, f.cwd, "compiled")).revision,
   });
   expect(object((await cli(f, "inspect", String(run.id))).stdout).run).toMatchObject({
@@ -177,15 +175,14 @@ test("HTTP schedule enable, disable and off persist their state", async () => {
   ] as const) {
     expect(object((await cli(f, "schedule", "compiled", action)).stdout)).toMatchObject({
       enabled,
+      input: { count: 2 },
+      cron: "0 * * * *",
     });
-    expect(await Effect.runPromise(f.store.listSchedules())).toMatchObject([
-      { enabled, input: { count: 2 }, cron: "0 * * * *" },
-    ]);
     expect(JSON.parse((await cli(f, "list")).stdout)).toMatchObject([{ schedule: { enabled } }]);
   }
 
   expect((await cli(f, "schedule", "compiled", "--off")).code).toBe(0);
-  expect(await Effect.runPromise(f.store.listSchedules())).toEqual([]);
+  expect(JSON.parse((await cli(f, "list")).stdout)).toMatchObject([{ schedule: null }]);
 });
 
 test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", async () => {
@@ -197,9 +194,9 @@ test("HTTP cancel refuses an active owner and inspect diagnoses a missing run", 
   const cancelled = await cli(f, "cancel", "owned");
   expect(cancelled.code).toBe(1);
   expect(cancelled.stderr).toContain("owned");
-  expect(await Effect.runPromise(f.store.getRun("owned"))).toMatchObject({
+  expect(object((await cli(f, "inspect", "owned")).stdout).run).toMatchObject({
     status: "running",
-    owner: { token: "active-owner" },
+    owner: { host: expect.any(String) },
   });
   const missing = await cli(f, "inspect", "missing-run");
   expect(missing.code).toBe(1);
@@ -286,10 +283,19 @@ test("HTTP run reports named JSON input errors before creating a run", async () 
     expect(result.stderr).toContain(message ?? "");
   }
 
-  expect(
-    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: new Date().toISOString() })),
-  ).toEqual([]);
+  expect(JSON.parse((await cli(f, "runs")).stdout)).toEqual([]);
 });
+
+/** The revision a run pinned, read from the daemon's HTTP API as the dashboard reads it. */
+async function runGraph(home: string, id: string) {
+  const daemon = readDaemonFile(home);
+
+  const response = await fetch(`http://127.0.0.1:${daemon?.port}/api/runs/${id}/graph`, {
+    headers: { Authorization: `Bearer ${daemon?.token}` },
+  });
+
+  return object(await response.text());
+}
 
 async function registryEntry(home: string, cwd: string, slug: string) {
   const entry = await Effect.runPromise(

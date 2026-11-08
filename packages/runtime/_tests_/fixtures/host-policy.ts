@@ -3,6 +3,7 @@ import { executionKeyString } from "@loopy/core";
 import { code, loopy, parallel, wait } from "@loopy/sdk/graph";
 import { Deferred, Effect } from "effect";
 import type { DurableExecutionProvider } from "../../src/host";
+import { withBundles } from "./compiled";
 import { MemorySqlStore } from "./stores";
 
 export const policySuccess: ExecutionResult = {
@@ -37,11 +38,7 @@ export function policyGraph() {
       }),
   });
 
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
+  withBundles(graph);
 
   return graph;
 }

@@ -1,15 +1,16 @@
 import { graphView } from "@loopy/contract";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { ServiceError } from "./error";
 import type { ServiceOptions } from "./registry";
 
 export const runNotFound = (id: string) =>
   new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`);
 
+// Effect's Clock is the time source the store and host read too, so one request stamps one timeline.
+const now = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis).toISOString());
+
 /** Shared by every operation group so one request sees one clock and one not-found rule. */
 export function makeServiceContext(options: ServiceOptions) {
-  const now = () => new Date(options.clock.now()).toISOString();
-
   const found = <A, E>(id: string, lookup: Effect.Effect<A | null | undefined, E>) =>
     Effect.flatMap(lookup, (run) =>
       run === null || run === undefined ? Effect.fail(runNotFound(id)) : Effect.succeed(run),

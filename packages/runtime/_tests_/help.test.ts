@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { compile } from "@loopy/compiler";
 import { Effect } from "effect";
 import { generateCommand } from "../src/local/typegen/generate";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
+import { compileOrThrow } from "./fixtures/compile";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const repository = resolve(import.meta.dir, "../../..");
@@ -55,11 +55,7 @@ describe("CLI help generation", () => {
       join(directory, "entry.ts"),
       'import {loopy} from "loopy"; import {codexExec} from "./codex.ts"; export default loopy("generated", {input:{}, run:()=>codexExec({args:["hi"], flags:{json:true}})});',
     );
-    const result = await Effect.runPromise(compile(join(directory, "entry.ts")));
-
-    if (!result.ok) {
-      throw new Error(JSON.stringify(result.diagnostics));
-    }
+    const result = await compileOrThrow(join(directory, "entry.ts"));
 
     expect(result.graph.nodes[0]).toMatchObject({
       kind: "command",

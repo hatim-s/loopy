@@ -12,7 +12,7 @@ import { evaluate as evaluateEffect } from "../src/evaluate";
 
 // The executor's own decoder, so these tests read bundle stdout exactly as a run does.
 const decodeStdout = (stdout: string) =>
-  bundleResult({ stdout, stderr: "", exitCode: 0, durationMs: 0 }, (text) => text);
+  bundleResult({ stdout, stderr: "", exitCode: 0 }, (text) => text);
 
 const sdk = "loopy";
 

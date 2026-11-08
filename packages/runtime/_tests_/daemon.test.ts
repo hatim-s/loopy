@@ -7,8 +7,9 @@ import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { makeDaemon, PreparationError, ScheduleDefinitionError } from "../src/host";
-import { countPasses, nextPass, waitUntil } from "./fixtures/service-runtime";
+import { countPasses, nextPass } from "./fixtures/service-runtime";
 import { MemorySqlStore } from "./fixtures/stores";
+import { eventually } from "./fixtures/wait";
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {
   return {
@@ -33,7 +34,8 @@ const runs = (store: Pick<DashboardReader, "queryRuns">) =>
   store.queryRuns({ limit: 200, now: newRun().createdAt });
 
 const settled = (store: Pick<DashboardReader, "queryRuns">, count: number) =>
-  waitUntil(
+  eventually(
+    "every run to succeed",
     Effect.map(
       runs(store),
       (all) => all.length === count && all.every((run) => run.status === "succeeded"),
@@ -118,7 +120,8 @@ test("preparation failure finishes that run, reports its Cause and permits other
         yield* store.createRun(newRun());
         yield* store.createRun({ ...newRun(), id: "second" });
         yield* Effect.forkScoped(daemon.run);
-        yield* waitUntil(
+        yield* eventually(
+          "every run to settle unowned",
           Effect.map(runs(store), (all) =>
             all.every((run) => run.status !== "queued" && !run.owner),
           ),

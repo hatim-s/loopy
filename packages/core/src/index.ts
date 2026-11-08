@@ -43,6 +43,8 @@ export {
   outputBytes,
 } from "./json";
 
+export { LeaseReleaseFailed, LeaseReleaseUnknown, withLease } from "./lease";
+
 export { limitLogs } from "./logs";
 
 export * from "./model";
@@ -89,3 +91,5 @@ export {
   isStringArray,
   setOwnProperty,
 } from "./validation";
+
+export { isPendingWait } from "./waits";

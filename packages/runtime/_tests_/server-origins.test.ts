@@ -15,7 +15,7 @@ async function fixture() {
 
   return {
     store,
-    service: makeLocalService({ store, home, clock: { now: Date.now } }),
+    service: makeLocalService({ store, home }),
     cwd: root,
     assets: join(root, "assets"),
     port: 0,

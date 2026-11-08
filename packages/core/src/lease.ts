@@ -1,5 +1,6 @@
-import type { OwnershipError, RunRecord, StorageError, Store } from "@loopy/core";
 import { Data, Effect, type Exit } from "effect";
+import type { RunRecord } from "./model";
+import type { OwnershipError, StorageError, Store } from "./store";
 
 const LEASE_RELEASE_TIMEOUT_MS = 5000;
 
@@ -14,9 +15,14 @@ export class LeaseReleaseFailed extends Data.TaggedError("LeaseReleaseFailed")<{
   cause: StorageError | OwnershipError;
 }> {}
 
-// Release is bounded so a hung store cannot pin shutdown.
-export function withLease<A, E, R>(
-  store: Pick<Store, "claim" | "release">,
+/**
+ * Claims a run under a fresh token, runs `use` and always releases the claim. Release is bounded
+ * so a hung store cannot pin shutdown. A caller may map claim failures into its own vocabulary.
+ */
+export function withLease<A, E, R, ClaimError>(
+  store: Pick<Store, "release"> & {
+    claim: (runId: string, token: string) => Effect.Effect<RunRecord, ClaimError>;
+  },
   runId: string,
   use: (token: string, run: RunRecord) => Effect.Effect<A, E, R>,
 ) {
