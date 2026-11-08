@@ -72,11 +72,7 @@ export async function holdApproval(daemon: OwnedDaemon, waiting: RunSnapshotView
   const id = waiting.run.id;
   const approved = approves(ordinal);
   const observed = Date.now();
-  const target = observed + holdMs(ordinal);
-
-  while (Date.now() < target) {
-    await Bun.sleep(Math.min(250, target - Date.now()));
-  }
+  await Bun.sleep(holdMs(ordinal));
 
   const stillWaiting = await daemon.call(routes.run, { params: { id } });
 

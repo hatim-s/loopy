@@ -7,6 +7,8 @@ import { filesystemReceipt } from "../filesystem-receipt";
 import { assert, equal } from "../shared/assert";
 import { docker as runDocker } from "../shared/process";
 import { root } from "../stack/constants";
+import { localState } from "../stack/credentials";
+import { toolEnvironment } from "../stack/environment";
 import type { Journey } from "./client";
 
 const stateRoot = sandboxStateRoot(root);
@@ -42,7 +44,7 @@ async function inspect(container: string) {
     '{"network":{{json .HostConfig.NetworkMode}},"user":{{json .Config.User}},"readOnly":{{json .HostConfig.ReadonlyRootfs}},"privileged":{{json .HostConfig.Privileged}},"capDrop":{{json .HostConfig.CapDrop}},"security":{{json .HostConfig.SecurityOpt}},"mounts":{{json .Mounts}}}';
 
   const stdout = await runDocker(["container", "inspect", "--format", format, container], {
-    env: process.env,
+    env: toolEnvironment(localState),
   });
 
   const parsed = decodeIsolation(JSON.parse(stdout));
