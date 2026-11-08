@@ -1,4 +1,4 @@
-import { LOG_LEVELS, NODE_RUN_STATUSES } from "@loopy/core";
+import { LOG_LEVELS, NODE_RUN_STATUSES, PAGE_LIMIT } from "@loopy/core";
 import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect";
 import { decodeBoundary, isoDateTime, queryNumber, struct } from "./codec";
 import { executionKeySchema, nodeRunViewSchema } from "./graph";
@@ -6,10 +6,13 @@ import { logRecordSchema, runStatusSchema } from "./records";
 
 const iso = isoDateTime;
 
+// Larger run inputs, outputs and node outputs are left out of list pages and snapshots.
+export const PREVIEW_BYTES = 16_384;
+
 const limit = queryNumber
   .check(Schema.isInt())
   .check(Schema.isGreaterThan(0))
-  .check(Schema.isLessThanOrEqualTo(200))
+  .check(Schema.isLessThanOrEqualTo(PAGE_LIMIT))
   .pipe(Schema.withDecodingDefault(Effect.succeed(50)));
 
 const numericCursor = Schema.optional(
