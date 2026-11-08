@@ -6,8 +6,6 @@ import { jsonSchema } from "./json";
 
 const dictionary = Schema.Record(Schema.String, Schema.mutableKey(jsonSchema));
 
-const timeoutMs = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
-
 /** Commands without a declared timeout and every parser get this budget. */
 export const DEFAULT_TIMEOUT_MS = 300_000;
 
@@ -20,7 +18,7 @@ export const executionSpecSchema = Schema.Union([
     kind: Schema.Literal("code"),
     bundleHash: hashSchema,
     input: dictionary,
-    timeoutMs,
+    timeoutMs: positiveInt,
   }),
   struct({
     kind: Schema.Literal("command"),
@@ -32,10 +30,10 @@ export const executionSpecSchema = Schema.Union([
     cwd: Schema.NullOr(Schema.String),
     env: Schema.Record(Schema.String, Schema.mutableKey(Schema.String)),
     stdin: Schema.NullOr(Schema.String),
-    timeoutMs,
+    timeoutMs: positiveInt,
     maxOutputBytes: Schema.NullOr(positiveInt),
     okExitCodes: Schema.Array(Schema.Int).pipe(Schema.mutable),
-    parse: Schema.NullOr(struct({ bundleHash: hashSchema, timeoutMs })),
+    parse: Schema.NullOr(struct({ bundleHash: hashSchema, timeoutMs: positiveInt })),
   }),
 ]);
 

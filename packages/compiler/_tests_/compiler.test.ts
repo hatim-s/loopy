@@ -279,7 +279,6 @@ for (const name of ["hello", "review", "asset-sync", "www-sync"]) {
     }
 
     expect(validateGraph(result.graph)).toEqual([]);
-    expect(result.warnings).toEqual([]);
     expect(result.bundles.length).toBeGreaterThan(0);
   });
 }

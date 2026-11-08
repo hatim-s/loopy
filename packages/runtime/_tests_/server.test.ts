@@ -19,7 +19,7 @@ import {
   scheduleViewSchema,
   serverEventSchema,
 } from "@loopy/contract";
-import { type RuntimeEvent, requireRecord, revision } from "@loopy/core";
+import { type RuntimeEvent, revision } from "@loopy/core";
 import { Effect, Schema, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import {
@@ -71,13 +71,9 @@ test("API returns run records, step traces and cursor logs", async () => {
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
   const headers = { Authorization: `Bearer ${token}` };
   const request = (path: string) => fetch(`${url.origin}/api${path}`, { headers });
-  const detail = requireRecord(await (await request(`/runs/${run.id}`)).json(), "Run detail");
-  expect(detail.nodeRuns).toMatchObject([
-    { status: "succeeded" },
-    { status: "succeeded" },
-    { status: "succeeded" },
-  ]);
-  expect(detail.logs).toEqual([]);
+  expect(await (await request(`/runs/${run.id}`)).json()).toMatchObject({
+    nodeRuns: [{ status: "succeeded" }, { status: "succeeded" }, { status: "succeeded" }],
+  });
   expect(await (await request(`/runs/${run.id}/logs`)).json()).toMatchObject([
     { message: "first" },
     { message: "second" },

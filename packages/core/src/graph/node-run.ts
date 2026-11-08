@@ -1,10 +1,10 @@
 import { Schema } from "effect";
 import { counter, positiveInt, struct } from "../codec";
-import { executionErrorSchema } from "../executor";
+import { executionErrorSchema, receiptSchema } from "../executor";
 import { jsonSchema } from "../json";
 import { executionKeySchema } from "./key";
 
-const RECEIPT_KINDS = ["none", "started", "finished"] as const;
+const RECEIPT_KINDS = receiptSchema.members.map((member) => member.fields.kind.schema.literal);
 
 const base = struct({
   key: executionKeySchema,

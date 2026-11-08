@@ -247,23 +247,6 @@ function LoopyHead({ loopy, graph }: { loopy: LoopyView; graph: GraphRevisionVie
           <StartRunForm key={loopy.slug} loopy={loopy} />
         </div>
       )}
-      {graph && graph.graph.warnings.length > 0 && (
-        <details className="text-xs text-attention">
-          <summary className="cursor-pointer">
-            {graph.graph.warnings.length} compiler{" "}
-            {graph.graph.warnings.length === 1 ? "warning" : "warnings"}
-          </summary>
-          <ul className="mt-1 space-y-0.5 font-mono">
-            {graph.graph.warnings.map((warning) => (
-              <li key={`${warning.code}:${warning.nodeId}:${warning.message}`}>
-                {warning.code}
-                {warning.nodeId !== null && ` at ${warning.label ?? warning.nodeId}`}:{" "}
-                {warning.message}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
     </header>
   );
 }

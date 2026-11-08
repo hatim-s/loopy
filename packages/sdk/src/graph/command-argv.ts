@@ -1,7 +1,7 @@
 import {
   COMMAND_PLATFORMS,
   type CommandFlagSpec,
-  type CommandVariant,
+  type CommandVariants,
   checkCommandFlags,
 } from "@loopy/core";
 import {
@@ -24,7 +24,7 @@ type RenderedCommand = {
   operands: (string | RefValue)[];
   flags: Readonly<Record<string, AuthorValue>>;
   flagSpec: CommandFlagSpec;
-  variants: Partial<Record<(typeof COMMAND_PLATFORMS)[number], CommandVariant>>;
+  variants: CommandVariants;
   okExitCodes: readonly number[];
 };
 

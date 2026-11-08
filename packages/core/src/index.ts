@@ -86,7 +86,5 @@ export {
   isRecord,
   isString,
   isStringArray,
-  requirePositiveInteger,
-  requireRecord,
   setOwnProperty,
 } from "./validation";

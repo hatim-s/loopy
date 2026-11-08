@@ -287,7 +287,6 @@ export class GraphBuilder {
       ),
       entry,
       outputs: output === null ? null : { ref: bindingId(output.id), path: [] },
-      warnings: [],
     };
   }
 }

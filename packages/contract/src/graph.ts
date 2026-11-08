@@ -1,12 +1,4 @@
-import {
-  codeNodeSchema,
-  commandNodeSchema,
-  DIAGNOSTIC_CODES,
-  graphSchema,
-  nodeIdSchema,
-  nodeSchema,
-  struct,
-} from "@loopy/core";
+import { codeNodeSchema, commandNodeSchema, graphSchema, nodeSchema, struct } from "@loopy/core";
 import { Schema } from "effect";
 
 type NodeMember = (typeof nodeSchema.members)[number];
@@ -32,14 +24,6 @@ export const nodeViewSchema = Schema.Union([
 export const graphViewSchema = struct({
   ...graphSchema.fields,
   nodes: Schema.Array(nodeViewSchema).pipe(Schema.mutable),
-  warnings: Schema.Array(
-    struct({
-      code: Schema.Literals(DIAGNOSTIC_CODES),
-      message: Schema.String,
-      nodeId: Schema.NullOr(nodeIdSchema),
-      label: Schema.NullOr(Schema.String),
-    }),
-  ).pipe(Schema.mutable),
 });
 
 export type GraphView = Schema.Schema.Type<typeof graphViewSchema>;

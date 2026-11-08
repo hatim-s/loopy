@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import * as contract from "@loopy/contract";
 import { Schema } from "effect";
-import type * as core from "../src";
+import * as core from "../src";
 import {
   type DiagnosticCode,
   ERROR_FIELDS,
@@ -11,14 +10,49 @@ import {
   graphTypeResolver,
   validateGraph,
 } from "../src";
+import { decode } from "./fixtures/decode";
 import { approveDemoGraph } from "./fixtures/graphs";
 
 test("approve-demo is the canonical JSON graph for the builder", () => {
-  expect(contract.decodeBoundary(contract.graphSchema)(approveDemoGraph)).toEqual(approveDemoGraph);
-  expect(
-    contract.decodeBoundary(contract.graphSchema)(JSON.parse(JSON.stringify(approveDemoGraph))),
-  ).toEqual(approveDemoGraph);
+  expect(decode(core.graphSchema)(approveDemoGraph)).toEqual(approveDemoGraph);
+  expect(decode(core.graphSchema)(JSON.parse(JSON.stringify(approveDemoGraph)))).toEqual(
+    approveDemoGraph,
+  );
   expect(validateGraph(approveDemoGraph)).toEqual([]);
+});
+
+test("execution timeouts are whole positive milliseconds from graph validation onward", () => {
+  const nodes = approveDemoGraph.nodes;
+  const command = nodes.find((node) => node.kind === "command");
+  const code = nodes.find((node) => node.kind === "code");
+
+  if (!command || !code) {
+    throw new Error("approve-demo must keep a code node and a command node.");
+  }
+
+  const withTimeout = (timeout: core.Duration) => [
+    { ...code, timeout },
+    { ...command, options: { ...command.options, timeout } },
+  ];
+
+  for (const timeout of [0, "0s", 1.5, "0.0001s"] as const) {
+    for (const node of withTimeout(timeout)) {
+      expect(() => decode(core.nodeSchema)(node)).toThrow("at least 1 ms in whole milliseconds");
+    }
+  }
+
+  for (const timeout of [1500, "1.5s"] as const) {
+    expect(withTimeout(timeout).map((node) => decode(core.nodeSchema)(node))).toEqual(
+      withTimeout(timeout),
+    );
+  }
+
+  const spec = { kind: "code" as const, bundleHash: "a".repeat(64), input: {}, timeoutMs: 1500 };
+  expect(decode(core.executionSpecSchema)(spec)).toEqual(spec);
+
+  for (const timeoutMs of [0, 1.5]) {
+    expect(() => decode(core.executionSpecSchema)({ ...spec, timeoutMs })).toThrow();
+  }
 });
 
 function broken(
@@ -44,7 +78,7 @@ broken("missing_endpoint", (graph) => ({
     ...graph.edges,
     {
       from: graph.entry,
-      to: contract.decodeBoundary(contract.nodeIdSchema)("missing"),
+      to: decode(core.nodeIdSchema)("missing"),
       kind: "next",
     },
   ],
@@ -52,17 +86,17 @@ broken("missing_endpoint", (graph) => ({
 
 broken("missing_entry", (graph) => ({
   ...graph,
-  entry: contract.decodeBoundary(contract.nodeIdSchema)("missing"),
+  entry: decode(core.nodeIdSchema)("missing"),
 }));
 
 broken("unresolved_ref", (graph) => ({
   ...graph,
-  outputs: { ref: contract.decodeBoundary(contract.refIdSchema)("missing"), path: [] },
+  outputs: { ref: decode(core.refIdSchema)("missing"), path: [] },
 }));
 
 broken("out_of_scope_ref", (graph) => ({
   ...graph,
-  outputs: { ref: contract.decodeBoundary(contract.refIdSchema)("5:apply"), path: [] },
+  outputs: { ref: decode(core.refIdSchema)("5:apply"), path: [] },
 }));
 
 broken("predicate_type", (graph) => ({
@@ -74,7 +108,7 @@ broken("predicate_type", (graph) => ({
           predicate: {
             op: "eq",
             left: {
-              ref: contract.decodeBoundary(contract.refIdSchema)("2:approve"),
+              ref: decode(core.refIdSchema)("2:approve"),
               path: ["approved"],
             },
             right: "true",
@@ -93,7 +127,7 @@ broken("invalid_size", (graph) => ({
           predicate: {
             op: "exists",
             value: {
-              ref: contract.decodeBoundary(contract.refIdSchema)("2:approve"),
+              ref: decode(core.refIdSchema)("2:approve"),
               path: [],
               size: true,
             },
@@ -111,7 +145,7 @@ broken(
       node.kind === "branch"
         ? {
             ...node,
-            arms: { ...node.arms, no: contract.decodeBoundary(contract.nodeIdSchema)("missing") },
+            arms: { ...node.arms, no: decode(core.nodeIdSchema)("missing") },
           }
         : node,
     ),
@@ -127,7 +161,7 @@ broken("invalid_scope", (graph) => ({
 test("graph validation reports cycle", () => {
   const graph = structuredClone(approveDemoGraph);
   graph.edges.push({
-    from: contract.decodeBoundary(contract.nodeIdSchema)("8:join"),
+    from: decode(core.nodeIdSchema)("8:join"),
     to: graph.entry,
     kind: "next",
   });
@@ -137,7 +171,7 @@ test("graph validation reports cycle", () => {
 });
 
 test("execution identity escapes delimiters and distinguishes runs and iteration paths", () => {
-  const nodeId = contract.decodeBoundary(contract.nodeIdSchema)("a/b");
+  const nodeId = decode(core.nodeIdSchema)("a/b");
 
   const keys: core.ExecutionKey[] = [
     { runId: "run", nodeId, scope: [] },
@@ -152,7 +186,7 @@ test("execution identity escapes delimiters and distinguishes runs and iteration
         { nodeId, index: 1 },
       ],
     },
-    { runId: "run", nodeId: contract.decodeBoundary(contract.nodeIdSchema)('a/b"/[1]'), scope: [] },
+    { runId: "run", nodeId: decode(core.nodeIdSchema)('a/b"/[1]'), scope: [] },
   ];
 
   expect(new Set(keys.map(executionKeyString)).size).toBe(keys.length);
@@ -167,14 +201,12 @@ test("strict value boundaries reject malformed refs instead of accepting them as
     { nested: { ref: "draft", path: [], size: true } },
   ]) {
     expect(
-      Schema.decodeUnknownExit(contract.valueSchema)(value, { onExcessProperty: "error" })._tag ===
+      Schema.decodeUnknownExit(core.valueSchema)(value, { onExcessProperty: "error" })._tag ===
         "Success",
     ).toBe(false);
   }
 
-  expect(
-    contract.decodeBoundary(contract.valueSchema)({ nested: { ref: "draft", path: [] } }),
-  ).toEqual({
+  expect(decode(core.valueSchema)({ nested: { ref: "draft", path: [] } })).toEqual({
     nested: { ref: "draft", path: [] },
   });
 });
@@ -188,7 +220,7 @@ test("declared ref fields resolve and predicate size has a numeric comparison ty
           predicate: {
             op: "gt",
             left: {
-              ref: contract.decodeBoundary(contract.refIdSchema)("input"),
+              ref: decode(core.refIdSchema)("input"),
               path: ["subject"],
               size: true,
             },
@@ -205,7 +237,7 @@ test("declared ref fields resolve and predicate size has a numeric comparison ty
           predicate: {
             op: "eq",
             left: {
-              ref: contract.decodeBoundary(contract.refIdSchema)("0:draft"),
+              ref: decode(core.refIdSchema)("0:draft"),
               path: ["missing"],
             },
             right: 0,
@@ -216,14 +248,13 @@ test("declared ref fields resolve and predicate size has a numeric comparison ty
   expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
 });
 
-const mapGraph = contract.decodeBoundary(contract.graphSchema)({
+const mapGraph = decode(core.graphSchema)({
   version: 1,
   meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
   name: "map",
   input: { items: "json" },
   entry: "map",
   outputs: { ref: "map", path: [] },
-  warnings: [],
   nodes: [
     {
       id: "map",
@@ -267,7 +298,7 @@ test("map bindings stay inside the body and only scope joins can iterate", () =>
   expect(
     validateGraph({
       ...mapGraph,
-      outputs: { ref: contract.decodeBoundary(contract.refIdSchema)("item"), path: [] },
+      outputs: { ref: decode(core.refIdSchema)("item"), path: [] },
     }).map((error) => error.code),
   ).toEqual(["out_of_scope_ref"]);
 
@@ -289,14 +320,13 @@ test("map bindings stay inside the body and only scope joins can iterate", () =>
 });
 
 test("parallel siblings cannot consume one another's results", () => {
-  const graph = contract.decodeBoundary(contract.graphSchema)({
+  const graph = decode(core.graphSchema)({
     version: 1,
     meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "parallel",
     input: {},
     entry: "parallel",
     outputs: null,
-    warnings: [],
     nodes: [
       { id: "parallel", kind: "parallel", scope: null, label: null, branches: { a: "a", b: "b" } },
       { id: "a", kind: "uuid", scope: "parallel", label: null },
@@ -316,14 +346,13 @@ test("parallel siblings cannot consume one another's results", () => {
 });
 
 test("rescue error binding is visible only to the handler", () => {
-  const graph = contract.decodeBoundary(contract.graphSchema)({
+  const graph = decode(core.graphSchema)({
     version: 1,
     meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "rescue",
     input: {},
     entry: "rescue",
     outputs: null,
-    warnings: [],
     nodes: [
       {
         id: "rescue",
@@ -353,7 +382,7 @@ test("rescue error binding is visible only to the handler", () => {
       ? {
           ...node,
           message: {
-            ref: contract.decodeBoundary(contract.refIdSchema)("error"),
+            ref: decode(core.refIdSchema)("error"),
             path: ["message"],
           },
         }
@@ -377,9 +406,7 @@ test("scope bindings cannot shadow node outputs, input, or one another", () => {
   const shadow = {
     ...mapGraph,
     nodes: withoutIndex.map((node) =>
-      node.kind === "map"
-        ? { ...node, index: contract.decodeBoundary(contract.refIdSchema)("input") }
-        : node,
+      node.kind === "map" ? { ...node, index: decode(core.refIdSchema)("input") } : node,
     ),
   };
 
@@ -400,7 +427,7 @@ function withPredicate(predicate: core.Predicate): Graph {
   };
 }
 
-const jsonRef = { ref: contract.decodeBoundary(contract.refIdSchema)("input"), path: ["data"] };
+const jsonRef = { ref: decode(core.refIdSchema)("input"), path: ["data"] };
 
 for (const op of ["lt", "lte", "gt", "gte"] as const) {
   test(`${op} rejects JSON and non-orderable declared types`, () => {
@@ -410,7 +437,7 @@ for (const op of ["lt", "lte", "gt", "gte"] as const) {
       [true, false],
       ["a", 1],
     ]) {
-      const predicate = contract.decodeBoundary(contract.predicateSchema)({ op, left, right });
+      const predicate = decode(core.predicateSchema)({ op, left, right });
       expect(validateGraph(withPredicate(predicate)).map((error) => error.code)).toContain(
         "predicate_type",
       );
@@ -435,9 +462,9 @@ test("size requires declared string or array and in requires matching array elem
     [1, "text"],
   ]) {
     expect(
-      validateGraph(
-        withPredicate(contract.decodeBoundary(contract.predicateSchema)({ op: "in", left, right })),
-      ).map((error) => error.code),
+      validateGraph(withPredicate(decode(core.predicateSchema)({ op: "in", left, right }))).map(
+        (error) => error.code,
+      ),
     ).toEqual(["predicate_type"]);
   }
 
@@ -462,7 +489,7 @@ test("a map body cannot consume its enclosing map output", () => {
             ...node,
             result: {
               kind: "value" as const,
-              value: { ref: contract.decodeBoundary(contract.refIdSchema)("map"), path: [] },
+              value: { ref: decode(core.refIdSchema)("map"), path: [] },
             },
           }
         : node,
@@ -482,7 +509,7 @@ test("format accepts scalar literals and declared scalar refs only", () => {
           ? {
               ...node,
               values: {
-                value: { ref: contract.decodeBoundary(contract.refIdSchema)("input"), path },
+                value: { ref: decode(core.refIdSchema)("input"), path },
               },
             }
           : node,
@@ -495,7 +522,7 @@ test("format accepts scalar literals and declared scalar refs only", () => {
   for (const value of [null, [], {}]) {
     const format = approveDemoGraph.nodes.find((node) => node.kind === "format");
     expect(
-      Schema.decodeUnknownExit(contract.nodeSchema)(
+      Schema.decodeUnknownExit(core.nodeSchema)(
         { ...format, values: { value } },
         { onExcessProperty: "error" },
       )._tag === "Success",
@@ -508,7 +535,7 @@ test("disconnected nodes are diagnosed", () => {
     ...approveDemoGraph,
     nodes: [
       ...approveDemoGraph.nodes,
-      contract.decodeBoundary(contract.nodeSchema)({
+      decode(core.nodeSchema)({
         id: "orphan",
         kind: "uuid",
         label: null,
@@ -521,11 +548,11 @@ test("disconnected nodes are diagnosed", () => {
     validateGraph(graph)
       .filter((error) => error.code === "invalid_scope")
       .map((error) => error.node),
-  ).toEqual([contract.decodeBoundary(contract.nodeIdSchema)("orphan")]);
+  ).toEqual([decode(core.nodeIdSchema)("orphan")]);
 });
 
 test("a node with next edges to two different targets is diagnosed", () => {
-  const sibling = contract.decodeBoundary(contract.nodeSchema)({
+  const sibling = decode(core.nodeSchema)({
     id: "sibling",
     kind: "uuid",
     label: null,
@@ -546,13 +573,12 @@ test("a node with next edges to two different targets is diagnosed", () => {
       code: "invalid_scope",
       node: approveDemoGraph.entry,
       message: "A node must continue to exactly one next node.",
-      source: null,
     },
   ]);
 });
 
 test("a second root with an edge into the graph is diagnosed", () => {
-  const root = contract.decodeBoundary(contract.nodeSchema)({
+  const root = decode(core.nodeSchema)({
     id: "root",
     kind: "uuid",
     label: null,
@@ -579,7 +605,7 @@ for (const target of ["5:apply", "6:join"]) {
         ...approveDemoGraph.edges,
         {
           from: approveDemoGraph.entry,
-          to: contract.decodeBoundary(contract.nodeIdSchema)(target),
+          to: decode(core.nodeIdSchema)(target),
           kind: "next" as const,
         },
       ],
@@ -596,15 +622,15 @@ test("sibling arm edges cannot grant reference visibility", () => {
       node.kind === "fail"
         ? {
             ...node,
-            message: { ref: contract.decodeBoundary(contract.refIdSchema)("4:format"), path: [] },
+            message: { ref: decode(core.refIdSchema)("4:format"), path: [] },
           }
         : node,
     ),
     edges: [
       ...approveDemoGraph.edges,
       {
-        from: contract.decodeBoundary(contract.nodeIdSchema)("4:format"),
-        to: contract.decodeBoundary(contract.nodeIdSchema)("7:fail"),
+        from: decode(core.nodeIdSchema)("4:format"),
+        to: decode(core.nodeIdSchema)("7:fail"),
         kind: "next" as const,
       },
     ],
@@ -616,8 +642,8 @@ test("sibling arm edges cannot grant reference visibility", () => {
 });
 
 test("array refs use the declared map result type for size and membership", () => {
-  const done = contract.decodeBoundary(contract.nodeIdSchema)("done");
-  const mapRef = { ref: contract.decodeBoundary(contract.refIdSchema)("map"), path: [] };
+  const done = decode(core.nodeIdSchema)("done");
+  const mapRef = { ref: decode(core.refIdSchema)("map"), path: [] };
 
   const graph: Graph = {
     ...mapGraph,
@@ -630,7 +656,7 @@ test("array refs use the declared map result type for size and membership", () =
                 ...node,
                 result: {
                   kind: "value" as const,
-                  value: { ref: contract.decodeBoundary(contract.refIdSchema)("body"), path: [] },
+                  value: { ref: decode(core.refIdSchema)("body"), path: [] },
                 },
               }
             : node,
@@ -641,19 +667,19 @@ test("array refs use the declared map result type for size and membership", () =
         scope: null,
         label: null,
         arms: {
-          yes: contract.decodeBoundary(contract.nodeIdSchema)("yes"),
-          no: contract.decodeBoundary(contract.nodeIdSchema)("no"),
+          yes: decode(core.nodeIdSchema)("yes"),
+          no: decode(core.nodeIdSchema)("no"),
         },
         predicate: { op: "in", left: "value", right: mapRef },
       },
       {
-        id: contract.decodeBoundary(contract.nodeIdSchema)("yes"),
+        id: decode(core.nodeIdSchema)("yes"),
         kind: "uuid",
         scope: done,
         label: null,
       },
       {
-        id: contract.decodeBoundary(contract.nodeIdSchema)("no"),
+        id: decode(core.nodeIdSchema)("no"),
         kind: "uuid",
         scope: done,
         label: null,
@@ -680,14 +706,13 @@ test("array refs use the declared map result type for size and membership", () =
 });
 
 function numericBranchGraph(): Graph {
-  return contract.decodeBoundary(contract.graphSchema)({
+  return decode(core.graphSchema)({
     version: 1,
     meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "derived-types",
     input: {},
     entry: "branch",
     outputs: null,
-    warnings: [],
     nodes: [
       {
         id: "branch",
@@ -746,7 +771,7 @@ test("numeric branch results allow ordering and reject string equality", () => {
           ...node,
           predicate: {
             op: "eq",
-            left: { ref: contract.decodeBoundary(contract.refIdSchema)("branch"), path: [] },
+            left: { ref: decode(core.refIdSchema)("branch"), path: [] },
             right: "wrong",
           },
         }
@@ -770,7 +795,7 @@ test("switch results resolve through each arm's terminal join", () => {
   graph.input = { choice: "string" };
   graph.nodes = graph.nodes.map((node) =>
     node.id === "branch"
-      ? contract.decodeBoundary(contract.nodeSchema)({
+      ? decode(core.nodeSchema)({
           id: node.id,
           kind: "switch",
           scope: null,
@@ -791,14 +816,13 @@ test("switch results resolve through each arm's terminal join", () => {
 });
 
 test("format accepts a scalar join result", () => {
-  const graph = contract.decodeBoundary(contract.graphSchema)({
+  const graph = decode(core.graphSchema)({
     version: 1,
     meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "scalar-join",
     input: {},
     entry: "join",
     outputs: null,
-    warnings: [],
     nodes: [
       {
         id: "join",
@@ -831,14 +855,14 @@ test("format accepts map items from a declared string array", () => {
         ? {
             ...node,
             values: {
-              value: { ref: contract.decodeBoundary(contract.refIdSchema)("item"), path: [] },
+              value: { ref: decode(core.refIdSchema)("item"), path: [] },
             },
           }
         : node,
     ),
   };
 
-  expect(contract.decodeBoundary(contract.graphSchema)(graph)).toEqual(graph);
+  expect(decode(core.graphSchema)(graph)).toEqual(graph);
   expect(validateGraph(graph)).toEqual([]);
 });
 
@@ -846,7 +870,7 @@ test("finally preserves its body result type", () => {
   const graph = numericBranchGraph();
   graph.nodes = graph.nodes.map((node) =>
     node.id === "branch"
-      ? contract.decodeBoundary(contract.nodeSchema)({
+      ? decode(core.nodeSchema)({
           id: node.id,
           kind: "finally",
           scope: null,
@@ -870,7 +894,7 @@ test("command refs use their declared output fields", () => {
             result: {
               kind: "value" as const,
               value: {
-                ref: contract.decodeBoundary(contract.refIdSchema)("5:apply"),
+                ref: decode(core.refIdSchema)("5:apply"),
                 path: ["count"],
               },
             },
@@ -885,7 +909,7 @@ test("command refs use their declared output fields", () => {
           result: {
             kind: "value" as const,
             value: {
-              ref: contract.decodeBoundary(contract.refIdSchema)("5:apply"),
+              ref: decode(core.refIdSchema)("5:apply"),
               path: ["missing"],
             },
           },
@@ -896,14 +920,13 @@ test("command refs use their declared output fields", () => {
 });
 
 test("cyclic join field projections produce diagnostics without recursing forever", () => {
-  const graph = contract.decodeBoundary(contract.graphSchema)({
+  const graph = decode(core.graphSchema)({
     version: 1,
     meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "cyclic-ref",
     input: {},
     entry: "join",
     outputs: null,
-    warnings: [],
     nodes: [
       {
         id: "join",
@@ -923,7 +946,7 @@ test("rescue results use the common body and handler type", () => {
   const graph = numericBranchGraph();
   graph.nodes = graph.nodes.map((node) =>
     node.id === "branch"
-      ? contract.decodeBoundary(contract.nodeSchema)({
+      ? decode(core.nodeSchema)({
           id: node.id,
           kind: "rescue",
           scope: null,
@@ -952,7 +975,7 @@ for (const [yes, no, member] of [
 ] satisfies [core.Value[], core.Value[], core.Value][]) {
   test(`literal array branch results preserve element types for ${JSON.stringify(yes)}`, () => {
     const graph = numericBranchGraph();
-    const result = { ref: contract.decodeBoundary(contract.refIdSchema)("result"), path: [] };
+    const result = { ref: decode(core.refIdSchema)("result"), path: [] };
     graph.nodes = graph.nodes.map((node) =>
       node.kind === "join" && (node.id === "yes" || node.id === "no")
         ? { ...node, result: { kind: "value" as const, value: node.id === "yes" ? yes : no } }
@@ -978,14 +1001,13 @@ for (const result of [
   { nested: { count: { ref: "input", path: ["count"] } } },
 ]) {
   test(`format resolves literal join paths through ${JSON.stringify(result)}`, () => {
-    const graph = contract.decodeBoundary(contract.graphSchema)({
+    const graph = decode(core.graphSchema)({
       version: 1,
       meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
       name: "literal-path",
       input: { count: "number" },
       entry: "join",
       outputs: null,
-      warnings: [],
       nodes: [
         {
           id: "join",
@@ -1014,7 +1036,7 @@ test("parallel result paths resolve each labelled arm through its join", () => {
   const graph = numericBranchGraph();
   graph.nodes = graph.nodes.map((node) =>
     node.id === "branch"
-      ? contract.decodeBoundary(contract.nodeSchema)({
+      ? decode(core.nodeSchema)({
           id: node.id,
           kind: "parallel",
           scope: null,
@@ -1026,7 +1048,7 @@ test("parallel result paths resolve each labelled arm through its join", () => {
             ...node,
             predicate: {
               op: "gt",
-              left: { ref: contract.decodeBoundary(contract.refIdSchema)("branch"), path: ["a"] },
+              left: { ref: decode(core.refIdSchema)("branch"), path: ["a"] },
               right: 0,
             },
           }
@@ -1036,7 +1058,7 @@ test("parallel result paths resolve each labelled arm through its join", () => {
               result: {
                 kind: "value" as const,
                 value: {
-                  ref: contract.decodeBoundary(contract.refIdSchema)("branch"),
+                  ref: decode(core.refIdSchema)("branch"),
                   path: ["a"],
                 },
               },
@@ -1051,7 +1073,7 @@ test("parallel result paths resolve each labelled arm through its join", () => {
 });
 
 test("rescue error binding resolves the shared record fields", () => {
-  const graph = contract.decodeBoundary(contract.graphSchema)({
+  const graph = decode(core.graphSchema)({
     ...numericBranchGraph(),
     nodes: [
       {
@@ -1105,7 +1127,7 @@ for (const type of FIELD_TYPES) {
     expect(resolve({ ref: "0:draft", path: [] })).toBe(type);
 
     for (const path of [["0"], ["length"], ["toString"]]) {
-      graph.outputs = { ref: contract.decodeBoundary(contract.refIdSchema)("0:draft"), path };
+      graph.outputs = { ref: decode(core.refIdSchema)("0:draft"), path };
       expect(validateGraph(graph).map((error) => error.code)).toContain("unresolved_ref");
     }
   });
@@ -1122,7 +1144,7 @@ test("control unions reject paths that enter a scalar or array arm", () => {
             predicate: {
               op: "exists",
               value: {
-                ref: contract.decodeBoundary(contract.refIdSchema)("branch"),
+                ref: decode(core.refIdSchema)("branch"),
                 path: ["field"],
               },
             },
@@ -1137,7 +1159,7 @@ for (const kind of ["branch", "rescue"] as const) {
     const graph = numericBranchGraph();
     graph.nodes = graph.nodes.map((node) =>
       node.id === "yes"
-        ? contract.decodeBoundary(contract.nodeSchema)({
+        ? decode(core.nodeSchema)({
             id: node.id,
             kind: "fail",
             scope: node.scope,
@@ -1145,7 +1167,7 @@ for (const kind of ["branch", "rescue"] as const) {
             message: "oops",
           })
         : node.id === "branch" && kind === "rescue"
-          ? contract.decodeBoundary(contract.nodeSchema)({
+          ? decode(core.nodeSchema)({
               id: node.id,
               kind,
               scope: null,
@@ -1169,7 +1191,7 @@ test("a branch with no returning arms has an unresolved result reference", () =>
     .filter((node) => !["check", "pass", "fail"].includes(node.id))
     .map((node) =>
       node.id === "yes" || node.id === "no"
-        ? contract.decodeBoundary(contract.nodeSchema)({
+        ? decode(core.nodeSchema)({
             id: node.id,
             kind: "fail",
             scope: "branch",
@@ -1179,9 +1201,7 @@ test("a branch with no returning arms has an unresolved result reference", () =>
         : node,
     );
   graph.edges = graph.edges.filter((edge) => edge.from === "branch");
-  graph.edges.push(
-    contract.decodeBoundary(contract.edgeSchema)({ from: "branch", to: "result", kind: "next" }),
-  );
+  graph.edges.push(decode(core.edgeSchema)({ from: "branch", to: "result", kind: "next" }));
 
   expect(graphTypeResolver(graph)({ ref: "branch", path: [] })).toBe("never");
   expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
@@ -1191,7 +1211,7 @@ for (const field of ["toString", "constructor", "__proto__"]) {
   test(`record paths require an own declaration for ${field}`, () => {
     const graph = structuredClone(approveDemoGraph);
     graph.outputs = {
-      ref: contract.decodeBoundary(contract.refIdSchema)("0:draft"),
+      ref: decode(core.refIdSchema)("0:draft"),
       path: [field],
     };
     expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
@@ -1207,7 +1227,7 @@ for (const field of ["toString", "constructor", "__proto__"]) {
   });
 
   test(`parallel paths reject undeclared label ${field}`, () => {
-    const graph = contract.decodeBoundary(contract.graphSchema)({
+    const graph = decode(core.graphSchema)({
       ...numericBranchGraph(),
       nodes: [
         { id: "parallel", kind: "parallel", scope: null, label: null, branches: { a: "a" } },
@@ -1285,7 +1305,7 @@ for (const label of ["__proto__", "constructor", "prototype"]) {
             ? {
                 ...node,
                 kind: "switch",
-                on: { ref: contract.decodeBoundary(contract.refIdSchema)("input"), path: [] },
+                on: { ref: decode(core.refIdSchema)("input"), path: [] },
                 cases: { [label]: node.arms.yes },
                 default: node.arms.no,
               }
@@ -1307,21 +1327,20 @@ for (const label of ["__proto__", "constructor", "prototype"]) {
 }
 
 test("none joins resolve to never without a plumbing reference", () => {
-  const graph = contract.decodeBoundary(contract.graphSchema)({
+  const graph = decode(core.graphSchema)({
     version: 1,
     meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
     name: "none",
     input: {},
     entry: "none",
     outputs: null,
-    warnings: [],
     nodes: [{ id: "none", kind: "join", label: null, scope: null, result: { kind: "none" } }],
     edges: [],
   });
 
   expect(graphTypeResolver(graph)({ ref: "none", path: [] })).toBe("never");
   expect(validateGraph(graph)).toEqual([]);
-  graph.outputs = contract.decodeBoundary(contract.refSchema)({ ref: "none", path: [] });
+  graph.outputs = decode(core.refSchema)({ ref: "none", path: [] });
   expect(validateGraph(graph).map(({ code }) => code)).toEqual(["unresolved_ref"]);
 });
 
@@ -1349,13 +1368,13 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
 
     for (const node of nodes) {
       expect(
-        Schema.decodeUnknownExit(contract.nodeSchema)(node, { onExcessProperty: "error" })._tag ===
+        Schema.decodeUnknownExit(core.nodeSchema)(node, { onExcessProperty: "error" })._tag ===
           "Success",
       ).toBe(false);
     }
 
     expect(
-      Schema.decodeUnknownExit(contract.graphSchema)(
+      Schema.decodeUnknownExit(core.graphSchema)(
         { ...approveDemoGraph, input: { [name]: "number" } },
         { onExcessProperty: "error" },
       )._tag === "Success",
@@ -1368,15 +1387,15 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
 
   for (const label of [name, `${name}?`]) {
     const sites = [
-      ["node label", contract.nodeSchema, { ...base, kind: "uuid", label }],
+      ["node label", core.nodeSchema, { ...base, kind: "uuid", label }],
       [
         "parallel arm",
-        contract.nodeSchema,
+        core.nodeSchema,
         { ...base, kind: "parallel", branches: { [label]: "arm" } },
       ],
       [
         "switch arm",
-        contract.nodeSchema,
+        core.nodeSchema,
         {
           ...base,
           kind: "switch",
@@ -1385,11 +1404,11 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
           default: null,
         },
       ],
-      ["input field", contract.graphSchema, { ...approveDemoGraph, input: { [label]: "number" } }],
-      ["output field", contract.outputSchema, { kind: "record", fields: { [label]: "number" } }],
+      ["input field", core.graphSchema, { ...approveDemoGraph, input: { [label]: "number" } }],
+      ["output field", core.outputSchema, { kind: "record", fields: { [label]: "number" } }],
       [
         "wait field",
-        contract.nodeSchema,
+        core.nodeSchema,
         {
           ...base,
           kind: "wait",

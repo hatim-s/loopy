@@ -45,7 +45,6 @@ export const diagnosticSchema = struct({
   code: Schema.Literals(DIAGNOSTIC_CODES),
   message: Schema.String,
   node: Schema.NullOr(nodeIdSchema),
-  source: Schema.NullOr(struct({ module: Schema.String, line: positiveInt, column: positiveInt })),
 });
 
 export type Diagnostic = Schema.Schema.Type<typeof diagnosticSchema>;
@@ -106,7 +105,6 @@ export const graphSchema = struct({
   edges: Schema.Array(edgeSchema).pipe(Schema.mutable),
   entry: nodeIdSchema,
   outputs: Schema.NullOr(refSchema),
-  warnings: Schema.Array(diagnosticSchema).pipe(Schema.mutable),
 });
 
 export type Graph = Schema.Schema.Type<typeof graphSchema>;

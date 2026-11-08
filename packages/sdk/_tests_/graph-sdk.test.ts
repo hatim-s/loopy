@@ -67,7 +67,6 @@ function rejects(code: DiagnosticCode, run: () => void) {
 
     if (error instanceof GraphBuildError) {
       expect(error.diagnostic.code).toBe(code);
-      expect(error.diagnostic.source).toBeNull();
     }
   }
 }

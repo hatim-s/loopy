@@ -1,4 +1,4 @@
-import type { COMMAND_PLATFORMS, CommandFlag } from "@loopy/core";
+import { COMMAND_PLATFORMS, type CommandFlag } from "@loopy/core";
 
 export type PositionalDefinition = {
   readonly name: string;
@@ -166,8 +166,7 @@ function optionIdentity(flag: CommandFlag | undefined): string {
 export function validateCommandDeclaration(descriptor: CommandDeclaration): void {
   for (const definition of [
     descriptor,
-    platformVariant(descriptor, "darwin"),
-    platformVariant(descriptor, "linux"),
+    ...COMMAND_PLATFORMS.map((platform) => platformVariant(descriptor, platform)),
   ]) {
     const seen = new Map<string, string>();
 

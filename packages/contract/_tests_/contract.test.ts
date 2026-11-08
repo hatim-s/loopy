@@ -378,7 +378,7 @@ test("graph wire views reject paths and hashes, including command parser hashes"
     return node;
   });
 
-  const view = { ...approveDemoGraph, nodes, warnings: [] };
+  const view = { ...approveDemoGraph, nodes };
   expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
   expect(
     Schema.decodeUnknownExit(contract.graphViewSchema)(approveDemoGraph, {
@@ -393,33 +393,6 @@ test("graph wire views reject paths and hashes, including command parser hashes"
           node.kind === "command" ? { ...node, parse: { bundleHash: "secret" } } : node,
         ),
       },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
-});
-
-test("graph warning views project node labels without source module paths", () => {
-  const graph = {
-    ...approveDemoGraph,
-    warnings: [
-      {
-        code: "predicate_type" as const,
-        message: "warning",
-        node: approveDemoGraph.entry,
-        source: { module: "/private/author.ts", line: 1, column: 1 },
-      },
-    ],
-  };
-
-  const view = contract.graphView(graph);
-  expect(view.warnings).toEqual([
-    { code: "predicate_type", message: "warning", nodeId: graph.entry, label: "draft" },
-  ]);
-  expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
-  expect(JSON.stringify(view)).not.toContain("/private/author.ts");
-  expect(
-    Schema.decodeUnknownExit(contract.graphViewSchema)(
-      { ...view, warnings: graph.warnings },
       { onExcessProperty: "error" },
     )._tag === "Success",
   ).toBe(false);

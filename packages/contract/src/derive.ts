@@ -188,11 +188,5 @@ export function graphView(graph: Graph): GraphView {
 
       return node.kind === "command" ? { ...node, parse: node.parse !== null } : node;
     }),
-    warnings: graph.warnings.map(({ code, message, node }) => ({
-      code,
-      message,
-      nodeId: node,
-      label: graph.nodes.find((entry) => entry.id === node)?.label ?? null,
-    })),
   };
 }

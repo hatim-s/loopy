@@ -1,7 +1,7 @@
 import type { Duration, RateLimit } from "@loopy/core";
 import {
   type CommandFlagSpec,
-  type CommandVariant,
+  type CommandVariants,
   type GraphRetry,
   type OutSchema,
   parseArgv,
@@ -55,8 +55,8 @@ function addCommand(
     out: OutSchema;
     argv: readonly (string | RefValue)[];
     flags: Readonly<Record<string, AuthorValue>>;
-    flagSpec?: CommandFlagSpec;
-    variants?: Partial<Record<"darwin" | "linux", CommandVariant>>;
+    flagSpec: CommandFlagSpec | null;
+    variants: CommandVariants;
     okExitCodes: readonly number[];
     parse: { module: string | null } | null;
   },
@@ -71,14 +71,14 @@ function addCommand(
       out: node.out,
       argv: node.argv.map((arg) => serialize(arg, builder)),
       flags: serializeValues(node.flags, builder),
-      ...(node.flagSpec && { flagSpec: node.flagSpec }),
-      ...(node.variants && Object.keys(node.variants).length > 0 && { variants: node.variants }),
+      flagSpec: node.flagSpec,
+      variants: node.variants,
       options: {
         cwd: serialize(options.cwd, builder),
         env: serializeValues(options.env ?? {}, builder),
         stdin: serialize(options.stdin, builder),
-        timeout: options.timeout,
-        maxOutputBytes: options.maxOutputBytes,
+        timeout: options.timeout ?? null,
+        maxOutputBytes: options.maxOutputBytes ?? null,
       },
       rateLimit: options.rateLimit ?? null,
       retry: retryPolicy(options.retry),
@@ -178,7 +178,16 @@ export function defineCommand<const S extends OutSchema, const D extends Command
 
 function shell(key: string, argv: readonly (string | RefValue)[], options: Options) {
   const id = addCommand(
-    { key, out: commandOutput, argv, flags: {}, okExitCodes: [0], parse: null },
+    {
+      key,
+      out: commandOutput,
+      argv,
+      flags: {},
+      flagSpec: null,
+      variants: {},
+      okExitCodes: [0],
+      parse: null,
+    },
     options,
   );
 

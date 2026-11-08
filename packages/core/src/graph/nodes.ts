@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { positiveInt, struct } from "../codec";
-import { durationSchema } from "../duration";
+import { durationSchema, positiveDurationSchema } from "../duration";
 import { jsonSchema } from "../json";
 import { rateLimitSchema } from "../rate-limit";
 import {
@@ -49,6 +49,8 @@ export type CommandFlagSpec = Schema.Schema.Type<typeof commandFlagSpecSchema>;
 
 export const COMMAND_PLATFORMS = ["darwin", "linux"] as const;
 
+type CommandPlatform = (typeof COMMAND_PLATFORMS)[number];
+
 /** A platform's program, flag rendering and preset flag values, which override the base values. */
 const commandVariantSchema = struct({
   program: Schema.String,
@@ -62,7 +64,9 @@ export type CommandVariant = Schema.Schema.Type<typeof commandVariantSchema>;
 export const commandVariantsSchema = struct({
   darwin: Schema.optional(commandVariantSchema),
   linux: Schema.optional(commandVariantSchema),
-});
+} satisfies Record<CommandPlatform, unknown>);
+
+export type CommandVariants = Schema.Schema.Type<typeof commandVariantsSchema>;
 
 const values = graphRecord(Schema.mutableKey(valueSchema));
 
@@ -83,7 +87,7 @@ export const codeNodeSchema = struct({
   module: struct({ path: Schema.String, bundleHash: Schema.NullOr(Schema.String) }),
   rateLimit: Schema.NullOr(rateLimitSchema),
   retry: retrySchema,
-  timeout: Schema.NullOr(durationSchema),
+  timeout: Schema.NullOr(positiveDurationSchema),
 });
 
 export const commandNodeSchema = struct({
@@ -93,14 +97,15 @@ export const commandNodeSchema = struct({
   out: outputSchema,
   argv: Schema.Array(valueSchema).pipe(Schema.mutable),
   flags: values,
-  flagSpec: Schema.optional(commandFlagSpecSchema),
-  variants: Schema.optional(commandVariantsSchema),
+  // Only sh.exec and sh.run nodes, which pass argv through, have no flag spec.
+  flagSpec: Schema.NullOr(commandFlagSpecSchema),
+  variants: commandVariantsSchema,
   options: struct({
     cwd: Schema.NullOr(valueSchema),
     env: values,
     stdin: Schema.NullOr(valueSchema),
-    timeout: Schema.optional(durationSchema),
-    maxOutputBytes: Schema.optional(positiveInt),
+    timeout: Schema.NullOr(positiveDurationSchema),
+    maxOutputBytes: Schema.NullOr(positiveInt),
   }),
   rateLimit: Schema.NullOr(rateLimitSchema),
   retry: retrySchema,
