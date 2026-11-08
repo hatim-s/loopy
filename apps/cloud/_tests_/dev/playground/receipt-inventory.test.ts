@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { qualityTestRoot } from "../../../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { qualityTestRoot } from "../../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { type Admission, groups, phases } from "../../../dev/playground/journal";
 import { cohortJobs, failsAt, planTotals } from "../../../dev/playground/plan";
 import { receiptInventory } from "../../../dev/playground/receipt/inventory";

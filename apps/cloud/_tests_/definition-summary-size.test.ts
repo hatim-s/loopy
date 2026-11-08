@@ -1,20 +1,30 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import { definitionSummarySchema } from "@loopy/contract";
 import { canonicalJson, revision } from "@loopy/core";
 import { Schema } from "effect";
 import { ARTIFACT_LIMITS } from "../src/artifacts/storage";
 import { fillBytes, summarySizeBody, utf8 } from "./fixtures/summary-size-body";
-import { summarySizeRuntime } from "./fixtures/summary-size-runtime";
+import type { SummarySizeRequest } from "./fixtures/summary-size-workerd";
+import { probeRuntime } from "./fixtures/workerd";
 
-let harness: Awaited<ReturnType<typeof summarySizeRuntime>>;
+let runtime: Awaited<ReturnType<typeof probeRuntime>>;
 
 beforeAll(async () => {
-  harness = await summarySizeRuntime();
+  runtime = await probeRuntime({
+    entry: resolve(import.meta.dir, "fixtures/summary-size-workerd.ts"),
+    name: "summary-size-tests",
+    className: "SummarySizeProbe",
+    r2: "BUCKET",
+  });
 }, 60_000);
 
 afterAll(async () => {
-  await harness?.cleanup();
+  await runtime?.cleanup();
 });
+
+const probe = (instance: string, input: SummarySizeRequest) =>
+  runtime.probe(instance, { body: input });
 
 const summary = Schema.Struct({
   value: definitionSummarySchema,
@@ -45,7 +55,7 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
     const instance = `legacy-${sourceBytes}`;
     const body = await summarySizeBody(`/${"x".repeat(sourceBytes - 1)}`);
     expect(utf8(canonicalJson(body.graph))).toBe(ARTIFACT_LIMITS.graphBytes);
-    const legacy = await harness.probe(instance, { operation: "legacy", body });
+    const legacy = await probe(instance, { operation: "legacy", body });
     expect(legacy).toMatchObject({ status: 200 });
 
     const before = Schema.decodeUnknownSync(
@@ -57,7 +67,7 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
       }),
     )(legacy.body).value;
 
-    const response = await harness.probe(instance, { operation: "summary" });
+    const response = await probe(instance, { operation: "summary" });
     expect(response).toMatchObject({ status: 200 });
     const first = Schema.decodeUnknownSync(summary)(response.body);
     expect(first).toMatchObject({
@@ -69,11 +79,11 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
       graphReads: 1,
       artifactWrites: 0,
     });
-    expect(await harness.probe(instance, { operation: "list" })).toEqual({
+    expect(await probe(instance, { operation: "list" })).toEqual({
       status: 200,
       body: { value: [first.value], graphReads: 0, artifactWrites: 0 },
     });
-    expect(await harness.probe(instance, { operation: "service" })).toMatchObject({
+    expect(await probe(instance, { operation: "service" })).toMatchObject({
       status: 200,
       body: {
         value: {
@@ -84,24 +94,22 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
         artifactWrites: 0,
       },
     });
-    await harness.evict(instance);
+    await runtime.evict(instance);
     expect(
-      Schema.decodeUnknownSync(summary)(
-        (await harness.probe(instance, { operation: "summary" })).body,
-      ),
+      Schema.decodeUnknownSync(summary)((await probe(instance, { operation: "summary" })).body),
     ).toEqual({
       ...first,
       graphReads: 0,
     });
 
     const after = Schema.decodeUnknownSync(inspect)(
-      (await harness.probe(instance, { operation: "inspect" })).body,
+      (await probe(instance, { operation: "inspect" })).body,
     ).value;
 
     expect(after.pointer).toEqual(before.pointer);
 
     if (sourceBytes > pointerBudgetSourceBytes) {
-      expect(await harness.probe(instance, { operation: "save", body })).toEqual({
+      expect(await probe(instance, { operation: "save", body })).toEqual({
         status: 400,
         body: {
           error:
@@ -111,9 +119,7 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
         },
       });
       expect(
-        Schema.decodeUnknownSync(summary)(
-          (await harness.probe(instance, { operation: "summary" })).body,
-        ),
+        Schema.decodeUnknownSync(summary)((await probe(instance, { operation: "summary" })).body),
       ).toEqual({ ...first, graphReads: 0 });
     }
 
@@ -140,7 +146,7 @@ for (const [name, pattern] of [
     const body = await summarySizeBody(source, pattern);
     expect(utf8(source)).toBe(pointerBudgetSourceBytes);
     expect(utf8(canonicalJson(body.graph))).toBe(ARTIFACT_LIMITS.graphBytes);
-    const saved = await harness.probe(`maximum-${name}`, { operation: "save", body });
+    const saved = await probe(`maximum-${name}`, { operation: "save", body });
     expect(saved).toMatchObject({ status: 200, body: { graphReads: 0, artifactWrites: 2 } });
     expect(Schema.decodeUnknownSync(summary)(saved.body).value).toMatchObject({
       source,
@@ -148,13 +154,13 @@ for (const [name, pattern] of [
       input: body.graph.input,
       schedule: body.graph.meta.schedule,
     });
-    expect(await harness.probe(`maximum-${name}`, { operation: "list" })).toMatchObject({
+    expect(await probe(`maximum-${name}`, { operation: "list" })).toMatchObject({
       status: 200,
       body: { graphReads: 0, artifactWrites: 0 },
     });
 
     const stored = Schema.decodeUnknownSync(inspect)(
-      (await harness.probe(`maximum-${name}`, { operation: "inspect" })).body,
+      (await probe(`maximum-${name}`, { operation: "inspect" })).body,
     ).value;
 
     expect(stored.pointer.sourceBytes).toBe(pointerBudgetSourceBytes);
@@ -168,7 +174,7 @@ for (const [name, source] of [
 ] as const) {
   test(`${name} publication rejects its combined UTF8 pointer row before R2 writes`, async () => {
     const body = await summarySizeBody(source);
-    const response = await harness.probe(`rejected-${name}`, { operation: "save", body });
+    const response = await probe(`rejected-${name}`, { operation: "save", body });
     expect(response).toEqual({
       status: 400,
       body: {
@@ -178,7 +184,7 @@ for (const [name, source] of [
         artifactWrites: 0,
       },
     });
-    expect(await harness.probe(`rejected-${name}`, { operation: "inspect" })).toMatchObject({
+    expect(await probe(`rejected-${name}`, { operation: "inspect" })).toMatchObject({
       status: 200,
       body: { value: { pointer: null, projection: null } },
     });
@@ -193,14 +199,14 @@ test("JSON-root graph publication stores schema input within the row budget", as
   body.graph.meta.description = "JSON input";
   body.revision = await revision(body.graph);
 
-  const saved = await harness.probe("json-input", { operation: "save", body });
+  const saved = await probe("json-input", { operation: "save", body });
   expect(saved).toMatchObject({
     status: 200,
     body: { value: { input: "schema" }, artifactWrites: 2 },
   });
 
   const stored = Schema.decodeUnknownSync(inspect)(
-    (await harness.probe("json-input", { operation: "inspect" })).body,
+    (await probe("json-input", { operation: "inspect" })).body,
   ).value;
 
   expect(stored.projection?.projection_json).toBe(

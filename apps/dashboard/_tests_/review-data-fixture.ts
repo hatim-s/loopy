@@ -6,7 +6,7 @@ import type { NodeRun, StoreEffect } from "@loopy/core";
 import { makeLocalService } from "@loopy/runtime/local";
 import { openRunStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
-import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
 
 /** Persisted synthetic records let HTTP and browser checks inspect the same bounded pages. */
 export const reviewDataFixture = Effect.fn(function* () {

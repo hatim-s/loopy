@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { qualityTestRoot } from "../../../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { qualityTestRoot } from "../../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { requireFreshDurableRoot } from "../../../dev/playground/receipt/selection";
 
 test("durable selection rejects filesystem receipts and unreleased export guards", async () => {

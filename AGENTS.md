@@ -12,16 +12,17 @@ packages/runtime/src/    os/, host/, store/, executor/, service/ and local/ adap
 packages/compiler/src/   restricted author evaluation and artifact compilation.
 packages/cli/src/        HTTP commands and daemon control.
 packages/loopy/src/      thin public re-exports and executable entrypoint.
-packages/loopy/_tests_/  product integration tests, fixtures and opt-in acceptance/.
+packages/*/_tests_/      each package's tests and fixtures, beside the owner they test.
+packages/loopy/_tests_/  architecture test and opt-in acceptance/.
 apps/dashboard/src/     contract-backed backend, routes, components and display helpers.
 apps/cloud/src/         Worker, workspace DOs, SQL/R2 adapters and receipt authority.
 apps/cloud/dev/         local stack, journeys, failure probes and workload comparisons.
-apps/cloud/_tests_/dev/ tests for development tooling.
+apps/*/_tests_/         each app's tests; apps/cloud/_tests_/dev/ tests development tooling.
 apps/sandbox/src/       attempt admission, supervision, export guards and Docker workers.
 scripts/                repository build and global-install orchestration only.
 ```
 
-The real workflows in `examples/` use the removed step SDK. PR 7 owns their migration; they are outside semantic TypeScript checking until then. Graph example fixtures remain compiled and checked.
+The real workflows in `examples/` use the removed step SDK. PR 7 owns their migration; they are outside semantic TypeScript checking until then, except the helper modules `examples/_tests_` imports, which are checked and gated. Graph example fixtures remain compiled and checked.
 
 The public entries are `loopy` and `loopy/graph` for the builder, `loopy/engine` for the reducer, `loopy/local` and `loopy/contract`. The old runtime entry and executable step SDK are deleted. The dashboard imports only `@loopy/contract` from the implementation packages.
 
@@ -69,9 +70,9 @@ Do not add compatibility paths or migrations for discarded databases. Retained f
 
 ## Tests and isolation
 
-The test gate includes `packages/loopy/_tests_`, `apps/dashboard/_tests_` and `apps/cloud/_tests_`. Shared test fixtures stay under their owning test root. Tests cover core transitions and durable boundaries. Use temporary homes and injected executors and clocks. Keep server, SSE, schedule and CLI tests passing when contracts change. Remove tests for deleted behavior with their implementation.
+A test lives in the `_tests_` of the package or app it tests and imports that owner relatively. `packages/loopy/_tests_` keeps only the architecture test and acceptance. The root `test` script runs every `_tests_` root, including `examples/_tests_`, and the architecture test fails when one is missing. A fixture shared by several roots lives in the lowest owner all its users may import: run records in `packages/core/_tests_/fixtures`, temp roots, scopes, waits, bundling, stores and compiled bodies in `packages/runtime/_tests_/fixtures`. Packages never export test helpers. Tests cover core transitions and durable boundaries. Use temporary homes and injected executors and clocks. Keep server, SSE, schedule and CLI tests passing when contracts change. Remove tests for deleted behavior with their implementation.
 
-Tests that need repository-local state use `packages/loopy/_tests_/fixtures/quality-test-root.ts`. It creates a unique child of `.loopy/quality-tests` with its own `.loopy/loopies` project marker, preventing ancestor registry selection. Older suites still use temporary directories or `.loopy/architecture-tests`; the helper has not replaced every allocator.
+Tests allocate directories with `qualityTestRoot` from `packages/runtime/_tests_/fixtures/quality-test-root.ts`. It creates a unique child of `.loopy/quality-tests` with its own `.loopy/loopies` project marker, preventing ancestor registry selection, and removes it with the test. `fixtures/test-scope.ts` owns that lifetime: `fixtureScope`, `runScoped` and `onCleanup` release with the running test, `fileScope` with the file. `fixtures/wait.ts` waits on observable conditions (`until`, `waitForFile`, `waitForExit`, `bounded`); tests do not poll or sleep by hand. `fixtures/bundle.ts` bundles for the browser in a child bun.
 
 For verification runs, inject fixture Loopy homes and sanitize child environments to prevent personal-state access. Give fixture projects explicit registry markers. Do not set global `TMPDIR` for legacy sandbox tests. Use isolated state and port 0 for ephemeral Bun/Miniflare servers. Dispose owned processes before removing only that fixture's state. Keep historical evidence separate from disposable test output.
 

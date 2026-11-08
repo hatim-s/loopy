@@ -4,12 +4,13 @@ import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "@loopy/cont
 import { revision, waitRecordSchema } from "@loopy/core";
 import { log, loopy, wait } from "@loopy/sdk/graph";
 import { Schema } from "effect";
-import { Miniflare } from "miniflare";
-import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
-import { bundleForBrowser } from "../../../packages/loopy/_tests_/fixtures/bundle";
-import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
-import { fileScope, onCleanup } from "../../../packages/loopy/_tests_/fixtures/test-scope";
-import { until } from "../../../packages/loopy/_tests_/fixtures/wait";
+import type { Miniflare } from "miniflare";
+import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
+import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
+import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
+import { until } from "../../../packages/runtime/_tests_/fixtures/wait";
+import { cloudBucket, cloudWorker, startWorkerd, testWorker } from "./fixtures/workerd";
 
 let runtime: Miniflare;
 
@@ -33,40 +34,26 @@ beforeAll(async () => {
     directory,
   );
 
-  runtime = new Miniflare({
-    host: "127.0.0.1",
-    port: 0,
+  runtime = await startWorkerd({
     workers: [
-      {
-        name: "cloud",
-        modules: true,
-        scriptPath: resolve(directory, "worker.js"),
-        compatibilityDate: "2026-07-30",
-        durableObjects: { WORKSPACES: { className: "Workspace", useSQLite: true } },
-        r2Buckets: { ARTIFACTS: "synthetic-artifacts" },
-        bindings: {
-          LOOPY_STAGE: "local",
-          LOCAL_AUTH: JSON.stringify([
-            { token: tokenA, workspace: "alpha" },
-            { token: tokenB, workspace: "bravo" },
-          ]),
-          SANDBOX_URL: "http://127.0.0.1:1",
-          SANDBOX_TOKEN: "synthetic-unused-provider-token",
-          CONCURRENCY: "1",
-        },
-      },
-      {
+      cloudWorker(directory, {
+        LOCAL_AUTH: JSON.stringify([
+          { token: tokenA, workspace: "alpha" },
+          { token: tokenB, workspace: "bravo" },
+        ]),
+        SANDBOX_URL: "http://127.0.0.1:1",
+        SANDBOX_TOKEN: "synthetic-unused-provider-token",
+        CONCURRENCY: "1",
+      }),
+      testWorker({
         name: "probe",
-        modules: true,
         scriptPath: resolve(directory, "cloud-worker-probe.js"),
-        compatibilityDate: "2026-07-30",
         durableObjects: { PROBES: { className: "CloudWorkerProbe", useSQLite: true } },
-        r2Buckets: { ARTIFACTS: "synthetic-artifacts" },
-      },
+        r2Buckets: { ARTIFACTS: cloudBucket("ARTIFACTS") },
+      }),
     ],
   });
   onCleanup(() => runtime.dispose(), scope);
-  await runtime.ready;
 }, 60_000);
 
 async function probe(command: string, instance = command) {
