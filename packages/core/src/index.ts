@@ -64,7 +64,6 @@ export {
 
 export {
   type BundledNode,
-  bundleHash,
   carriesBundle,
   graphBundles,
   revision,
