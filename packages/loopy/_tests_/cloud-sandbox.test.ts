@@ -14,8 +14,9 @@ import {
 import { canonicalJson } from "@loopy/core";
 import { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect, Result, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
-import type { Attempts } from "../../../apps/sandbox/src/attempt";
+import { Attempts } from "../../../apps/sandbox/src/attempt";
 import type { AttemptDependenciesFactory } from "../../../apps/sandbox/src/attempt/dependencies";
 import { sandboxConfigSchema } from "../../../apps/sandbox/src/config";
 import { type AttemptBackend, DockerBackend } from "../../../apps/sandbox/src/docker";
@@ -523,7 +524,6 @@ test("Docker timeout kills only the owned worker and missing or killed workers s
 test("lost Docker start acknowledgement and wait transport failure retain started receipts through restart", async () => {
   for (const lostStart of [false, true]) {
     const config = await fixture();
-    config.maxTimeoutMs = 150;
     const fault = Promise.withResolvers<void>();
     let saved: DockerAttemptPlan | null = null;
     let running = false;
@@ -597,25 +597,35 @@ test("lost Docker start acknowledgement and wait transport failure retain starte
       throw new Error("Expected saved attempt identity.");
     }
 
-    await new Promise((resolveWait) =>
-      setTimeout(resolveWait, Math.max(0, persisted.plan.deadline - Date.now() + 5)),
+    const deadline = persisted.plan.deadline;
+
+    // The restarted service and the monitor it forks read the test clock, which starts at the deadline.
+    await run(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(deadline);
+          const restored = yield* Attempts.open(config, dependencies(config, backend));
+          expect(yield* restored.lookup(input)).toEqual({ kind: "started" });
+          outage = false;
+          // Wakes the recovery retry that the outage put to sleep.
+          yield* TestClock.adjust(5000);
+          yield* restored.drain();
+          const terminal = yield* restored.lookup(input);
+          expect(
+            terminal.kind === "finished" &&
+              terminal.result.kind === "failed" &&
+              terminal.result.error.message,
+          ).toContain("owned container was killed");
+          expect(starts).toBe(1);
+          expect(kills).toBe(1);
+          expect(running).toBe(false);
+          expect(yield* restored.start(input)).toEqual(terminal);
+          yield* restored.close();
+        }),
+      ).pipe(Effect.provide(TestClock.layer())),
     );
-    const restored = await open(config, backend);
-    expect(await run(restored.lookup(input))).toEqual({ kind: "started" });
-    outage = false;
-    await run(restored.drain());
-    const terminal = await run(restored.lookup(input));
-    expect(
-      terminal.kind === "finished" &&
-        terminal.result.kind === "failed" &&
-        terminal.result.error.message,
-    ).toContain("owned container was killed");
-    expect(starts).toBe(1);
-    expect(kills).toBe(1);
-    expect(running).toBe(false);
-    expect(await run(restored.start(input))).toEqual(terminal);
   }
-}, 10_000);
+});
 
 function artifactLookup(input: SandboxAttemptRequest, path: string) {
   const url = new URL(lookup(input).url);

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type { ExecutionResult } from "@loopy/contract";
 import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
 import {
@@ -111,11 +112,17 @@ test("a failed admission releases its retained request at the plan deadline", as
     },
   });
 
-  await expect(run(service.start(request))).rejects.toThrow("timed out before eventual commit");
-  await Bun.sleep(100);
-  expect((await run(authority.commit())).kind).toBe("created");
-  expect(await run(service.lookup(request))).toEqual({ kind: "started" });
-  await run(service.drain());
+  // The eviction fiber forks from the start call, so start, adjust and lookup share one clock.
+  await run(
+    Effect.gen(function* () {
+      const failed = yield* Effect.flip(service.start(request));
+      expect(failed.message).toContain("timed out before eventual commit");
+      yield* TestClock.adjust(config.maxTimeoutMs);
+      expect((yield* authority.commit()).kind).toBe("created");
+      expect(yield* service.lookup(request)).toEqual({ kind: "started" });
+      yield* service.drain();
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
   expect(starts).toBe(0);
   expect(recoveries).toBe(1);
 });

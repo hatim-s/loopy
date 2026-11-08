@@ -8,7 +8,7 @@ import {
   type SandboxAttemptRequest,
 } from "@loopy/contract/sandbox";
 import { CommandExecutionError } from "@loopy/runtime/os";
-import { Effect, Result, Schema } from "effect";
+import { Clock, Effect, Result, Schema } from "effect";
 import type { SandboxConfig } from "../config";
 import { bundleFile, CONTAINER } from "../container-layout";
 import type { SandboxOperationError } from "../operations";
@@ -118,7 +118,7 @@ export class DockerBackend implements AttemptBackend {
             yield* docker.required(["rm", helper], { signal });
             yield* docker.required(attemptContainerArgs(this.config, plan, labels), { signal });
 
-            if (Date.now() >= plan.deadline) {
+            if ((yield* Clock.currentTimeMillis) >= plan.deadline) {
               return failed("execution", "Attempt timed out before its container started.");
             }
 
@@ -140,7 +140,7 @@ export class DockerBackend implements AttemptBackend {
 
   private waitForWorker(plan: DockerAttemptPlan, signal: AbortSignal | undefined) {
     return Effect.gen({ self: this }, function* () {
-      const remaining = plan.deadline - Date.now();
+      const remaining = plan.deadline - (yield* Clock.currentTimeMillis);
 
       const waited = yield* (
         remaining <= 0
