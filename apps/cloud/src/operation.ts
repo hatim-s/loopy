@@ -22,13 +22,9 @@ export function cloudSync<A>(operation: string, run: () => A) {
 }
 
 export class CloudProtocolError extends Data.TaggedError("CloudProtocolError")<{
-  operation: "receipt" | "artifact";
   cause: unknown;
 }> {}
 
-export function decodeProtocol<A>(operation: "receipt" | "artifact", decode: () => A) {
-  return Effect.try({
-    try: decode,
-    catch: (cause) => new CloudProtocolError({ operation, cause }),
-  });
+export function decodeProtocol<A>(decode: () => A) {
+  return Effect.try({ try: decode, catch: (cause) => new CloudProtocolError({ cause }) });
 }

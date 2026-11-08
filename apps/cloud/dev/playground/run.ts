@@ -151,7 +151,7 @@ export async function execute(
       };
 
       progress = { ...progress, result };
-      await atomic(path, progress);
+      atomic(path, progress);
 
       return result;
     }

@@ -3,17 +3,13 @@ import {
   type SandboxAttemptRequest,
   verifiedBase64,
 } from "@loopy/contract/sandbox";
+import { specBundles } from "@loopy/core";
 import { Effect } from "effect";
 import { SandboxRequestError } from "./request-error";
 
 export function validateBundles(request: SandboxAttemptRequest) {
   return Effect.gen(function* () {
-    const required =
-      request.spec.kind === "code"
-        ? [request.spec.bundleHash]
-        : request.spec.parse
-          ? [request.spec.parse.bundleHash]
-          : [];
+    const required = specBundles(request.spec);
 
     const supplied = new Set<string>();
 

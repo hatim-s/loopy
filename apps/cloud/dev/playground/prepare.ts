@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { compile } from "@loopy/compiler";
 import { decodeBoundary, encodeBoundary, routes } from "@loopy/contract";
 import { Effect, Schema } from "effect";
-import { failure, io } from "../../../sandbox/src/operations";
+import { checked, failure, io } from "../../../sandbox/src/operations";
 import { requireCurrentBaseline } from "./baseline";
 import { PlaygroundClient } from "./client";
 import { evidence, profile, state } from "./config";
@@ -96,8 +96,10 @@ export function prepare() {
       revisions,
     });
 
-    yield* io(operation, () => atomic(resolve(evidence, "playground-driver-source.json"), ready));
-    yield* io(operation, () => atomic(sourceReadyPath(state), ready));
+    yield* checked(operation, () =>
+      atomic(resolve(evidence, "playground-driver-source.json"), ready),
+    );
+    yield* checked(operation, () => atomic(sourceReadyPath(state), ready));
     console.log(
       JSON.stringify({
         status: "source-ready",
@@ -139,7 +141,7 @@ export async function arm(input: { profile: PlaygroundProfile; baseline: string;
     }
   }
 
-  await atomic(
+  atomic(
     gatePath(selected.state),
     encodeBoundary(gateSchema)({
       batch: source.batch,

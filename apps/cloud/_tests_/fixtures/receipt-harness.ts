@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { attemptResources, dockerAttemptPlanSchema } from "@loopy/contract/sandbox";
 import { Miniflare } from "miniflare";
-import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority";
+import { HttpSandboxAuthority } from "../../../sandbox/src/http-authority";
 
 export const bridgeToken = "synthetic-receipt-bridge-credential-0001";
 

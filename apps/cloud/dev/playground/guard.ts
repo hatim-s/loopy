@@ -1,8 +1,7 @@
-import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, isoDateTime } from "@loopy/contract";
 import { dockerAttemptPlanSchema } from "@loopy/contract/sandbox";
-import { errnoCode } from "@loopy/core";
+import { tryPidLock } from "@loopy/runtime/os";
 import { Schema } from "effect";
 import { ownerOf, SANDBOX_LABELS } from "../../../sandbox/src/docker/identity";
 import { docker } from "../shared/process";
@@ -99,36 +98,6 @@ async function assertNoAbort() {
   }
 }
 
-async function waitOwner(lock: string) {
-  let data: unknown;
-
-  try {
-    data = await Bun.file(resolve(lock, "owner.json")).json();
-  } catch (cause) {
-    if (errnoCode(cause) === "ENOENT") {
-      return;
-    }
-
-    throw cause;
-  }
-
-  const lockOwner = Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Int }), {
-    onExcessProperty: "ignore",
-  })(data);
-
-  try {
-    process.kill(lockOwner.pid, 0);
-  } catch (cause) {
-    if (errnoCode(cause) === "ESRCH") {
-      throw new Error(
-        `Pressure check owner ${lockOwner.pid} is dead. Reconcile its lock explicitly before admission.`,
-      );
-    }
-
-    throw cause;
-  }
-}
-
 async function freshSample(path: string) {
   const file = Bun.file(path);
 
@@ -144,31 +113,22 @@ async function freshSample(path: string) {
 export async function guard() {
   const lock = resolve(state, "pressure-check.lock");
   const deadline = Date.now() + 35_000;
-  let acquired = false;
+  let release: (() => void) | null = null;
 
   try {
-    while (!acquired) {
+    while (release === null) {
       await assertNoAbort();
+      const attempt = tryPidLock(lock);
 
-      try {
-        await mkdir(lock);
-        acquired = true;
-      } catch (cause) {
-        if (errnoCode(cause) !== "EEXIST") {
-          throw cause;
-        }
-
-        await waitOwner(lock);
-
-        if (Date.now() >= deadline) {
-          throw new Error("Pressure check did not finish within 35 seconds. Admission is closed.");
-        }
-
+      if (attempt.kind === "acquired") {
+        release = attempt.release;
+      } else if (Date.now() >= deadline) {
+        throw new Error("Pressure check did not finish within 35 seconds. Admission is closed.");
+      } else {
         await Bun.sleep(100);
       }
     }
 
-    await atomic(resolve(lock, "owner.json"), { pid: process.pid, at: new Date().toISOString() });
     await assertNoAbort();
     const samplePath = resolve(state, "pressure-last.json");
 
@@ -179,7 +139,7 @@ export async function guard() {
         ...(await inspectPressure()),
       });
 
-      await atomic(samplePath, sample);
+      atomic(samplePath, sample);
     }
 
     await assertNoAbort();
@@ -190,8 +150,6 @@ export async function guard() {
     );
     throw cause;
   } finally {
-    if (acquired) {
-      await rm(lock, { recursive: true });
-    }
+    release?.();
   }
 }

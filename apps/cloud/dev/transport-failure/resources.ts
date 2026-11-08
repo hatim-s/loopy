@@ -239,24 +239,20 @@ export function cleanup(config: Config) {
       "owned_container_remains",
     );
 
-    const layout = stateLayout(config.stateRoot);
+    const lockExists = yield* fixtureIO("filesystem", () =>
+      access(stateLayout(config.stateRoot).lock).then(
+        () => true,
+        (cause: unknown) => {
+          if (errnoCode(cause) !== "ENOENT") {
+            throw cause;
+          }
 
-    for (const path of [layout.lock, layout.startGuard]) {
-      const exists = yield* fixtureIO("filesystem", () =>
-        access(path).then(
-          () => true,
-          (cause: unknown) => {
-            if (errnoCode(cause) !== "ENOENT") {
-              throw cause;
-            }
+          return false;
+        },
+      ),
+    );
 
-            return false;
-          },
-        ),
-      );
-
-      assert(!exists, "service_lock_remains");
-    }
+    assert(!lockExists, "service_lock_remains");
 
     return {
       containersRemoved: removed,

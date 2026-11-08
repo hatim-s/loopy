@@ -163,8 +163,8 @@ test("dependency construction happens under the process lock, which a failed ope
       Attempts.open(config, () =>
         Effect.gen(function* () {
           called = true;
-          const owner: unknown = JSON.parse(yield* Effect.promise(() => Bun.file(lock).text()));
-          expect(owner).toMatchObject({ pid: process.pid });
+          const owner = yield* Effect.promise(() => Bun.file(lock).text());
+          expect(owner.split(" ")[0]).toBe(String(process.pid));
 
           return yield* Effect.fail(failure("fixture", new Error("Factory failed")));
         }),

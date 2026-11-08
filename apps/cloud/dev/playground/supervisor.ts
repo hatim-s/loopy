@@ -118,7 +118,7 @@ export async function serve(input: Parameters<typeof parseServeIdentity>[0]) {
     }
 
     start("dashboard", dashboardArgv(profile.dashboardPort), { LOOPY_API_ORIGIN: api });
-    await atomic(manifestPath, {
+    atomic(manifestPath, {
       ...ownership,
       root,
       api,

@@ -3,6 +3,7 @@ import {
   AuthorityError,
   type AuthorityInput,
   authorityErrorSchema,
+  isLoopbackOrigin,
   type OperationInput,
   type OperationName,
   operationOutput,
@@ -19,15 +20,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
   constructor(private readonly options: { url: string; token: string; namespace: string }) {
     const base = new URL(options.url);
 
-    if (
-      base.protocol !== "http:" ||
-      !["127.0.0.1", "localhost"].includes(base.hostname) ||
-      base.username ||
-      base.password ||
-      base.pathname !== "/" ||
-      base.search ||
-      base.hash
-    ) {
+    if (!isLoopbackOrigin(base)) {
       throw new Error(
         "Receipt authority requires a loopback HTTP origin without credentials or a path.",
       );

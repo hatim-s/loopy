@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { decodeBoundary } from "@loopy/contract";
 import { AuthorityError, authorityCommandSchema } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
-import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
+import { HttpSandboxAuthority } from "../../sandbox/src/http-authority";
 import {
   bridgeToken,
   namespace,

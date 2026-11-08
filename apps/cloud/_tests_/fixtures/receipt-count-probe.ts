@@ -1,6 +1,6 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
-import type { Environment } from "../../../../apps/cloud/src/environment";
-import { SandboxReceipts } from "../../../../apps/cloud/src/receipts";
+import type { Environment } from "../../src/environment";
+import { SandboxReceipts } from "../../src/receipts";
 
 export class ReceiptCountProbe extends SandboxReceipts {
   private readonly counts;

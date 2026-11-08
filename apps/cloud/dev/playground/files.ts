@@ -1,7 +1,6 @@
-import { rename, writeFile } from "node:fs/promises";
+import { writeFileAtomically } from "@loopy/runtime/os";
 
-export async function atomic<T>(path: string, value: T) {
-  const temporary = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  await rename(temporary, path);
+/** Writes pretty JSON that a reader sees whole or not at all. */
+export function atomic<T>(path: string, value: T) {
+  writeFileAtomically(path, `${JSON.stringify(value, null, 2)}\n`, 0o600);
 }

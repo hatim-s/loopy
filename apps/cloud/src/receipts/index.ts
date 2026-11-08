@@ -9,15 +9,12 @@ import {
   type OperationOutput,
   operationOutput,
   planMatches,
-  SANDBOX_MAX_REQUEST_BYTES,
 } from "@loopy/contract/sandbox";
 import { Cause, Effect, Result } from "effect";
-import type { Environment } from "../environment";
-import { readBoundedText } from "../http";
+import { cloudConfig, type Environment } from "../environment";
 import { CloudError, cloudSync, platform } from "../operation";
 import { ReceiptAuthority } from "./authority";
 import { R2ImmutableResults } from "./results";
-import { receiptAccess, receiptsConfiguration } from "./route";
 import { ReceiptSql } from "./sql";
 
 type ReceiptHandlers = {
@@ -26,6 +23,7 @@ type ReceiptHandlers = {
   ) => Effect.Effect<OperationOutput<K>, CloudError | AuthorityError>;
 };
 
+/** Only the Worker can reach this object, and it authenticates every command before forwarding. */
 export class SandboxReceipts {
   private readonly db: ReceiptSql;
   private readonly authority: ReceiptAuthority;
@@ -35,7 +33,15 @@ export class SandboxReceipts {
     ctx: DurableObjectState,
     private readonly env: Environment,
   ) {
-    this.config = receiptsConfiguration(env);
+    const receipts = cloudConfig(env).receipts;
+
+    if (receipts === null) {
+      throw new Error(
+        "Set RECEIPTS_TOKEN, RECEIPTS_NAMESPACE and RECEIPTS_ROOT to serve receipts.",
+      );
+    }
+
+    this.config = receipts;
     this.db = new ReceiptSql(ctx.storage, this.config.namespace, this.config.root);
     this.authority = new ReceiptAuthority(this.db);
   }
@@ -61,13 +67,7 @@ export class SandboxReceipts {
   }
   private handle(request: Request) {
     return Effect.gen({ self: this }, function* () {
-      const rejected = receiptAccess(request, this.env);
-
-      if (rejected) {
-        return rejected;
-      }
-
-      const text = yield* readBoundedText(new Response(request.body), SANDBOX_MAX_REQUEST_BYTES);
+      const text = yield* platform("read receipt command", () => request.text());
 
       const parsed = yield* Effect.result(
         cloudSync("decode command", () => decodeBoundary(authorityCommandSchema)(JSON.parse(text))),

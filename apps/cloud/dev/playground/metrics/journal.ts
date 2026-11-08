@@ -112,7 +112,7 @@ export async function journalMetrics(phase: string) {
     ],
   };
 
-  await atomic(resolve(evidence, `playground-performance-${phase}-lifecycle.json`), value);
+  atomic(resolve(evidence, `playground-performance-${phase}-lifecycle.json`), value);
 
   return { primary: value.primary, preflight: value.preflight, invalidEvents };
 }

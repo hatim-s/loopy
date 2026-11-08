@@ -1,9 +1,12 @@
 import { cp, lstat, mkdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { decodeBoundary, type RunSnapshotView, routes } from "@loopy/contract";
-import { executionKeyString } from "@loopy/core";
+import { errnoCode, executionKeyString } from "@loopy/core";
 import { Schema, Struct } from "effect";
-import { receiptSchema } from "../../../../packages/runtime/src/executor/receipts";
+import {
+  receiptSchema,
+  runReceiptDirectory,
+} from "../../../../packages/runtime/src/executor/receipts";
 import { sha256Hex } from "../shared/hash";
 import { home, state } from "./config";
 import type { OwnedDaemon } from "./daemon";
@@ -48,11 +51,18 @@ async function artifactIdentity(snapshot: RunSnapshotView, workspace: string) {
 }
 
 export async function receiptInventory(runId: string) {
-  const directory = join(home, "receipts", runId);
+  const directory = runReceiptDirectory(home, runId);
 
-  const files = await lstat(directory)
-    .then(() => sortedFiles(directory))
-    .catch(() => []);
+  const files = await lstat(directory).then(
+    () => sortedFiles(directory),
+    (cause: unknown) => {
+      if (errnoCode(cause) !== "ENOENT") {
+        throw cause;
+      }
+
+      return [];
+    },
+  );
 
   return Promise.all(
     files.map(async (file) => {

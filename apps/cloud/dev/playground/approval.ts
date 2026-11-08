@@ -21,7 +21,7 @@ export async function updateApproval(options: {
 
   const save = async (next: Progress) => {
     progress = next;
-    await atomic(path, progress);
+    atomic(path, progress);
   };
 
   const pending = progress.wait;
