@@ -1,14 +1,20 @@
 import { expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AuthorityInput } from "@loopy/contract/sandbox";
+import { type AuthorityInput, JOURNAL_PAGE_LIMIT } from "@loopy/contract/sandbox";
 import { Effect, Exit } from "effect";
 import type { ArtifactReader } from "../src/artifacts";
 import { Attempts } from "../src/attempt";
 import { FilesystemAuthority } from "../src/filesystem/authority";
 import { failure } from "../src/operations";
 import { stateLayout } from "../src/state-root";
-import { artifactReader, authorityFixture, successful, uncertain } from "./fixtures/authority";
+import {
+  artifactReader,
+  authorityFixture,
+  CountingBackend,
+  successful,
+  uncertain,
+} from "./fixtures/authority";
 import { openAttemptsWith, run } from "./fixtures/run";
 
 test("observed terminal result survives result and terminal-pointer publication failures", async () => {
@@ -31,7 +37,7 @@ test("observed terminal result survives result and terminal-pointer publication 
 
   const authority = new FailingComplete(config.stateRoot);
   let puts = 0;
-  let recoveries = 0;
+  const counting = new CountingBackend();
 
   const service = await openAttemptsWith(config, {
     authority,
@@ -49,25 +55,14 @@ test("observed terminal result survives result and terminal-pointer publication 
         }),
       get: (ref) => resultsFor(workspace).get(ref),
     }),
-    backend: {
-      start: () =>
-        Effect.gen(function* () {
-          return successful;
-        }),
-      recover: () =>
-        Effect.gen(function* () {
-          recoveries++;
-
-          return uncertain;
-        }),
-    },
+    backend: counting,
   });
 
   await run(service.start(request));
   await run(service.drain());
   expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: successful });
   expect(puts).toBe(3);
-  expect(recoveries).toBe(0);
+  expect(counting.recoveries).toBe(0);
 });
 
 test("failed helper cleanup holds its guard across requests and restart while unrelated volumes progress", async () => {
@@ -94,16 +89,7 @@ test("failed helper cleanup holds its guard across requests and restart while un
       }),
   };
 
-  const backend = {
-    start: () =>
-      Effect.gen(function* () {
-        return successful;
-      }),
-    recover: () =>
-      Effect.gen(function* () {
-        return uncertain;
-      }),
-  };
+  const backend = new CountingBackend();
 
   const authority = new FilesystemAuthority(config.stateRoot);
 
@@ -241,16 +227,7 @@ test("artifact export uses terminal authority without reading unavailable result
           cleanups++;
         }),
     },
-    backend: {
-      start: () =>
-        Effect.gen(function* () {
-          return successful;
-        }),
-      recover: () =>
-        Effect.gen(function* () {
-          return uncertain;
-        }),
-    },
+    backend: new CountingBackend(),
   });
 
   await run(service.start(request));
@@ -301,33 +278,22 @@ test("new admission reconciles only export metadata despite multiple pages of un
     authority,
     resultsFor,
     artifactReader,
-    backend: {
-      start: () =>
-        Effect.gen(function* () {
-          return successful;
-        }),
-      recover: () =>
-        Effect.gen(function* () {
-          return uncertain;
-        }),
-    },
+    backend: new CountingBackend(),
   });
 
   const session = { epoch: 1, nonce: "historical-session" };
+  const ref = await run(resultsFor(request.workspace).put(successful));
+  // Each kind fills more than one journal page, so a full scan would need several pages.
+  const perKind = JOURNAL_PAGE_LIMIT + 1;
 
   // Populate after startup so startup recovery keeps its separate combined scan.
-  for (let index = 0; index < 402; index++) {
+  for (let index = 0; index < 2 * perKind; index++) {
     const historical = await plan(1, `history-${index}`);
 
     const record =
-      index < 201
+      index < perKind
         ? { kind: "started", session, plan: historical }
-        : {
-            kind: "finished",
-            session,
-            plan: historical,
-            result: { kind: "inline", value: successful },
-          };
+        : { kind: "finished", session, plan: historical, result: { kind: "blob", ref } };
 
     await writeFile(
       join(stateLayout(config.stateRoot).receipts, `${historical.id}.json`),
@@ -335,7 +301,7 @@ test("new admission reconciles only export metadata despite multiple pages of un
     );
   }
 
-  expect((await readdir(stateLayout(config.stateRoot).receipts)).length).toBe(402);
+  expect((await readdir(stateLayout(config.stateRoot).receipts)).length).toBe(2 * perKind);
   const before = authority.recoveryQueries;
   authority.exportQueries.length = 0;
   await run(service.start(request));
@@ -343,6 +309,6 @@ test("new admission reconciles only export metadata despite multiple pages of un
   expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: successful });
   expect(authority.recoveryQueries).toBe(before);
   expect(authority.exportQueries).toEqual([
-    { after: null, limit: 200, volume: (await plan()).volume },
+    { after: null, limit: JOURNAL_PAGE_LIMIT, volume: (await plan()).volume },
   ]);
 });

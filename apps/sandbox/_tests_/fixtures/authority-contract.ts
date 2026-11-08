@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { AuthorityError, type DockerAttemptPlan } from "@loopy/contract/sandbox";
+import {
+  AuthorityError,
+  artifactHelperName,
+  type DockerAttemptPlan,
+} from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import type { ResultsFor, SandboxAttemptAuthority } from "../../src/authority";
 import { successful, uncertain } from "./authority";
@@ -48,7 +52,7 @@ export function authorityContract(name: string, open: () => Promise<AuthoritySub
     const granted = await run(subject.authority.beginExport(request));
     expect(granted).toMatchObject({
       kind: "granted",
-      record: { volume: plan.volume, helper: `loopy-artifact-${plan.id}`, session },
+      record: { volume: plan.volume, helper: artifactHelperName(plan.id), session },
     });
     expect(await run(subject.authority.beginExport(request))).toEqual(granted);
     const next = await subject.plan("export-guard", 2);

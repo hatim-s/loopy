@@ -112,13 +112,9 @@ function isNodeRunStatus(value: string): value is NodeRunStatus {
   return Object.hasOwn(NODE_STATUS, value);
 }
 
+/** Unsettled work is running, retrying, or held for a person or a clock. */
 export function isSettled(status: NodeRunStatus): boolean {
   return NODE_STATUS[status].settled;
-}
-
-/** Work that has started and not settled: running, retrying, or held for a person or a clock. */
-export function isInFlight(status: NodeRunStatus): boolean {
-  return !NODE_STATUS[status].settled;
 }
 
 export function byUrgency(a: NodeRunStatus, b: NodeRunStatus): number {

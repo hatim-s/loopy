@@ -1,14 +1,13 @@
 import { beforeAll, expect, test } from "bun:test";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { revision } from "@loopy/core";
 import { loopy, sh } from "@loopy/sdk/graph";
-import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
 import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { fileScope } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { bounded } from "../../../packages/runtime/_tests_/fixtures/wait";
-import { cloudWorker, startWorkerd } from "./fixtures/workerd";
+import { cloudWorker, cloudWorkerBundle, startWorkerd } from "./fixtures/workerd";
 import { readQueueProvider } from "./fixtures/workspace-read-queue-provider";
 
 const token = "read-queue-synthetic-principal-0000001";
@@ -19,12 +18,11 @@ const scope = fileScope();
 
 let directory: string;
 
+let bundle: string;
+
 beforeAll(async () => {
   directory = qualityTestRoot("read-queue", { scope });
-  await bundleForBrowser(
-    [join(resolve(import.meta.dir, "../../.."), "apps/cloud/src/worker.ts")],
-    join(directory, "bundle"),
-  );
+  bundle = await cloudWorkerBundle();
 });
 
 test("production Workspace queues runs, loopies and event history during provider lookup/start", async () => {
@@ -34,7 +32,7 @@ test("production Workspace queues runs, loopies and event history during provide
     const answered: string[] = [];
 
     const runtime = await startWorkerd({
-      ...cloudWorker(join(directory, "bundle"), {
+      ...cloudWorker(bundle, {
         LOCAL_AUTH: JSON.stringify([
           { token, workspace: mode },
           { token: controlToken, workspace: "control" },
@@ -43,7 +41,7 @@ test("production Workspace queues runs, loopies and event history during provide
         SANDBOX_URL: provider.url,
         SANDBOX_TOKEN: "read-queue-synthetic-provider",
       }),
-      modulesRoot: join(directory, "bundle"),
+      modulesRoot: bundle,
       name: `read-queue-${mode}`,
       durableObjectsPersist: join(directory, mode, "do"),
       r2Persist: join(directory, mode, "r2"),

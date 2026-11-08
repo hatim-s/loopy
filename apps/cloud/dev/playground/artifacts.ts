@@ -7,13 +7,10 @@ import { Schema } from "effect";
 import { sha256Hex } from "../shared/hash";
 import type { PlaygroundClient } from "./client";
 import { profile } from "./config";
-import type { CatalogEntry } from "./repository";
+import { artifactIdentitySchema, type CatalogEntry } from "./repository";
 
-// Fixture artifacts carry their own payload; only the identity fields are checked here.
 const decodeEnvelope = (bytes: Uint8Array) =>
-  Schema.decodeUnknownSync(
-    Schema.Struct({ batch: Schema.String, ordinal: Schema.Int, slug: Schema.String }),
-  )(JSON.parse(Buffer.from(bytes).toString("utf8")));
+  Schema.decodeUnknownSync(artifactIdentitySchema)(JSON.parse(Buffer.from(bytes).toString("utf8")));
 
 export async function materialize(
   client: PlaygroundClient,

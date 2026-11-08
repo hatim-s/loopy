@@ -19,6 +19,11 @@ export async function fileSha256(path: string) {
   return sha256Hex(await readFile(path));
 }
 
+/** SQLite orders ids by byte value, so an API census is sorted the same way before comparing. */
+export function byId(left: { id: string }, right: { id: string }) {
+  return Buffer.compare(Buffer.from(left.id), Buffer.from(right.id));
+}
+
 export function requireRunInventory(
   db: Database,
   expected: readonly { id: string; status: string }[],
@@ -28,9 +33,7 @@ export function requireRunInventory(
     .query<{ id: string; status: string }, []>("SELECT id,status FROM runs ORDER BY id")
     .all();
 
-  const sorted = expected
-    .map(({ id, status }) => ({ id, status }))
-    .sort((left, right) => left.id.localeCompare(right.id));
+  const sorted = expected.map(({ id, status }) => ({ id, status })).sort(byId);
 
   if (!isDeepStrictEqual(actual, sorted)) {
     throw new Error(message);

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { decodeBoundary, type ExecutionResult, nodeIdSchema } from "@loopy/contract";
 import {
   attemptRecordSchema,
+  attemptResources,
   type DockerAttemptPlan,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
@@ -347,10 +348,11 @@ test("artifact export requires its finished receipt and fences same-run admissio
     size: 2,
     bytes: "aGk=",
   });
-  expect(exportedVolumes).toEqual([expect.stringMatching(/^loopy-workspace-[a-f0-9]{64}$/)]);
+  const { volume } = await attemptResources(config.stateRoot, input);
+  expect(exportedVolumes).toEqual([volume]);
   await run(service.start({ ...input, attempt: 2 }));
   expect((await handler(artifactLookup(input, "out.txt"))).status).toBe(409);
-  expect(exportedVolumes).toEqual([expect.stringMatching(/^loopy-workspace-[a-f0-9]{64}$/)]);
+  expect(exportedVolumes).toEqual([volume]);
   secondCompletion.resolve(succeeded);
   await run(service.drain());
 });

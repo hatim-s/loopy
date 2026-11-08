@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import type { Json } from "@loopy/sdk";
 import { requestSchema } from "../uacode-asset-sync/request";
 import {
   type Files,
@@ -17,35 +16,24 @@ import {
   syncCommitMessage,
   syncMetadata,
 } from "../www-uacode-sync/sync";
-import { makeFixture } from "./fixtures/examples";
+import {
+  agentIds,
+  assetRoot,
+  firstSkillId,
+  firstSkillName,
+  makeFixture,
+  plannerAgentId,
+  releasePath,
+  root,
+  skills,
+  workflowAgentId,
+  writeJson,
+} from "./fixtures/examples";
 
-const root = "";
-
-const assetRoot = "configs/platform-features/ai-agents/asset-repository";
-
-const agentIds = [
-  "e_6aa19955aeb9ea1371af57c7",
-  "e_6a801aea757839657bbec2a1",
-  "e_ai_fde_agent",
-] as const;
-
-const workflowAgentId = "e_6aa19955aeb9ea1371af57c7";
-
-const plannerAgentId = "e_6a801aea757839657bbec2a1";
-
-const firstSkillName = "external-data-inspection";
-
-const firstSkillId = "e_6ab1053b200bf5533fd0ad0b";
-
-const lastSkillId = "e_6a5f2c12f62c9924bb176689";
+// The tuple type fails the build if the list no longer has a ninth skill.
+const lastSkillId = skills[8][1];
 
 const sourceSha = "abcdef1234567890abcdef1234567890abcdef12";
-
-const releasePath = join(root, assetRoot, "ENTITY_TYPE/ai_sdlc_feature_release.jsonl");
-
-function writeJson(files: Files, path: string, value: Json) {
-  files[path] = JSON.stringify(value, null, 2);
-}
 
 test("strips the maintainer-only note from the canonical Workflow Agent prompt", () => {
   expect(

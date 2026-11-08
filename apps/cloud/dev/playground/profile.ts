@@ -3,18 +3,10 @@ import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
 import { SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { sandboxStateRoot } from "../../../sandbox/src/state-root";
+import { PROFILE_NAMES, profileImage } from "../stack/images";
 import { stackPorts } from "../stack/ports";
 
-const profileNames = ["architecture"] as const;
-
-const profileNameSchema = Schema.UndefinedOr(Schema.Literals(profileNames));
-
-/** A named profile runs its own tag of the one sandbox image, built by cloud:build-sandbox. */
-export function profileImage(name: (typeof profileNameSchema)["Type"]) {
-  return name === undefined ? SANDBOX_IMAGE : `${SANDBOX_IMAGE}-${name}`;
-}
-
-export const PROFILE_IMAGES = [profileImage(undefined), ...profileNames.map(profileImage)];
+const profileNameSchema = Schema.UndefinedOr(Schema.Literals(PROFILE_NAMES));
 
 function paths(root: string, suffix: string, apiPort: number) {
   const state = resolve(root, `.loopy/playground${suffix}`);
@@ -35,6 +27,9 @@ function paths(root: string, suffix: string, apiPort: number) {
     api: ports.origin("api"),
     dashboard: ports.origin("dashboard"),
     sandbox: ports.origin("sandbox"),
+    // The daemon playground runs one local daemon beside the same profile's cloud stack.
+    daemonState: resolve(root, `.loopy/playground-daemon${suffix}`),
+    daemonPort: apiPort + 100,
   };
 }
 

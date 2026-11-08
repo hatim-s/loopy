@@ -2,6 +2,7 @@ import { isAbsolute, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
+import { PROFILE_LABELS } from "../stack/images";
 import { processFields } from "../stack/processes";
 
 const pidSchema = Schema.Int.check(Schema.isGreaterThan(0));
@@ -13,7 +14,7 @@ const absolutePath = Schema.String.check(
 const supervisorIdentitySchema = Schema.Struct({
   root: absolutePath,
   state: absolutePath,
-  profile: Schema.Literals(["default", "architecture"]),
+  profile: Schema.Literals(PROFILE_LABELS),
   nonce: Schema.String.check(Schema.isUUID()),
 });
 

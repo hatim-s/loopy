@@ -3,8 +3,7 @@ import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
 import { PlaygroundClient } from "../client";
 import { evidence } from "../config";
-import { CONCURRENCY } from "../plan";
-import { artifactPath, captureArtifact, decodePhaseName, writeArtifact } from "./artifacts";
+import { artifactPath, captureArtifact, decodePhaseName } from "./artifacts";
 import { sampleApi } from "./sampler";
 
 const decodeSeconds = decodeBoundary(
@@ -47,23 +46,11 @@ process.stdout.write(
   `${JSON.stringify({ phase, pid: process.pid, status: "sampling", output, stop: `kill -TERM ${process.pid}` })}\n`,
 );
 
-const result = await sampleApi({
+const result = await sampleApi(client, {
   phase,
   seconds,
   requestsPerSecond,
-  request: (path, signal) => client.request(path, { signal }),
   shouldStop: () => stopping,
-  onProgress: (progress) =>
-    process.stdout.write(`${JSON.stringify({ status: "progress", ...progress })}\n`),
-  save: (value) =>
-    writeArtifact(evidence, artifact, {
-      ...value,
-      api: client.settings.api,
-      dashboard: client.settings.dashboard,
-      batch: client.settings.batch,
-      workspace: client.settings.workspace,
-      workloadControls: { apiSlots: CONCURRENCY, runtimeAttempts: CONCURRENCY },
-    }),
 });
 
 process.stdout.write(`${JSON.stringify({ ...result, output })}\n`);

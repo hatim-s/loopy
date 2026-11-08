@@ -265,9 +265,7 @@ test("byte-at-a-time CRLF frames deliver a batch", async () => {
   reply = () =>
     new Response(
       new ReadableStream<Uint8Array>({
-        async pull(controller) {
-          await Bun.sleep(1);
-
+        pull(controller) {
           if (index === bytes.length) {
             controller.close();
 

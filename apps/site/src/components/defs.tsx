@@ -1,7 +1,5 @@
-const LOOP =
+export const LOOP_PATH =
   "M6.5 7.5c-2.8 0-4.5 2-4.5 4.5s1.7 4.5 4.5 4.5c4 0 7-9 11-9 2.8 0 4.5 2 4.5 4.5s-1.7 4.5-4.5 4.5c-4 0-7-9-11-9Z";
-
-export const LOOP_PATH = LOOP;
 
 export function Defs() {
   return (
@@ -60,7 +58,7 @@ export function Defs() {
         </symbol>
         <symbol id="g-mark" viewBox="0 0 24 24">
           <path
-            d={LOOP}
+            d={LOOP_PATH}
             fill="none"
             stroke="url(#brand)"
             strokeWidth="2.2"

@@ -106,9 +106,9 @@ The support to delete together is:
 - The `inline` result variant of `attemptRecordSchema` in `packages/contract/src/sandbox/journal.ts`.
 - The `inlineRef` fact of `completeTransition` in `packages/contract/src/sandbox/transitions.ts`.
 - The inline branches in `resolveResult` (`src/receipt-view.ts`) and `inlineRef` (`src/filesystem/authority.ts`).
-- The tests that write flat or inline receipts: the retained-receipt case in `_tests_/authority-contract.test.ts` and the historical scan in `_tests_/authority-publication.test.ts`.
+- The legacy receipt case in `_tests_/authority-contract.test.ts`, the only test that writes flat or inline receipts.
 
-A `service.lock` written by an older sandbox holds JSON `{pid, nonce}` instead of the shared `pid nonce` format. Startup does not convert it: `rejectPreviousLock` in `src/state-root.ts` stops with the lock path and asks the operator to stop any sandbox on that root, delete the file and start again. Remove that check and its case in `_tests_/attempts.test.ts` once no retained root carries an old lock.
+A `service.lock` written by an older sandbox holds JSON `{pid, nonce}` instead of the shared `pid nonce` format. Startup does not convert it: `rejectPreviousLock` in `src/state-root.ts` stops with the lock path and asks the operator to stop any sandbox on that root, delete the file and start again. Remove that check and its case in `_tests_/state-root.test.ts` once no retained root carries an old lock.
 
 ## Tests
 

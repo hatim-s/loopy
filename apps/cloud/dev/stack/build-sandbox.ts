@@ -1,6 +1,6 @@
 import { SANDBOX_DOCKER_CONTEXT } from "../../../sandbox/src/docker/identity";
-import { PROFILE_IMAGES } from "../playground/profile";
 import { root } from "./constants";
+import { PROFILE_IMAGES } from "./images";
 
 const build = Bun.spawn(
   [

@@ -1,12 +1,17 @@
-import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { attemptResources, dockerAttemptPlanSchema } from "@loopy/contract/sandbox";
 import { Effect, Exit, Scope } from "effect";
-import { bundleForBrowser } from "../../../../packages/runtime/_tests_/fixtures/bundle";
 import { qualityTestRoot } from "../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { HttpSandboxAuthority } from "../../../sandbox/src/http-authority";
-import { cloudBindings, cloudBucket, cloudWorker, startWorkerd, testWorker } from "./workerd";
+import {
+  cloudBindings,
+  cloudBucket,
+  cloudWorker,
+  cloudWorkerBundle,
+  startWorkerd,
+  testWorker,
+} from "./workerd";
 
 export const bridgeToken = "synthetic-receipt-bridge-credential-0001";
 
@@ -19,17 +24,8 @@ export async function receiptHarness(configuration: { stage?: string; token?: st
   const scope = Scope.makeUnsafe();
   const release = () => Effect.runPromise(Scope.close(scope, Exit.void));
   const directory = qualityTestRoot("receipts", { scope });
-  await writeFile(resolve(directory, "package.json"), JSON.stringify({ private: true }));
   const stateRoot = resolve(directory, "sandbox");
-
-  await bundleForBrowser(
-    [
-      resolve(import.meta.dir, "../../src/worker.ts"),
-      resolve(import.meta.dir, "receipt-rollback-probe.ts"),
-      resolve(import.meta.dir, "receipt-count-probe.ts"),
-    ],
-    directory,
-  );
+  const bundle = await cloudWorkerBundle();
 
   const bindings = cloudBindings({
     LOOPY_STAGE: configuration.stage ?? "local",
@@ -47,16 +43,16 @@ export async function receiptHarness(configuration: { stage?: string; token?: st
       durableObjectsPersist: resolve(directory, "do"),
       r2Persist: resolve(directory, "r2"),
       workers: [
-        cloudWorker(directory, bindings),
+        cloudWorker(bundle, bindings),
         testWorker({
           name: "rollback",
           serviceBindings: { CLOUD: "cloud" },
-          scriptPath: resolve(directory, "receipt-rollback-probe.js"),
+          scriptPath: resolve(bundle, "receipt-rollback-probe.js"),
           durableObjects: { PROBE: { className: "ReceiptRollbackProbe", useSQLite: true } },
         }),
         testWorker({
           name: "counts",
-          scriptPath: resolve(directory, "receipt-count-probe.js"),
+          scriptPath: resolve(bundle, "receipt-count-probe.js"),
           durableObjects: { COUNTS: { className: "ReceiptCountProbe", useSQLite: true } },
           r2Buckets: { RECEIPT_RESULTS: cloudBucket("RECEIPT_RESULTS") },
           bindings,

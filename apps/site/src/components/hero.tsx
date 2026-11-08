@@ -4,7 +4,7 @@ import { mountHeroField } from "../lib/hero-field";
 import { stagger } from "../lib/stagger";
 import { CopyButton } from "./copy-button";
 
-const LINES = ["Do the work once.", "Extract the graph.", "Run it with control."];
+const LINES = ["Write the task once.", "Save it as a graph.", "Run it with control."];
 
 export function Hero() {
   const hero = useRef<HTMLElement>(null);
@@ -46,8 +46,8 @@ export function Hero() {
         </h1>
         <div className="hero-body">
           <p className="sub rv" style={stagger(3)}>
-            Finish a task once in your agent CLI, and Loopy turns that session into a graph you can
-            read, edit and run again on your own machine.
+            Describe a task in a <code>.loopy.ts</code> file. Loopy compiles it into a graph you can
+            read, run and schedule on your own machine.
           </p>
           <div className="install rv" style={stagger(4)}>
             <span className="cmd">
@@ -59,7 +59,7 @@ export function Hero() {
             <CopyButton text={INSTALL} />
           </div>
           <p className="then rv" style={stagger(5)}>
-            Then open <code>{COMMANDS.ui.name}</code> and point it at a session.
+            Then open <code>{COMMANDS.ui.name}</code> to watch your runs in the local dashboard.
           </p>
         </div>
       </div>

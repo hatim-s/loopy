@@ -3,6 +3,7 @@ import { decodeBoundary, graphViewSchema, nodeRunSchema } from "@loopy/contract"
 import { focusNodes, graphModel } from "../src/lib/graph";
 import { graphGroups, layoutGraph } from "../src/lib/graph-layout";
 import { predicateText } from "../src/lib/graph-text";
+import { printOutline } from "../src/lib/outline";
 import { nodeTally, runMarks } from "../src/lib/run-marks";
 import { RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "./graph-fixtures";
 
@@ -323,4 +324,23 @@ test("the first view frames the run where it is: inner work in flight, else fail
   expect(focusNodes(failed, RELEASE.entry)).toEqual(["1:plan"]);
 
   expect(focusNodes(graphModel(RELEASE, null), RELEASE.entry)).toEqual(["0:status"]);
+});
+
+test("the outline prints every node after a control block, with the SDK's builder names", () => {
+  const { content, ranges } = printOutline(RELEASE);
+
+  const merged = new Set(
+    RELEASE.edges.filter((edge) => edge.kind === "join").map((edge) => String(edge.to)),
+  );
+
+  const printed = new Set(ranges.map((range) => String(range.nodeId)));
+
+  for (const node of RELEASE.nodes) {
+    if (!(node.kind === "join" && merged.has(String(node.id)))) {
+      expect(printed).toContain(String(node.id));
+    }
+  }
+
+  expect(content).toContain("switch_(input.channel, {");
+  expect(content).toContain("finally_({");
 });

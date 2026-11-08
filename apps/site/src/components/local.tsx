@@ -9,8 +9,9 @@ const AGENTS = [
 ] as const;
 
 const FACTS = [
-  "Source, credentials, subprocesses and traces stay local.",
-  "Run state lives in SQLite on disk. Traces export as JSONL.",
+  "Source, credentials and subprocesses stay on your machine.",
+  "Run state lives in SQLite on disk, behind a local daemon and dashboard.",
+  "Runs default to sandbox mode, and a loopy gets only the secrets it declares.",
   "Open source under Apache-2.0.",
 ];
 
@@ -25,8 +26,8 @@ export function Local() {
             Keep the agent you already use. Your laptop does the work.
           </h2>
           <p className="sub rv" style={stagger(1)}>
-            Loopy calls the CLI you have installed, with your login and your settings. No hosted
-            compute.
+            A command node calls the CLI you have installed, with your login and your settings. No
+            hosted compute.
           </p>
         </div>
         <ul className="facts">

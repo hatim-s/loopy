@@ -1,9 +1,10 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { isTerminalRun, type RunView, routes } from "@loopy/contract";
 import { errorMessage } from "@loopy/core";
 import { readDaemonFile } from "@loopy/runtime/local";
 import { Schema } from "effect";
+import { createOnce } from "../shared/fs";
 import { backupClosedDatabase } from "./backup";
 import { capture } from "./capture";
 import { home, source, state, writeEvidence } from "./config";
@@ -33,10 +34,11 @@ export async function run() {
 
   const plan = loadPlan(await selections());
 
-  await writeFile(
+  createOnce(
     join(state, "load-started.json"),
     JSON.stringify({ startedAt: new Date().toISOString(), plannedRuns: plan.length }),
-    { flag: "wx", mode: 0o600 },
+    0o600,
+    "This daemon playground load already started. Start a fresh state root to run it again.",
   );
 
   const daemon = new OwnedDaemon();

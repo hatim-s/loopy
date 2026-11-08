@@ -67,7 +67,11 @@ function DaemonFacts({ daemon, now }: { daemon: DaemonView; now: number }) {
       </section>
       <dl className="grid grid-cols-[112px_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-b border-line px-4 py-3 text-xs">
         <Row label="Process">
-          <span className="font-mono">pid {daemon.pid}</span>
+          {daemon.pid === null ? (
+            <span className="text-muted">Not a local process</span>
+          ) : (
+            <span className="font-mono">pid {daemon.pid}</span>
+          )}
         </Row>
         <Row label="Up for">
           <span title={timestamp(daemon.startedAt)}>

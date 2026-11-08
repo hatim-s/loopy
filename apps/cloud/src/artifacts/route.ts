@@ -1,9 +1,9 @@
 import { type ErrorCode, isTerminalRun } from "@loopy/contract";
-import { cloudRoutes, type SandboxErrorCode } from "@loopy/contract/sandbox";
+import { cloudRoutes } from "@loopy/contract/sandbox";
 import type { Store } from "@loopy/core";
 import { errorResponse, json } from "@loopy/runtime/service";
 import { Effect, Result, Schema } from "effect";
-import type { SandboxProvider } from "../provider";
+import type { ArtifactReadErrorCode, SandboxProvider } from "../provider";
 
 const serviceCode = {
   invalid_request: "bad_request",
@@ -11,9 +11,7 @@ const serviceCode = {
   output_limit: "bad_request",
   not_found: "not_found",
   conflict: "conflict",
-  unauthorized: "internal",
-  internal: "internal",
-} as const satisfies Record<SandboxErrorCode, ErrorCode>;
+} as const satisfies Record<ArtifactReadErrorCode, ErrorCode>;
 
 // The workspace guard upstream may leave a matching `workspace` search value in place.
 const decodeQuery = Schema.decodeUnknownResult(cloudRoutes.artifact.query);

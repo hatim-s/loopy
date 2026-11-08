@@ -7,16 +7,16 @@ import { stagger } from "../lib/stagger";
 const STEPS = [
   {
     n: "01",
-    title: "Capture",
+    title: "Save",
     cmd: COMMANDS.save.name,
-    body: "Do the task once in Codex, Claude Code, OpenCode or Pi. Loopy records the session as a trace.",
+    body: "Write the task as shell commands, code, branches and approvals in a .loopy.ts file. Save compiles it and stores the graph.",
     icon: <circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.5" />,
   },
   {
     n: "02",
-    title: "Extract",
+    title: "Check",
     cmd: COMMANDS.graph.name,
-    body: "A deterministic extractor proposes a graph, no model calls. Every node points back to its trace events.",
+    body: "Print the compiled nodes and edges, so you see the order before anything runs.",
     icon: (
       <path
         d="M7 1.5 12.5 7 7 12.5 1.5 7Z"
@@ -31,7 +31,7 @@ const STEPS = [
     n: "03",
     title: "Run",
     cmd: COMMANDS.run.name,
-    body: "The graph runs on your machine through the same CLIs. Loopy owns the order, the checks and the approvals.",
+    body: "The local daemon runs the graph on your machine. Loopy owns the order, the retries and the approvals.",
     icon: (
       <path
         d="M3.5 2.2v9.6L11.5 7Z"
@@ -68,10 +68,10 @@ export function Flow() {
     <section className="flow" id="how" aria-labelledby="flow-h" ref={section}>
       <div className="wrap grid">
         <h2 id="flow-h" className="rv" style={stagger(0)}>
-          A session goes in. A graph comes out.
+          A file goes in. A graph comes out.
         </h2>
         <p className="sub rv" style={stagger(1)}>
-          Loopy keeps the shape of what you did and drops the rest.
+          Every command, branch and approval becomes a node you can see.
         </p>
         <ol className="steps" ref={steps}>
           {STEPS.map((s, i) => (
@@ -97,7 +97,7 @@ export function Flow() {
             ref={svg}
             viewBox="0 0 1200 600"
             role="img"
-            aria-label="A session is captured, a graph is extracted, the graph runs. The checks fail once and retry, and the push waits for approval."
+            aria-label="A loopy file is saved, its graph appears, and the graph runs. The checks fail once and retry, and the push waits for approval."
           />
         </div>
       </div>

@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { nodeRunSchema } from "@loopy/contract";
 import { Schema } from "effect";
+import { artifactIdentitySchema } from "../playground/repository";
 import { sha256Hex } from "../shared/hash";
-import { artifactIdentitySchema } from "./capture";
 import type { DaemonRunRecord } from "./report-schema";
 
 type VerifiedRecord = DaemonRunRecord & { nodeRuns: readonly (typeof nodeRunSchema.Type)[] };

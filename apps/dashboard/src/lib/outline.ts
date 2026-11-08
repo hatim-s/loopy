@@ -40,7 +40,7 @@ function line(node: GraphNode): string {
     }
 
     case "switch": {
-      return `switchOn(${refText(node.on)}, {`;
+      return `switch_(${refText(node.on)}, {`;
     }
 
     case "map": {
@@ -52,7 +52,7 @@ function line(node: GraphNode): string {
     }
 
     case "finally": {
-      return "withFinally({";
+      return "finally_({";
     }
 
     case "rescue": {
@@ -145,13 +145,19 @@ class Printer {
   private readonly printed = new Set<string>();
   private readonly byId: Map<string, GraphNode>;
   private readonly next = new Map<string, string>();
+  // A control node has no next edge; its arms leave through join edges to the node that follows.
+  private readonly after = new Map<string, string>();
 
   constructor(private readonly graph: GraphView) {
     this.byId = new Map(graph.nodes.map((node) => [String(node.id), node]));
 
     for (const edge of graph.edges) {
+      const scope = this.byId.get(edge.from)?.scope;
+
       if (edge.kind === "next") {
         this.next.set(edge.from, edge.to);
+      } else if (scope && edge.to !== scope) {
+        this.after.set(scope, edge.to);
       }
     }
   }
@@ -172,7 +178,7 @@ class Printer {
         this.node(node, depth);
       }
 
-      id = this.next.get(id);
+      id = this.next.get(id) ?? this.after.get(id);
     }
   }
 

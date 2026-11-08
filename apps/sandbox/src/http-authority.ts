@@ -4,6 +4,7 @@ import {
   AuthorityError,
   type AuthorityInput,
   authorityErrorSchema,
+  type authorityOperations,
   isLoopbackOrigin,
   type OperationInput,
   type OperationName,
@@ -85,41 +86,22 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
     return new TextDecoder().decode(bytes);
   }
 
-  status(input: AuthorityInput<"status">) {
-    return this.call("status", input);
-  }
+  // TypeScript cannot build this per-operation record from the table without a cast, so each
+  // operation is bound by name and the interface checks that none is missing.
+  private readonly bind =
+    <K extends keyof typeof authorityOperations>(operation: K) =>
+    (input: AuthorityInput<K>) =>
+      this.call(operation, input);
 
-  openSession(input: AuthorityInput<"openSession">) {
-    return this.call("openSession", input);
-  }
-
-  read(input: AuthorityInput<"read">) {
-    return this.call("read", input);
-  }
-
-  admit(input: AuthorityInput<"admit">) {
-    return this.call("admit", input);
-  }
-
-  complete(input: AuthorityInput<"complete">) {
-    return this.call("complete", input);
-  }
-
-  beginExport(input: AuthorityInput<"beginExport">) {
-    return this.call("beginExport", input);
-  }
-
-  endExport(input: AuthorityInput<"endExport">) {
-    return this.call("endExport", input);
-  }
-
-  exportGuards(input: AuthorityInput<"exportGuards">) {
-    return this.call("exportGuards", input);
-  }
-
-  recoverable(input: AuthorityInput<"recoverable">) {
-    return this.call("recoverable", input);
-  }
+  readonly status = this.bind("status");
+  readonly openSession = this.bind("openSession");
+  readonly read = this.bind("read");
+  readonly admit = this.bind("admit");
+  readonly complete = this.bind("complete");
+  readonly beginExport = this.bind("beginExport");
+  readonly endExport = this.bind("endExport");
+  readonly exportGuards = this.bind("exportGuards");
+  readonly recoverable = this.bind("recoverable");
 
   resultsFor(workspace: string): ImmutableResults {
     return {

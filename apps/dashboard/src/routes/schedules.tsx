@@ -1,4 +1,4 @@
-import { type LoopyView, routes } from "@loopy/contract";
+import { DEFAULT_TIME_ZONE, type LoopyView, routes } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
@@ -49,7 +49,7 @@ function NewSchedule({ loopy }: { loopy: LoopyView }) {
         workspace={loopy.workspace}
         draft={{
           cron: loopy.schedule?.cron ?? "@hourly",
-          tz: loopy.schedule?.tz ?? "UTC",
+          tz: loopy.schedule?.tz ?? DEFAULT_TIME_ZONE,
           input: {},
           enabled: true,
         }}

@@ -5,9 +5,10 @@ import { CopyButton } from "./copy-button";
 
 const CMDS = [
   { cmd: INSTALL, note: "Install the CLI", copy: true },
-  { cmd: example(COMMANDS.save), note: "Bring in the graph" },
-  { cmd: example(COMMANDS.graph), note: "Get a graph back" },
-  { cmd: example(COMMANDS.ui), note: "Read it, edit it, run it" },
+  { cmd: example(COMMANDS.save), note: "Compile and store it" },
+  { cmd: example(COMMANDS.graph), note: "Print its graph" },
+  { cmd: example(COMMANDS.run), note: "Start a run" },
+  { cmd: example(COMMANDS.ui), note: "Watch it in the dashboard" },
 ];
 
 export function Start() {
@@ -17,7 +18,7 @@ export function Start() {
     <section className="start" id="start" aria-labelledby="start-h" ref={section}>
       <div className="wrap grid">
         <h2 id="start-h" className="rv" style={stagger(0)}>
-          Pick one task you did this week.
+          Pick one task you repeat every week.
         </h2>
         <ol className="cmds">
           {CMDS.map((c, i) => (

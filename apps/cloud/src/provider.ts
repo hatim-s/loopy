@@ -2,9 +2,10 @@ import { decodeBoundary, receiptSchema } from "@loopy/contract";
 import {
   SANDBOX_MAX_ARTIFACT_RESPONSE_BYTES,
   SANDBOX_MAX_RECEIPT_RESPONSE_BYTES,
-  type SandboxArtifactRead,
+  type SandboxArtifact,
   type SandboxArtifactRequest,
   type SandboxAttemptRequest,
+  type SandboxErrorCode,
   sandboxArtifactQuerySchema,
   sandboxArtifactSchema,
   sandboxAttemptQuerySchema,
@@ -25,6 +26,13 @@ import { CloudError, decodeProtocol, platform } from "./operation";
 export const SANDBOX_REQUEST_TIMEOUT_MS = 5000;
 
 const SANDBOX_ARTIFACT_TIMEOUT_MS = 15_000;
+
+/** Credential and sandbox faults fail the effect, so a reader sees only request errors. */
+export type ArtifactReadErrorCode = Exclude<SandboxErrorCode, "unauthorized" | "internal">;
+
+type ArtifactRead =
+  | { kind: "artifact"; artifact: SandboxArtifact }
+  | { kind: "error"; error: { code: ArtifactReadErrorCode; message: string } };
 
 export class SandboxProvider implements DurableExecutionProvider {
   private readonly base: URL;
@@ -89,10 +97,7 @@ export class SandboxProvider implements DurableExecutionProvider {
   }
   artifact(
     request: Omit<SandboxArtifactRequest, "workspace">,
-  ): Effect.Effect<
-    SandboxArtifactRead,
-    CloudError | BodyLimitError | BodyReadError | CloudProtocolError
-  > {
+  ): Effect.Effect<ArtifactRead, CloudError | BodyLimitError | BodyReadError | CloudProtocolError> {
     return Effect.gen({ self: this }, function* () {
       const url = new URL("/artifacts", this.base);
       url.search = searchParams(sandboxArtifactQuerySchema, {
@@ -106,7 +111,6 @@ export class SandboxProvider implements DurableExecutionProvider {
       if (!response.ok) {
         const { error } = yield* sandboxError(response, text);
 
-        // Credentials and sandbox faults belong to the provider, not to the reader's request.
         if (error.code === "unauthorized" || error.code === "internal") {
           return yield* Effect.fail(
             new CloudError({
@@ -116,7 +120,7 @@ export class SandboxProvider implements DurableExecutionProvider {
           );
         }
 
-        return { kind: "error", error };
+        return { kind: "error", error: { code: error.code, message: error.message } };
       }
 
       return {

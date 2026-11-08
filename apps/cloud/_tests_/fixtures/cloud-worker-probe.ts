@@ -73,9 +73,13 @@ export class CloudWorkerProbe {
       await Effect.runPromise(storage.put("immutable", "original"));
       await Effect.runPromise(storage.put("immutable", "replacement"));
 
-      const conditional = await this.env.ARTIFACTS.put("workspaces/probe/immutable", "third", {
-        onlyIf: { etagDoesNotMatch: "*" },
-      });
+      const conditional = await this.env.ARTIFACTS.put(
+        `${r2Key.workspace("probe")}immutable`,
+        "third",
+        {
+          onlyIf: { etagDoesNotMatch: "*" },
+        },
+      );
 
       const other = new ImmutableBucket(this.env.ARTIFACTS, r2Key.workspace("other"));
 

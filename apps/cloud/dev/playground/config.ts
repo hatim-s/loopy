@@ -1,7 +1,8 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
 import { Effect, Schema } from "effect";
+import { createOnce } from "../shared/fs";
 import { root } from "../stack/constants";
 import { randomToken, tokenSchema } from "../stack/credentials";
 import { type PlaygroundProfile, playgroundProfile } from "./profile";
@@ -72,7 +73,12 @@ export async function initialize() {
       profile.receiptMode === "durable-object" ? { ...base, receiptsToken: randomToken() } : base;
 
     decodeBoundary(playgroundConfigSchema(profile))(value);
-    await writeFile(configPath, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    createOnce(
+      configPath,
+      `${JSON.stringify(value, null, 2)}\n`,
+      0o600,
+      `Playground config ${configPath} was created by another process. Rerun to read it.`,
+    );
   }
 
   return config();

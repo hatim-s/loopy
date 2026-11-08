@@ -1,6 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { SANDBOX_IMAGE, SANDBOX_LABELS } from "../../../sandbox/src/docker/identity";
+import { SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { assert } from "../shared/assert";
 import { root } from "../stack/constants";
 import { randomToken } from "../stack/credentials";
@@ -14,8 +14,8 @@ import {
 import { requireFreePorts } from "../stack/ports";
 import { respondsOk, waitUntilReady } from "../stack/readiness";
 import { writeDevVars, writeWorkerConfig } from "../stack/worker-config";
-import { api, environment, owner, ports, runtime, sandbox, sandboxState, state } from "./config";
-import { docker, ownedContainer, stop } from "./resources";
+import { api, environment, ports, runtime, sandbox, sandboxState, state } from "./config";
+import { owned, stop } from "./resources";
 
 const manifestPath = resolve(state, "processes.json");
 
@@ -113,7 +113,7 @@ export class FailureStack {
 
   async close() {
     if (!this.started) {
-      return { containersRemoved: 0, volumesRemoved: 0, ownedContainersRemaining: 0 };
+      return;
     }
 
     if (this.children) {
@@ -121,49 +121,9 @@ export class FailureStack {
       await stop(this.children.provider, "SIGTERM");
     }
 
-    const volumes = new Set<string>();
-    const names = await this.ownedContainerNames();
-
-    for (const name of names) {
-      const container = await ownedContainer(name);
-
-      for (const mount of container.Mounts) {
-        if (mount.Type === "volume" && mount.Name) {
-          volumes.add(mount.Name);
-        }
-      }
-
-      await docker(["rm", "--force", name]);
-    }
-
-    for (const volume of volumes) {
-      assert(
-        /^loopy-(workspace|input)-[a-f0-9]{64}$/.test(volume),
-        "cleanup_volume_identity_mismatch",
-      );
-      await docker(["volume", "rm", volume]);
-    }
-
-    assert((await this.ownedContainerNames()).length === 0, "owned_containers_remain");
+    const evidence = await owned.remove();
     await rm(manifestPath, { force: true });
 
-    return {
-      containersRemoved: names.length,
-      volumesRemoved: volumes.size,
-      ownedContainersRemaining: 0,
-    };
-  }
-
-  private async ownedContainerNames() {
-    const listed = await docker([
-      "ps",
-      "-a",
-      "--filter",
-      `label=${SANDBOX_LABELS.owner}=${owner}`,
-      "--format",
-      "{{.Names}}",
-    ]);
-
-    return listed.trim().split("\n").filter(Boolean);
+    return evidence;
   }
 }

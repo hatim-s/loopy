@@ -108,7 +108,6 @@ export class TransportFaults {
         () => marker(saved),
         (text) => text === "started\n",
       ).pipe(Effect.orDie);
-      const started = Date.now();
 
       return yield* withWaitClient(
         Effect.sync(() => {
@@ -169,7 +168,6 @@ export class TransportFaults {
               stdout: yield* fixtureIO("stdout", () => child.stdout).pipe(Effect.orDie),
               stderr: yield* fixtureIO("stderr", () => child.stderr).pipe(Effect.orDie),
               exitCode,
-              durationMs: Date.now() - started,
             };
           }),
       );

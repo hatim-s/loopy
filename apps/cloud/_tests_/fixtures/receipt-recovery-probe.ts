@@ -1,4 +1,5 @@
 import type { AuthorityInput } from "@loopy/contract/sandbox";
+import { attemptResourceNames } from "../../../../packages/contract/src/sandbox/journal";
 import { ReceiptAuthority } from "../../src/receipts/authority";
 import type { ReceiptSql } from "../../src/receipts/sql";
 
@@ -24,15 +25,6 @@ export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admi
     INSERT INTO receipt_exports SELECT 'released-'||x,volume,0,json_set(record,'$.token','released-'||x) FROM n,receipt_exports WHERE token='active'`)
     .toArray();
 
-  const counts = {
-    attempts: db.storage.sql
-      .exec("SELECT kind,count(*) AS count FROM receipt_attempts GROUP BY kind ORDER BY kind")
-      .toArray(),
-    exports: db.storage.sql
-      .exec("SELECT active,count(*) AS count FROM receipt_exports GROUP BY active ORDER BY active")
-      .toArray(),
-  };
-
   const recovered = db.recoverable({ after: null, limit: 2 });
 
   db.storage.sql
@@ -47,7 +39,7 @@ export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admi
   const otherVolume = db.exportGuards({
     after: null,
     limit: 1,
-    volume: `loopy-workspace-${"0".repeat(64)}`,
+    volume: attemptResourceNames(input.plan.id, "0".repeat(64)).volume,
   });
 
   db.storage.sql
@@ -61,5 +53,5 @@ export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admi
     malformed = error instanceof Error ? error.message : "non-error rejection";
   }
 
-  return { counts, recovered, malformed, exactVolume, otherVolume };
+  return { recovered, malformed, exactVolume, otherVolume };
 }

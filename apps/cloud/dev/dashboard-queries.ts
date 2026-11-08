@@ -14,15 +14,16 @@ import {
   manyRunsFixture,
 } from "../../../packages/runtime/_tests_/fixtures/dashboard-scale";
 import { FEED_SCAN_LIMIT } from "../../../packages/runtime/src/store/query/scan";
+import { root } from "./stack/constants";
 
-const parent = resolve(import.meta.dir, "../../..", ".loopy/dashboard-queries");
+const parent = resolve(root, ".loopy/dashboard-queries");
 
 function datasetRoot(name: string) {
   mkdirSync(parent, { recursive: true });
-  const root = mkdtempSync(join(parent, `${name}-`));
-  mkdirSync(join(root, ".loopy/loopies"), { recursive: true });
+  const directory = mkdtempSync(join(parent, `${name}-`));
+  mkdirSync(join(directory, ".loopy/loopies"), { recursive: true });
 
-  return root;
+  return directory;
 }
 
 const scope = Scope.makeUnsafe();

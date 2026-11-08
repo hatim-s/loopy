@@ -122,7 +122,7 @@ try {
     sidecarsBefore,
     limits: [
       "No SqlRunStore constructor,migrations,SQL writes or live/raw/working database access.",
-      "Exact SQL shapes use source constants and projections on the same immutable diagnostic copy.",
+      "Each case is a statement recorded while the store's own read functions ran on the same immutable diagnostic copy.",
       "Native SQLite does not reproduce Workerd binding ceilings;successful native200-binding queries are not runtime parity proof.",
       "Ten warm-cache repetitions on a shared host are local diagnostics, not a controlled hardware benchmark or production p99.",
       "SQL duration excludes EXPLAIN and result hashing;operation duration includes first EXPLAIN. JSON row-to-view conversion and post-scan feed filtering are not measured.",

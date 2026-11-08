@@ -1,29 +1,28 @@
 import { join } from "node:path";
 import type { Json } from "loopy";
 import { type Files, read } from "../../www-uacode-sync/json-edit";
-import { sourceFiles } from "../../www-uacode-sync/sync";
 
-const root = "";
+export const root = "";
 
-const assetRoot = "configs/platform-features/ai-agents/asset-repository";
+export const assetRoot = "configs/platform-features/ai-agents/asset-repository";
 
-const agentIds = [
+export const agentIds = [
   "e_6aa19955aeb9ea1371af57c7",
   "e_6a801aea757839657bbec2a1",
   "e_ai_fde_agent",
 ] as const;
 
-const workflowAgentId = "e_6aa19955aeb9ea1371af57c7";
+export const workflowAgentId = "e_6aa19955aeb9ea1371af57c7";
 
-const plannerAgentId = "e_6a801aea757839657bbec2a1";
+export const plannerAgentId = "e_6a801aea757839657bbec2a1";
 
-const firstSkillName = "external-data-inspection";
+export const firstSkillName = "external-data-inspection";
 
-const firstSkillId = "e_6ab1053b200bf5533fd0ad0b";
+export const firstSkillId = "e_6ab1053b200bf5533fd0ad0b";
 
-const releasePath = join(root, assetRoot, "ENTITY_TYPE/ai_sdlc_feature_release.jsonl");
+export const releasePath = join(root, assetRoot, "ENTITY_TYPE/ai_sdlc_feature_release.jsonl");
 
-const skills = [
+export const skills = [
   ["external-data-inspection", "e_6ab1053b200bf5533fd0ad0b"],
   ["automation-run-debugging", "e_6aa851442b4d71304f6477b1"],
   ["resiliency", "e_6aa801afd4d5060ea2c2ae6c"],
@@ -35,7 +34,7 @@ const skills = [
   ["performance", "e_6a5f2c12f62c9924bb176689"],
 ] as const;
 
-function writeJson(files: Files, path: string, value: Json) {
+export function writeJson(files: Files, path: string, value: Json) {
   files[path] = JSON.stringify(value, null, 2);
 }
 
@@ -138,20 +137,4 @@ function releaseFixtures(files: Files) {
 
 function writeFile(files: Files, path: string, value: string) {
   files[path] = value;
-}
-
-export function sourceFixture(content: Map<string, string>) {
-  const source: Files = {};
-  const canonical = content.get(workflowAgentId) ?? "";
-  source[sourceFiles[0] ?? ""] = canonical;
-  source[sourceFiles[1] ?? ""] =
-    `<!-- BEGIN agent-prompt.md \u2014 generated, do not edit below this line -->\n${canonical}\n<!-- END agent-prompt.md -->`;
-  source[".claude/agents/solution-planner.md"] = content.get(plannerAgentId) ?? "";
-  source[".claude/agents/ai-fde.md"] = content.get(agentIds[2]) ?? "";
-
-  for (const [name] of skills) {
-    source[`packages/uac/skills/${name}/SKILL.md`] = content.get(name) ?? "";
-  }
-
-  return source;
 }
