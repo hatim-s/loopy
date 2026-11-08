@@ -3,16 +3,37 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useRemoveSchedule, useToggleSchedule } from "../../lib/mutations";
 import { Button } from "../button";
-import { ResolveError } from "../resolve-form";
+import { CodedError } from "../error-banner";
 import { StatusPill } from "../ui/status";
 import { ScheduleForm } from "./form";
 import { CronReading, FireTime } from "./text";
 
-export const SCHEDULE_COLUMNS = 7;
+const COLUMNS = [
+  { label: "Loopy" },
+  { label: "Schedule" },
+  { label: "Next fire", className: "w-36" },
+  { label: "Last fire" },
+  { label: "Input" },
+  { label: "State", className: "w-36" },
+  { label: "Actions", className: "w-40", hidden: true },
+] satisfies { label: string; className?: string; hidden?: true }[];
+
+export function ScheduleHead() {
+  return (
+    <thead>
+      <tr>
+        {COLUMNS.map((column) => (
+          <th key={column.label} scope="col" className={column.className}>
+            {"hidden" in column ? <span className="sr-only">{column.label}</span> : column.label}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  );
+}
 
 type Remove = ReturnType<typeof useRemoveSchedule>;
 
-/** The first click arms the button; the second removes. Leaving it disarms. */
 function RemoveButton({ remove }: { remove: Remove }) {
   const [armed, setArmed] = useState(false);
 
@@ -125,8 +146,8 @@ export function ScheduleRow({
       </tr>
       {error && (
         <tr>
-          <td colSpan={SCHEDULE_COLUMNS}>
-            <ResolveError error={error} />
+          <td colSpan={COLUMNS.length}>
+            <CodedError error={error} />
           </td>
         </tr>
       )}
@@ -140,7 +161,7 @@ function EditRow({ schedule }: { schedule: ScheduleView }) {
 
   return (
     <tr className="hover:bg-transparent">
-      <td colSpan={SCHEDULE_COLUMNS} className="bg-sunken py-4">
+      <td colSpan={COLUMNS.length} className="bg-sunken py-4">
         <div className="max-w-3xl">
           <ScheduleForm
             slug={schedule.slug}

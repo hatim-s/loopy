@@ -2,9 +2,9 @@ import { isTerminalRun, type NodeRunView, type RunView } from "@loopy/contract";
 import { useId, useState } from "react";
 import { elapsed } from "../../lib/format";
 import type { GraphNodeModel } from "../../lib/graph";
+import { statusTone } from "../../lib/status";
 import { KindGlyph } from "../graph/kind-glyph";
 import { Icon } from "../ui/icon";
-import { statusTone } from "../ui/status";
 
 const BAR = {
   ok: "bg-[var(--chart-ok)]",
@@ -20,13 +20,7 @@ function end(execution: NodeRunView, now: number): number {
 
 const TICKS = 4;
 
-/**
- * When each node ran, against the run's own clock. One lane per node that executed, one bar per
- * execution. It shows what the page holds: the top level, plus the open item's executions.
- * Rows select the node, so the timeline doubles as a way to move through the code. It starts
- * closed: the code carries each node's status, and the timeline answers when. `partial` means
- * a bounded page left executions out, so a missing lane is not proof a node never ran.
- */
+/** `partial`: a bounded page left executions out, so a missing lane is not proof a node never ran. */
 export function RunTimeline(props: {
   run: RunView;
   nodes: GraphNodeModel[];

@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
 import type { ScheduleView } from "@loopy/contract";
 import { QueryClient } from "@tanstack/react-query";
-import { fakeBackend } from "../src/backend/fake";
 import { keys } from "../src/lib/keys";
 import { toggleSchedule } from "../src/lib/mutations";
-import { applyBatch } from "../src/lib/stream";
+import { applyBatch } from "../src/lib/stream/apply";
 
 const schedule: ScheduleView = {
   workspace: "/work",
@@ -22,21 +21,9 @@ function pendingToggle(client: QueryClient) {
   const reply = Promise.withResolvers<ScheduleView>();
   const started = Promise.withResolvers<void>();
 
-  const backend = fakeBackend({
-    epoch: "e1",
-    loopies: [],
-    schedules: [],
-    runs: [],
-    graphs: [],
-    pins: {},
-    batches: [],
-    intervalMs: 0,
-  });
-
   const request = toggleSchedule(
     client,
     {
-      ...backend,
       setScheduleEnabled: () => {
         started.resolve();
 

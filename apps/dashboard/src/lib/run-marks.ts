@@ -1,54 +1,21 @@
-import type { GraphView, NodeRunView } from "@loopy/contract";
-import type { NodeMark } from "../components/code/code-view";
+import type { GraphView, NodeRunView, ScopeCountsView } from "@loopy/contract";
 import { elapsed } from "./format";
-import type { GraphModel, GraphNodeModel } from "./graph";
-import type { ScopeSummary } from "./view-models";
+import type { GraphModel, GraphNode, GraphNodeModel } from "./graph";
+import { isSettled, type Status } from "./status";
 
-type GraphNode = GraphView["nodes"][number];
+/** What the code view says about one node. A definition view passes marks without status. */
+export type NodeMark = {
+  title: string;
+  /** Null when the node has no execution in what the page shows. */
+  status: Status | null;
+  /** The run finished without reaching this node, so its lines draw dimmed. */
+  skipped: boolean;
+  /** A short read-out beside the node's first line: "4/4", "try 2 of 3", "1.2s". */
+  note: string | null;
+  /** The first line of the node's error, printed under its last line. */
+  error: string | null;
+};
 
-/**
- * Nodes that execute once per map item. Their executions carry a scope tuple, so the run's top
- * level says nothing about them until a reader opens one item.
- */
-export function perItemNodes(graph: GraphView): Set<string> {
-  const byId = new Map<string, GraphNode>(graph.nodes.map((node) => [node.id, node]));
-  const inside = new Set<string>();
-
-  for (const node of graph.nodes) {
-    let parent = node.scope === null ? undefined : byId.get(node.scope);
-
-    while (parent) {
-      if (parent.kind === "map") {
-        inside.add(node.id);
-        break;
-      }
-
-      parent = parent.scope === null ? undefined : byId.get(parent.scope);
-    }
-  }
-
-  return inside;
-}
-
-/** The innermost map that owns a node through its scope chain, if any. */
-export function owningMap(graph: GraphView, nodeId: string): GraphNode["id"] | null {
-  const byId = new Map<string, GraphNode>(graph.nodes.map((node) => [node.id, node]));
-  let parent = byId.get(nodeId)?.scope ?? null;
-
-  while (parent !== null) {
-    const node = byId.get(parent);
-
-    if (node?.kind === "map") {
-      return node.id;
-    }
-
-    parent = node?.scope ?? null;
-  }
-
-  return null;
-}
-
-/** The first node of a map's body that does work, skipping joins that only merge arms. */
 export function firstInside(graph: GraphView, mapId: string): GraphNode["id"] | null {
   const byId = new Map<string, GraphNode>(graph.nodes.map((node) => [node.id, node]));
   const map = byId.get(mapId);
@@ -67,17 +34,19 @@ export function firstInside(graph: GraphView, mapId: string): GraphNode["id"] | 
   return null;
 }
 
-const SETTLED = new Set<NodeRunView["status"]>(["succeeded", "failed", "cancelled", "skipped"]);
+/** Whether a map still has items to start, from its rolled-up status. */
+export function mapRunning(node: GraphNodeModel | undefined): boolean {
+  return node?.state.kind === "ran" && !isSettled(node.state.status);
+}
 
 /**
  * A map's read-out. The daemon counts items once they have an execution, so the number is what
  * the run reached so far, never the length of the list being mapped.
  */
-function mapNote(node: GraphNodeModel, summary: ScopeSummary): string {
-  const done = node.state.kind === "ran" && SETTLED.has(node.state.status);
-  const items = `${summary.total.toLocaleString()} ${summary.total === 1 ? "item" : "items"}`;
+export function itemsStarted(total: number, running: boolean): string {
+  const items = `${total.toLocaleString()} ${total === 1 ? "item" : "items"}`;
 
-  return done ? `${items} started` : `${items} started so far`;
+  return running ? `${items} started so far` : `${items} started`;
 }
 
 function note(node: GraphNodeModel, now: number): string | null {
@@ -125,16 +94,15 @@ function firstError(executions: NodeRunView[]): string | null {
  */
 export function runMarks(options: {
   model: GraphModel;
-  perItem: Set<string>;
   itemOpen: boolean;
-  scopes: ScopeSummary[];
+  scopes: ScopeCountsView[];
   now: number;
 }): Map<string, NodeMark> {
-  const { model, perItem, itemOpen, scopes, now } = options;
+  const { model, itemOpen, scopes, now } = options;
   const marks = new Map<string, NodeMark>();
 
   for (const node of model.nodes) {
-    const unknown = perItem.has(node.id) && !itemOpen;
+    const unknown = node.maps.length > 0 && !itemOpen;
     const map = scopes.find((scope) => scope.nodeId === node.id);
     const status = unknown || node.state.kind !== "ran" ? null : node.state.status;
 
@@ -143,7 +111,7 @@ export function runMarks(options: {
       status,
       skipped: !unknown && node.state.kind === "idle" && node.state.reason === "not_run",
       note: map
-        ? mapNote(node, map)
+        ? itemsStarted(map.total, mapRunning(node))
         : unknown
           ? "per item"
           : node.state.kind === "idle" && node.state.reason === "not_loaded"
@@ -156,7 +124,6 @@ export function runMarks(options: {
   return marks;
 }
 
-/** Marks for a saved definition: titles only, nothing claims a run. */
 export function definitionMarks(model: GraphModel): Map<string, NodeMark> {
   return new Map(
     model.nodes.map((node) => [

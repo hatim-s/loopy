@@ -1,15 +1,15 @@
 import { isTerminalRun, type RunSnapshotView, type RunView } from "@loopy/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
-import { elapsed, timestamp } from "../../lib/format";
-import { useResolveHook, useRunMutation } from "../../lib/mutations";
+import { bytes, elapsed, runElapsed, timestamp } from "../../lib/format";
+import { useRunMutation } from "../../lib/mutations";
 import { useRunPayload } from "../../lib/ui-data";
+import { isWaiting, type WaitingRun } from "../../lib/waiting";
 import { Button } from "../button";
 import { Countdown } from "../countdown";
 import { ErrorBanner } from "../error-banner";
 import { JsonBlock } from "../json-preview";
-import { PayloadEditor, ResolveError } from "../resolve-form";
-import { bytes, runElapsed } from "../runs/run-table";
+import { RespondRow } from "../respond";
 import { Load } from "../ui/load";
 import { RunPill } from "../ui/status";
 
@@ -22,21 +22,53 @@ function resumable(run: RunView): boolean {
   );
 }
 
-function RunActions({ run }: { run: RunView }) {
+type RunAction = "resume" | "cancel" | "again";
+
+/** One mutation for the header's actions, so only one runs at a time and its error shows. */
+function useRunAction(run: RunView) {
   const navigate = useNavigate();
-  const resume = useRunMutation((backend) => backend.resumeRun(run.id));
-  const cancel = useRunMutation((backend) => backend.cancelRun(run.id));
-  const again = useRunMutation((backend) => backend.startRun(run.slug, run.input, run.workspace));
-  const busy = resume.isPending || cancel.isPending || again.isPending;
-  const error = resume.error ?? cancel.error ?? again.error;
+
+  const mutation = useRunMutation((backend, action: RunAction) => {
+    switch (action) {
+      case "resume": {
+        return backend.resumeRun(run.id);
+      }
+
+      case "cancel": {
+        return backend.cancelRun(run.id);
+      }
+
+      case "again": {
+        return backend.startRun(run.slug, run.input, run.workspace);
+      }
+    }
+  });
+
+  return {
+    pending: mutation.isPending ? mutation.variables : null,
+    error: mutation.error,
+    start: (action: RunAction) =>
+      mutation.mutate(action, {
+        onSuccess: (next) => {
+          if (action === "again") {
+            void navigate({ to: "/runs/$runId", params: { runId: next.id } });
+          }
+        },
+      }),
+  };
+}
+
+function RunActions({ run }: { run: RunView }) {
+  const action = useRunAction(run);
+  const busy = action.pending !== null;
   const truncated = run.truncatedFields?.input !== undefined;
 
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap justify-end gap-2">
         {!isTerminalRun(run.status) && (
-          <Button variant="danger" disabled={busy} onClick={() => cancel.mutate()}>
-            {cancel.isPending ? "Cancelling" : "Cancel run"}
+          <Button variant="danger" disabled={busy} onClick={() => action.start("cancel")}>
+            {action.pending === "cancel" ? "Cancelling" : "Cancel run"}
           </Button>
         )}
         {resumable(run) && (
@@ -47,9 +79,9 @@ function RunActions({ run }: { run: RunView }) {
                 ? "Recover the run from its stale owner and queue it"
                 : "Wake the run now"
             }
-            onClick={() => resume.mutate()}
+            onClick={() => action.start("resume")}
           >
-            {resume.isPending ? "Resuming" : "Resume"}
+            {action.pending === "resume" ? "Resuming" : "Resume"}
           </Button>
         )}
         <Button
@@ -59,34 +91,20 @@ function RunActions({ run }: { run: RunView }) {
               ? "The input is too large to resend from here. Start the run from the CLI."
               : "Start a new run with this run's input"
           }
-          onClick={() =>
-            again.mutate(undefined, {
-              onSuccess: (next) =>
-                void navigate({ to: "/runs/$runId", params: { runId: next.id } }),
-            })
-          }
+          onClick={() => action.start("again")}
         >
-          {again.isPending ? "Starting" : "Run again"}
+          {action.pending === "again" ? "Starting" : "Run again"}
         </Button>
       </div>
-      {error && <ErrorBanner error={error} />}
+      {action.error && <ErrorBanner error={action.error} />}
     </div>
   );
 }
 
-function Waiting({
-  run,
-  now,
-}: {
-  run: RunView & { waitingOn: NonNullable<RunView["waitingOn"]> };
-  now: number;
-}) {
-  const resolve = useResolveHook(run.waitingOn.token);
-  const [open, setOpen] = useState(false);
-
+function Waiting({ run, now }: { run: WaitingRun; now: number }) {
   return (
     <div className="rounded-panel border border-attention/40 bg-attention-soft px-4 py-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <RespondRow run={run} rowClassName="gap-x-3" formClassName="max-w-2xl">
         <p className="font-medium">
           Waiting on <code className="text-[13px]">{run.waitingOn.hook}</code>
         </p>
@@ -98,16 +116,7 @@ function Waiting({
             </>
           )}
         </span>
-        <Button small className="ml-auto" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? "Close" : "Respond"}
-        </Button>
-      </div>
-      {open && (
-        <div className="mt-3 max-w-2xl">
-          <PayloadEditor resolve={resolve} />
-          {resolve.error && <ResolveError error={resolve.error} />}
-        </div>
-      )}
+      </RespondRow>
     </div>
   );
 }
@@ -234,9 +243,7 @@ export function RunHeader(props: {
         </div>
         <RunActions run={run} />
       </div>
-      {run.status === "suspended" && run.waitingOn && (
-        <Waiting run={{ ...run, waitingOn: run.waitingOn }} now={now} />
-      )}
+      {run.status === "suspended" && isWaiting(run) && <Waiting run={run} now={now} />}
       {run.status === "failed" && (
         <div
           role="alert"

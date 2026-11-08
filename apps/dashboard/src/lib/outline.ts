@@ -1,10 +1,9 @@
 import type { GraphView } from "@loopy/contract";
+import type { GraphNode } from "./graph";
 import { predicateText, refText, valueText } from "./graph-text";
+import { nodeIdParts } from "./node-id";
 import type { SourceRange } from "./view-models";
 
-type GraphNode = GraphView["nodes"][number];
-
-/** A code listing printed from the compiled graph, with each node's lines. */
 export type Outline = { content: string; ranges: SourceRange[] };
 
 export const OUTLINE_FILE = "outline";
@@ -12,7 +11,7 @@ export const OUTLINE_FILE = "outline";
 const INDENT = "  ";
 
 function name(node: GraphNode): string {
-  return node.label ?? node.id.replace(/^\d+:/, "").replace(/\W+/g, "_");
+  return node.label ?? nodeIdParts(node.id).local.replace(/\W+/g, "_");
 }
 
 function record(values: Record<string, Parameters<typeof valueText>[0]>): string {
@@ -23,7 +22,6 @@ function record(values: Record<string, Parameters<typeof valueText>[0]>): string
     : `{ ${entries.map(([key, value]) => `${key}: ${valueText(value)}`).join(", ")} }`;
 }
 
-/** The one line that stands for a node, in the builder's own vocabulary. */
 function line(node: GraphNode): string {
   switch (node.kind) {
     case "code": {
@@ -92,7 +90,6 @@ function line(node: GraphNode): string {
   }
 }
 
-/** The arms a control node opens, each a sequence that starts at a node id. */
 function arms(node: GraphNode): [string, string][] {
   switch (node.kind) {
     case "branch": {
@@ -137,14 +134,12 @@ function arms(node: GraphNode): [string, string][] {
   }
 }
 
-/** Joins that only merge arms back together carry no code of their own. */
 function merges(graph: GraphView, node: GraphNode): boolean {
   return (
     node.kind === "join" && graph.edges.some((edge) => edge.to === node.id && edge.kind === "join")
   );
 }
 
-/** Prints sequences of nodes depth first, recording each node's lines as it goes. */
 class Printer {
   readonly lines: string[] = [];
   readonly ranges: SourceRange[] = [];

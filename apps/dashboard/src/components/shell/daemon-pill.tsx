@@ -1,11 +1,11 @@
+import type { DaemonView } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { BackendError } from "../../backend/backend";
 import { useClock } from "../../lib/clock";
-import { type ConnectionState, useConnectionState } from "../../lib/connection";
-import { shortId, span, timestamp } from "../../lib/format";
+import { span, timestamp, until } from "../../lib/format";
 import { useDaemon } from "../../lib/ui-data";
-import type { DaemonDetail } from "../../lib/view-models";
+import { type ConnectionState, useConnectionState } from "../../session/access";
 
 const STREAM = {
   idle: { word: "Starting", dot: "bg-neutral", note: "The event stream has not opened yet." },
@@ -27,7 +27,7 @@ function isUnreachable(error: Error): boolean {
   return error instanceof BackendError && error.code === "unreachable";
 }
 
-/** One bar per worker slot, filled while a run holds it. Wide pools show only the numbers. */
+// Wide pools show only the numbers.
 function SlotBars({ running, concurrency }: { running: number; concurrency: number }) {
   if (concurrency > 8) {
     return null;
@@ -54,41 +54,16 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function DaemonFacts({ daemon, now }: { daemon: DaemonDetail; now: number }) {
+function DaemonFacts({ daemon, now }: { daemon: DaemonView; now: number }) {
   return (
     <>
       <section className="border-b border-line px-4 py-3">
-        <p className="mb-2 flex justify-between text-xs text-muted">
+        <p className="flex justify-between text-xs text-muted">
           Worker slots
           <b className="font-medium text-ink tabular-nums">
             {daemon.running} of {daemon.concurrency} busy
           </b>
         </p>
-        {daemon.slots === null ? (
-          <p className="text-xs text-faint">
-            This daemon reports how many slots are busy, not which run holds each one.
-          </p>
-        ) : (
-          <ol className="grid gap-1">
-            {daemon.slots.map((slot) => (
-              <li
-                key={slot.runId}
-                className="flex h-[26px] items-center gap-2 rounded-control bg-sunken px-2 text-xs"
-              >
-                <Link
-                  to="/runs/$runId"
-                  params={{ runId: slot.runId }}
-                  className="min-w-0 flex-1 truncate text-ink hover:text-active"
-                >
-                  {slot.slug} <span className="font-mono text-muted">{shortId(slot.runId)}</span>
-                </Link>
-                <span className="text-muted tabular-nums">
-                  {span(now - Date.parse(slot.since))}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
       </section>
       <dl className="grid grid-cols-[112px_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-b border-line px-4 py-3 text-xs">
         <Row label="Process">
@@ -103,11 +78,7 @@ function DaemonFacts({ daemon, now }: { daemon: DaemonDetail; now: number }) {
           {daemon.nextWakeAt === null ? (
             <span className="text-muted">No run waits on a timer</span>
           ) : (
-            <span title={timestamp(daemon.nextWakeAt)}>
-              {Date.parse(daemon.nextWakeAt) > now
-                ? `in ${span(Date.parse(daemon.nextWakeAt) - now)}`
-                : "due now"}
-            </span>
+            <span title={timestamp(daemon.nextWakeAt)}>{until(daemon.nextWakeAt, now)}</span>
           )}
         </Row>
       </dl>
@@ -115,10 +86,7 @@ function DaemonFacts({ daemon, now }: { daemon: DaemonDetail; now: number }) {
   );
 }
 
-/**
- * The top bar's daemon pill: stream state, slot use and running count at a glance. It opens a
- * dialog with the daemon's facts. Escape or a click outside closes it and focus returns here.
- */
+/** Escape or a click outside closes the dialog, and focus returns to the pill. */
 export function DaemonPill() {
   const daemon = useDaemon();
   const stream = STREAM[useConnectionState()];

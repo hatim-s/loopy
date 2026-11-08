@@ -1,13 +1,11 @@
 export const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 
-/** Smoothstep from a to b. */
 export const ss = (a: number, b: number, v: number) => {
   const t = clamp((v - a) / (b - a));
 
   return t * t * (3 - 2 * t);
 };
 
-/** Cubic ease-out from a to b. */
 export const eo = (a: number, b: number, v: number) => {
   const t = clamp((v - a) / (b - a));
 
@@ -47,6 +45,7 @@ export function bezier(x1: number, y1: number, x2: number, y2: number) {
   };
 }
 
+// The same curve as --ease in site.css. Change both together.
 export const EASE = bezier(0.2, 0.8, 0.2, 1);
 
 export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;

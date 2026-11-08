@@ -8,9 +8,12 @@ import { Load, Note } from "../components/ui/load";
 import { Segmented } from "../components/ui/segmented";
 import { StatusGlyph } from "../components/ui/status";
 import { useClock } from "../lib/clock";
+import { countTotal } from "../lib/format";
+import { useRunPages } from "../lib/pages";
+import { DEFAULT_PERIOD, PERIOD, PERIOD_OPTIONS, PERIODS, type Period } from "../lib/period";
 import { searchField } from "../lib/search";
-import { useDaemon, useOverview, useRunPages } from "../lib/ui-data";
-import { PERIODS, type Period, type StatusCounts } from "../lib/view-models";
+import { useDaemon, useOverview } from "../lib/ui-data";
+import { pageCount, useAwaitingRuns } from "../lib/waiting";
 
 const searchSchema = Schema.Struct({
   period: searchField(Schema.Literals(PERIODS)),
@@ -21,43 +24,6 @@ export const Route = createFileRoute("/")({
   validateSearch: Schema.decodeUnknownSync(searchSchema),
   component: Overview,
 });
-
-const PERIOD_TEXT = {
-  "1h": "Last hour",
-  "24h": "Last 24 hours",
-  "7d": "Last 7 days",
-  "30d": "Last 30 days",
-} satisfies Record<Period, string>;
-
-function total(counts: StatusCounts): number {
-  return Object.values(counts).reduce((sum, count) => sum + count, 0);
-}
-
-/** The change against the previous window, or nothing when that window is unknown or empty. */
-function Change({
-  now,
-  before,
-  worseUp,
-}: {
-  now: number;
-  before: number | null;
-  worseUp: boolean;
-}) {
-  if (before === null || before === 0) {
-    return null;
-  }
-
-  const change = (now - before) / before;
-  const worse = worseUp ? change > 0 : change < 0;
-  const tone = change === 0 ? "tone-neutral" : worse ? "tone-bad" : "tone-ok";
-
-  return (
-    <span className={`pill pill-sm pill-plain ${tone}`} title="Against the window before this one">
-      {change > 0 ? "+" : ""}
-      {(change * 100).toFixed(Math.abs(change) < 0.1 ? 1 : 0)}%
-    </span>
-  );
-}
 
 function Tile(props: {
   label: ReactNode;
@@ -101,7 +67,7 @@ function Tile(props: {
 
 function Metrics({ period, metric }: { period: Period; metric: ChartMetric }) {
   const overview = useOverview(period);
-  const awaiting = useRunPages({ status: "suspended", waiting: true }, 20);
+  const awaiting = useAwaitingRuns();
   const daemon = useDaemon();
   const navigate = Route.useNavigate();
 
@@ -109,8 +75,9 @@ function Metrics({ period, metric }: { period: Period; metric: ChartMetric }) {
     <section className="panel" aria-label="Run totals">
       <Load value={overview} pending={<Note>Loading totals.</Note>}>
         {(data) => {
-          const runs = total(data.totals);
-          const finished = data.totals.succeeded + data.totals.failed + data.totals.cancelled;
+          const totals = data.counts;
+          const runs = countTotal(totals);
+          const finished = totals.succeeded + totals.failed + totals.cancelled;
 
           return (
             <>
@@ -121,20 +88,11 @@ function Metrics({ period, metric }: { period: Period; metric: ChartMetric }) {
               >
                 <Tile
                   label="Runs"
-                  value={
-                    <>
-                      {runs.toLocaleString()}
-                      <Change
-                        now={runs}
-                        before={data.previous ? total(data.previous) : null}
-                        worseUp={false}
-                      />
-                    </>
-                  }
+                  value={runs.toLocaleString()}
                   note={
                     finished === 0
                       ? "None finished in this window"
-                      : `${((data.totals.succeeded / finished) * 100).toFixed(1)}% of finished runs succeeded`
+                      : `${((totals.succeeded / finished) * 100).toFixed(1)}% of finished runs succeeded`
                   }
                   selected={metric === "runs"}
                   onSelect={() =>
@@ -147,20 +105,11 @@ function Metrics({ period, metric }: { period: Period; metric: ChartMetric }) {
                       <StatusGlyph status="failed" /> Failed
                     </>
                   }
-                  value={
-                    <>
-                      {data.totals.failed.toLocaleString()}
-                      <Change
-                        now={data.totals.failed}
-                        before={data.previous?.failed ?? null}
-                        worseUp
-                      />
-                    </>
-                  }
+                  value={totals.failed.toLocaleString()}
                   note={
                     finished === 0
                       ? "None finished in this window"
-                      : `${((data.totals.failed / finished) * 100).toFixed(1)}% of finished runs`
+                      : `${((totals.failed / finished) * 100).toFixed(1)}% of finished runs`
                   }
                   selected={metric === "failed"}
                   onSelect={() =>
@@ -173,11 +122,7 @@ function Metrics({ period, metric }: { period: Period; metric: ChartMetric }) {
                       <StatusGlyph status="awaiting" /> Awaiting
                     </>
                   }
-                  value={
-                    awaiting.state === "ready"
-                      ? `${awaiting.data.rows.length}${awaiting.data.hasNext ? "+" : ""}`
-                      : "…"
-                  }
+                  value={awaiting.state === "ready" ? pageCount(awaiting.data) : "…"}
                   note="Right now, held on a hook"
                 />
                 <Tile
@@ -199,23 +144,12 @@ function Metrics({ period, metric }: { period: Period; metric: ChartMetric }) {
               <div className="px-5 pt-4 pb-3">
                 <div className="mb-3 flex flex-wrap items-center gap-3">
                   <h2>{metric === "runs" ? "Runs by outcome" : "Failed runs"}</h2>
-                  <span className="text-xs text-muted">
-                    per{" "}
-                    {data.bucketSeconds >= 86_400
-                      ? "day"
-                      : data.bucketSeconds >= 3600
-                        ? "hour"
-                        : `${data.bucketSeconds / 60} minutes`}
-                  </span>
+                  <span className="text-xs text-muted">per {PERIOD[period].bucket}</span>
                   <span className="ml-auto">
                     <ChartLegend metric={metric} />
                   </span>
                 </div>
-                <OutcomeChart
-                  buckets={data.buckets}
-                  bucketSeconds={data.bucketSeconds}
-                  metric={metric}
-                />
+                <OutcomeChart buckets={data.buckets} period={period} metric={metric} />
               </div>
             </>
           );
@@ -235,7 +169,7 @@ function RecentFailures({ period }: { period: Period }) {
     <section className="table-card" aria-label="Recent failures">
       <div className="panel-head">
         <h2>Recent failures</h2>
-        <span className="text-xs text-muted">{PERIOD_TEXT[period].toLowerCase()}</span>
+        <span className="text-xs text-muted">{PERIOD[period].label.toLowerCase()}</span>
         <Link to="/runs" search={{ status: "failed", period }} className="ml-auto text-xs">
           All failed runs
         </Link>
@@ -254,7 +188,7 @@ function RecentFailures({ period }: { period: Period }) {
 }
 
 function Overview() {
-  const { period = "24h", metric = "runs" } = Route.useSearch();
+  const { period = DEFAULT_PERIOD, metric = "runs" } = Route.useSearch();
   const navigate = Route.useNavigate();
   const now = useClock();
 
@@ -263,15 +197,15 @@ function Overview() {
       <div className="page-head mb-1">
         <div>
           <h1>Overview</h1>
-          <p className="lede">{PERIOD_TEXT[period]}. Awaiting and running counts are live.</p>
+          <p className="lede">{PERIOD[period].label}. Awaiting and running counts are live.</p>
         </div>
         <Segmented
           label="Window"
           value={period}
-          options={PERIODS.map((value) => ({ value, label: value }))}
+          options={PERIOD_OPTIONS}
           onChange={(value) =>
             void navigate({
-              search: (prev) => ({ ...prev, period: value === "24h" ? undefined : value }),
+              search: (prev) => ({ ...prev, period: value === DEFAULT_PERIOD ? undefined : value }),
             })
           }
         />

@@ -1,3 +1,4 @@
+import { COMMANDS, example } from "./commands";
 import { clamp, EASE, eo, reducedMotion, ss } from "./motion";
 
 // The "how it works" stage: a terminal on the left, a canvas on the right, on
@@ -136,8 +137,10 @@ const RUN = (() => {
 })();
 
 function runState(u: number) {
-  // SAFETY: every node starts pending, the literal is one member of the Status union
-  const st = NODES.map((n) => ({ s: "pending" as Status, text: KIND[n.kind] }));
+  const st: { s: Status; text: string }[] = NODES.map((n) => ({
+    s: "pending",
+    text: KIND[n.kind],
+  }));
 
   for (const e of RUN.ev) {
     if (e.t <= u) {
@@ -202,7 +205,6 @@ const captureK = (t: number, i: number) => eo(0, 0.35, t - (T.line0 + i * T.line
 
 const quietFade = (t: number) => ss(T.fade0, T.fade1, t);
 
-// trace log: all fifteen lines in one column
 function traceLog(parent: Element, x: number, y: number, lh: number) {
   return TRACE.map((r, i) => {
     const ly = y + i * lh;
@@ -222,7 +224,6 @@ function traceLog(parent: Element, x: number, y: number, lh: number) {
   });
 }
 
-// node card: icon tile, name, status line, status dot
 function makeCard(parent: Element, node: Node, w: number, h: number) {
   const g = el("g", { class: "card", "data-s": "pending" }, parent);
   el("rect", { width: w, height: h, rx: 10, class: "card-bg" }, g);
@@ -323,7 +324,6 @@ function makeEdge(
 
 type Edge = ReturnType<typeof makeEdge>;
 
-// edges for a snake of cards: straight hops, horizontal within a row, vertical between rows
 function snakeEdges(parent: Element, pos: Pt[], cw: number, ch: number) {
   return [0, 1, 2, 3, 4].map((i) => {
     const A = pos[i];
@@ -488,21 +488,20 @@ const STATUS_FILL: Record<Status, string> = {
   pending: "var(--subtle)",
 };
 
-// terminal: the three commands and what they print
 function terminal(parent: Element, x0: number, y0: number) {
   const R = RUN;
   const RUN0 = T.RUN0;
 
   const TL: TermRow[] = [
-    { t0: 0.2, kind: "cmd", text: "loopy import --from codex", dur: 0.8 },
-    { t0: 1.1, kind: "out", text: "Recording session in ~/work/api" },
-    { t0: 3.2, kind: "out", text: "15 events, 66 seconds" },
-    { t0: 3.4, kind: "out", text: "Saved trace imp_7f2c" },
-    { t0: 3.7, kind: "cmd", text: "loopy extract imp_7f2c", dur: 0.6 },
+    { t0: 0.2, kind: "cmd", text: example(COMMANDS.save), dur: 0.8 },
+    { t0: 1.1, kind: "out", text: "Compiling cve-patch.ts" },
+    { t0: 3.2, kind: "out", text: "Pinned revision 7f2c" },
+    { t0: 3.4, kind: "out", text: "Saved loopy cve-patch" },
+    { t0: 3.7, kind: "cmd", text: example(COMMANDS.graph), dur: 0.6 },
     { t0: 6.6, kind: "out", text: "6 nodes, 5 edges" },
     { t0: 6.8, kind: "out", text: "Every node points at its events" },
-    { t0: 7.0, kind: "out", text: "Saved graph cve-patch" },
-    { t0: 7.2, kind: "cmd", text: "loopy run cve-patch", dur: 0.6 },
+    { t0: 7.0, kind: "out", text: "Ready to run" },
+    { t0: 7.2, kind: "cmd", text: example(COMMANDS.run), dur: 0.6 },
     ...R.ev.flatMap((e): TermRow[] =>
       e.log ? [{ t0: RUN0 + e.t, kind: "log", log: e.log, status: e.s }] : [],
     ),
@@ -708,7 +707,6 @@ export type StageHandles = {
   rails: HTMLElement[];
 };
 
-/** Builds the stage into the svg and drives it, the step highlight and the rails on one clock. */
 export function mountStage({ stage, svg, steps, rails }: StageHandles) {
   const reduce = reducedMotion();
   const compactMQ = matchMedia("(max-width: 900px)");

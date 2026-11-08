@@ -2,34 +2,26 @@ import { runStatusSchema } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
+import { LoopySelect } from "../components/loopy-select";
 import { EventDrawer, EventTable } from "../components/observability/event-table";
 import { LogTable } from "../components/observability/log-table";
 import { Load, Note } from "../components/ui/load";
 import { PagerFoot, ScanNote } from "../components/ui/pager";
 import { Segmented } from "../components/ui/segmented";
+import { useEventPages, useLogPages } from "../lib/pages";
+import { DEFAULT_PERIOD, PERIOD_OPTIONS, PERIODS, type Period } from "../lib/period";
 import { searchField } from "../lib/search";
-import { useEventPages, useLogPages, useLoopyRows } from "../lib/ui-data";
-import {
-  type EventFilters,
-  LOG_LEVELS,
-  type LogFilters,
-  PERIODS,
-  type Period,
-} from "../lib/view-models";
+import { statusWord } from "../lib/status";
+import { type EventFilters, LOG_LEVELS, type LogFilters } from "../lib/view-models";
 
 const ENTITIES = ["run", "node", "step", "log", "hook", "schedule"] as const;
 
 const RUN_STATUSES = runStatusSchema.literals;
 
-/** Suspended covers runs held on a hook and runs sleeping on a timer. */
-const STATUS_LABEL = {
-  queued: "Queued",
-  running: "Running",
-  suspended: "Suspended or awaiting",
-  succeeded: "Succeeded",
-  failed: "Failed",
-  cancelled: "Cancelled",
-} satisfies Record<(typeof RUN_STATUSES)[number], string>;
+// Suspended covers runs held on a hook and runs sleeping on a timer.
+function runStatusLabel(status: (typeof RUN_STATUSES)[number]): string {
+  return status === "suspended" ? "Suspended or awaiting" : statusWord(status);
+}
 
 /**
  * One URL search object for both tabs, so a filter set in Logs still applies in Runtime
@@ -69,7 +61,7 @@ function Logs({ filters }: { filters: LogFilters }) {
           ) : (
             <LogTable rows={page.rows} busy={fetching} withRun={filters.runId === undefined} />
           )}
-          <PagerFoot pager={pager} page={page} noun="lines">
+          <PagerFoot pager={pager} noun="lines">
             <ScanNote scan={page} noun="lines" />
           </PagerFoot>
         </>
@@ -104,7 +96,7 @@ function Events({
               ) : (
                 <EventTable rows={page.rows} busy={fetching} open={open} onOpen={onOpen} />
               )}
-              <PagerFoot pager={pager} page={page} noun="events">
+              <PagerFoot pager={pager} noun="events">
                 <ScanNote scan={page} noun="events" />
               </PagerFoot>
             </div>
@@ -158,10 +150,9 @@ function TextFilter(props: {
 function ObservabilityPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const loopies = useLoopyRows();
   const [tail, setTail] = useState(true);
   const tab = search.tab ?? "logs";
-  const period: Period = search.period ?? "24h";
+  const period: Period = search.period ?? DEFAULT_PERIOD;
 
   const set = (patch: Partial<Search>) =>
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
@@ -219,20 +210,7 @@ function ObservabilityPage() {
       </div>
       <section className="table-card" aria-label={tab === "logs" ? "Logs" : "Runtime events"}>
         <div className="table-bar">
-          <select
-            className="field"
-            aria-label="Loopy"
-            value={search.slug ?? ""}
-            onChange={(event) => set({ slug: event.target.value || undefined })}
-          >
-            <option value="">All loopies</option>
-            {loopies.state === "ready" &&
-              loopies.data.map((loopy) => (
-                <option key={`${loopy.workspace}:${loopy.slug}`} value={loopy.slug}>
-                  {loopy.slug}
-                </option>
-              ))}
-          </select>
+          <LoopySelect value={search.slug} onChange={(slug) => set({ slug })} />
           <select
             className="field"
             aria-label="Run status"
@@ -244,7 +222,7 @@ function ObservabilityPage() {
             <option value="">Any run status</option>
             {RUN_STATUSES.map((status) => (
               <option key={status} value={status}>
-                {STATUS_LABEL[status]}
+                {runStatusLabel(status)}
               </option>
             ))}
           </select>
@@ -327,8 +305,8 @@ function ObservabilityPage() {
           <Segmented
             label="Window"
             value={period}
-            options={PERIODS.map((value) => ({ value, label: value }))}
-            onChange={(value) => set({ period: value === "24h" ? undefined : value })}
+            options={PERIOD_OPTIONS}
+            onChange={(value) => set({ period: value === DEFAULT_PERIOD ? undefined : value })}
           />
           {tab === "logs" && (
             <label className="flex items-center gap-2 text-xs text-muted">
@@ -346,10 +324,9 @@ function ObservabilityPage() {
           )}
         </div>
         {tab === "logs" ? (
-          <Logs key={JSON.stringify(logFilters)} filters={logFilters} />
+          <Logs filters={logFilters} />
         ) : (
           <Events
-            key={JSON.stringify(eventFilters)}
             filters={eventFilters}
             open={search.event ?? null}
             onOpen={(event) => set({ event: event ?? undefined })}

@@ -1,11 +1,16 @@
+import type { OverviewView } from "@loopy/contract";
 import { useId, useState } from "react";
-import type { OverviewBucket, StatusCounts } from "../../lib/view-models";
+import { PERIOD, type Period } from "../../lib/period";
+import { statusWord } from "../../lib/status";
+import type { StatusCounts } from "../../lib/view-models";
+
+type Bucket = OverviewView["buckets"][number];
 
 /** What the chart stacks. In-flight folds queued, running and suspended into one series. */
 export const SERIES = [
-  { key: "succeeded", label: "Succeeded", fill: "var(--chart-ok)" },
-  { key: "failed", label: "Failed", fill: "var(--chart-bad)" },
-  { key: "cancelled", label: "Cancelled", fill: "var(--chart-cancel)" },
+  { key: "succeeded", label: statusWord("succeeded"), fill: "var(--chart-ok)" },
+  { key: "failed", label: statusWord("failed"), fill: "var(--chart-bad)" },
+  { key: "cancelled", label: statusWord("cancelled"), fill: "var(--chart-cancel)" },
   { key: "inFlight", label: "In flight", fill: "var(--chart-live)" },
 ] as const;
 
@@ -53,16 +58,10 @@ function bucketLabel(start: string, bucketSeconds: number): string {
   return bucketSeconds >= 86_400 ? DAY.format(new Date(start)) : HOUR.format(new Date(start));
 }
 
-/**
- * Runs per bucket as stacked columns, or failed runs alone. Each column has a hover read-out,
- * and a table carries the same numbers for screen readers.
- */
-export function OutcomeChart(props: {
-  buckets: OverviewBucket[];
-  bucketSeconds: number;
-  metric: ChartMetric;
-}) {
-  const { buckets, bucketSeconds, metric } = props;
+/** Each column has a hover read-out, and a table carries the same numbers for screen readers. */
+export function OutcomeChart(props: { buckets: Bucket[]; period: Period; metric: ChartMetric }) {
+  const { buckets, period, metric } = props;
+  const { bucketSeconds, bucket: bucketWord } = PERIOD[period];
   const [hover, setHover] = useState<number | null>(null);
   const titleId = useId();
   const shown = metric === "runs" ? SERIES : SERIES.filter((series) => series.key === "failed");
@@ -76,12 +75,7 @@ export function OutcomeChart(props: {
   return (
     <figure className="m-0">
       <figcaption id={titleId} className="sr-only">
-        {metric === "runs" ? "Runs by outcome" : "Failed runs"} per{" "}
-        {bucketSeconds >= 86_400
-          ? "day"
-          : bucketSeconds >= 3600
-            ? "hour"
-            : `${bucketSeconds / 60} minutes`}
+        {metric === "runs" ? "Runs by outcome" : "Failed runs"} per {bucketWord}
       </figcaption>
       <div className="relative" style={{ height: HEIGHT + LABEL_H }} aria-hidden="true">
         {ticks.map((tick) => (
@@ -109,7 +103,7 @@ export function OutcomeChart(props: {
         >
           {rows.map((row, index) => (
             <div
-              key={buckets[index]?.start}
+              key={buckets[index]?.at}
               className={`flex h-full min-w-0 flex-1 flex-col-reverse ${hover === index ? "bg-hover" : ""}`}
               onPointerEnter={() => setHover(index)}
             >
@@ -136,7 +130,7 @@ export function OutcomeChart(props: {
                 transform: `translateX(${hover > buckets.length / 2 ? "calc(-100% - 12px)" : "12px"})`,
               }}
             >
-              <p className="mb-1 font-medium">{bucketLabel(active.bucket.start, bucketSeconds)}</p>
+              <p className="mb-1 font-medium">{bucketLabel(active.bucket.at, bucketSeconds)}</p>
               {shown.map((series) => (
                 <p key={series.key} className="flex items-center gap-2 text-muted">
                   <i className="size-2 rounded-[2px]" style={{ background: series.fill }} />
@@ -149,10 +143,10 @@ export function OutcomeChart(props: {
         </div>
         <div className="absolute right-0 bottom-0 flex" style={{ left: AXIS_W, height: LABEL_H }}>
           {buckets.map((bucket, index) => (
-            <span key={bucket.start} className="relative flex-1 overflow-visible">
+            <span key={bucket.at} className="relative flex-1 overflow-visible">
               {index % labelEvery === 0 && (
                 <span className="absolute top-1.5 left-0 text-[11px] whitespace-nowrap text-faint">
-                  {bucketLabel(bucket.start, bucketSeconds)}
+                  {bucketLabel(bucket.at, bucketSeconds)}
                 </span>
               )}
             </span>
@@ -172,8 +166,8 @@ export function OutcomeChart(props: {
         </thead>
         <tbody>
           {buckets.map((bucket, index) => (
-            <tr key={bucket.start}>
-              <th scope="row">{bucketLabel(bucket.start, bucketSeconds)}</th>
+            <tr key={bucket.at}>
+              <th scope="row">{bucketLabel(bucket.at, bucketSeconds)}</th>
               {shown.map((series) => (
                 <td key={series.key}>{rows[index]?.[series.key]}</td>
               ))}

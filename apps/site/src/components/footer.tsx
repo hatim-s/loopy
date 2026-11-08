@@ -14,14 +14,12 @@ export function Footer() {
   }, []);
 
   return (
-    <footer id="github">
+    <footer>
       <div className="wrap">
         <div className="foot">
           <Mark size={22} />
           <span>Apache-2.0</span>
           <nav aria-label="Footer">
-            <a href="#github">GitHub</a>
-            <a href="#docs">Docs</a>
             <a href="#how">Examples</a>
           </nav>
         </div>

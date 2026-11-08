@@ -7,12 +7,12 @@ import {
   type InputField,
   initialValues,
   inputFields,
-  parseJsonInput,
   type RecordSpec,
 } from "../lib/input-form";
 import { useRunMutation } from "../lib/mutations";
 import { Button } from "./button";
 import { ErrorBanner } from "./error-banner";
+import { JsonField, useJsonText } from "./json-field";
 
 const CONTROL = "field block w-full";
 
@@ -50,7 +50,7 @@ function FieldControl({
   );
 }
 
-/** One control per spec key. Issues show only after a submit attempt. */
+// Issues show only after a submit attempt.
 function RecordFields({ spec, onSubmit }: { spec: RecordSpec; onSubmit: (input: Json) => void }) {
   const fields = inputFields(spec);
   const [values, setValues] = useState(() => initialValues(fields));
@@ -98,35 +98,25 @@ function RecordFields({ spec, onSubmit }: { spec: RecordSpec; onSubmit: (input: 
 }
 
 function JsonEditor({ onSubmit }: { onSubmit: (input: Json) => void }) {
-  const [text, setText] = useState("{}");
-  const parsed = parseJsonInput(text);
+  const input = useJsonText("{}");
 
   return (
     <form
       id="start-run"
-      className="space-y-1"
       onSubmit={(event) => {
         event.preventDefault();
 
-        if (parsed.valid) {
-          onSubmit(parsed.value);
+        if (input.parsed.valid) {
+          onSubmit(input.parsed.value);
         }
       }}
     >
-      <label className="block space-y-1">
-        <span className="text-xs text-muted">
-          Input, as JSON. The loopy validates it against its schema.
-        </span>
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          rows={5}
-          spellCheck={false}
-          aria-invalid={!parsed.valid}
-          className="field"
-        />
-      </label>
-      {!parsed.valid && <p className="text-xs text-danger">The input is not valid JSON.</p>}
+      <JsonField
+        label="Input, as JSON. The loopy validates it against its schema."
+        noun="input"
+        json={input}
+        rows={5}
+      />
     </form>
   );
 }

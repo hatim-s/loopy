@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useReveal } from "../hooks/use-reveal";
+import { COMMANDS } from "../lib/commands";
 import { mountStage } from "../lib/stage";
 import { stagger } from "../lib/stagger";
 
@@ -7,14 +8,14 @@ const STEPS = [
   {
     n: "01",
     title: "Capture",
-    cmd: "loopy import",
+    cmd: COMMANDS.save.name,
     body: "Do the task once in Codex, Claude Code, OpenCode or Pi. Loopy records the session as a trace.",
     icon: <circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.5" />,
   },
   {
     n: "02",
     title: "Extract",
-    cmd: "loopy extract",
+    cmd: COMMANDS.graph.name,
     body: "A deterministic extractor proposes a graph, no model calls. Every node points back to its trace events.",
     icon: (
       <path
@@ -29,7 +30,7 @@ const STEPS = [
   {
     n: "03",
     title: "Run",
-    cmd: "loopy run",
+    cmd: COMMANDS.run.name,
     body: "The graph runs on your machine through the same CLIs. Loopy owns the order, the checks and the approvals.",
     icon: (
       <path

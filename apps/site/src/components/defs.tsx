@@ -3,7 +3,6 @@ const LOOP =
 
 export const LOOP_PATH = LOOP;
 
-/** Shared gradients and the node glyphs the stage and the cards reference by id. */
 export function Defs() {
   return (
     <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">

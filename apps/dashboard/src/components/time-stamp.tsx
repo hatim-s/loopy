@@ -18,7 +18,6 @@ const OTHER_YEAR = new Intl.DateTimeFormat(undefined, {
   hourCycle: "h23",
 });
 
-/** Second precision for this year, the year instead of seconds for anything older. */
 function precise(value: string, now: number): string {
   const date = new Date(value);
 
@@ -47,20 +46,4 @@ export function TimeStamp({ at, now }: { at: string; now: number }) {
       </time>
     </span>
   );
-}
-
-const UNITS = [
-  { size: 86_400_000, suffix: "d" },
-  { size: 3_600_000, suffix: "h" },
-  { size: 60_000, suffix: "m" },
-] as const;
-
-/** The largest whole unit only, for lists too narrow for "3h 10m ago": 45s, 12m, 3h, 2d. */
-export function shortAge(value: string, now: number): string {
-  const elapsed = Math.max(0, now - Date.parse(value));
-  const unit = UNITS.find(({ size }) => elapsed >= size);
-
-  return unit
-    ? `${Math.floor(elapsed / unit.size)}${unit.suffix}`
-    : `${Math.floor(elapsed / 1000)}s`;
 }

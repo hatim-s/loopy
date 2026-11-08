@@ -1,39 +1,31 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useMatches } from "@tanstack/react-router";
 import { shortId } from "../../lib/format";
+import { NAV, type NavPath } from "./nav";
 
-type Crumb = { label: string; to?: "/loopies" | "/runs" };
+type Crumb = { label: string; to?: NavPath };
 
-const SECTION = {
-  loopies: { label: "Loopies", to: "/loopies" },
-  runs: { label: "Runs", to: "/runs" },
-  observability: { label: "Logs and events" },
-  schedules: { label: "Schedules" },
-} as const satisfies Record<string, Crumb>;
+function section(routeId: string): Crumb {
+  const item = NAV.find(({ to }) => routeId === to || routeId === `${to}/`) ?? NAV[0];
 
-function isSection(name: string): name is keyof typeof SECTION {
-  return Object.hasOwn(SECTION, name);
+  return { label: item.label, to: item.to };
 }
 
-/** The top bar's trail, read from the path: section, then the loopy or run. */
-function crumbs(pathname: string): Crumb[] {
-  const [section = "", id] = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+function useTrail(): Crumb[] {
+  const match = useMatches({ select: (matches) => matches.at(-1) });
 
-  if (!isSection(section)) {
-    return [{ label: "Overview" }];
+  if (match?.routeId === "/runs/$runId") {
+    return [section("/runs"), { label: `Run ${shortId(match.params.runId)}` }];
   }
 
-  const head = SECTION[section];
-
-  if (id === undefined) {
-    return [{ label: head.label }];
+  if (match?.routeId === "/loopies/$slug") {
+    return [section("/loopies"), { label: match.params.slug }];
   }
 
-  return [head, { label: section === "runs" ? `Run ${shortId(id)}` : id }];
+  return [{ label: section(match?.routeId ?? "/").label }];
 }
 
 export function Crumbs() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const trail = crumbs(pathname);
+  const trail = useTrail();
 
   return (
     <nav aria-label="Breadcrumb" className="min-w-0">

@@ -1,13 +1,10 @@
-import type { RunView } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
 import { describeCron } from "../../lib/cron";
-import { elapsed, shortId, span } from "../../lib/format";
-import { useResolveHook } from "../../lib/mutations";
-import { useLoopyRows, useRunPages, useScheduleOverview } from "../../lib/ui-data";
-import { Button } from "../button";
-import { PayloadEditor, ResolveError } from "../resolve-form";
-import { runElapsed } from "../runs/run-table";
+import { elapsed, runElapsed, shortId, span } from "../../lib/format";
+import { useRunPages } from "../../lib/pages";
+import { useLoopyRows, useScheduleOverview } from "../../lib/ui-data";
+import { isWaiting, pageCount, useAwaitingRuns, type WaitingRun } from "../../lib/waiting";
+import { RespondRow } from "../respond";
 import { FireTime } from "../schedules/text";
 import { Load, Note } from "../ui/load";
 import { RunPill, StatusPill } from "../ui/status";
@@ -34,19 +31,10 @@ function PanelHead(props: {
   );
 }
 
-function countText(rows: number, more: boolean): string {
-  return `${rows}${more ? "+" : ""}`;
-}
-
-type WaitingRun = RunView & { waitingOn: NonNullable<RunView["waitingOn"]> };
-
 function AwaitingRow({ run, now }: { run: WaitingRun; now: number }) {
-  const [open, setOpen] = useState(false);
-  const resolve = useResolveHook(run.waitingOn.token);
-
   return (
     <li className="border-b border-line px-4 py-3 last:border-b-0">
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+      <RespondRow run={run} rowClassName="gap-x-2.5" formClassName="">
         <StatusPill status="awaiting" small />
         <Link
           to="/runs/$runId"
@@ -58,36 +46,19 @@ function AwaitingRow({ run, now }: { run: WaitingRun; now: number }) {
         <span className="text-xs text-muted">
           on <code>{run.waitingOn.hook}</code> for {span(now - Date.parse(run.waitingOn.since))}
         </span>
-        <Button small className="ml-auto" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? "Close" : "Respond"}
-        </Button>
-      </div>
-      {open && (
-        <div className="mt-3">
-          <PayloadEditor resolve={resolve} />
-          {resolve.error && <ResolveError error={resolve.error} />}
-        </div>
-      )}
+      </RespondRow>
     </li>
   );
 }
 
-function isWaiting(run: RunView): run is WaitingRun {
-  return run.waitingOn !== null;
-}
-
 export function AwaitingYou({ now }: { now: number }) {
-  const pager = useRunPages({ status: "suspended", waiting: true }, LIST_PAGE);
+  const pager = useAwaitingRuns();
 
   return (
     <section className="panel min-w-0" aria-label="Awaiting you">
       <PanelHead
         title="Awaiting you"
-        count={
-          pager.state === "ready"
-            ? countText(pager.data.rows.length, pager.data.hasNext)
-            : undefined
-        }
+        count={pager.state === "ready" ? pageCount(pager.data) : undefined}
         to="/runs"
         search={{ status: "awaiting" }}
         link="All awaiting runs"
@@ -116,11 +87,7 @@ export function RunningNow({ now }: { now: number }) {
     <section className="panel min-w-0" aria-label="Running now">
       <PanelHead
         title="Running now"
-        count={
-          pager.state === "ready"
-            ? countText(pager.data.rows.length, pager.data.hasNext)
-            : undefined
-        }
+        count={pager.state === "ready" ? pageCount(pager.data) : undefined}
         to="/runs"
         search={{ status: "running" }}
         link="All running runs"

@@ -1,7 +1,6 @@
 import { MiniMap, useReactFlow, useStore } from "@xyflow/react";
-import type { ReactNode } from "react";
-import type { NodeRunStatus } from "../../lib/graph";
-import type { FitPadding, GraphLayout } from "../../lib/graph-layout";
+import { FIT_PADDING, type GraphLayout } from "../../lib/graph-layout";
+import { statusTone, TONE_FILL } from "../../lib/status";
 import type { FrameNode } from "./frame";
 import type { FlowNode } from "./node";
 
@@ -18,21 +17,6 @@ function minimapSize(layout: GraphLayout) {
 }
 
 // XYFlow paints minimap nodes with an inline fill, so colours go in as values, not classes.
-const MINI_FILL = {
-  definition: "var(--line-strong)",
-  idle: "var(--line-strong)",
-  succeeded: "var(--success)",
-  failed: "var(--danger)",
-  running: "var(--lamp)",
-  queued: "var(--lamp)",
-  retrying: "var(--attention)",
-  rate_limited: "var(--attention)",
-  waiting: "var(--attention)",
-  sleeping: "var(--attention)",
-  cancelled: "var(--neutral)",
-  skipped: "var(--neutral)",
-} satisfies Record<NodeRunStatus | "definition" | "idle", string>;
-
 function miniFill(node: FlowNode | FrameNode): string {
   if (node.type === "frame") {
     return "transparent";
@@ -40,14 +24,13 @@ function miniFill(node: FlowNode | FrameNode): string {
 
   const { state } = node.data.model;
 
-  return MINI_FILL[state.kind === "ran" ? state.status : state.kind];
+  return state.kind === "ran" ? TONE_FILL[statusTone(state.status)] : "var(--line-strong)";
 }
 
 function miniStroke(node: FlowNode | FrameNode): string {
   return node.type === "frame" ? "var(--line-strong)" : "transparent";
 }
 
-/** The minimap in the bottom-right corner, above the view controls. */
 export function GraphMinimap({ layout }: { layout: GraphLayout }) {
   return (
     <MiniMap<FlowNode | FrameNode>
@@ -82,20 +65,13 @@ function ControlIcon({ d }: { d: string }) {
   );
 }
 
-/** Zoom, fit and the minimap switch, in one strip with whatever the page puts beside them. */
-export function ViewControls(props: {
-  padding: FitPadding;
-  minimap: boolean;
-  onMinimap: (shown: boolean) => void;
-  children: ReactNode;
-}) {
-  const { padding, minimap, onMinimap, children } = props;
+export function ViewControls(props: { minimap: boolean; onMinimap: (shown: boolean) => void }) {
+  const { minimap, onMinimap } = props;
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const zoom = useStore((state) => state.transform[2]);
 
   return (
     <div className="float flex h-9 items-center gap-1 px-1 text-xs">
-      {children}
       <span className="flex items-center">
         <button
           type="button"
@@ -119,7 +95,7 @@ export function ViewControls(props: {
         <button
           type="button"
           className="icon-button"
-          onClick={() => void fitView({ padding, maxZoom: 1, duration: 240 })}
+          onClick={() => void fitView({ padding: FIT_PADDING, maxZoom: 1, duration: 240 })}
           aria-label="Fit the graph to the view"
           title="Fit to view"
         >
