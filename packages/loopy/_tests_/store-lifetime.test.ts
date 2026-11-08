@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { StorageError } from "../../core/src/store";
-import { makeSqliteRunStore } from "../../runtime/src/store/sqlite/store";
+import { makeSqliteRunStore } from "../../runtime/src/store/open";
 import { newRun } from "./fixture";
 
 const nodeId = Schema.decodeUnknownSync(nodeIdSchema)("0:code");

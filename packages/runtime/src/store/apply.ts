@@ -1,9 +1,9 @@
 import type { ExecutionKey, StoreEffect } from "@loopy/core";
-import { StoreInvariantError } from "../operation";
-import { earliestWakeAt } from "../timestamps";
 import type { SqlWrite } from "./context";
 import { writeLog, writeNodeRun } from "./nodes";
+import { StoreInvariantError } from "./operation";
 import { finishRun, requireRunning, suspendRun } from "./runs";
+import { earliestWakeAt } from "./timestamps";
 import { expireNodeWait, expireWaits, insertWait } from "./waits";
 
 function effectKey(effect: StoreEffect): ExecutionKey | null {

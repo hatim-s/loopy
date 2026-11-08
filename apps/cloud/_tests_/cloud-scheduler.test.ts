@@ -16,7 +16,7 @@ import { RegistryError } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { code, loopy, sleep, wait } from "@loopy/sdk/graph";
 import { Cause, Effect } from "effect";
-import { BunSqlDriver } from "../../../packages/runtime/src/store/sqlite/bun-driver";
+import { BunSqlDriver } from "../../../packages/runtime/src/store/bun-driver";
 import type { R2ArtifactRegistry } from "../src/artifacts";
 import { type SchedulerStorage, WorkspaceScheduler } from "../src/scheduler";
 

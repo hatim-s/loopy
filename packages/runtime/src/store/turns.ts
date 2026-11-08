@@ -1,6 +1,6 @@
 import type { DurableTurn, DurableTurnStore } from "@loopy/core";
-import { utc } from "../timestamps";
 import type { SqlContext, SqlWrite } from "./context";
+import { utc } from "./timestamps";
 
 type TurnRow = {
   id: string;

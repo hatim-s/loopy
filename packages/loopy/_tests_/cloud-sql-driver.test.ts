@@ -13,8 +13,8 @@ import {
   type SqlValue,
 } from "@loopy/runtime/store/portable";
 import { Effect, Schema } from "effect";
+import { BunSqlDriver } from "../../runtime/src/store/bun-driver";
 import { EVENT_RETENTION } from "../../runtime/src/store/event-outbox";
-import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
 import { newRun } from "./fixture";
 import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { storeContract } from "./store-contract";

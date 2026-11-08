@@ -1,3 +1,3 @@
-export type { SqlRunStore } from "./sqlite/run-store";
+export { makeSqliteRunStore, openRunStore } from "./open";
 
-export { makeSqliteRunStore, openRunStore } from "./sqlite/store";
+export type { SqlRunStore } from "./run-store";

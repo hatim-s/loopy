@@ -1,16 +1,14 @@
-import { emptyRunCounts, type OverviewQuery, type OverviewView } from "@loopy/contract";
-import { StoreRejectedError } from "./operation";
+import {
+  emptyRunCounts,
+  type OverviewQuery,
+  type OverviewView,
+  overviewBucketCount,
+} from "@loopy/contract";
 
 export const FEED_SCAN_LIMIT = 2000;
 
 export function overviewBuckets(query: OverviewQuery): OverviewView {
-  const count = Math.ceil(
-    (Date.parse(query.to) - Date.parse(query.from)) / (query.bucketSeconds * 1000),
-  );
-
-  if (count < 1 || count > 744) {
-    throw new StoreRejectedError("Overview window must contain between 1 and 744 buckets.");
-  }
+  const count = overviewBucketCount(query);
 
   return {
     from: query.from,

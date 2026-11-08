@@ -5,11 +5,13 @@ import { join } from "node:path";
 import {
   decodeBoundary,
   executionKeyString,
+  MAX_OVERVIEW_BUCKETS,
   MAX_PREVIEW_BYTES,
   PAGE_LIMIT,
   routes,
 } from "@loopy/contract";
 import { Effect } from "effect";
+import { FEED_SCAN_LIMIT } from "../../runtime/src/store/query/scan";
 import { largeMapFixture, manyRunsFixture } from "./dashboard-scale-fixture";
 
 function bytes<T>(value: T) {
@@ -229,9 +231,9 @@ export async function benchmarkDashboardQueries() {
     plans,
     limits: {
       page: PAGE_LIMIT,
-      feedCandidates: 2000,
+      feedCandidates: FEED_SCAN_LIMIT,
       nodeOutputPreviewBytes: MAX_PREVIEW_BYTES,
-      overviewBuckets: 744,
+      overviewBuckets: MAX_OVERVIEW_BUCKETS,
     },
     note: "Local synthetic read measurements only. Ingest uses store writes without activation, executors, or provider calls. Both datasets contain terminal runs.",
   };

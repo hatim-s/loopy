@@ -21,7 +21,7 @@ import {
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect, Schema } from "effect";
 import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
-import { BunSqlDriver } from "../../../packages/runtime/src/store/sqlite/bun-driver";
+import { BunSqlDriver } from "../../../packages/runtime/src/store/bun-driver";
 
 const drivers: BunSqlDriver[] = [];
 

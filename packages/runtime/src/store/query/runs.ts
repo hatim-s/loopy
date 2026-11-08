@@ -8,11 +8,11 @@ import {
 } from "@loopy/contract";
 import { MAX_PREVIEW_BYTES, type PendingHook, type RunRecord, waitRecordSchema } from "@loopy/core";
 import { Schema } from "effect";
-import { overviewBuckets } from "../../query-utils";
-import { storedDecoder } from "../../row-codec";
 import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";
+import { storedDecoder } from "../row-codec";
 import { type RunRow, rowToRun } from "../rows";
+import { overviewBuckets } from "./scan";
 
 type RunFilter = Pick<RunPageQuery, "slug" | "workspace" | "status" | "from" | "to">;
 

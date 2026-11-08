@@ -1,5 +1,5 @@
-import { StoreRejectedError } from "../../operation";
 import type { SqlDriver } from "../driver";
+import { StoreRejectedError } from "../operation";
 import { SCHEMA_15_TO_16 } from "./upgrade";
 
 const SCHEMA_VERSION = 16;

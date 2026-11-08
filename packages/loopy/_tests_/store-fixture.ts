@@ -1,7 +1,7 @@
 import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { type SqlOwnerPolicy, SqlRunStore } from "@loopy/runtime/store/portable";
 import { Clock, Effect, Exit, Scope } from "effect";
-import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
+import { BunSqlDriver } from "../../runtime/src/store/bun-driver";
 
 // No owner is alive, so a lease expires on time alone, as it does for cloud owners.
 export const NEVER_ALIVE: SqlOwnerPolicy = {

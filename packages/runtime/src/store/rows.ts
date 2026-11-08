@@ -8,8 +8,8 @@ import {
   waitRecordSchema,
 } from "@loopy/core";
 import { Schema } from "effect";
-import { StoredDataError } from "../operation";
-import { storedDecoder, storedValueDecoder } from "../row-codec";
+import { StoredDataError } from "./operation";
+import { storedDecoder, storedValueDecoder } from "./row-codec";
 
 export type RunRow = {
   id: string;

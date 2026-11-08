@@ -6,11 +6,11 @@ import {
   type ScopeItemsQuery,
 } from "@loopy/contract";
 import { MAX_PREVIEW_BYTES, type NodeRunStatus, PAGE_LIMIT } from "@loopy/core";
-import { storedDecoder } from "../../row-codec";
 import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";
 import { readEventCursor } from "../events";
 import { readNode } from "../nodes";
+import { storedDecoder } from "../row-codec";
 import { decodeNodeRun } from "../rows";
 import { readHooks } from "../waits";
 import { type PreviewRunRow, previewRun, RUN_PREVIEW_COLUMNS } from "./runs";

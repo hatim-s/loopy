@@ -6,12 +6,11 @@ import {
   type RuntimeEvent,
   type WakeError,
 } from "@loopy/core";
-import { StoreRejectedError } from "../operation";
-import { acquireWindow, type RateLimitWindow } from "../rate-limit-window";
-import { normalizeRun, utc } from "../timestamps";
 import type { SqlContext, SqlWrite } from "./context";
 import { emit } from "./events";
+import { StoreRejectedError } from "./operation";
 import { type RunRow, rowToRun } from "./rows";
+import { normalizeRun, utc } from "./timestamps";
 
 const RELEASE =
   "UPDATE runs SET wake_at=CASE WHEN status='running' THEN ? ELSE wake_at END,status=CASE WHEN status='running' THEN 'suspended' ELSE status END,owner_token=NULL,owner_pid=NULL,owner_host=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND owner_token=?";
@@ -251,25 +250,4 @@ export function readNextWakeAt(ctx: SqlContext): string | undefined {
       )
       .get()?.wake_at ?? undefined
   );
-}
-
-export function acquireRateLimit(
-  ctx: SqlContext,
-  limit: { key: string; count: number; windowMs: number; now: string },
-) {
-  const window =
-    ctx.db
-      .query<RateLimitWindow, [string]>(
-        "SELECT window_start AS windowStart,count FROM rate_limits WHERE key=?",
-      )
-      .get(limit.key) ?? undefined;
-
-  const acquired = acquireWindow(window, limit.count, limit.windowMs, limit.now);
-  ctx.db
-    .query(
-      "INSERT INTO rate_limits VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=excluded.count",
-    )
-    .run(limit.key, acquired.window.windowStart, acquired.window.count);
-
-  return acquired.result;
 }
