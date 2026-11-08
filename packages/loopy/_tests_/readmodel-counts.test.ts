@@ -59,7 +59,7 @@ test("grouped counts match filtered authoritative runs through transitions and r
     expect(await Effect.runPromise(reopened.eventCursor())).toEqual(cursor);
     expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
     expect(db.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-      value: "15",
+      value: "16",
     });
     expect(
       db

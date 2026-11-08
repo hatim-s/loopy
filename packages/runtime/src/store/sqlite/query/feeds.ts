@@ -59,6 +59,13 @@ function feedCursor(query: LogPageQuery | EventPageQuery, column: string) {
   return { ascending, clauses, values };
 }
 
+// Exported with the other store projections so read-only diagnostics run the exact query shape.
+export const LOG_PROJECTION =
+  "l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches";
+
+export const EVENT_PROJECTION =
+  "e.sequence,e.at,e.txn,e.run_id AS runId,COALESCE(r.slug,e.slug) AS slug,COALESCE(r.workspace,e.workspace) AS workspace,r.status,e.node_id AS nodeId,e.entity,e.kind";
+
 export function readLogPage(ctx: SqlContext, query: LogPageQuery): GlobalLogsPage {
   const { ascending, clauses, values } = feedCursor(query, "l.id");
 
@@ -69,7 +76,7 @@ export function readLogPage(ctx: SqlContext, query: LogPageQuery): GlobalLogsPag
 
   const rows = ctx.db
     .query<LogSummaryView & FeedRow & { textMatches: number }, SqlValue[]>(
-      `SELECT l.id,l.run_id AS runId,r.slug,r.workspace,r.status,l.seq,l.at,l.node_id AS nodeId,l.execution_key AS executionKey,l.attempt,l.level,substr(l.message,1,1024) AS message,l.data_bytes AS dataBytes,instr(lower(l.message),lower(?))>0 AS textMatches FROM logs l JOIN runs r ON r.id=l.run_id WHERE ${clauses.join(" AND ")} ORDER BY l.id ${ascending ? "ASC" : "DESC"} LIMIT ${FEED_SCAN_LIMIT + 1}`,
+      `SELECT ${LOG_PROJECTION} FROM logs l JOIN runs r ON r.id=l.run_id WHERE ${clauses.join(" AND ")} ORDER BY l.id ${ascending ? "ASC" : "DESC"} LIMIT ${FEED_SCAN_LIMIT + 1}`,
     )
     .all(query.text ?? "", ...values);
 
@@ -117,7 +124,7 @@ export function readEventPage(ctx: SqlContext, query: EventPageQuery): EventHist
 
   const rows = ctx.db
     .query<EventSummaryView & FeedRow, SqlValue[]>(
-      `SELECT e.sequence,e.at,e.txn,e.run_id AS runId,COALESCE(r.slug,e.slug) AS slug,COALESCE(r.workspace,e.workspace) AS workspace,r.status,e.node_id AS nodeId,e.entity,e.kind FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE ${clauses.join(" AND ")} ORDER BY e.sequence ${ascending ? "ASC" : "DESC"} LIMIT ${FEED_SCAN_LIMIT + 1}`,
+      `SELECT ${EVENT_PROJECTION} FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE ${clauses.join(" AND ")} ORDER BY e.sequence ${ascending ? "ASC" : "DESC"} LIMIT ${FEED_SCAN_LIMIT + 1}`,
     )
     .all(...values);
 

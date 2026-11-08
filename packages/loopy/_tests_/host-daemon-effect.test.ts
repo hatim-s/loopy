@@ -6,6 +6,8 @@ import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "./fixture";
 import { MemorySqlStore } from "./store-fixture";
 
+const empty = loopy("empty", { input: {}, run: () => 42 });
+
 test("daemon wakes for a newly committed run and shuts down owned work", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -28,12 +30,9 @@ test("daemon wakes for a newly committed run and shuts down owned work", async (
           prepare: () =>
             Deferred.succeed(prepared, undefined).pipe(
               Effect.andThen(Deferred.await(gate)),
-              Effect.as({
-                executor: new FakeExecutor(),
-                graph: loopy("empty", { input: {}, run: () => 42 }),
-              }),
+              Effect.as({ executor: new FakeExecutor(), graph: empty }),
             ),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph: empty }),
         });
 
         const fiber = yield* Effect.forkChild(daemon.run);

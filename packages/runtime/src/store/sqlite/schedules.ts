@@ -1,4 +1,4 @@
-import type { RunRecord, Schedule, Store } from "@loopy/core";
+import type { Schedule, ScheduleFailure, Store } from "@loopy/core";
 import { StoreRejectedError } from "../operation";
 import { utc } from "../timestamps";
 import type { SqlContext, SqlWrite } from "./context";
@@ -7,6 +7,9 @@ import { rowToSchedule, type ScheduleRow } from "./rows";
 import { insertRun } from "./runs";
 
 type ScheduleKey = Pick<Schedule, "workspace" | "slug">;
+
+// Failures recorded for an older version describe a schedule that has since been saved again.
+const CURRENT_FAILURE = "f.workspace=s.workspace AND f.slug=s.slug AND f.version=s.version";
 
 function readSchedule(ctx: SqlContext, { workspace, slug }: ScheduleKey) {
   return (
@@ -33,14 +36,35 @@ export function readSchedules(ctx: SqlContext): Schedule[] {
     .map(rowToSchedule);
 }
 
+export function readDueSchedules(ctx: SqlContext, now: string, limit: number): Schedule[] {
+  return ctx.db
+    .query<ScheduleRow, [string, string, number]>(
+      `SELECT s.* FROM schedules s LEFT JOIN schedule_failures f ON ${CURRENT_FAILURE}
+      WHERE s.enabled=1 AND s.next_fire_at<=? AND (f.retry_at IS NULL OR f.retry_at<=?)
+      ORDER BY s.next_fire_at,s.workspace,s.slug LIMIT ?`,
+    )
+    .all(utc(now), utc(now), limit)
+    .map(rowToSchedule);
+}
+
 export function readNextScheduleAt(ctx: SqlContext): string | undefined {
   return (
     ctx.db
       .query<{ at: string | null }, []>(
-        "SELECT MIN(next_fire_at) AS at FROM schedules WHERE enabled=1",
+        `SELECT MIN(MAX(s.next_fire_at,COALESCE(f.retry_at,s.next_fire_at))) AS at
+        FROM schedules s LEFT JOIN schedule_failures f ON ${CURRENT_FAILURE} WHERE s.enabled=1`,
       )
       .get()?.at ?? undefined
   );
+}
+
+export function readScheduleFailures(ctx: SqlContext, limit: number): ScheduleFailure[] {
+  return ctx.db
+    .query<ScheduleFailure, [number]>(
+      `SELECT f.workspace,f.slug,f.error,f.retry_at AS retryAt FROM schedule_failures f
+      JOIN schedules s ON ${CURRENT_FAILURE} ORDER BY f.workspace,f.slug LIMIT ?`,
+    )
+    .all(limit);
 }
 
 export function putSchedule(write: SqlWrite, schedule: Omit<Schedule, "version">): Schedule {
@@ -92,29 +116,12 @@ export function setScheduleEnabled(
   return rowToSchedule(row);
 }
 
-export function advanceSchedule(
-  write: SqlWrite,
-  options: Parameters<Store["advanceSchedule"]>[0],
-): boolean {
-  const { workspace, slug, version, nextFireAt } = options;
-
-  const updated = write.db
-    .query(
-      "UPDATE schedules SET next_fire_at=? WHERE workspace=? AND slug=? AND version=? AND enabled=1",
-    )
-    .run(utc(nextFireAt), workspace, slug, version);
-
-  if (!updated.changes) {
-    return false;
-  }
-
-  emitSchedule(write, options, "saved");
-
-  return true;
-}
-
 export function deleteSchedule(write: SqlWrite, key: ScheduleKey): void {
   const row = readSchedule(write, key);
+
+  write.db
+    .query("DELETE FROM schedule_failures WHERE workspace=? AND slug=?")
+    .run(key.workspace, key.slug);
 
   if (
     write.db
@@ -133,36 +140,73 @@ export function deleteSchedule(write: SqlWrite, key: ScheduleKey): void {
 
 export function fireSchedule(
   write: SqlWrite,
-  options: ScheduleKey &
-    Pick<Schedule, "version" | "nextFireAt"> & {
-      fireKey: string;
-      run: RunRecord;
-    },
+  { schedule, next, run }: Parameters<Store["fireSchedule"]>[0],
 ): boolean {
-  const { workspace, slug, version, fireKey, run, nextFireAt } = options;
-  const schedule = readSchedule(write, options);
-
-  if (!schedule) {
+  if (!readSchedule(write, schedule)) {
     throw new StoreRejectedError(
-      `Schedule '${slug}' does not exist. Save the schedule before firing it.`,
+      `Schedule '${schedule.slug}' does not exist. Save the schedule before firing it.`,
     );
   }
+
+  const slot = utc(schedule.nextFireAt);
+  const fireKey = `${schedule.slug}@${slot}`;
 
   const updated = write.db
     .query(
       `UPDATE schedules SET last_fire_key=?,next_fire_at=? WHERE workspace=? AND slug=?
-    AND version=? AND enabled=1 AND (last_fire_key IS NULL OR last_fire_key<>?)`,
+    AND version=? AND enabled=1 AND next_fire_at=? AND (last_fire_key IS NULL OR last_fire_key<>?)`,
     )
-    .run(fireKey, utc(nextFireAt), workspace, slug, version, fireKey);
+    .run(fireKey, utc(next), schedule.workspace, schedule.slug, schedule.version, slot, fireKey);
 
   if (!updated.changes) {
     return false;
   }
 
+  write.db
+    .query("DELETE FROM schedule_failures WHERE workspace=? AND slug=?")
+    .run(schedule.workspace, schedule.slug);
   insertRun(write, run);
   emitSchedule(write, schedule, "fired");
 
   return true;
+}
+
+export function failSchedule(
+  write: SqlWrite,
+  { schedule, error, retryAt }: Parameters<Store["failSchedule"]>[0],
+): boolean {
+  const { workspace, slug } = schedule;
+  let version = schedule.version;
+
+  if (retryAt === null) {
+    const disabled = write.db
+      .query<{ version: number }, [string, string, number]>(
+        `UPDATE schedules SET enabled=0,version=version+1
+      WHERE workspace=? AND slug=? AND version=? AND enabled=1 RETURNING version`,
+      )
+      .get(workspace, slug, version);
+
+    if (!disabled) {
+      return false;
+    }
+
+    version = disabled.version;
+  }
+
+  const recorded = write.db
+    .query(
+      `INSERT INTO schedule_failures(workspace,slug,version,retry_at,error)
+    SELECT workspace,slug,version,?,? FROM schedules WHERE workspace=? AND slug=? AND version=?
+    ON CONFLICT(workspace,slug) DO UPDATE SET
+    version=excluded.version,retry_at=excluded.retry_at,error=excluded.error`,
+    )
+    .run(retryAt === null ? null : utc(retryAt), error, workspace, slug, version);
+
+  if (retryAt === null) {
+    emitSchedule(write, schedule, "saved");
+  }
+
+  return recorded.changes > 0;
 }
 
 export function readScheduleOverview(ctx: SqlContext) {

@@ -1,6 +1,6 @@
 import { StoreRejectedError } from "../../operation";
 import type { SqlDriver } from "../driver";
-import { markSchemaVersion, SCHEDULE_OVERVIEW_INDEX } from "./fresh";
+import { SCHEDULE_OVERVIEW_INDEX } from "./fresh";
 
 // Frozen migration steps. They describe how old homes changed and never follow the fresh schema.
 const SCHEMA_13_TO_14 = `
@@ -89,7 +89,8 @@ function run(db: SqlDriver, script: string): void {
 /**
  * Local homes from before the meta marker record their version in PRAGMA user_version.
  * This upgrades schema 13 and 14 and moves schema 15 homes onto the meta marker, keeping
- * every record and the epoch. The runtime README states when this path can go.
+ * every record and the epoch. Opening the store then applies the schema 15 step. The runtime
+ * README states when this path can go.
  */
 export function upgradeLegacyHome(db: SqlDriver): void {
   db.transaction(() => {
@@ -114,7 +115,7 @@ export function upgradeLegacyHome(db: SqlDriver): void {
 
     // Schema 15 homes may predate the schedule overview index.
     db.exec(SCHEDULE_OVERVIEW_INDEX);
-    markSchemaVersion(db);
+    db.query("INSERT OR REPLACE INTO meta VALUES ('schema_version','15')").run();
     db.exec("PRAGMA user_version=0");
   }, "immediate");
 }

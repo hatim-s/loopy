@@ -17,6 +17,11 @@ import { type PreviewRunRow, previewRun, RUN_PREVIEW_COLUMNS } from "./runs";
 
 const decodeScope = storedDecoder(executionKeySchema.fields.scope, "query-nodes");
 
+// Exported with the other store projections so read-only diagnostics run the exact query shape.
+export const NODE_PAGE_PROJECTION = `execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>${MAX_PREVIEW_BYTES} THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes`;
+
+export const ATTEMPT_PROJECTION = `attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>${MAX_PREVIEW_BYTES} THEN json_set(record,'$.output',NULL) ELSE record END AS record`;
+
 export function readNodePage(ctx: SqlContext, runId: string, query: NodePageQuery) {
   const clauses = ["run_id=?", "scope=?"];
   const values: SqlValue[] = [runId, query.scope];
@@ -38,7 +43,7 @@ export function readNodePage(ctx: SqlContext, runId: string, query: NodePageQuer
 
   const rows = ctx.db
     .query<{ record: string; bytes: number; execution_key: string }, SqlValue[]>(
-      `SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>${MAX_PREVIEW_BYTES} THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE ${clauses.join(" AND ")} ORDER BY execution_key LIMIT ?`,
+      `SELECT ${NODE_PAGE_PROJECTION} FROM node_runs WHERE ${clauses.join(" AND ")} ORDER BY execution_key LIMIT ?`,
     )
     .all(...values, query.limit + 1);
 
@@ -176,7 +181,7 @@ export function readExecution(ctx: SqlContext, runId: string, key: string, after
       { record: string; attempt: number; bytes: number | null },
       [string, string, number, number]
     >(
-      `SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>${MAX_PREVIEW_BYTES} THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT ?`,
+      `SELECT ${ATTEMPT_PROJECTION} FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT ?`,
     )
     .all(runId, key, after, PAGE_LIMIT + 1);
 

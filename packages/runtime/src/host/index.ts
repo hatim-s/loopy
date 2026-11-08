@@ -23,4 +23,10 @@ export { DriverCleanupFailed } from "./heartbeat";
 
 export { LeaseReleaseFailed, LeaseReleaseUnknown } from "./lease";
 
-export { ScheduleRevisionError } from "./schedules";
+export {
+  fireDueSchedules,
+  SCHEDULE_POLICY,
+  type ScheduleDefinition,
+  ScheduleDefinitionError,
+  type ScheduleFiringOptions,
+} from "./schedules";

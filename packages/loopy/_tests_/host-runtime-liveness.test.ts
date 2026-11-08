@@ -5,7 +5,7 @@ import {
   LeaseReleaseUnknown,
   makeDaemon,
   PreparationError,
-  ScheduleRevisionError,
+  ScheduleDefinitionError,
 } from "@loopy/runtime/host";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Cause, Deferred, Effect, Fiber } from "effect";
@@ -84,7 +84,7 @@ test("a held activation leaves background schedule and run admission live", asyn
           store,
           concurrency: 2,
           prepare: () => Effect.succeed({ graph, executor }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
         });
 
         yield* store.createRun({ ...newRun(), id: "held" });
@@ -130,7 +130,7 @@ test("preparation cleanup deadline unblocks stop and retains the original failur
           store,
           concurrency: 1,
           prepare: () => Effect.fail(preparation),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
           onError: (cause) => {
             errors.push(cause);
           },
@@ -194,7 +194,7 @@ for (const failure of ["schedule", "scan"] as const) {
             store,
             concurrency: 1,
             prepare: () => Effect.succeed({ graph: empty, executor: new FakeExecutor() }),
-            revisionFor: () => Effect.fail(new ScheduleRevisionError({ cause: "fixture" })),
+            definitionFor: () => Effect.fail(new ScheduleDefinitionError({ cause: "fixture" })),
             onError: () => {
               errors++;
             },
@@ -203,7 +203,8 @@ for (const failure of ["schedule", "scan"] as const) {
           const running = yield* Effect.forkChild(daemon.run);
           yield* TestClock.adjust(0);
           expect(scans).toBe(1);
-          const intervals = failure === "scan" ? [5000, 5000, 5000] : [1000, 2000, 4000, 5000];
+          // A failed schedule waits for its persisted retry deadline, which matches the idle poll.
+          const intervals = [5000, 5000, 5000];
 
           for (const [index, delay] of intervals.entries()) {
             yield* TestClock.adjust(delay - 1);
@@ -239,7 +240,7 @@ test("claim contention is silent while another queued run completes", async () =
           store,
           concurrency: 2,
           prepare: () => Effect.succeed({ graph: empty, executor: new FakeExecutor() }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph: empty }),
           onError: (cause) => {
             errors.push(cause);
           },
@@ -286,7 +287,7 @@ test("stop waits for an in-flight scan and prevents another scan", async () => {
           store,
           concurrency: 1,
           prepare: () => Effect.succeed({ graph: empty, executor: new FakeExecutor() }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph: empty }),
         });
 
         const active = yield* Effect.forkChild(daemon.run);
@@ -337,7 +338,7 @@ test("schedule mutation wakes the loop without repeated scans before its deadlin
           store,
           concurrency: 1,
           prepare: () => Effect.succeed({ graph: empty, executor: new FakeExecutor() }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph: empty }),
         });
 
         const running = yield* Effect.forkChild(daemon.run);
@@ -385,7 +386,7 @@ test("unrelated terminal run events leave idle sleep intact", async () => {
           store,
           concurrency: 1,
           prepare: () => Effect.succeed({ graph: empty, executor: new FakeExecutor() }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph: empty }),
         });
 
         const running = yield* Effect.forkChild(daemon.run);
@@ -440,7 +441,7 @@ test("ownership loss reports activation unsubscribe defects instead of suppressi
           store,
           concurrency: 1,
           prepare: () => Effect.succeed({ graph, executor }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
           onError: (cause) => {
             errors.push(cause);
           },
@@ -496,7 +497,7 @@ test("mixed preparation/interruption Cause never persists a business failure", a
           store,
           concurrency: 1,
           prepare: () => Effect.failCause(cause),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
           onError: (cause) => {
             errors.push(cause);
           },

@@ -249,7 +249,7 @@ test("graceful daemon stop drains a real worker and retains its finished success
             store,
             concurrency: 1,
             prepare: () => Effect.succeed({ graph, executor }),
-            revisionFor: () => Effect.succeed("bundle"),
+            definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
           });
 
           yield* store.createRun({ ...newRun(), input: {} });

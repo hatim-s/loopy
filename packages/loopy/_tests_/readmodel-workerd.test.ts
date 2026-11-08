@@ -43,11 +43,11 @@ const schemaRows = Schema.Array(
   Schema.Struct({ type: Schema.String, name: Schema.String, sql: Schema.NullOr(Schema.String) }),
 );
 
-test("workerd grouped counts match per-filter queries through transitions, rollback and unchanged schema-15 reopening", async () => {
+test("workerd grouped counts match per-filter queries through transitions, rollback and unchanged schema-16 reopening", async () => {
   const resultSchema = Schema.Struct({
     before: schemaRows,
     after: schemaRows,
-    version: Schema.Struct({ value: Schema.Literal("15") }),
+    version: Schema.Struct({ value: Schema.Literal("16") }),
     history: Schema.Struct({
       error: Schema.NullOr(Schema.String),
       before: cursor,
@@ -80,14 +80,14 @@ test("workerd grouped counts match per-filter queries through transitions, rollb
     "Invalid store timestamp 'invalid-timestamp'. Validate timestamps before persistence.",
   );
   expect(result.after).toEqual(result.before);
-  expect(result.version).toEqual({ value: "15" });
+  expect(result.version).toEqual({ value: "16" });
   expect(result.after.filter(({ type }) => type === "trigger")).toEqual([]);
   await runtime.unsafeEvictDurableObject("readmodel", "ReadmodelProbe", { name: "counts" });
 
   const reopenedSchema = Schema.Struct({
     rows: Schema.mutable(Schema.Array(row)),
     cursor,
-    version: Schema.Struct({ value: Schema.Literal("15") }),
+    version: Schema.Struct({ value: Schema.Literal("16") }),
   });
 
   const reopened = decodeBoundary(reopenedSchema)(await probe("/reopen", "counts"));
