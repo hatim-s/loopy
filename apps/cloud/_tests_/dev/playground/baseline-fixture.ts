@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { routes } from "@loopy/contract";
 import type { Capture } from "../../../dev/playground/metrics/artifacts";
 import { createMeasure } from "../../../dev/playground/metrics/request";
 import { baselineEndpoints } from "../../../dev/playground/metrics/sampler";
@@ -12,11 +12,11 @@ export async function baselineReceipt(failure: "none" | "transport" = "none"): P
       throw new Error("Synthetic transport failure");
     }
 
-    return Response.json({ ok: true });
+    return Response.json({ cursor: 0, epoch: "synthetic" });
   }, samples);
 
   for (const endpoint of baselineEndpoints) {
-    await measure(endpoint, "/synthetic", Schema.Struct({ ok: Schema.Literal(true) }));
+    await measure(endpoint, routes.cursor, {});
   }
 
   return {

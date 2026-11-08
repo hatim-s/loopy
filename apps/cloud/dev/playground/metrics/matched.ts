@@ -33,7 +33,7 @@ let previousStart = 0;
 
 const direct = createMeasure(
   (path, signal) =>
-    fetch(`${client.settings.api}/api${path}`, {
+    fetch(`${client.settings.api}${path}`, {
       headers: { Authorization: `Bearer ${client.settings.token}` },
       signal,
     }),
@@ -49,14 +49,14 @@ async function probe(route: "runs" | "loopies" | "events", mode: "direct" | "sha
   const label = `${route}.${mode}`;
 
   if (route === "runs") {
-    await measure(label, "/runs?limit=50", routes.runs.response, (value) => ({
+    await measure(label, routes.runs, { query: { limit: 50 } }, (value) => ({
       items: value.length,
       queued: value.filter((run) => run.status === "queued").length,
       running: value.filter((run) => run.status === "running").length,
       terminal: value.filter((run) => isTerminalRun(run.status)).length,
     }));
   } else if (route === "loopies") {
-    await measure(label, "/loopies", routes.loopies.response, (value) => ({
+    await measure(label, routes.loopies, {}, (value) => ({
       items: value.length,
       retainedRuns: value.reduce(
         (sum, loopy) => sum + Object.values(loopy.counts).reduce((a, b) => a + b, 0),
@@ -66,7 +66,7 @@ async function probe(route: "runs" | "loopies" | "events", mode: "direct" | "sha
       queued: value.reduce((sum, loopy) => sum + loopy.counts.queued, 0),
     }));
   } else {
-    await measure(label, "/event-history?limit=50", routes.eventHistory.response, (value) => ({
+    await measure(label, routes.eventHistory, { query: { limit: 50 } }, (value) => ({
       items: value.items.length,
       scanned: value.scanned,
       newest: value.newest,

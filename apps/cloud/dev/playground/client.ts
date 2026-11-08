@@ -1,7 +1,13 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Json, PutLoopyBody } from "@loopy/contract";
-import { decodeBoundary } from "@loopy/contract";
+import {
+  decodeBoundary,
+  decodeRouteResponse,
+  type Route,
+  type RouteInput,
+  type RouteResult,
+  routeRequest,
+} from "@loopy/contract";
 import { errnoCode } from "@loopy/core";
 import type { Schema } from "effect";
 import { type Config, config, state } from "./config";
@@ -14,9 +20,10 @@ export class PlaygroundClient {
     return new PlaygroundClient(await config());
   }
 
+  /** Takes a path from the API origin, such as one from routeUrl. */
   async request(path: string, signal?: AbortSignal, init: RequestInit = {}) {
-    if (!path.startsWith("/") || path.startsWith("//")) {
-      throw new Error("Use a relative API path beginning with one slash.");
+    if (!path.startsWith("/api/")) {
+      throw new Error("Use an API path beginning with /api/.");
     }
 
     await mkdir(resolve(state, "api-slots"), { recursive: true });
@@ -42,7 +49,7 @@ export class PlaygroundClient {
             JSON.stringify({ pid: process.pid, at: Date.now() }),
           );
 
-          const response = await fetch(`${this.settings.api}/api${path}`, {
+          const response = await fetch(`${this.settings.api}${path}`, {
             ...init,
             headers: {
               Authorization: `Bearer ${this.settings.token}`,
@@ -71,25 +78,27 @@ export class PlaygroundClient {
     throw new Error("Global API slots stayed occupied. Inspect api-slots owners before recovery.");
   }
 
-  async json<T>(
-    schema: Schema.Codec<T, unknown, never, never>,
-    path: string,
-    options: { method?: "POST" | "PUT"; body?: Json | PutLoopyBody } = {},
-  ) {
-    const method = options.body === undefined ? "GET" : (options.method ?? "POST");
-
-    const response = await this.request(path, undefined, {
-      method,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
+  /** Reads the cloud-only artifact route, which the daemon contract does not name. */
+  async json<T>(schema: Schema.Codec<T, unknown, never, never>, path: string) {
+    const response = await this.request(path);
 
     if (!response.ok) {
       await response.body?.cancel();
-      throw new Error(
-        `Playground API ${method} ${path.split("?")[0]} returned HTTP ${response.status}.`,
-      );
+      throw new Error(`Playground API GET ${path.split("?")[0]} returned HTTP ${response.status}.`);
     }
 
     return decodeBoundary(schema)(await response.json());
+  }
+
+  async call<R extends Route>(route: R, input: RouteInput<R>): Promise<RouteResult<R>> {
+    const { method, url, headers, body } = routeRequest(route, input);
+    const response = await this.request(url, undefined, { method, headers, body });
+    const outcome = decodeRouteResponse(route, response.status, await response.text());
+
+    if (outcome.kind !== "ok") {
+      throw new Error(`Playground API ${method} ${route.path} returned HTTP ${response.status}.`);
+    }
+
+    return outcome.value;
   }
 }

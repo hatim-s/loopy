@@ -1,4 +1,4 @@
-import { type CursorView, routes } from "@loopy/contract";
+import { type CursorView, type Json, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal, failureEvidence } from "../shared/assert";
 import { compileFixture } from "../shared/fixture-client";
@@ -19,11 +19,17 @@ async function main() {
   let cursor: CursorView | undefined;
 
   await journey.evidence.check("authentication", async () => {
-    await journey.denied("/runs", 401, "unauthorized", { principal: "none" });
-    await journey.denied("/runs", 401, "unauthorized", { principal: "invalid" });
-    await journey.denied("/runs", 403, "forbidden", {
-      headers: { Origin: "http://127.0.0.1:14872" },
-    });
+    await journey.denied(journey.send(routes.runs, {}, { principal: "none" }), 401, "unauthorized");
+    await journey.denied(
+      journey.send(routes.runs, {}, { principal: "invalid" }),
+      401,
+      "unauthorized",
+    );
+    await journey.denied(
+      journey.send(routes.runs, {}, { headers: { Origin: "http://127.0.0.1:14872" } }),
+      403,
+      "forbidden",
+    );
 
     return { unauthenticatedDenied: true, invalidTokenDenied: true, crossOriginDenied: true };
   });
@@ -34,20 +40,20 @@ async function main() {
     assert(body.sourceArtifact?.status === "available", "source_not_captured");
     await journey.upload(body);
 
-    const graph = await journey.json(
-      routes.graph.response,
-      `/loopies/${slug}/graph?workspace=fixtures`,
-    );
+    const graph = await journey.call(routes.graph, {
+      params: { slug },
+      query: { workspace: "fixtures" },
+    });
 
     equal(graph.revision, body.revision, "uploaded_revision_changed");
 
-    const source = await journey.json(
-      routes.source.response,
-      `/loopies/${slug}/source?workspace=fixtures`,
-    );
+    const source = await journey.call(routes.source, {
+      params: { slug },
+      query: { workspace: "fixtures" },
+    });
 
     equal(source, body.sourceArtifact, "uploaded_source_changed");
-    cursor = await journey.json(routes.cursor.response, "/cursor");
+    cursor = await journey.call(routes.cursor, {});
 
     return {
       bundles: body.bundles.length,
@@ -58,16 +64,20 @@ async function main() {
   });
 
   await journey.evidence.check("run_input_validation", async () => {
-    const before = await journey.json(routes.runs.response, `/runs?slug=${slug}&limit=200`);
-    await journey.denied(`/loopies/${slug}/runs`, 400, "bad_request", {
-      method: "POST",
-      body: { input: { name: 123, chooseYes: true, items: [] }, workspace: "fixtures" },
-    });
-    await journey.denied(`/loopies/${slug}/runs`, 400, "bad_request", {
-      method: "POST",
-      body: { input: { name: "fixture" }, workspace: "fixtures" },
-    });
-    const after = await journey.json(routes.runs.response, `/runs?slug=${slug}&limit=200`);
+    const runs = { query: { slug, limit: 200 } };
+    const before = await journey.call(routes.runs, runs);
+
+    const malformed: Json[] = [{ name: 123, chooseYes: true, items: [] }, { name: "fixture" }];
+
+    for (const input of malformed) {
+      await journey.denied(
+        journey.send(routes.startRun, { params: { slug }, body: { input, workspace: "fixtures" } }),
+        400,
+        "bad_request",
+      );
+    }
+
+    const after = await journey.call(routes.runs, runs);
     equal(
       after.map((run) => run.id),
       before.map((run) => run.id),
@@ -99,10 +109,10 @@ async function main() {
     const first = await Effect.runPromise(compileFixture("approval-one.ts"));
     firstRevision = first.revision;
     await journey.upload(first);
-    firstSource = await journey.json(
-      routes.source.response,
-      `/loopies/${approvalSlug}/source?workspace=fixtures`,
-    );
+    firstSource = await journey.call(routes.source, {
+      params: { slug: approvalSlug },
+      query: { workspace: "fixtures" },
+    });
     const run = await journey.start(approvalSlug, { name: "fixture" });
     approvalId = run.id;
     const waiting = await journey.waitForHook(run.id);
@@ -110,17 +120,26 @@ async function main() {
       runId: run.id,
       runStatus: waiting.run.status,
     });
-    await journey.denied(`/runs/${run.id}/hooks/approval`, 400, "bad_request", {
-      method: "POST",
-      body: { payload: { approved: "yes" } },
-    });
-    const after = await journey.json(routes.run.response, `/runs/${run.id}`);
+    const hook = { id: run.id, name: "approval" };
+    await journey.denied(
+      journey.send(routes.resolveNamedHook, {
+        params: hook,
+        body: { payload: { approved: "yes" } },
+      }),
+      400,
+      "bad_request",
+    );
+    const after = await journey.call(routes.run, { params: { id: run.id } });
     assert(after.run.waitingOn?.hook === "approval", "invalid_payload_consumed_approval");
-    await journey.denied(`/runs/${run.id}/hooks/approval`, 404, "not_found", {
-      method: "POST",
-      principal: "other",
-      body: { payload: { approved: true } },
-    });
+    await journey.denied(
+      journey.send(
+        routes.resolveNamedHook,
+        { params: hook, body: { payload: { approved: true } } },
+        { principal: "other" },
+      ),
+      404,
+      "not_found",
+    );
 
     return {
       runId: run.id,
@@ -136,21 +155,21 @@ async function main() {
     assert(second.revision !== firstRevision, "revision_fixture_did_not_change");
     await journey.upload(second);
 
-    const current = await journey.json(
-      routes.graph.response,
-      `/loopies/${approvalSlug}/graph?workspace=fixtures`,
-    );
+    const current = await journey.call(routes.graph, {
+      params: { slug: approvalSlug },
+      query: { workspace: "fixtures" },
+    });
 
-    const pinned = await journey.json(routes.runGraph.response, `/runs/${approvalId}/graph`);
+    const pinned = await journey.call(routes.runGraph, { params: { id: approvalId } });
     equal(current.revision, second.revision, "current_graph_not_updated");
     equal(pinned.revision, firstRevision, "existing_run_revision_changed");
     equal(
-      await journey.json(routes.runSource.response, `/runs/${approvalId}/source`),
+      await journey.call(routes.runSource, { params: { id: approvalId } }),
       firstSource,
       "existing_run_source_changed",
     );
-    await journey.json(routes.resolveNamedHook.response, `/runs/${approvalId}/hooks/approval`, {
-      method: "POST",
+    await journey.call(routes.resolveNamedHook, {
+      params: { id: approvalId, name: "approval" },
       body: { payload: { approved: true } },
     });
     const completed = await journey.wait(approvalId);
@@ -166,8 +185,8 @@ async function main() {
     const next = await journey.start(approvalSlug, { name: "fixture" });
     const waiting = await journey.waitForHook(next.id);
     assert(waiting.run.waitingOn?.hook === "approval", "new_revision_did_not_wait");
-    await journey.json(routes.resolveNamedHook.response, `/runs/${next.id}/hooks/approval`, {
-      method: "POST",
+    await journey.call(routes.resolveNamedHook, {
+      params: { id: next.id, name: "approval" },
       body: { payload: { approved: true } },
     });
     const latest = await journey.wait(next.id);
@@ -216,10 +235,9 @@ async function main() {
       "sse_first_frame_has_no_journey_run",
     );
 
-    const transaction = await journey.json(
-      routes.eventHistory.response,
-      `/event-history?txn=${encodeURIComponent(first.events[0]?.txn ?? "")}&limit=200`,
-    );
+    const transaction = await journey.call(routes.eventHistory, {
+      query: { txn: first.events[0]?.txn ?? "", limit: 200 },
+    });
 
     equal(
       first.events.map((event) => event.sequence).sort((a, b) => a - b),
@@ -229,14 +247,16 @@ async function main() {
 
     if (first.events.length > 1) {
       await journey.denied(
-        `/events?after=${first.events[0]?.sequence}&epoch=${encodeURIComponent(cursor.epoch)}`,
+        journey.send(routes.events, {
+          query: { after: first.events[0]?.sequence ?? 0, epoch: cursor.epoch },
+        }),
         410,
         "stale_cursor",
       );
     }
 
     await journey.denied(
-      `/events?after=${second.id}&epoch=wrong-journey-epoch`,
+      journey.send(routes.events, { query: { after: second.id, epoch: "wrong-journey-epoch" } }),
       410,
       "stale_cursor",
     );

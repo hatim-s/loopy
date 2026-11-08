@@ -40,7 +40,7 @@ export async function materialize(
     path: fixture.artifactPath,
   });
 
-  const artifact = await client.json(sandboxArtifactSchema, `/cloud/artifacts?${query}`);
+  const artifact = await client.json(sandboxArtifactSchema, `/api/cloud/artifacts?${query}`);
   const bytes = Buffer.from(artifact.bytes, "base64");
   const hash = sha256Hex(bytes);
 

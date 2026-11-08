@@ -28,10 +28,7 @@ await evidence.check("isolated_stack_start_and_compile", async () => {
   );
 
   for (const body of bodies) {
-    await api.json(routes.putLoopy.response, `/loopies/${body.graph.name}`, {
-      method: "PUT",
-      body,
-    });
+    await api.call(routes.putLoopy, { params: { slug: body.graph.name }, body });
   }
 
   return {
@@ -94,7 +91,8 @@ try {
     const waiting = await journey.snapshot(approvalId);
     assert(waiting.run.waitingOn?.hook === "approval", "approval_wait_lost_after_restart");
     const hookCount = waiting.hooks.length;
-    await api.json(routes.resolveNamedHook.response, `/runs/${approvalId}/hooks/approval`, {
+    await api.call(routes.resolveNamedHook, {
+      params: { id: approvalId, name: "approval" },
       body: { payload: { approved: true } },
     });
     const finished = await journey.wait(approvalId);
@@ -170,18 +168,20 @@ try {
 
   await evidence.check("scheduled_firing_overlap_and_restart_deduplication", async () => {
     const slug = "cloud-failure-schedule";
-    const prior = await api.json(routes.runs.response, `/runs?slug=${slug}&limit=200`);
+    const runs = { query: { slug, limit: 200 } };
+    const prior = await api.call(routes.runs, runs);
     const existing = new Set(prior.map((run) => run.id));
 
-    const schedule = await api.json(routes.putSchedule.response, `/loopies/${slug}/schedule`, {
-      method: "PUT",
+    const schedule = await api.call(routes.putSchedule, {
+      params: { slug },
       body: { input: {}, enabled: true },
     });
 
+    const disable = () =>
+      api.call(routes.setScheduleEnabled, { params: { slug }, body: { enabled: false } });
+
     const list = async () =>
-      (await api.json(routes.runs.response, `/runs?slug=${slug}&limit=200`)).filter(
-        (run) => !existing.has(run.id),
-      );
+      (await api.call(routes.runs, runs)).filter((run) => !existing.has(run.id));
 
     try {
       const first = (
@@ -218,9 +218,7 @@ try {
           (await ownedContainer(secondWorker.receipt.container)).State.Running,
         "scheduled_workers_did_not_overlap",
       );
-      await api.json(routes.setScheduleEnabled.response, `/loopies/${slug}/schedule/enabled`, {
-        body: { enabled: false },
-      });
+      await disable();
 
       for (const run of both) {
         const waiting = await journey.until(
@@ -238,9 +236,9 @@ try {
         }
       }
 
-      const current = (
-        await api.json(routes.schedules.response, "/schedules?workspace=fixtures")
-      ).find((value) => value.slug === slug);
+      const current = (await api.call(routes.schedules, { query: { workspace: "fixtures" } })).find(
+        (value) => value.slug === slug,
+      );
 
       assert(current?.lastFireKey, "scheduled_fire_key_missing");
       const firedAt = both.map((run) => Date.parse(run.createdAt)).sort((a, b) => a - b);
@@ -259,9 +257,7 @@ try {
           "consecutive minute fires run concurrently, then both persist approval waits",
       };
     } finally {
-      await api.json(routes.setScheduleEnabled.response, `/loopies/${slug}/schedule/enabled`, {
-        body: { enabled: false },
-      });
+      await disable();
     }
   });
 } catch (cause) {

@@ -61,7 +61,8 @@ async function admit(client: PlaygroundClient, group: Group, job: Job<CatalogEnt
   // The intent is durable before the request so a crash leaves an ambiguous record, never a repeat.
   await writeFile(file, `${JSON.stringify(intent, null, 2)}\n`, { flag: "wx", mode: 0o600 });
 
-  const run = await client.json(routes.startRun.response, `/loopies/${fixture.slug}/runs`, {
+  const run = await client.call(routes.startRun, {
+    params: { slug: fixture.slug },
     body: { input: { ...intent.input, items: [...intent.input.items] }, workspace: "playground" },
   });
 
@@ -97,7 +98,7 @@ export async function execute(
   const deadline = Date.now() + 40 * 60_000;
 
   while (Date.now() < deadline) {
-    const snapshot = await client.json(routes.run.response, `/runs/${runId}`);
+    const snapshot = await client.call(routes.run, { params: { id: runId } });
 
     progress = await updateApproval({ client, admission, runId, snapshot, progress, path });
 

@@ -1,5 +1,10 @@
-import { decodeBoundary } from "@loopy/contract";
-import type { Schema } from "effect";
+import {
+  decodeRouteResponse,
+  type Route,
+  type RouteInput,
+  type RouteResult,
+  routeUrl,
+} from "@loopy/contract";
 import type { Sample } from "./statistics";
 
 type Request = (path: string, signal: AbortSignal) => Promise<Response>;
@@ -54,12 +59,13 @@ async function readBody(request: Request, path: string, began: number): Promise<
 }
 
 export function createMeasure(request: Request, samples: Sample[]) {
-  return async function measure<T>(
+  return async function measure<R extends Route>(
     endpoint: string,
-    path: string,
-    schema: Schema.Codec<T, unknown, never, never>,
-    observe: (value: T) => Observation = () => ({}),
+    route: R,
+    input: RouteInput<R>,
+    observe: (value: RouteResult<R>) => Observation = () => ({}),
   ) {
+    const path = routeUrl(route, input);
     const began = performance.now();
     const at = new Date().toISOString();
     const empty = { status: null, bytes: 0, headersMs: null, parseMs: null, observation: {} };
@@ -102,24 +108,17 @@ export function createMeasure(request: Request, samples: Sample[]) {
 
     const parseStart = performance.now();
 
-    try {
-      const parsed = decodeBoundary(schema)(
-        JSON.parse(Buffer.concat(read.chunks).toString("utf8")),
-      );
+    const outcome = decodeRouteResponse(
+      route,
+      read.status,
+      Buffer.concat(read.chunks).toString("utf8"),
+    );
 
-      samples.push({
-        ...base,
-        parseMs: performance.now() - parseStart,
-        failure: null,
-        observation: observe(parsed),
-      });
-    } catch {
-      samples.push({
-        ...base,
-        parseMs: performance.now() - parseStart,
-        failure: "schema",
-        observation: {},
-      });
-    }
+    samples.push({
+      ...base,
+      parseMs: performance.now() - parseStart,
+      failure: outcome.kind === "ok" ? null : "schema",
+      observation: outcome.kind === "ok" ? observe(outcome.value) : {},
+    });
   };
 }

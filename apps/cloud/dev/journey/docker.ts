@@ -68,7 +68,7 @@ async function inspect(container: string) {
 }
 
 export async function docker(journey: Journey, runId: string) {
-  const snapshot = await journey.json(routes.run.response, `/runs/${runId}`);
+  const snapshot = await journey.call(routes.run, { params: { id: runId } });
   const receipts: Awaited<ReturnType<typeof receipt>>[] = [];
 
   for (const label of ["greeting", "descriptor", "firstfail"]) {

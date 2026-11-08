@@ -19,9 +19,9 @@ import { FailureStack } from "./stack";
 
 export class FailureJourney {
   readonly stack = new FailureStack();
-  readonly api = new ApiClient({ base: `${api}/api`, token: this.stack.token, timeoutMs: 10_000 });
+  readonly api = new ApiClient({ origin: api, token: this.stack.token, timeoutMs: 10_000 });
   private readonly provider = new ApiClient({
-    base: sandbox,
+    origin: sandbox,
     token: this.stack.sandboxToken,
     timeoutMs: 10_000,
   });
@@ -41,7 +41,8 @@ export class FailureJourney {
   });
 
   async start(slug: string) {
-    const run = await this.api.json(routes.startRun.response, `/loopies/${slug}/runs`, {
+    const run = await this.api.call(routes.startRun, {
+      params: { slug },
       body: { input: {}, workspace: "fixtures" },
     });
 
@@ -51,7 +52,7 @@ export class FailureJourney {
   }
 
   snapshot(id: string) {
-    return this.api.json(routes.run.response, `/runs/${id}`);
+    return this.api.call(routes.run, { params: { id } });
   }
 
   until<T>(
