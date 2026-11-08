@@ -1,7 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
-  decodeBoundary,
   decodeRouteResponse,
   type Route,
   type RouteInput,
@@ -9,7 +8,6 @@ import {
   routeRequest,
 } from "@loopy/contract";
 import { tryPidLock } from "@loopy/runtime/os";
-import type { Schema } from "effect";
 import { type Config, config, state } from "./config";
 import { CONCURRENCY } from "./plan";
 
@@ -65,18 +63,6 @@ export class PlaygroundClient {
     }
 
     throw new Error("Global API slots stayed occupied. Inspect api-slots owners before recovery.");
-  }
-
-  /** Reads the cloud-only artifact route, which the daemon contract does not name. */
-  async json<T>(schema: Schema.Codec<T, unknown, never, never>, path: string) {
-    const response = await this.request(path);
-
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error(`Playground API GET ${path.split("?")[0]} returned HTTP ${response.status}.`);
-    }
-
-    return decodeBoundary(schema)(await response.json());
   }
 
   async call<R extends Route>(route: R, input: RouteInput<R>): Promise<RouteResult<R>> {

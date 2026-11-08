@@ -7,7 +7,6 @@ import {
   type RouteInput,
   routes,
 } from "@loopy/contract";
-import type { Schema } from "effect";
 import { assert } from "../shared/assert";
 import {
   ApiClient,
@@ -61,19 +60,6 @@ export class Journey {
       default:
         return this.tokens[principal];
     }
-  }
-
-  /** Raw requests reach the cloud-only artifact route, which the daemon contract does not name. */
-  request(path: string, { principal, ...options }: JourneyRequest = {}) {
-    return this.client.request(path, { ...options, token: this.token(principal) });
-  }
-
-  json<T>(
-    schema: Schema.Codec<T, unknown, never, never>,
-    path: string,
-    { principal, ...options }: JourneyRequest = {},
-  ) {
-    return this.client.json(schema, path, { ...options, token: this.token(principal) });
   }
 
   send<R extends Route>(

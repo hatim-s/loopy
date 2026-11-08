@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
-import { routes } from "@loopy/contract";
-import { sandboxArtifactSchema } from "@loopy/contract/sandbox";
+import { encodeBoundary, routes } from "@loopy/contract";
+import { cloudRoutes } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { assert, equal } from "../shared/assert";
 import { compileFixture } from "../shared/fixture-client";
@@ -26,16 +26,13 @@ const node = snapshot.nodeRuns.find((value) => value.key.nodeId.endsWith(":first
 
 assert(node, "artifact_attempt_missing");
 
-const query = new URLSearchParams({
-  key: JSON.stringify(node.key),
-  attempt: String(node.attempt),
+const query = encodeBoundary(cloudRoutes.artifact.query)({
+  executionKey: node.key,
+  attempt: node.attempt,
   path: "firstfail",
 });
 
-// The artifact route belongs to the cloud worker, not the daemon route table.
-const path = `/api/cloud/artifacts?${query}`;
-
-const artifact = await journey.json(sandboxArtifactSchema, path);
+const artifact = await journey.call(cloudRoutes.artifact, { query });
 
 const bytes = Buffer.from(artifact.bytes, "base64");
 
@@ -45,23 +42,18 @@ equal(artifact.size, bytes.length, "artifact_size_mismatch");
 
 equal(artifact.sha256, sha256Hex(bytes), "artifact_hash_mismatch");
 
-await journey.denied(journey.request(path, { principal: "none" }), 401, "unauthorized");
+const read = (input: Partial<typeof query>, principal?: "none" | "other") =>
+  journey.send(cloudRoutes.artifact, { query: { ...query, ...input } }, { principal });
 
-await journey.denied(journey.request(path, { principal: "other" }), 404, "not_found");
+await journey.denied(read({}, "none"), 401, "unauthorized");
 
-query.set("path", "../escape");
+await journey.denied(read({}, "other"), 404, "not_found");
 
-await journey.denied(journey.request(`/api/cloud/artifacts?${query}`), 400, "bad_request");
+await journey.denied(read({ path: "../escape" }), 400, "bad_request");
 
-query.set("path", "missing");
+await journey.denied(read({ path: "missing" }), 404, "not_found");
 
-await journey.denied(journey.request(`/api/cloud/artifacts?${query}`), 404, "not_found");
-
-query.set("path", "firstfail");
-
-query.set("attempt", "999");
-
-await journey.denied(journey.request(`/api/cloud/artifacts?${query}`), 404, "not_found");
+await journey.denied(read({ attempt: 999 }), 404, "not_found");
 
 const current = await journey.call(routes.run, { params: { id: run.id } });
 
