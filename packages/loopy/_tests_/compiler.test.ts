@@ -132,8 +132,32 @@ test("subgraphs expand in each author module's directory", async () => {
 
   expect(result.graph.nodes[0]).toMatchObject({
     kind: "code",
-    module: { path: join(root, "child/value.ts") },
+    module: { path: "child/value.ts" },
   });
+});
+
+test("the same loopy compiled from two checkout locations has one revision", async () => {
+  const compileCopy = async () => {
+    const { root, file } = await project(
+      'import {loopy,defineCommand,code} from "__SDK__"; const echo=defineCommand({key:"custom.echo",program:"echo",parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("moved", {input:{},run:()=>code("value",{in:{word:echo({args:["hi"]})},out:{kind:"value",type:"string"},module:"./lib/value.ts"})});',
+    );
+
+    await writeFile(join(root, "parse.ts"), "export default (result)=>result.stdout.trim();");
+    await Bun.write(join(root, "lib/value.ts"), "export default (input)=>input.word;");
+    const compiled = await compile(file);
+
+    if (!compiled.ok) {
+      throw new Error(JSON.stringify(compiled.diagnostics));
+    }
+
+    return compiled;
+  };
+
+  const [first, second] = [await compileCopy(), await compileCopy()];
+  expect(first.revision).toBe(second.revision);
+  expect(
+    first.graph.nodes.flatMap((node) => (node.kind === "code" ? [node.module.path] : [])),
+  ).toEqual(["lib/value.ts"]);
 });
 
 for (const effect of ["network", "write"]) {
@@ -296,14 +320,14 @@ test("code bundle import.meta names each source module instead of the saved bund
   expect(run()).toEqual({ entry: join(root, "code.ts"), helper: join(root, "lib/helper.ts") });
 });
 
-test("bundles execute the stdin/stdout protocol and preserve prepared parser input", async () => {
+test("bundles execute the stdin/stdout protocol", async () => {
   const { root, file } = await project(
     'import {loopy,defineCommand,code} from "__SDK__"; const command=defineCommand({key:"custom.parse",program:"echo",flags:{suffix:{cli:"-s",kind:"string"}},parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("executable", {input:{},run:()=>{command({args:["hello"],flags:{suffix:"!"}});return code("context",{in:{value:42},out:{kind:"record",fields:{value:"number",workspace:"string"}},module:"./context.ts"});}});',
   );
 
   await writeFile(
     join(root, "parse.ts"),
-    "export default (result,input)=>result.stdout.trim()+input.args[0]+input.flags.suffix;",
+    "export default (result)=>result.stdout.trim()+result.exitCode;",
   );
   await writeFile(
     join(root, "context.ts"),
@@ -314,14 +338,6 @@ test("bundles execute the stdin/stdout protocol and preserve prepared parser inp
   if (!compiled.ok) {
     throw new Error(JSON.stringify(compiled.diagnostics));
   }
-
-  const command = compiled.graph.nodes.find((node) => node.kind === "command");
-
-  if (command?.kind !== "command") {
-    throw new Error("Missing command node.");
-  }
-
-  expect(command?.parse?.input).toEqual({ args: ["hello"], flags: { suffix: "!" } });
 
   const execute = async (index: number, input: Json) => {
     const bundle = compiled.bundles[index];
@@ -351,12 +367,9 @@ test("bundles execute the stdin/stdout protocol and preserve prepared parser inp
     return { stdout, stderr };
   };
 
-  const parsed = await execute(0, {
-    result: { stdout: "output\n", stderr: "", exitCode: 0, durationMs: 1 },
-    input: command?.parse?.input ?? {},
-  });
+  const parsed = await execute(0, { stdout: "output\n", stderr: "", exitCode: 0 });
 
-  expect(JSON.parse(parsed.stdout)).toBe("outputhello!");
+  expect(JSON.parse(parsed.stdout)).toBe("output0");
   const result = await execute(1, { value: 42 });
   expect(parseModuleOutput(result.stdout)).toEqual({
     ok: true,

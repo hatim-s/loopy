@@ -16,22 +16,22 @@ import { approveDemoGraph } from "./fixtures/graphs";
 import { waitUntil } from "./fixtures/service-runtime";
 import { MemorySqlStore } from "./store-fixture";
 
-test("compiled command parser gets result and prepared input, then code runs through service and daemon", async () => {
+test("compiled command parser gets only the command result, then code runs through service and daemon", async () => {
   const f = await fixture();
   const source = join(f.workspace, "sequence.ts");
   await writeFile(
     join(f.workspace, "parse.ts"),
-    'export default (result, input) => {if (Object.keys(result).sort().join() !== "exitCode,stderr,stdout") {throw new Error("Unexpected parser result fields.");} return {word: result.stdout.trim(), operand: input.args[0]};};',
+    'export default (...args) => {const [result] = args; if (args.length !== 1 || Object.keys(result).sort().join() !== "exitCode,stderr,stdout") {throw new Error("Unexpected parser arguments.");} return {word: result.stdout.trim()};};',
   );
   await writeFile(
     join(f.workspace, "code.ts"),
-    'export default (input, context) => {context.log("code", input); return {message: input.word + " " + input.operand};};',
+    'export default (input, context) => {context.log("code", input); return {message: input.word + "!"};};',
   );
   await writeFile(
     source,
     `import {loopy, defineCommand, code, sh} from "loopy";
-const echo = defineCommand({key: "fixture.echo", program: "printf", parse: "./parse.ts", positionals: [{name: "word"}]}, {kind: "record", fields: {word: "string", operand: "string"}});
-export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw"], {label: "raw"}); const raw = echo({args: ["hello"]}); return code("greet", {in: {word: raw.get("word"), operand: raw.get("operand")}, out: {kind: "record", fields: {message: "string"}}, module: "./code.ts"});}});`,
+const echo = defineCommand({key: "fixture.echo", program: "printf", parse: "./parse.ts", positionals: [{name: "word"}]}, {kind: "record", fields: {word: "string"}});
+export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw"], {label: "raw"}); const raw = echo({args: ["hello"]}); return code("greet", {in: {word: raw.get("word")}, out: {kind: "record", fields: {message: "string"}}, module: "./code.ts"});}});`,
   );
   const compiled = await Effect.runPromise(compile(source));
 
@@ -96,7 +96,7 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
       waitUntil(Effect.map(store.getRun(run.id), (stored) => stored?.status === "succeeded")),
     );
     const snapshot = await Effect.runPromise(service.runSnapshot(run.id));
-    expect(snapshot.run).toMatchObject({ status: "succeeded", output: { message: "hello hello" } });
+    expect(snapshot.run).toMatchObject({ status: "succeeded", output: { message: "hello!" } });
     expect(snapshot.nodeRuns.map((node) => node.status)).toEqual([
       "succeeded",
       "succeeded",
@@ -106,7 +106,7 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
     expect(snapshot.nodeRuns.map((node) => node.attempt)).toEqual([1, 1, 1, 1]);
     expect(snapshot.nodeRuns.every((node) => node.key.scope.length === 0)).toBe(true);
     expect(await Effect.runPromise(store.getLogs(run.id, 0, 200))).toContainEqual(
-      expect.objectContaining({ message: "code", data: { word: "hello", operand: "hello" } }),
+      expect.objectContaining({ message: "code", data: { word: "hello" } }),
     );
   } finally {
     await Effect.runPromise(Scope.close(scope, Exit.void));

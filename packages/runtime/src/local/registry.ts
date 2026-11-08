@@ -5,7 +5,7 @@ import {
   decodeBoundary,
   decodeJson,
   graphSchema,
-  MAX_SOURCE_BYTES,
+  MAX_SOURCE_JSON_BYTES,
   type PutLoopyBody,
   type SavedLoopy,
   type SourceArtifact,
@@ -243,12 +243,12 @@ export class Registry {
         return unavailableSource(revision, "not_captured");
       }
 
-      if (info.size > MAX_SOURCE_BYTES * 2) {
+      if (info.size > MAX_SOURCE_JSON_BYTES) {
         return yield* Effect.fail(
           new RegistryError({
             operation: "read source",
             cause: new Error(
-              `Source artifact exceeds the ${(MAX_SOURCE_BYTES * 2) / 1024} KiB payload limit.`,
+              `Source artifact exceeds the ${MAX_SOURCE_JSON_BYTES / 1024} KiB payload limit.`,
             ),
           }),
         );

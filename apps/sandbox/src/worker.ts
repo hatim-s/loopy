@@ -61,7 +61,7 @@ function command(spec: CommandSpec) {
       return step.result;
     }
 
-    const parsed = yield* bundle(step.bundleHash, step.input, step.timeoutMs);
+    const parsed = yield* bundle(step.bundleHash, step.result, step.timeoutMs);
 
     return { ...parsed, logs: [...step.logs, ...parsed.logs] };
   });

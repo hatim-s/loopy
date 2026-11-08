@@ -287,7 +287,7 @@ for (const accepted of [false, true]) {
     const f = await fixture();
     await writeFile(
       f.bundle,
-      'const {result} = await Bun.stdin.json(); process.stdout.write(JSON.stringify({parsedExit: result.exitCode}) + "\\n");',
+      'const result = await Bun.stdin.json(); process.stdout.write(JSON.stringify({parsedExit: result.exitCode}) + "\\n");',
     );
     const spec = commandSpec(["/bin/sh", "-c", "exit 2"]);
 
@@ -296,7 +296,7 @@ for (const accepted of [false, true]) {
     }
 
     spec.okExitCodes = accepted ? [0, 2] : [0];
-    spec.parse = { bundleHash: "a".repeat(64), input: {}, timeoutMs: 5000 };
+    spec.parse = { bundleHash: "a".repeat(64), timeoutMs: 5000 };
 
     const result = await Effect.runPromise(
       f.executor.execute(f.key, 1, spec, new AbortController().signal),
@@ -325,7 +325,7 @@ test("parser execution failures propagate to the stored graph node and run", asy
     throw new Error("Expected command node");
   }
 
-  node.parse = { module: null, bundleHash: "a".repeat(64), input: {} };
+  node.parse = { module: null, bundleHash: "a".repeat(64) };
   const store = new MemorySqlStore();
   await Effect.runPromise(store.createRun(newRun()));
   expect(

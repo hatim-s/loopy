@@ -11,10 +11,11 @@ type Grep = { matches: GrepMatch[]; binaryMatches: string[] };
 
 type Sha256 = { hash: string; file: string };
 
-export function parseWc({ stdout }: CommandResult, input: { args?: readonly Json[] } = {}): Wc[] {
+export function parseWc({ stdout }: CommandResult): Wc[] {
   const rows = lines(stdout);
 
-  if ((input.args?.length ?? 0) > 1) {
+  // wc prints a total row exactly when it reads more than one operand.
+  if (rows.length > 1) {
     rows.pop();
   }
 

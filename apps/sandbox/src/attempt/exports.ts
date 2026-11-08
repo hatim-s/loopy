@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type {
-  AuthoritySession,
-  ExportRecord,
-  FinishedAttemptRecord,
-  SandboxArtifactRequest,
+import {
+  type AuthoritySession,
+  type ExportRecord,
+  type FinishedAttemptRecord,
+  JOURNAL_PAGE_LIMIT,
+  type SandboxArtifactRequest,
 } from "@loopy/contract/sandbox";
 import { Effect, Result, Semaphore } from "effect";
 import type { ArtifactReader } from "../artifacts";
@@ -29,7 +30,7 @@ function collectPages<Page extends { next: string | null }>(
 }
 
 export function recoveryRecords(authority: SandboxAttemptAuthority) {
-  return collectPages((after) => authority.recoverable({ after, limit: 200 })).pipe(
+  return collectPages((after) => authority.recoverable({ after, limit: JOURNAL_PAGE_LIMIT })).pipe(
     Effect.map((pages) => ({
       attempts: pages.flatMap((page) => page.attempts),
       exports: pages.flatMap((page) => page.exports),
@@ -65,7 +66,7 @@ export class AttemptExports {
   reconcile(volume: string) {
     return Effect.gen({ self: this }, function* () {
       const pages = yield* collectPages((after) =>
-        this.authority.exportGuards({ after, limit: 200, volume }),
+        this.authority.exportGuards({ after, limit: JOURNAL_PAGE_LIMIT, volume }),
       );
 
       const exports = pages.flatMap((page) => page.exports);

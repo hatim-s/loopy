@@ -7,7 +7,6 @@ import {
   type RunSnapshotView,
   type RunsQuery,
   type RunView,
-  type Schedule,
   type ScheduleView,
   type ServerEvent,
 } from "@loopy/contract";
@@ -623,8 +622,13 @@ test("a newer detail cursor cannot hide a fresh list event or summary transition
   expect(client.getQueryData<RunSnapshotView>(keys.run(run.id))?.cursor).toBe(20);
 });
 
+type ScheduleRecord = Exclude<
+  Extract<ServerEvent, { entity: "schedule" }>,
+  { kind: "deleted" }
+>["record"];
+
 /** A schedule as the store emits it; the view adds a null lastFireKey. */
-const record: Schedule = {
+const record: ScheduleRecord = {
   workspace: "/work",
   slug: "triage",
   cron: "*/5 * * * *",
@@ -633,11 +637,12 @@ const record: Schedule = {
   enabled: true,
   nextFireAt: "2026-10-17T10:05:00.000Z",
   version: 2,
+  failure: null,
 };
 
-const scheduled: ScheduleView = { ...record, lastFireKey: null, failure: null };
+const scheduled: ScheduleView = { ...record, lastFireKey: null };
 
-function scheduleSaved(sequence: number, saved: Schedule) {
+function scheduleSaved(sequence: number, saved: ScheduleRecord) {
   return event(sequence, { entity: "schedule", kind: "saved", runId: null, record: saved });
 }
 
@@ -657,6 +662,18 @@ test("a saved schedule replaces its row, and an older version leaves the row alo
     "*/5 * * * *",
   );
   expect(client.getQueryState(keys.schedules("/work"))?.isInvalidated).toBe(false);
+});
+
+test("a schedule disabled by a failure keeps that failure in the row", () => {
+  const client = new QueryClient();
+  client.setQueryData(keys.schedules("/work"), [scheduled]);
+  const failure = { error: "Loopy 'triage' is not saved.", retryAt: null };
+
+  applyBatch(client, [scheduleSaved(11, { ...record, enabled: false, version: 3, failure })]);
+
+  expect(client.getQueryData<ScheduleView[]>(keys.schedules("/work"))).toEqual([
+    { ...scheduled, enabled: false, version: 3, failure },
+  ]);
 });
 
 test("a fired schedule keeps its version and carries the fire key into the row", () => {

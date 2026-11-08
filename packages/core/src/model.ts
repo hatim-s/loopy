@@ -124,6 +124,11 @@ export const scheduleSchema = struct({
 
 export type Schedule = Schema.Schema.Type<typeof scheduleSchema>;
 
+// The last failure of the saved version; a null retry means firing disabled the schedule.
+export const scheduleFailureSchema = Schema.NullOr(
+  struct({ error: Schema.String, retryAt: Schema.NullOr(Schema.String) }),
+);
+
 const TERMINAL_RUN_STATUSES = [
   "succeeded",
   "failed",
@@ -178,7 +183,8 @@ export const runtimeEventSchema = Schema.Union([
     ...eventFields,
     entity: Schema.Literal("schedule"),
     kind: Schema.Literals(["saved", "fired", "skipped"]),
-    record: scheduleSchema,
+    // Each event states the current failure, so a stream consumer never infers it from the kind.
+    record: struct({ ...scheduleSchema.fields, failure: scheduleFailureSchema }),
   }),
   struct({
     ...eventFields,

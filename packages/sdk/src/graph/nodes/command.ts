@@ -58,7 +58,7 @@ function addCommand(
     flagSpec?: CommandFlagSpec;
     variants?: Partial<Record<"darwin" | "linux", CommandVariant>>;
     okExitCodes: readonly number[];
-    parse: { module: string | null; input: Readonly<Record<string, AuthorValue>> } | null;
+    parse: { module: string | null } | null;
   },
   options: Options,
 ) {
@@ -83,11 +83,7 @@ function addCommand(
       rateLimit: options.rateLimit ?? null,
       retry: retryPolicy(options.retry),
       okExitCodes: [...node.okExitCodes],
-      parse: node.parse && {
-        module: node.parse.module,
-        bundleHash: null,
-        input: serializeValues(node.parse.input, builder),
-      },
+      parse: node.parse && { module: node.parse.module, bundleHash: null },
     },
     options.label ?? null,
   ).id;
@@ -126,7 +122,7 @@ function descriptorCommand(
       flagSpec: rendered.flagSpec,
       variants: rendered.variants,
       okExitCodes: rendered.okExitCodes,
-      parse: mode?.parser ? { module: mode.parser.module, input: rendered.parseInput } : null,
+      parse: mode?.parser ?? null,
     },
     options,
   );

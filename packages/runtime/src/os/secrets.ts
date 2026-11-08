@@ -9,11 +9,12 @@ import {
   readFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { MAX_SECRET_VALUE_BYTES, secretValueSchema } from "@loopy/contract";
 import {
   errnoCode,
+  MAX_SECRET_VALUE_BYTES,
   requireRecord,
   SecretError,
+  secretValueSchema,
   setOwnProperty,
   validateSecretName,
 } from "@loopy/core";

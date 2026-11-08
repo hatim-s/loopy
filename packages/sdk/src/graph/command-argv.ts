@@ -26,7 +26,6 @@ type RenderedCommand = {
   flagSpec: CommandFlagSpec;
   variants: Partial<Record<(typeof COMMAND_PLATFORMS)[number], CommandVariant>>;
   okExitCodes: readonly number[];
-  parseInput: Record<string, AuthorValue>;
 };
 
 function flagSpec(descriptor: CommandDefinition): CommandFlagSpec {
@@ -131,8 +130,5 @@ export function commandArgv(
     flagSpec: spec,
     variants: variants(descriptor, input, prepared.flags ?? {}, mode),
     okExitCodes: descriptor.okExitCodes ?? [0],
-    parseInput: Object.fromEntries(
-      Object.entries(prepared).filter(([, value]) => value !== undefined),
-    ),
   };
 }

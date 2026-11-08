@@ -29,6 +29,7 @@ export {
   authorityCommandSchema,
   authorityErrorSchema,
   authorityOperations,
+  JOURNAL_PAGE_LIMIT,
   type OperationInput,
   type OperationName,
   type OperationOutput,

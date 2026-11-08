@@ -10,6 +10,7 @@ import {
   recordSpecSchema,
   runStatusSchema,
   runtimeEventSchema,
+  scheduleFailureSchema,
   scheduleSchema,
   struct,
 } from "@loopy/core";
@@ -64,8 +65,7 @@ export type RunView = Schema.Schema.Type<typeof runViewSchema>;
 export const scheduleViewSchema = struct({
   ...scheduleSchema.fields,
   lastFireKey: Schema.NullOr(Schema.String),
-  // The last failure of the saved version; a null retry means firing disabled the schedule.
-  failure: Schema.NullOr(struct({ error: Schema.String, retryAt: Schema.NullOr(Schema.String) })),
+  failure: scheduleFailureSchema,
 });
 
 export type ScheduleView = Schema.Schema.Type<typeof scheduleViewSchema>;

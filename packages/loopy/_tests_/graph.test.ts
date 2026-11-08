@@ -1408,25 +1408,3 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
     }
   }
 }
-
-test("parser input references use the same graph visibility checks as command arguments", () => {
-  const graph = {
-    ...approveDemoGraph,
-    nodes: approveDemoGraph.nodes.map((node) =>
-      node.kind === "command"
-        ? {
-            ...node,
-            parse: {
-              module: null,
-              bundleHash: null,
-              input: {
-                args: [{ ref: contract.decodeBoundary(contract.refIdSchema)("missing"), path: [] }],
-              },
-            },
-          }
-        : node,
-    ),
-  };
-
-  expect(validateGraph(graph).map((value) => value.code)).toContain("unresolved_ref");
-});

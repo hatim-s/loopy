@@ -8,6 +8,7 @@ import {
   MAX_SOURCE_BYTES,
   putLoopyBodySchema,
   type SourceArtifact,
+  sourceArtifactOrUnavailable,
   sourceArtifactSchema,
 } from "@loopy/contract";
 import { Registry } from "@loopy/runtime/local";
@@ -190,12 +191,17 @@ test("source boundaries validate ranges and byte caps while save checks graph id
       { onExcessProperty: "error" },
     )._tag === "Success",
   ).toBe(false);
+  const file = { id: "file-0", path: "entry.ts", content: "é".repeat(MAX_SOURCE_BYTES) };
+  expect(sourceArtifactOrUnavailable({ ...available, files: [file] })).toMatchObject({
+    status: "unavailable",
+    reason: "too_large",
+  });
   expect(
-    Schema.decodeUnknownExit(sourceArtifactSchema)(
-      artifact(body.revision, "é".repeat(MAX_SOURCE_BYTES)),
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
+    sourceArtifactOrUnavailable({
+      ...available,
+      files: [{ ...file, path: "a/b.ts", content: "" }],
+    }),
+  ).toMatchObject({ status: "unavailable", reason: "not_captured" });
   await writeFile(f.file, " ".repeat(MAX_SOURCE_BYTES + 1));
   expect(await Effect.runPromise(compile(f.file))).toMatchObject({
     ok: false,
