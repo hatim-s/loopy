@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { counter, positiveInt, struct } from "../codec";
 import { EXECUTION_MODES } from "../model";
 import { nodeSchema } from "./nodes";
-import { graphRecord, labelSchema, nodeIdSchema, recordSpecSchema, refSchema } from "./values";
+import { graphRecord, nodeIdSchema, recordSpecSchema, refSchema } from "./values";
 
 export * from "./key";
 
@@ -12,23 +12,14 @@ export * from "./nodes";
 
 export * from "./values";
 
-export const edgeSchema = Schema.Union([
-  struct({
-    from: nodeIdSchema,
-    to: nodeIdSchema,
-    kind: Schema.Literals(["next", "yes", "no", "each", "join", "cleanup", "rescue"]),
-  }),
-  struct({
-    from: nodeIdSchema,
-    to: nodeIdSchema,
-    kind: Schema.Literal("case"),
-    label: labelSchema,
-  }),
-]);
+// Control nodes name their arm entries in their own fields, so edges carry only sequence and joins.
+export const edgeSchema = struct({
+  from: nodeIdSchema,
+  to: nodeIdSchema,
+  kind: Schema.Literals(["next", "join"]),
+});
 
 export type Edge = Schema.Schema.Type<typeof edgeSchema>;
-
-export type EdgeKind = Edge["kind"];
 
 export const DIAGNOSTIC_CODES = [
   "duplicate_label",

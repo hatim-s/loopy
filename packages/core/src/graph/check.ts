@@ -150,9 +150,6 @@ function reservedNames({ graph }: Context): Diagnostic[] {
       ? []
       : Object.keys(graph.input).map((name) => ({ name, node: null }))),
     ...graph.nodes.flatMap((node) => nodeNames(node).map((name) => ({ name, node: node.id }))),
-    ...graph.edges.flatMap((edge) =>
-      edge.kind === "case" ? [{ name: edge.label, node: edge.from }] : [],
-    ),
   ];
 
   return names.flatMap(({ name, node }) =>

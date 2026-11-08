@@ -1,4 +1,4 @@
-import { type Diagnostic, type Edge, INPUT_REF, type Node, type NodeId } from ".";
+import { type Diagnostic, INPUT_REF, type NodeId } from ".";
 import {
   ancestors,
   continuationTargets,
@@ -82,48 +82,6 @@ function scopes({ graph, nodes }: Context): Diagnostic[] {
   });
 }
 
-function controlTarget(node: Node, edge: Edge): boolean {
-  switch (edge.kind) {
-    case "yes":
-    case "no":
-      return node.kind === "branch" && node.arms[edge.kind] === edge.to;
-    case "case":
-      return node.kind === "switch"
-        ? (edge.label === "default"
-            ? node.default
-            : Object.hasOwn(node.cases, edge.label)
-              ? node.cases[edge.label]
-              : null) === edge.to
-        : node.kind === "parallel" &&
-            Object.hasOwn(node.branches, edge.label) &&
-            node.branches[edge.label] === edge.to;
-    case "each":
-      return node.kind === "map" && node.body === edge.to;
-    case "cleanup":
-      return node.kind === "finally" && node.cleanup === edge.to;
-    case "rescue":
-      return node.kind === "rescue" && node.handler === edge.to;
-    default:
-      return true;
-  }
-}
-
-function controlEdges({ graph, nodes }: Context): Diagnostic[] {
-  return graph.edges.flatMap((edge) => {
-    const node = nodes.get(edge.from);
-
-    return node && !controlTarget(node, edge)
-      ? [
-          diagnostic(
-            "invalid_scope",
-            node.id,
-            "Control edges must match their owner and declared target.",
-          ),
-        ]
-      : [];
-  });
-}
-
 function scopeEdges(context: Context): Diagnostic[] {
   return context.graph.edges.flatMap((edge) => {
     const from = context.nodes.get(edge.from);
@@ -134,7 +92,6 @@ function scopeEdges(context: Context): Diagnostic[] {
     }
 
     const local = from.scope === to.scope && sameBody(context, from, to);
-    const entry = targets(from).includes(to.id) && to.scope === from.id;
     const last = isBodyTail(context, from);
     const owner = from.scope === null ? undefined : context.nodes.get(from.scope);
 
@@ -145,13 +102,13 @@ function scopeEdges(context: Context): Diagnostic[] {
       owner &&
       (to.id === owner.id || (to.kind === "join" && to.scope === owner.scope));
 
-    return local || entry || join
+    return local || join
       ? []
       : [
           diagnostic(
             "invalid_scope",
             from.id,
-            "Edges must stay within a body or use its entry or join.",
+            "Edges must stay within a body or leave it through a join.",
           ),
         ];
   });
@@ -215,7 +172,6 @@ export const structureRules = [
   endpoints,
   scopes,
   scopeEdges,
-  controlEdges,
   continuations,
   connectivity,
   cycles,

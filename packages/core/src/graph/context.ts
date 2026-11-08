@@ -110,8 +110,7 @@ export function continuationTargets(context: Context, node: Node): NodeId[] {
   const found = context.graph.edges.flatMap((edge) => {
     const from = context.nodes.get(edge.from);
 
-    return (edge.kind === "next" || edge.kind === "join") &&
-      !isScopeJoin(context, edge) &&
+    return !isScopeJoin(context, edge) &&
       context.nodes.get(edge.to)?.scope === node.scope &&
       from !== undefined &&
       (from.id === node.id || ancestors(from, context.nodes).some(({ id }) => id === node.id))
