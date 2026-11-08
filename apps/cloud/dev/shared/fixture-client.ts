@@ -9,6 +9,7 @@ import {
   putLoopyBodySchema,
   type RunSnapshotView,
   routes,
+  type SandboxAttemptRequest,
 } from "@loopy/contract";
 import { Effect, type Schema } from "effect";
 import { root } from "../stack/constants";
@@ -66,7 +67,7 @@ export async function readJson<T>(
 
 export type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
-  body?: Json | PutLoopyBody;
+  body?: Json | PutLoopyBody | SandboxAttemptRequest;
   token?: string | null;
   headers?: Record<string, string>;
   signal?: AbortSignal;

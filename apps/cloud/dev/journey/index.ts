@@ -1,6 +1,8 @@
 import { type CursorView, routes } from "@loopy/contract";
 import { Effect } from "effect";
-import { assert, equal, Journey } from "./client";
+import { assert, equal, failureEvidence } from "../shared/assert";
+import { compileFixture } from "../shared/fixture-client";
+import { Journey } from "./client";
 import { docker } from "./docker";
 import { frame } from "./events";
 import { execution } from "./execution";
@@ -16,7 +18,7 @@ async function main() {
   let firstSource: unknown;
   let cursor: CursorView | undefined;
 
-  await journey.check("authentication", async () => {
+  await journey.evidence.check("authentication", async () => {
     await journey.denied("/runs", 401, "unauthorized", { principal: "none" });
     await journey.denied("/runs", 401, "unauthorized", { principal: "invalid" });
     await journey.denied("/runs", 403, "forbidden", {
@@ -26,8 +28,8 @@ async function main() {
     return { unauthenticatedDenied: true, invalidTokenDenied: true, crossOriginDenied: true };
   });
 
-  await journey.check("compile_upload_graph_bundles_source", async () => {
-    const body = await Effect.runPromise(journey.compiled("execution.ts"));
+  await journey.evidence.check("compile_upload_graph_bundles_source", async () => {
+    const body = await Effect.runPromise(compileFixture("execution.ts"));
     assert(body.bundles.length === 2, "expected_two_compiled_bundles");
     assert(body.sourceArtifact?.status === "available", "source_not_captured");
     await journey.upload(body);
@@ -55,7 +57,7 @@ async function main() {
     };
   });
 
-  await journey.check("run_input_validation", async () => {
+  await journey.evidence.check("run_input_validation", async () => {
     const before = await journey.json(routes.runs.response, `/runs?slug=${slug}&limit=200`);
     await journey.denied(`/loopies/${slug}/runs`, 400, "bad_request", {
       method: "POST",
@@ -76,7 +78,7 @@ async function main() {
   });
 
   for (const chooseYes of [true, false]) {
-    await journey.check(
+    await journey.evidence.check(
       `docker_execution_branch_${chooseYes ? "yes" : "no"}_map_parallel_retry_logs`,
       async () => {
         const run = await journey.start(slug, { name: "fixture", chooseYes, items: [2, 4, 6] });
@@ -87,14 +89,14 @@ async function main() {
     );
   }
 
-  await journey.check("docker_network_none_and_retained_retry_workspace", async () => {
+  await journey.evidence.check("docker_network_none_and_retained_retry_workspace", async () => {
     assert(executionId, "execution_case_dependency_missing");
 
     return docker(journey, executionId);
   });
 
-  await journey.check("approval_wait_and_invalid_payload", async () => {
-    const first = await Effect.runPromise(journey.compiled("approval-one.ts"));
+  await journey.evidence.check("approval_wait_and_invalid_payload", async () => {
+    const first = await Effect.runPromise(compileFixture("approval-one.ts"));
     firstRevision = first.revision;
     await journey.upload(first);
     firstSource = await journey.json(
@@ -103,7 +105,7 @@ async function main() {
     );
     const run = await journey.start(approvalSlug, { name: "fixture" });
     approvalId = run.id;
-    const waiting = await journey.wait(run.id, true);
+    const waiting = await journey.waitForHook(run.id);
     assert(waiting.run.waitingOn?.hook === "approval", "approval_wait_not_registered", {
       runId: run.id,
       runStatus: waiting.run.status,
@@ -128,9 +130,9 @@ async function main() {
     };
   });
 
-  await journey.check("revision_pinning_after_new_save_and_approval_resolve", async () => {
+  await journey.evidence.check("revision_pinning_after_new_save_and_approval_resolve", async () => {
     assert(approvalId && firstRevision, "approval_case_dependency_missing");
-    const second = await Effect.runPromise(journey.compiled("approval-two.ts"));
+    const second = await Effect.runPromise(compileFixture("approval-two.ts"));
     assert(second.revision !== firstRevision, "revision_fixture_did_not_change");
     await journey.upload(second);
 
@@ -162,7 +164,7 @@ async function main() {
       "pinned_bundle_not_executed",
     );
     const next = await journey.start(approvalSlug, { name: "fixture" });
-    const waiting = await journey.wait(next.id, true);
+    const waiting = await journey.waitForHook(next.id);
     assert(waiting.run.waitingOn?.hook === "approval", "new_revision_did_not_wait");
     await journey.json(routes.resolveNamedHook.response, `/runs/${next.id}/hooks/approval`, {
       method: "POST",
@@ -188,17 +190,17 @@ async function main() {
     };
   });
 
-  await journey.check("cross_workspace_query_body_and_run_isolation", async () => {
+  await journey.evidence.check("cross_workspace_query_body_and_run_isolation", async () => {
     assert(executionId, "execution_case_dependency_missing");
 
     return isolation(journey, executionId);
   });
-  await journey.check("bounded_run_node_log_feed_pages", async () => {
+  await journey.evidence.check("bounded_run_node_log_feed_pages", async () => {
     assert(executionId, "execution_case_dependency_missing");
 
     return pages(journey, executionId);
   });
-  await journey.check("sse_reconnect_transaction_cursor_with_real_events", async () => {
+  await journey.evidence.check("sse_reconnect_transaction_cursor_with_real_events", async () => {
     assert(cursor, "cursor_case_dependency_missing");
     let first = await frame(journey, cursor.cursor, cursor.epoch);
 
@@ -210,7 +212,7 @@ async function main() {
     const second = await frame(journey, cursor.cursor, cursor.epoch, first.id);
     assert(second.id > first.id, "sse_reconnect_did_not_advance");
     assert(
-      first.events.some((event) => event.runId && journey.runs.includes(event.runId)),
+      first.events.some((event) => event.runId && journey.evidence.runs.includes(event.runId)),
       "sse_first_frame_has_no_journey_run",
     );
 
@@ -247,16 +249,17 @@ async function main() {
       acknowledgedEventsRepeated: false,
     };
   });
-  const failures = journey.results.filter((result) => result.status === "failed");
+  const { results } = journey.evidence;
+  const failed = results.filter((result) => result.status === "failed").length;
   process.stdout.write(
-    `${JSON.stringify({ status: failures.length ? "failed" : "passed", passed: journey.results.length - failures.length, failed: failures.length, evidence: ".notes/cloud/evidence/journey.json", scope: "local-stack-journey-only" })}\n`,
+    `${JSON.stringify({ status: failed ? "failed" : "passed", passed: results.length - failed, failed, evidence: ".notes/cloud/evidence/journey.json", scope: "local-stack-journey-only" })}\n`,
   );
-  process.exitCode = failures.length ? 1 : 0;
+  process.exitCode = failed ? 1 : 0;
 }
 
-await main().catch(() => {
+await main().catch((cause: unknown) => {
   process.stdout.write(
-    `${JSON.stringify({ status: "failed", failure: "journey_initialization_failed" })}\n`,
+    `${JSON.stringify({ status: "failed", failure: "journey_initialization_failed", cause: failureEvidence(cause) })}\n`,
   );
   process.exitCode = 1;
 });

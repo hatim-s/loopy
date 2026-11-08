@@ -1,40 +1,53 @@
-import { createHash } from "node:crypto";
-import { resolve } from "node:path";
 import { routes } from "@loopy/contract";
 import { Effect } from "effect";
-import { assert, equal } from "../journey/client";
+import { assert, equal, failureEvidence } from "../shared/assert";
+import { compileFixture } from "../shared/fixture-client";
+import { sourceHashes } from "../shared/hash";
+import { root } from "../stack/constants";
 import { FailureJourney } from "./client";
-import { root } from "./config";
+import { ports } from "./config";
 import { docker, ownedContainer } from "./resources";
 
 const journey = new FailureJourney();
 
+const { api, evidence } = journey;
+
 let approvalId: string | undefined;
 
-await journey.check("isolated_stack_start_and_compile", async () => {
+let setupFailure: ReturnType<typeof failureEvidence> | null = null;
+
+await evidence.check("isolated_stack_start_and_compile", async () => {
   await journey.stack.start();
 
   const bodies = await Effect.runPromise(
     Effect.forEach(
       ["failure-command.ts", "failure-timeout.ts", "failure-approval.ts", "failure-schedule.ts"],
-      (fixture) => journey.compiled(fixture),
+      compileFixture,
       { concurrency: 1 },
     ),
   );
 
   for (const body of bodies) {
-    await journey.json(routes.putLoopy.response, `/loopies/${body.graph.name}`, body, "PUT");
+    await api.json(routes.putLoopy.response, `/loopies/${body.graph.name}`, {
+      method: "PUT",
+      body,
+    });
   }
 
-  return { compiledFixtures: 4, apiPort: 14970, sandboxPort: 14971, inspectorPort: 14973 };
+  return {
+    compiledFixtures: 4,
+    apiPort: ports.api,
+    sandboxPort: ports.sandbox,
+    inspectorPort: ports.inspector,
+  };
 });
 
 try {
-  if (journey.results.some((result) => result.status === "failed")) {
+  if (!evidence.passed) {
     throw new Error("Isolated stack setup failed.");
   }
 
-  await journey.check("process_loss_running_effect_duplicate_admission_late_receipt", async () => {
+  await evidence.check("process_loss_running_effect_duplicate_admission_late_receipt", async () => {
     const approval = await journey.start("cloud-failure-approval");
     approvalId = approval.id;
     await journey.until(
@@ -76,13 +89,13 @@ try {
     };
   });
 
-  await journey.check("approval_wait_survives_process_restart", async () => {
+  await evidence.check("approval_wait_survives_process_restart", async () => {
     assert(approvalId, "approval_dependency_missing");
     const waiting = await journey.snapshot(approvalId);
     assert(waiting.run.waitingOn?.hook === "approval", "approval_wait_lost_after_restart");
     const hookCount = waiting.hooks.length;
-    await journey.json(routes.resolveNamedHook.response, `/runs/${approvalId}/hooks/approval`, {
-      payload: { approved: true },
+    await api.json(routes.resolveNamedHook.response, `/runs/${approvalId}/hooks/approval`, {
+      body: { payload: { approved: true } },
     });
     const finished = await journey.wait(approvalId);
     assert(finished.run.status === "succeeded", "persisted_approval_failed");
@@ -96,7 +109,7 @@ try {
     };
   });
 
-  await journey.check("docker_worker_kill_uncertain_without_retry", async () => {
+  await evidence.check("docker_worker_kill_uncertain_without_retry", async () => {
     const run = await journey.start("cloud-failure-command");
     const { receipt, request } = await journey.running(run.id);
     const container = await ownedContainer(receipt.container);
@@ -129,7 +142,7 @@ try {
     };
   });
 
-  await journey.check("command_timeout_stops_side_effect", async () => {
+  await evidence.check("command_timeout_stops_side_effect", async () => {
     const run = await journey.start("cloud-failure-timeout");
     const started = Date.now();
     const finished = await journey.wait(run.id);
@@ -155,20 +168,18 @@ try {
     };
   });
 
-  await journey.check("scheduled_firing_overlap_and_restart_deduplication", async () => {
+  await evidence.check("scheduled_firing_overlap_and_restart_deduplication", async () => {
     const slug = "cloud-failure-schedule";
-    const prior = await journey.json(routes.runs.response, `/runs?slug=${slug}&limit=200`);
+    const prior = await api.json(routes.runs.response, `/runs?slug=${slug}&limit=200`);
     const existing = new Set(prior.map((run) => run.id));
 
-    const schedule = await journey.json(
-      routes.putSchedule.response,
-      `/loopies/${slug}/schedule`,
-      { input: {}, enabled: true },
-      "PUT",
-    );
+    const schedule = await api.json(routes.putSchedule.response, `/loopies/${slug}/schedule`, {
+      method: "PUT",
+      body: { input: {}, enabled: true },
+    });
 
     const list = async () =>
-      (await journey.json(routes.runs.response, `/runs?slug=${slug}&limit=200`)).filter(
+      (await api.json(routes.runs.response, `/runs?slug=${slug}&limit=200`)).filter(
         (run) => !existing.has(run.id),
       );
 
@@ -183,7 +194,7 @@ try {
       )[0];
 
       assert(first, "scheduled_run_missing");
-      journey.runs.push(first.id);
+      evidence.runs.push(first.id);
       const firstWorker = await journey.running(first.id, "fired\n");
       await journey.stack.restart();
       equal(
@@ -207,8 +218,8 @@ try {
           (await ownedContainer(secondWorker.receipt.container)).State.Running,
         "scheduled_workers_did_not_overlap",
       );
-      await journey.json(routes.setScheduleEnabled.response, `/loopies/${slug}/schedule/enabled`, {
-        enabled: false,
+      await api.json(routes.setScheduleEnabled.response, `/loopies/${slug}/schedule/enabled`, {
+        body: { enabled: false },
       });
 
       for (const run of both) {
@@ -222,13 +233,13 @@ try {
         const saved = await journey.assertSingleAttempt(waiting);
         equal(await journey.artifact(saved), "fired\nfinished\n", "scheduled_effect_repeated");
 
-        if (!journey.runs.includes(run.id)) {
-          journey.runs.push(run.id);
+        if (!evidence.runs.includes(run.id)) {
+          evidence.runs.push(run.id);
         }
       }
 
       const current = (
-        await journey.json(routes.schedules.response, "/schedules?workspace=fixtures")
+        await api.json(routes.schedules.response, "/schedules?workspace=fixtures")
       ).find((value) => value.slug === slug);
 
       assert(current?.lastFireKey, "scheduled_fire_key_missing");
@@ -248,28 +259,23 @@ try {
           "consecutive minute fires run concurrently, then both persist approval waits",
       };
     } finally {
-      await journey.json(routes.setScheduleEnabled.response, `/loopies/${slug}/schedule/enabled`, {
-        enabled: false,
+      await api.json(routes.setScheduleEnabled.response, `/loopies/${slug}/schedule/enabled`, {
+        body: { enabled: false },
       });
     }
   });
-} catch {
-  // The setup result already contains the safe, reproducible failure.
+} catch (cause) {
+  setupFailure = failureEvidence(cause);
 } finally {
-  await journey.check("cleanup_owned_processes_containers_volumes", () => journey.stack.close());
-  const sourceHashes: Record<string, string> = {};
-
-  for (const path of [
-    "apps/cloud/src/scheduler.ts",
-    "apps/sandbox/src/attempt/index.ts",
-    "apps/sandbox/src/docker/index.ts",
-  ]) {
-    sourceHashes[path] = createHash("sha256")
-      .update(new Uint8Array(await Bun.file(resolve(root, path)).arrayBuffer()))
-      .digest("hex");
-  }
-
-  await journey.save({ sourceHashes });
+  await evidence.check("cleanup_owned_processes_containers_volumes", () => journey.stack.close());
+  await evidence.save({
+    setupFailure,
+    sourceHashes: await sourceHashes(root, [
+      "apps/cloud/src/scheduler.ts",
+      "apps/sandbox/src/attempt/index.ts",
+      "apps/sandbox/src/docker/index.ts",
+    ]),
+  });
 }
 
-process.exitCode = journey.results.some((result) => result.status === "failed") ? 1 : 0;
+process.exitCode = evidence.passed ? 0 : 1;

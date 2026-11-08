@@ -1,11 +1,15 @@
-import { createHash } from "node:crypto";
+import { resolve } from "node:path";
 import { routes, sandboxArtifactSchema } from "@loopy/contract";
 import { Effect } from "effect";
-import { assert, equal, Journey } from "./client";
+import { assert, equal } from "../shared/assert";
+import { compileFixture } from "../shared/fixture-client";
+import { sha256Hex } from "../shared/hash";
+import { root } from "../stack/constants";
+import { Journey } from "./client";
 
 const journey = await Journey.open();
 
-await journey.upload(await Effect.runPromise(journey.compiled("execution.ts")));
+await journey.upload(await Effect.runPromise(compileFixture("execution.ts")));
 
 const run = await journey.start("cloud-journey-execution", {
   name: "fixture",
@@ -37,7 +41,7 @@ equal(bytes.toString(), "firstfail", "artifact_content_mismatch");
 
 equal(artifact.size, bytes.length, "artifact_size_mismatch");
 
-equal(artifact.sha256, createHash("sha256").update(bytes).digest("hex"), "artifact_hash_mismatch");
+equal(artifact.sha256, sha256Hex(bytes), "artifact_hash_mismatch");
 
 await journey.denied(path, 401, "unauthorized", { principal: "none" });
 
@@ -80,6 +84,9 @@ const evidence = {
   scope: "terminal run workspace file, not an immutable per-attempt snapshot",
 };
 
-await Bun.write(".notes/cloud/evidence/artifacts.json", `${JSON.stringify(evidence, null, 2)}\n`);
+await Bun.write(
+  resolve(root, ".notes/cloud/evidence/artifacts.json"),
+  `${JSON.stringify(evidence, null, 2)}\n`,
+);
 
 console.log(JSON.stringify(evidence));

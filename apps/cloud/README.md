@@ -6,7 +6,7 @@ This branch is local only. The Worker rejects remote hosts and non-local stage c
 
 ## Start
 
-Use an isolated checkout. The transport-failure runner remains pinned to the original `cloud-integration` worktree and branch. Bun 1.4.0 and Docker CLI 29.8.1 were used. The lockfile pins Wrangler 4.152.0, Miniflare 4.20260730.0 and Cloudflare types 5.20261022.1. The Worker compatibility date is 2026-07-30.
+Use an isolated checkout. The transport-failure runner records the worktree, branch and HEAD it ran from. Bun 1.4.0 and Docker CLI 29.8.1 were used. The lockfile pins Wrangler 4.152.0, Miniflare 4.20260730.0 and Cloudflare types 5.20261022.1. The Worker compatibility date is 2026-07-30.
 
 ```sh
 bun install --frozen-lockfile

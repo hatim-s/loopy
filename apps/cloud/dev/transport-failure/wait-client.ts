@@ -10,10 +10,11 @@ export interface WaitClient {
   stderr: Promise<string>;
 }
 
+const SHUTDOWN_MS = 5000;
+
 export function withWaitClient<A, E, R, E2, R2>(
   acquire: Effect.Effect<WaitClient, E2, R2>,
   use: (client: WaitClient) => Effect.Effect<A, E, R>,
-  options: { shutdownMs?: number } = {},
 ) {
   return Effect.acquireUseRelease(acquire, use, (client) =>
     fixtureIO("wait client shutdown", async () => {
@@ -33,7 +34,7 @@ export function withWaitClient<A, E, R, E2, R2>(
                 "Wait client shutdown did not finish. Reconcile the owned process and streams before retrying.",
             }),
           ),
-        options.shutdownMs ?? 5000,
+        SHUTDOWN_MS,
       );
 
       try {

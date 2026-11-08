@@ -1,5 +1,5 @@
 import { Data, Effect } from "effect";
-import { JourneyFailure } from "./journey/client";
+import { JourneyFailure } from "../shared/assert";
 
 export class FixtureError extends Data.TaggedError("FixtureError")<{
   operation: string;
