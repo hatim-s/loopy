@@ -34,6 +34,16 @@ const RUNTIME_IMPORTS: Record<RuntimeLayer, readonly RuntimeLayer[]> = {
   local: ["os", "host", "store", "executor", "service"],
 };
 
+// Engine lives in core, so host needs no other package; only local composes the SDK.
+const RUNTIME_PACKAGES: Record<RuntimeLayer, readonly Package[]> = {
+  os: ["core"],
+  host: ["core"],
+  store: ["core", "contract"],
+  executor: ["core", "contract"],
+  service: ["core", "contract"],
+  local: ["core", "contract", "sdk"],
+};
+
 interface Manifest {
   name: string;
   private?: boolean;
@@ -156,16 +166,16 @@ function workspaceImport(specifier: string) {
   return { owner, key: specifier === name ? "." : `.${specifier.slice(name.length)}` };
 }
 
+function runtimeLayer(file: string) {
+  return RUNTIME_LAYERS.find((candidate) =>
+    relative(sourceRoot("runtime"), file).startsWith(`${candidate}/`),
+  );
+}
+
 function runtimeViolations(file: string, target: string): string[] {
   const root = sourceRoot("runtime");
-
-  const layer = RUNTIME_LAYERS.find((candidate) =>
-    relative(root, file).startsWith(`${candidate}/`),
-  );
-
-  const targetLayer = RUNTIME_LAYERS.find((candidate) =>
-    relative(root, target).startsWith(`${candidate}/`),
-  );
+  const layer = runtimeLayer(file);
+  const targetLayer = runtimeLayer(target);
 
   if (!layer || !targetLayer || layer === targetLayer) {
     return [];
@@ -226,6 +236,12 @@ test("workspace source imports follow package ownership and explicit exports", (
 
         if (!ALLOWED[owner].includes(imported.owner)) {
           violations.push(`${name} may not import ${imported.owner} (${specifier}).`);
+        }
+
+        const layer = owner === "runtime" ? runtimeLayer(file) : undefined;
+
+        if (layer && !RUNTIME_PACKAGES[layer].includes(imported.owner)) {
+          violations.push(`${name} in runtime ${layer} may not import ${imported.owner}.`);
         }
 
         if (!Object.hasOwn(manifest(packageRoot(imported.owner)).exports, imported.key)) {

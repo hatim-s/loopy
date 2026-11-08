@@ -29,6 +29,7 @@ export {
   type LogRecord,
   logRecordSchema,
   MAX_PREVIEW_BYTES,
+  MAX_SECRET_VALUE_BYTES,
   type Node,
   type NodeRun,
   nodeIdSchema,
@@ -51,6 +52,7 @@ export {
   runStatusSchema,
   type Schedule,
   scheduleSchema,
+  secretValueSchema,
   type Value,
   valueSchema,
 } from "@loopy/core";
@@ -59,14 +61,12 @@ export {
   DEFAULT_PORT,
   decodeRunCursor,
   encodeRunCursor,
-  MAX_SECRET_VALUE_BYTES,
   type PutScheduleBody,
   putScheduleBodySchema,
   type Route,
   type RunsQuery,
   routes,
   scheduleEnabledBodySchema,
-  secretValueSchema,
 } from "./api";
 
 export {

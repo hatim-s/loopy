@@ -46,7 +46,12 @@ export { limitLogs } from "./logs";
 
 export * from "./model";
 
-export { validateSecretName, validateSlug } from "./names";
+export {
+  MAX_SECRET_VALUE_BYTES,
+  secretValueSchema,
+  validateSecretName,
+  validateSlug,
+} from "./names";
 
 export * from "./rate-limit";
 

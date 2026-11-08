@@ -1,4 +1,4 @@
-import { jsonSchema, logRecordSchema, struct } from "@loopy/core";
+import { jsonSchema, logRecordSchema, secretValueSchema, struct } from "@loopy/core";
 import { Schema, SchemaGetter } from "effect";
 import { pageLimit, queryCounter, queryNumber } from "./codec";
 import { putLoopyBodySchema } from "./compiled-loopy";
@@ -100,20 +100,6 @@ export type PutScheduleBody = Schema.Schema.Type<typeof putScheduleBodySchema>;
 export const scheduleEnabledBodySchema = struct({ enabled: Schema.Boolean });
 
 const scheduleParamsSchema = struct({ slug: Schema.String });
-
-export const MAX_SECRET_VALUE_BYTES = 64 * 1024;
-
-const ENCODER = new TextEncoder();
-
-export const secretValueSchema = Schema.String.check(
-  Schema.makeFilter(
-    (value) =>
-      value !== "" &&
-      !value.includes("\0") &&
-      ENCODER.encode(value).byteLength <= MAX_SECRET_VALUE_BYTES,
-    { message: "A secret must be nonempty, contain no NUL bytes, and fit within 64 KiB." },
-  ),
-);
 
 /** The local daemon listens here unless the caller picks another port. */
 export const DEFAULT_PORT = 4310;
