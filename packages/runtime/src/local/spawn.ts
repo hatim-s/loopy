@@ -1,8 +1,9 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import type { CommandResult } from "@loopy/core";
-import { CommandExecutionError, errorMessage } from "@loopy/core";
+import { errorMessage } from "@loopy/core";
 import { Effect } from "effect";
+import { CommandExecutionError } from "./command-error";
 
 const KILL_GRACE_MS = 5000;
 

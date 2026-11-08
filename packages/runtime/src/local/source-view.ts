@@ -1,4 +1,4 @@
-import type { SourceArtifact } from "@loopy/contract";
+import { type SourceArtifact, unavailableSource } from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
 import { Effect } from "effect";
 import { secretRedactor } from "./secret-redactor";
@@ -14,12 +14,5 @@ export const redactSourceArtifact = (home: string, artifact: SourceArtifact) =>
     const source = canonicalJson(artifact);
     const redact = secretRedactor(Object.values(yield* new SecretStore(home).snapshot()));
 
-    return redact(source) === source
-      ? artifact
-      : {
-          version: 1 as const,
-          status: "unavailable" as const,
-          revision: artifact.revision,
-          reason: "redacted" as const,
-        };
+    return redact(source) === source ? artifact : unavailableSource(artifact.revision, "redacted");
   });

@@ -3,8 +3,8 @@ import {
   type AuthoritySession,
   attemptResourceNames,
   type DockerAttemptPlan,
+  type Receipt,
   type SandboxAttemptRequest,
-  type SandboxReceipt,
   workspaceVolumeInput,
 } from "@loopy/contract";
 import { durationMs } from "@loopy/core";
@@ -71,7 +71,7 @@ export class AttemptAdmissions {
       }),
     );
   }
-  start(request: SandboxAttemptRequest): Effect.Effect<SandboxReceipt, SandboxFailure> {
+  start(request: SandboxAttemptRequest): Effect.Effect<Receipt, SandboxFailure> {
     return Effect.gen({ self: this }, function* () {
       yield* validateBundles(request);
       const id = attemptId(this.options.config.stateRoot, request);

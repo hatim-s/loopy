@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
   decodeBoundary,
+  executionResultSchema,
   finishedAttemptRecordSchema,
   sandboxAttemptIdentitySchema,
-  sandboxExecutionResultSchema,
 } from "@loopy/contract";
 import { Effect } from "effect";
 import { attemptHash } from "../../../../sandbox/src/admission";
@@ -20,7 +20,7 @@ const root = "/synthetic/runtime-root/.loopy/cloud/sandbox";
 
 const id = attemptHash({ root, ...identity });
 
-const result = decodeBoundary(sandboxExecutionResultSchema)({
+const result = decodeBoundary(executionResultSchema)({
   kind: "succeeded",
   output: { ok: true },
   logs: [],
@@ -81,7 +81,7 @@ test("receipt evidence verifies immutable bytes and rejects wrong identities, in
     ),
   ).rejects.toThrow("immutable result bytes");
 
-  const corrupted = decodeBoundary(sandboxExecutionResultSchema)({
+  const corrupted = decodeBoundary(executionResultSchema)({
     ...result,
     output: { ok: false },
   });

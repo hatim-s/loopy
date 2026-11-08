@@ -1,8 +1,7 @@
 export {
-  type Effect,
+  type EngineEffect,
   type EngineEvent,
   type EngineState,
   initialState,
   step,
-  validateOutput,
 } from "@loopy/core/engine";

@@ -1,4 +1,4 @@
-import { describeCron } from "../../lib/cron";
+import { describeCron } from "@loopy/contract";
 import { timestamp, until } from "../../lib/format";
 
 export function CronReading({ cron, tz }: { cron: string; tz?: string }) {

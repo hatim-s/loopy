@@ -1,4 +1,4 @@
-import type { HookRecord, RunRecord, RunStatus, RuntimeEvent, StorageError } from "@loopy/core";
+import type { PendingHook, RunRecord, RunStatus, RuntimeEvent, StorageError } from "@loopy/core";
 import type { Effect, Schema } from "effect";
 import type { runsQuerySchema } from "./api";
 import type {
@@ -46,8 +46,6 @@ export type DashboardSnapshot = Omit<RunSnapshotView, "run"> &
     Pick<RunSnapshotView, "scopes" | "nodeRunsNext" | "truncatedOutputs" | "hooksTruncated">
   > & { run: RunRecord };
 
-export type PendingHook = HookRecord & { expiresAt: string | null };
-
 export interface DashboardReader {
   scheduleOverview(): Effect.Effect<ScheduleOverviewView, StorageError>;
   dashboardSnapshot(id: string): Effect.Effect<DashboardSnapshot | undefined, StorageError>;
@@ -77,8 +75,4 @@ export interface DashboardReader {
   ): Effect.Effect<Schema.Schema.Type<typeof logDetailSchema> | undefined, StorageError>;
   eventPage(query: EventPageQuery): Effect.Effect<EventHistoryPage, StorageError>;
   eventDetail(sequence: number): Effect.Effect<RuntimeEvent | undefined, StorageError>;
-}
-
-export function emptyRunCounts(): StatusCounts {
-  return { queued: 0, running: 0, suspended: 0, succeeded: 0, failed: 0, cancelled: 0 };
 }

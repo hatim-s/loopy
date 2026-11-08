@@ -1,6 +1,5 @@
-import { Schema, SchemaGetter, Struct } from "effect";
-
-/** Every wire edge rejects undeclared fields, including nested structs. */
+import { PAGE_LIMIT } from "@loopy/core";
+import { Effect, Schema, SchemaGetter } from "effect";
 
 export const boundaryOptions = { onExcessProperty: "error" } as const;
 
@@ -10,13 +9,26 @@ export const decodeBoundary = <S extends Schema.ConstraintDecoder<unknown>>(sche
 export const encodeBoundary = <S extends Schema.ConstraintEncoder<unknown>>(schema: S) =>
   Schema.encodeUnknownSync(schema, boundaryOptions);
 
-// Preserve Number coercion, including whitespace, null and booleans, at query edges.
+export const decodeJson = <S extends Schema.ConstraintDecoder<unknown>>(schema: S) =>
+  Schema.decodeUnknownSync(Schema.fromJsonString(schema), boundaryOptions);
+
 export const queryNumber = Schema.Unknown.pipe(
   Schema.decodeTo(Schema.Finite, {
     decode: SchemaGetter.transform(Number),
     encode: SchemaGetter.transform((value) => value),
   }),
 );
+
+export const queryCounter = queryNumber
+  .check(Schema.isInt())
+  .check(Schema.isGreaterThanOrEqualTo(0));
+
+export const pageLimit = (fallback: number) =>
+  queryNumber
+    .check(Schema.isInt())
+    .check(Schema.isGreaterThan(0))
+    .check(Schema.isLessThanOrEqualTo(PAGE_LIMIT))
+    .pipe(Schema.withDecodingDefault(Effect.succeed(fallback)));
 
 export const isoDateTime = Schema.String.check(
   Schema.makeFilter(
@@ -33,6 +45,14 @@ export const isoDateTime = Schema.String.check(
   ),
 );
 
-/** Preserve mutable wire records while returning a native Effect Struct. */
-export const struct = <const F extends Schema.Struct.Fields>(fields: F) =>
-  Schema.Struct(fields).mapFields(Struct.map(Schema.mutableKey));
+export const boundedToken = Schema.String.check(Schema.isMinLength(1)).check(
+  Schema.isMaxLength(256),
+);
+
+export const base64Text = Schema.String.check(
+  Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+);
+
+/** Base64 text whose decoded size stays within maxBytes. */
+export const boundedBase64 = (maxBytes: number) =>
+  base64Text.check(Schema.isMaxLength(Math.ceil(maxBytes / 3) * 4));

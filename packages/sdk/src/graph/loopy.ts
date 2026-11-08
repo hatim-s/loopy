@@ -11,7 +11,8 @@ import type { AuthorValue } from "./ref";
 
 export function loopy<const S extends RecordSpec>(
   name: string,
-  definition: { [K in keyof GraphMeta]?: NonNullable<GraphMeta[K]> } & {
+  definition: { [K in Exclude<keyof GraphMeta, "schedule">]?: NonNullable<GraphMeta[K]> } & {
+    schedule?: { cron: string; tz?: string };
     input: S;
     inputValidation?: InputValidation;
     run(context: { input: ReturnType<typeof inputRef<S>> }): AuthorValue;

@@ -1,10 +1,58 @@
+// The dashboard reaches core domain schemas and helpers only through this browser-safe entry.
 export {
+  DEFAULT_TIME_ZONE,
+  type Diagnostic,
+  describeCron,
+  diagnosticSchema,
+  type Edge,
+  type ExecutionKey,
+  type ExecutionResult,
+  type ExecutionSpec,
+  edgeSchema,
+  emptyRunCounts,
+  executionErrorSchema,
+  executionKeySchema,
   executionKeyString,
-  isFieldValue,
+  executionResultSchema,
+  executionSpecSchema,
+  type Graph,
+  graphMetaSchema,
+  graphSchema,
+  type HookRecord,
+  hookRecordSchema,
   isRecord,
   isRef,
   isTerminalRun,
+  type Json,
+  jsonSchema,
+  type LogPosition,
+  type LogRecord,
+  logRecordSchema,
+  MAX_PREVIEW_BYTES,
+  type Node,
+  type NodeRun,
+  nodeIdSchema,
+  nodeRunSchema,
+  nodeSchema,
+  type OutSchema,
+  outputSchema,
   PAGE_LIMIT,
+  parseFieldText,
+  predicateSchema,
+  type Receipt,
+  type RecordField,
+  type Ref,
+  type RunOutcome,
+  type RunStatus,
+  receiptSchema,
+  recordFields,
+  refIdSchema,
+  refSchema,
+  runStatusSchema,
+  type Schedule,
+  scheduleSchema,
+  type Value,
+  valueSchema,
 } from "@loopy/core";
 
 export {
@@ -22,7 +70,13 @@ export {
   scheduleEnabledBodySchema,
 } from "./api";
 
-export { boundaryOptions, decodeBoundary, encodeBoundary } from "./codec";
+export {
+  boundaryOptions,
+  decodeBoundary,
+  decodeJson,
+  encodeBoundary,
+  isoDateTime,
+} from "./codec";
 
 export {
   type PutLoopyBody,
@@ -39,7 +93,7 @@ export {
 
 export * from "./dashboard";
 
-export * from "./dashboard-reader";
+export type * from "./dashboard-reader";
 
 export {
   type DefinitionSummary,
@@ -52,24 +106,7 @@ export { graphView, loopyView, runView, serverEvent } from "./derive";
 
 export * from "./graph";
 
-export { type Json, jsonSchema } from "./json";
-
 export { parseModuleOutput } from "./module-output";
-
-export {
-  type HookRecord,
-  hookRecordSchema,
-  type LogPosition,
-  type LogRecord,
-  logRecordSchema,
-  type RunOutcome,
-  type RunStatus,
-  runStatusSchema,
-  type Schedule,
-  type StepRecord,
-  scheduleSchema,
-  stepRecordSchema,
-} from "./records";
 
 export * from "./sandbox";
 
@@ -83,6 +120,7 @@ export {
   MAX_SOURCE_RANGES,
   type SourceArtifact,
   sourceArtifactSchema,
+  unavailableSource,
 } from "./source-artifact";
 
 export {

@@ -6,7 +6,7 @@ import {
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
 } from "@loopy/contract";
-import { struct } from "@loopy/contract/codec";
+import { struct } from "@loopy/core";
 import { Cause, Effect, Result, Schema } from "effect";
 import { DockerArtifacts } from "./artifacts";
 import { Attempts } from "./attempt";

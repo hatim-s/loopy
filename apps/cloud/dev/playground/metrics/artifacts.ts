@@ -1,6 +1,5 @@
 import { resolve } from "node:path";
-import { decodeBoundary, encodeBoundary } from "@loopy/contract";
-import { isoDateTime } from "@loopy/contract/codec";
+import { decodeBoundary, encodeBoundary, isoDateTime } from "@loopy/contract";
 import { Schema } from "effect";
 import { atomic } from "../files";
 import { groupSchema } from "../journal";

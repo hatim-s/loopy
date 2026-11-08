@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary, graphViewSchema, nodeRunViewSchema } from "@loopy/contract";
+import { decodeBoundary, graphViewSchema, nodeRunSchema } from "@loopy/contract";
 import { focusNodes, graphModel } from "../src/lib/graph";
 import { graphGroups, layoutGraph } from "../src/lib/graph-layout";
 import { predicateText } from "../src/lib/graph-text";
@@ -24,7 +24,7 @@ function record(
     receipt: "started",
   };
 
-  return decodeBoundary(nodeRunViewSchema)(
+  return decodeBoundary(nodeRunSchema)(
     status === "succeeded"
       ? { ...base, status, output: null, endedAt: AT }
       : status === "failed"
@@ -282,7 +282,7 @@ test("the first view frames the run where it is: inner work in flight, else fail
     graphModel(RELEASE, {
       status: "running",
       coverage: [{ scope: [], complete: true }],
-      nodeRuns: nodeRuns.map((entry) => decodeBoundary(nodeRunViewSchema)(entry)),
+      nodeRuns: nodeRuns.map((entry) => decodeBoundary(nodeRunSchema)(entry)),
     });
 
   const live = parse([scoped("15:map", "running"), scoped("16:publish/build", "running")]);

@@ -1,7 +1,5 @@
+import { hashSchema, nodeIdSchema, positiveInt, struct } from "@loopy/core";
 import { Schema } from "effect";
-import { struct } from "./codec";
-
-import { nodeIdSchema } from "./graph";
 
 export const MAX_SOURCE_BYTES = 256 * 1024;
 
@@ -9,7 +7,7 @@ export const MAX_SOURCE_FILES = 32;
 
 export const MAX_SOURCE_RANGES = 10_000;
 
-const revisionSchema = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
+const UNAVAILABLE_SOURCE_REASONS = ["not_captured", "too_large", "redacted"] as const;
 
 const fileIdSchema = Schema.String.check(Schema.isPattern(/^file-[0-9]+$/));
 
@@ -25,15 +23,15 @@ const sourceFileSchema = struct({
 const sourceRangeSchema = struct({
   nodeId: nodeIdSchema,
   fileId: fileIdSchema,
-  startLine: Schema.Int.check(Schema.isGreaterThan(0)),
-  endLine: Schema.Int.check(Schema.isGreaterThan(0)),
+  startLine: positiveInt,
+  endLine: positiveInt,
 });
 
 export const sourceArtifactSchema = Schema.Union([
   struct({
     version: Schema.Literal(1),
     status: Schema.Literal("available"),
-    revision: revisionSchema,
+    revision: hashSchema,
     files: Schema.Array(sourceFileSchema)
       .pipe(Schema.mutable)
       .check(Schema.isMinLength(1))
@@ -83,9 +81,16 @@ export const sourceArtifactSchema = Schema.Union([
   struct({
     version: Schema.Literal(1),
     status: Schema.Literal("unavailable"),
-    revision: revisionSchema,
-    reason: Schema.Literals(["not_captured", "too_large", "redacted"]),
+    revision: hashSchema,
+    reason: Schema.Literals(UNAVAILABLE_SOURCE_REASONS),
   }),
 ]);
 
 export type SourceArtifact = Schema.Schema.Type<typeof sourceArtifactSchema>;
+
+export function unavailableSource(
+  revision: string,
+  reason: (typeof UNAVAILABLE_SOURCE_REASONS)[number],
+): SourceArtifact {
+  return { version: 1, status: "unavailable", revision, reason };
+}

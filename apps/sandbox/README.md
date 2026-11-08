@@ -56,7 +56,7 @@ The local Worker bridge uses `POST /internal/sandbox-receipts`. DO composition r
 
 `GET /attempts?workspace=...&key=...&attempt=1` looks up a receipt. Set `key` to `JSON.stringify(executionKey)` and encode query parameters using `URLSearchParams`.
 
-Both routes return the shared `SandboxReceipt` union:
+Both routes return the shared `Receipt` union:
 
 ```ts
 { kind: "none" }
@@ -66,7 +66,7 @@ Both routes return the shared `SandboxReceipt` union:
 
 `none` occurs only on lookup. Duplicate POSTs return the existing receipt. Changed content for the same workspace, execution key and attempt returns HTTP 409, including after completion. Other errors have `{error:{code,message}}`, with 400 for invalid requests, 401 for authentication, 404 for unknown routes, 413 for oversized requests and 500 for storage failures.
 
-The exported Zod schemas and inferred types live in `loopy/contract`: `sandboxAttemptRequestSchema`, `sandboxAttemptIdentitySchema`, `sandboxExecutionSpecSchema`, `sandboxExecutionResultSchema`, `sandboxReceiptSchema`, `sandboxArtifactRequestSchema`, `sandboxArtifactSchema` and `sandboxErrorSchema`. These imports remain browser-safe.
+The exported Effect schemas and inferred types live in `loopy/contract`: `sandboxAttemptRequestSchema`, `sandboxAttemptIdentitySchema`, `executionSpecSchema`, `executionResultSchema`, `receiptSchema`, `sandboxArtifactRequestSchema`, `sandboxArtifactSchema` and `sandboxErrorSchema`. These imports remain browser-safe.
 
 ## Workspace artifact export
 

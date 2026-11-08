@@ -1,7 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { decodeBoundary } from "@loopy/contract";
-import { isoDateTime } from "@loopy/contract/codec";
+import { decodeBoundary, isoDateTime } from "@loopy/contract";
 import { errnoCode } from "@loopy/core";
 import { Schema } from "effect";
 import { sha256Hex } from "../shared/hash";

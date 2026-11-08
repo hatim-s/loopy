@@ -1,12 +1,12 @@
 import type { ExecutionKey, Graph, Json } from "@loopy/core";
-import { type Effect, type EngineState, initialState, step } from "@loopy/core/engine";
+import { type EngineEffect, type EngineState, initialState, step } from "@loopy/core/engine";
 
 export const at = "2026-10-20T00:00:00.000Z";
 
 export const start = (graph: Graph, input: Json = {}) =>
   step(graph, initialState("run", input), { kind: "run_started", at });
 
-export function dispatches(effects: Effect[]) {
+export function dispatches(effects: EngineEffect[]) {
   return effects.filter((effect) => effect.kind === "dispatch");
 }
 

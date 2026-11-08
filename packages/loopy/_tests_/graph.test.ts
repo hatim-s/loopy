@@ -1,4 +1,4 @@
-import { expect, expectTypeOf, test } from "bun:test";
+import { expect, test } from "bun:test";
 import * as contract from "@loopy/contract";
 import type * as core from "@loopy/core";
 import {
@@ -12,53 +12,6 @@ import {
 } from "@loopy/core";
 import { Schema } from "effect";
 import { approveDemoGraph } from "./fixtures/graphs";
-
-type Flatten<T> = T extends unknown ? { [K in keyof T]: T[K] } : never;
-
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-  ? true
-  : false;
-
-test("graph schemas exactly match the portable model", () => {
-  const graph: Equal<contract.Graph, core.Graph> = true;
-
-  const predicate: Equal<
-    Schema.Schema.Type<typeof contract.predicateSchema>,
-    core.Predicate
-  > = true;
-
-  const reverse: Equal<core.Predicate, Schema.Schema.Type<typeof contract.predicateSchema>> = true;
-  expect([graph, predicate, reverse]).toEqual([true, true, true]);
-  expectTypeOf<contract.Graph>().toEqualTypeOf<core.Graph>();
-  expectTypeOf<contract.Node>().toEqualTypeOf<Flatten<core.Node>>();
-  expectTypeOf<contract.Edge>().toEqualTypeOf<Flatten<core.Edge>>();
-  expectTypeOf<contract.Value>().toEqualTypeOf<core.Value>();
-  expectTypeOf<contract.Ref>().toEqualTypeOf<core.Ref>();
-  expectTypeOf<contract.OutSchema>().toEqualTypeOf<core.OutSchema>();
-  expectTypeOf<contract.Diagnostic>().toEqualTypeOf<core.Diagnostic>();
-  expectTypeOf<contract.ExecutionKey>().toEqualTypeOf<core.ExecutionKey>();
-  expectTypeOf<contract.NodeRun>().toEqualTypeOf<Flatten<core.NodeRun>>();
-  expectTypeOf<contract.NodeRunView>().toEqualTypeOf<Flatten<core.NodeRun>>();
-  expectTypeOf<contract.GraphView>().toEqualTypeOf<
-    Flatten<
-      Omit<core.Graph, "nodes" | "warnings"> & {
-        warnings: {
-          code: core.DiagnosticCode;
-          message: string;
-          nodeId: core.NodeId | null;
-          label: string | null;
-        }[];
-        nodes: Flatten<
-          | Exclude<Flatten<core.Node>, { kind: "code" | "command" }>
-          | (Omit<Extract<core.Node, { kind: "code" }>, "module"> & { module: { name: string } })
-          | (Omit<Extract<core.Node, { kind: "command" }>, "parse"> & {
-              parse: { input: Record<string, core.Value> } | null;
-            })
-        >[];
-      }
-    >
-  >();
-});
 
 test("approve-demo is the canonical JSON graph for the builder", () => {
   expect(contract.decodeBoundary(contract.graphSchema)(approveDemoGraph)).toEqual(approveDemoGraph);
@@ -443,64 +396,6 @@ test("graph wire views reject paths and hashes, including command parser hashes"
   ).toBe(false);
 });
 
-test("every node run status round-trips without optional state fields", () => {
-  const base = {
-    key: {
-      runId: "run",
-      nodeId: contract.decodeBoundary(contract.nodeIdSchema)("0:draft"),
-      scope: [],
-    },
-    attempt: 1,
-    maxAttempts: 3,
-    receipt: "none" as const,
-    startedAt: "2026-10-18T00:00:00.000Z",
-  };
-
-  const states = [
-    { status: "running" },
-    { status: "succeeded", output: null, endedAt: base.startedAt },
-    { status: "failed", error: { code: "execution", message: "failed" }, endedAt: base.startedAt },
-    {
-      status: "retrying",
-      error: { code: "execution", message: "failed" },
-      nextRetryAt: base.startedAt,
-      endedAt: base.startedAt,
-    },
-    { status: "waiting", wakeAt: null },
-    { status: "sleeping", wakeAt: base.startedAt },
-    { status: "cancelled", endedAt: base.startedAt },
-  ] as const;
-
-  for (const state of states) {
-    const record = { ...base, ...state };
-    expect(contract.decodeBoundary(contract.nodeRunSchema)(record)).toEqual(record);
-    expect(
-      contract.decodeBoundary(contract.serverEventSchema)({
-        entity: "node",
-        kind: state.status,
-        sequence: 1,
-        at: base.startedAt,
-        txn: "txn",
-        runId: "run",
-        record,
-      }).record,
-    ).toEqual(record);
-  }
-
-  expect(
-    Schema.decodeUnknownExit(contract.nodeRunSchema)(
-      { ...base, status: "waiting" },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
-  expect(
-    Schema.decodeUnknownExit(contract.nodeRunSchema)(
-      { ...base, status: "running", output: null },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
-});
-
 test("scope bindings cannot shadow node outputs, input, or one another", () => {
   const withoutIndex = mapGraph.nodes.map((node) =>
     node.kind === "format" ? { ...node, values: { value: node.values.value ?? "" } } : node,
@@ -628,7 +523,7 @@ test("format accepts scalar literals and declared scalar refs only", () => {
       ),
     };
 
-    expect(validateGraph(graph).map((error) => error.code)).toContain("predicate_type");
+    expect(validateGraph(graph).map((error) => error.code)).toContain("format_type");
   }
 
   for (const value of [null, [], {}]) {

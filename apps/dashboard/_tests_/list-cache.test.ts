@@ -38,7 +38,7 @@ function page(runs: RunView[]): RunPage {
 }
 
 function snapshot(run: RunView): RunSnapshotView {
-  return { run, nodeRuns: [], steps: [], logs: [], hooks: [], cursor: 10, epoch: "e1" };
+  return { run, nodeRuns: [], logs: [], hooks: [], cursor: 10, epoch: "e1" };
 }
 
 function event(record: RunView, sequence: number, kind: "claimed" | "heartbeat"): ServerEvent {

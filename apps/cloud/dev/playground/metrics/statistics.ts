@@ -1,4 +1,4 @@
-import { isoDateTime } from "@loopy/contract/codec";
+import { isoDateTime } from "@loopy/contract";
 import { Schema } from "effect";
 import { distribution } from "../../shared/stats";
 

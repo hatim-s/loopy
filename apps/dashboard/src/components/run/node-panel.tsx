@@ -1,4 +1,4 @@
-import type { NodeRunView, ScopeCountsView } from "@loopy/contract";
+import type { NodeRun, ScopeCountsView } from "@loopy/contract";
 import type { ReactNode } from "react";
 import type { GraphNodeModel } from "../../lib/graph";
 import { nodeFacts } from "../../lib/node-facts";
@@ -117,7 +117,7 @@ function Header({
   onClose,
 }: {
   node: GraphNodeModel;
-  status: NodeRunView["status"] | null;
+  status: NodeRun["status"] | null;
   onClose: () => void;
 }) {
   return (

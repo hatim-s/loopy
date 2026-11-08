@@ -1,7 +1,7 @@
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { diagnosticSchema, graphSchema } from "@loopy/contract";
+import { boundaryOptions, diagnosticSchema, graphSchema } from "@loopy/contract";
 import { errorMessage } from "@loopy/core";
 import { compilerLauncher, spawnCaptured } from "@loopy/runtime/local";
 import { Effect, Schema } from "effect";
@@ -9,9 +9,10 @@ import { AuthorError, CompilationError, compilerIO, EvaluationError } from "./er
 import { typescriptPaths } from "./source";
 import type { AuthorModule } from "./types";
 
-const reportedDiagnostic = Schema.decodeUnknownResult(Schema.fromJsonString(diagnosticSchema), {
-  onExcessProperty: "error",
-});
+const reportedDiagnostic = Schema.decodeUnknownResult(
+  Schema.fromJsonString(diagnosticSchema),
+  boundaryOptions,
+);
 
 export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule[]) {
   return yield* Effect.acquireUseRelease(
@@ -136,9 +137,10 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
         }
 
         // BOUNDARY: The isolated process returns untrusted author-produced graph JSON.
-        return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(graphSchema), {
-          onExcessProperty: "error",
-        })(captured.stdout).pipe(
+        return yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(graphSchema),
+          boundaryOptions,
+        )(captured.stdout).pipe(
           Effect.mapError(
             (cause) =>
               new AuthorError({ code: "evaluation_failed", file, message: errorMessage(cause) }),

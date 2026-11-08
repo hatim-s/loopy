@@ -1,4 +1,4 @@
-import type { Json } from "../model";
+import type { Json } from "../json";
 import { isRecord } from "../validation";
 import type { Ref, Value } from ".";
 

@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:f
 import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  decodeBoundary,
+  decodeJson,
   graphSchema,
   MAX_SOURCE_BYTES,
   type PutLoopyBody,
@@ -9,9 +11,10 @@ import {
   type SourceArtifact,
   savedLoopySchema,
   sourceArtifactSchema,
+  unavailableSource,
 } from "@loopy/contract";
 import { canonicalJson, isRecord, validateSlug } from "@loopy/core";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
 import { RegistryConflictError, RegistryError } from "../service";
 import { canonicalPath, errnoCode, withLockDirectory, writeFileAtomically } from "./fs";
 import { redactSourceArtifact } from "./source-view";
@@ -19,8 +22,8 @@ import { redactSourceArtifact } from "./source-view";
 function readEntry(file: string) {
   const value: unknown = JSON.parse(readFileSync(file, "utf8"));
 
-  if (isRecord(value) && "version" in value && value.version === 2) {
-    const entry = Schema.decodeUnknownSync(savedLoopySchema, { onExcessProperty: "error" })(value);
+  if (isRecord(value) && value.version === 3) {
+    const entry = decodeBoundary(savedLoopySchema)(value);
     validateSlug(entry.slug);
 
     return entry;
@@ -161,18 +164,12 @@ export class Registry {
         }
 
         const entry: SavedLoopy = {
-          version: 2,
+          version: 3,
           slug: graph.name,
-          scope: meta.scope,
           graph,
           revision,
           bundles: bundles.map(({ nodeId, bundleHash }) => ({ nodeId, bundleHash })),
           source: owner,
-          description: meta.description,
-          input: graph.input,
-          schedule: meta.schedule,
-          mode: meta.mode,
-          secrets: meta.secrets,
           savedAt: new Date().toISOString(),
         };
 
@@ -252,12 +249,7 @@ export class Registry {
       );
 
       if (info === null) {
-        return {
-          version: 1,
-          status: "unavailable",
-          revision,
-          reason: "not_captured",
-        } satisfies SourceArtifact;
+        return unavailableSource(revision, "not_captured");
       }
 
       if (info.size > MAX_SOURCE_BYTES * 2) {
@@ -272,9 +264,7 @@ export class Registry {
       const contents = yield* registryPromise("read source", () => readFile(file, "utf8"));
 
       const artifact = yield* registrySync("decode source", () =>
-        Schema.decodeUnknownSync(sourceArtifactSchema, { onExcessProperty: "error" })(
-          JSON.parse(contents),
-        ),
+        decodeJson(sourceArtifactSchema)(contents),
       );
 
       if (artifact.revision !== revision) {
@@ -298,9 +288,7 @@ export class Registry {
       const file = yield* registrySync("graph path", () => this.graphPath(revision));
       const contents = yield* registryPromise("read graph", () => readFile(file, "utf8"));
 
-      return yield* registrySync("decode graph", () =>
-        Schema.decodeUnknownSync(graphSchema, { onExcessProperty: "error" })(JSON.parse(contents)),
-      );
+      return yield* registrySync("decode graph", () => decodeJson(graphSchema)(contents));
     });
   }
 }

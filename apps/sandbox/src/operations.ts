@@ -3,7 +3,7 @@ import type {
   SandboxAttemptAuthority as WireAuthority,
   ImmutableResults as WireResults,
 } from "@loopy/contract";
-import type { CommandExecutionError } from "@loopy/core";
+import type { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Data, Effect } from "effect";
 import type { ExportCleanupError, SandboxRequestError } from "./request-error";
 

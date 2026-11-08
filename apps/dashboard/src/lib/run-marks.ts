@@ -1,4 +1,4 @@
-import type { GraphView, NodeRunView, ScopeCountsView } from "@loopy/contract";
+import type { GraphView, NodeRun, ScopeCountsView } from "@loopy/contract";
 import { elapsed } from "./format";
 import type { GraphModel, GraphNode, GraphNodeModel } from "./graph";
 import { isSettled, type Status } from "./status";
@@ -77,7 +77,7 @@ function note(node: GraphNodeModel, now: number): string | null {
     : elapsed(now - Date.parse(only.startedAt));
 }
 
-function firstError(executions: NodeRunView[]): string | null {
+function firstError(executions: NodeRun[]): string | null {
   const failed = executions.find(
     (execution) => execution.status === "failed" || execution.status === "retrying",
   );

@@ -61,31 +61,14 @@ export function makeRunViews(options: ServiceOptions) {
     const now = timestamp();
     const hooks = yield* options.store.pendingHooks(ids, now);
 
-    return (run: RunRecord): RunView => {
-      const view = runView({
+    return (run: RunRecord): RunView =>
+      runView({
         run,
         loopy: { slug: run.slug, description: descriptions.get(run) ?? null },
-        steps: [],
-        hooks: [],
+        hook: hooks.get(run.id),
         now,
         leaseMs: options.store.leaseMs,
       });
-
-      const hook = hooks.get(run.id);
-
-      return hook
-        ? {
-            ...view,
-            waitingOn: {
-              hook: hook.name,
-              token: hook.token,
-              seq: hook.seq,
-              expiresAt: hook.expiresAt,
-              since: hook.createdAt,
-            },
-          }
-        : view;
-    };
   });
 
   const listRuns = Effect.fn("run-views.listRuns")(function* (

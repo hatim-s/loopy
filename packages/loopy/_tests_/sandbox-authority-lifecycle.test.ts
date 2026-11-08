@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SandboxExecutionResult } from "@loopy/contract";
+import type { ExecutionResult } from "@loopy/contract";
 import { Effect } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
@@ -60,7 +60,7 @@ class FaultAuthority extends FilesystemAuthority {
 test("lost admission acknowledgement and unavailable resolving reads retain one same-session start gate", async () => {
   const { config, request, resultsFor } = await fixture();
   const authority = new FaultAuthority(config.stateRoot);
-  const complete = Promise.withResolvers<SandboxExecutionResult>();
+  const complete = Promise.withResolvers<ExecutionResult>();
   let starts = 0;
   let recoveries = 0;
 

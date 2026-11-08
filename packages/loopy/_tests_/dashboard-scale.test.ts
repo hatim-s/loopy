@@ -5,8 +5,8 @@ import { join } from "node:path";
 import {
   decodeBoundary,
   executionKeyString,
+  MAX_PREVIEW_BYTES,
   PAGE_LIMIT,
-  PREVIEW_BYTES,
   routes,
 } from "@loopy/contract";
 import { Effect } from "effect";
@@ -230,7 +230,7 @@ export async function benchmarkDashboardQueries() {
     limits: {
       page: PAGE_LIMIT,
       feedCandidates: 2000,
-      nodeOutputPreviewBytes: PREVIEW_BYTES,
+      nodeOutputPreviewBytes: MAX_PREVIEW_BYTES,
       overviewBuckets: 744,
     },
     note: "Local synthetic read measurements only. Ingest uses store writes without activation, executors, or provider calls. Both datasets contain terminal runs.",

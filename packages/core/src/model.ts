@@ -1,6 +1,7 @@
-import type { NodeRun } from "./graph";
-
-export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+import { Schema } from "effect";
+import { counter, struct } from "./codec";
+import type { NodeRun } from "./graph/node-run";
+import { jsonSchema } from "./json";
 
 export const EXECUTION_MODES = ["sandbox", "full"] as const;
 
@@ -22,110 +23,107 @@ export const RUN_STATUSES = [
   "cancelled",
 ] as const;
 
-export type RunStatus = (typeof RUN_STATUSES)[number];
+export const runStatusSchema = Schema.Literals(RUN_STATUSES);
 
-export const STEP_KINDS = ["command", "function", "sleep", "hook", "clock", "random"] as const;
+export type RunStatus = Schema.Schema.Type<typeof runStatusSchema>;
 
-export type StepKind = (typeof STEP_KINDS)[number];
+export function emptyRunCounts(): Record<RunStatus, number> {
+  return { queued: 0, running: 0, suspended: 0, succeeded: 0, failed: 0, cancelled: 0 };
+}
+
+export const runOutcomeSchema = Schema.Union([
+  struct({ status: Schema.Literal("succeeded"), output: jsonSchema }),
+  struct({ status: Schema.Literal("failed"), error: Schema.String }),
+  struct({ status: Schema.Literal("cancelled") }),
+]);
+
+export type RunOutcome = Schema.Schema.Type<typeof runOutcomeSchema>;
+
+export const runRecordSchema = struct({
+  id: Schema.String,
+  slug: Schema.String,
+  revision: Schema.String,
+  workspace: Schema.String,
+  input: jsonSchema,
+  status: runStatusSchema,
+  output: Schema.optional(jsonSchema),
+  error: Schema.optional(Schema.String),
+  wakeAt: Schema.optional(Schema.String),
+  nextRetryAt: Schema.optional(Schema.String),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  owner: Schema.optional(
+    struct({
+      token: Schema.String,
+      pid: Schema.NullOr(Schema.Int),
+      host: Schema.String,
+      heartbeatAt: Schema.String,
+    }),
+  ),
+  truncatedFields: Schema.optional(
+    struct({ input: Schema.optional(counter), output: Schema.optional(counter) }),
+  ),
+});
+
+export type RunRecord = Schema.Schema.Type<typeof runRecordSchema>;
 
 export const LOG_LEVELS = ["info", "warn", "error"] as const;
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
-type RunOwner = { token: string; pid: number | null; host: string; heartbeatAt: string };
+export const logPositionSchema = struct({
+  kind: Schema.Literal("node"),
+  executionKey: Schema.String,
+  attempt: counter,
+  index: counter,
+});
 
-export type RunOutcome =
-  | { status: "succeeded"; output: Json }
-  | { status: "failed"; error: string }
-  | { status: "cancelled" };
+export type LogPosition = Schema.Schema.Type<typeof logPositionSchema>;
 
-export type RunRecord = {
-  id: string;
-  slug: string;
-  revision: string;
-  workspace: string;
-  input: Json;
-  status: RunStatus;
-  output?: Json;
-  error?: string;
-  wakeAt?: string;
-  nextRetryAt?: string;
-  createdAt: string;
-  updatedAt: string;
-  owner?: RunOwner;
-  truncatedFields?: { input?: number; output?: number };
-};
+export const logRecordSchema = struct({
+  runId: Schema.String,
+  seq: counter,
+  position: logPositionSchema,
+  level: Schema.Literals(LOG_LEVELS),
+  message: Schema.String,
+  data: Schema.optional(jsonSchema),
+  at: Schema.String,
+});
 
-export type StepBase = {
-  runId: string;
-  seq: number;
-  key: string;
-  kind: StepKind;
-  input: Json;
-  attempt: number;
-  maxAttempts: number;
-  startedAt: string;
-};
+export type LogRecord = Schema.Schema.Type<typeof logRecordSchema>;
 
-export type StepRecord = StepBase &
-  (
-    | { status: "running" }
-    | { status: "succeeded"; output: Json; endedAt: string; finishOrder: number }
-    | { status: "failed"; error: string; endedAt: string; finishOrder: number }
-    | { status: "retrying"; error: string; nextRetryAt: string; endedAt: string }
-    | { status: "sleeping"; wakeAt: string }
-    | { status: "waiting"; wakeAt?: string }
-  );
+export const hookRecordSchema = struct({
+  token: Schema.String,
+  runId: Schema.String,
+  seq: counter,
+  name: Schema.String,
+  createdAt: Schema.String,
+  payload: Schema.optional(jsonSchema),
+  resolvedAt: Schema.optional(Schema.String),
+  expiredAt: Schema.optional(Schema.String),
+});
 
-export type WaitingHookStep = Omit<StepBase, "input" | "kind"> & {
-  kind: "hook";
-  status: "waiting";
-  input: { name: string; token: string };
-  wakeAt?: string;
-};
+export type HookRecord = Schema.Schema.Type<typeof hookRecordSchema>;
 
-export type HookRecord = {
-  token: string;
-  runId: string;
-  seq: number;
-  name: string;
-  createdAt: string;
-  payload?: Json;
-  resolvedAt?: string;
-  expiredAt?: string;
-};
+export type PendingHook = HookRecord & { expiresAt: string | null };
 
-export type LogPosition =
-  | { kind: "node"; executionKey: string; attempt: number; index: number }
-  | { kind: "workflow"; afterStep: number; afterFinish: number; index: number }
-  | { kind: "step"; seq: number; attempt: number; index: number };
+export const scheduleSchema = struct({
+  version: Schema.Int,
+  workspace: Schema.String,
+  slug: Schema.String,
+  cron: Schema.String,
+  tz: Schema.String,
+  input: jsonSchema,
+  enabled: Schema.Boolean,
+  lastFireKey: Schema.optional(Schema.String),
+  nextFireAt: Schema.String,
+});
 
-export type LogRecord = {
-  runId: string;
-  seq: number;
-  position: LogPosition;
-  level: LogLevel;
-  message: string;
-  data?: Json;
-  at: string;
-};
-
-export type Schedule = {
-  version: number;
-  workspace: string;
-  slug: string;
-  cron: string;
-  tz: string;
-  input: Json;
-  enabled: boolean;
-  lastFireKey?: string;
-  nextFireAt: string;
-};
+export type Schedule = Schema.Schema.Type<typeof scheduleSchema>;
 
 export type RunSnapshot = {
   run: RunRecord;
   nodeRuns: NodeRun[];
-  steps: StepRecord[];
   logs: LogRecord[];
   hooks: HookRecord[];
   cursor: number;
@@ -152,15 +150,6 @@ export const RUN_EVENT_KINDS = [
   "finished",
 ] as const;
 
-export const STEP_STATUSES = [
-  "running",
-  "succeeded",
-  "failed",
-  "retrying",
-  "sleeping",
-  "waiting",
-] as const;
-
 export const HOOK_EVENT_KINDS = ["created", "resolved", "expired"] as const;
 
 export const SCHEDULE_EVENT_KINDS = ["saved", "fired"] as const;
@@ -178,11 +167,18 @@ type Event<E extends string, K extends string, R> = {
 export type RuntimeEvent =
   | Event<"run", (typeof RUN_EVENT_KINDS)[number], RunRecord>
   | Event<"node", NodeRun["status"], NodeRun>
-  | Event<"step", StepRecord["status"], StepRecord>
   | Event<"log", "written", LogRecord>
   | Event<"hook", (typeof HOOK_EVENT_KINDS)[number], HookRecord>
   | Event<"schedule", (typeof SCHEDULE_EVENT_KINDS)[number], Schedule>
   | Event<"schedule", "deleted", { workspace: string; slug: string }>;
+
+export const RUNTIME_EVENT_ENTITIES = [
+  "run",
+  "node",
+  "log",
+  "hook",
+  "schedule",
+] as const satisfies readonly RuntimeEvent["entity"][];
 
 export type RuntimeEventChange<T = RuntimeEvent> = T extends RuntimeEvent
   ? Omit<T, "sequence" | "at" | "txn">

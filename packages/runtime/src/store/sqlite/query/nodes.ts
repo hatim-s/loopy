@@ -1,12 +1,11 @@
 import {
   executionKeySchema,
   type NodePageQuery,
-  PREVIEW_BYTES,
   type ScopeCountsView,
   type ScopeItemsPage,
   type ScopeItemsQuery,
 } from "@loopy/contract";
-import { type NodeRunStatus, PAGE_LIMIT } from "@loopy/core";
+import { MAX_PREVIEW_BYTES, type NodeRunStatus, PAGE_LIMIT } from "@loopy/core";
 import { storedDecoder } from "../../row-codec";
 import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";
@@ -39,7 +38,7 @@ export function readNodePage(ctx: SqlContext, runId: string, query: NodePageQuer
 
   const rows = ctx.db
     .query<{ record: string; bytes: number; execution_key: string }, SqlValue[]>(
-      `SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>${PREVIEW_BYTES} THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE ${clauses.join(" AND ")} ORDER BY execution_key LIMIT ?`,
+      `SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>${MAX_PREVIEW_BYTES} THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE ${clauses.join(" AND ")} ORDER BY execution_key LIMIT ?`,
     )
     .all(...values, query.limit + 1);
 
@@ -47,7 +46,7 @@ export function readNodePage(ctx: SqlContext, runId: string, query: NodePageQuer
   const truncatedOutputs: Record<string, number> = {};
 
   for (const row of selected) {
-    if (row.bytes > PREVIEW_BYTES) {
+    if (row.bytes > MAX_PREVIEW_BYTES) {
       truncatedOutputs[row.execution_key] = row.bytes;
     }
   }
@@ -158,7 +157,6 @@ export function readDashboardSnapshot(ctx: SqlContext, id: string) {
     nodeRunsNext: nodes.next,
     truncatedOutputs: nodes.truncatedOutputs,
     scopes: readScopeCounts(ctx, id, "[]"),
-    steps: [],
     logs: [],
     hooks: hooks.slice(0, PAGE_LIMIT),
     hooksTruncated: hooks.length > PAGE_LIMIT,
@@ -178,7 +176,7 @@ export function readExecution(ctx: SqlContext, runId: string, key: string, after
       { record: string; attempt: number; bytes: number | null },
       [string, string, number, number]
     >(
-      `SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>${PREVIEW_BYTES} THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT ?`,
+      `SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>${MAX_PREVIEW_BYTES} THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT ?`,
     )
     .all(runId, key, after, PAGE_LIMIT + 1);
 
@@ -187,7 +185,7 @@ export function readExecution(ctx: SqlContext, runId: string, key: string, after
   const truncatedAttempts: Record<string, number> = {};
 
   for (const row of selected) {
-    if (row.bytes !== null && row.bytes > PREVIEW_BYTES) {
+    if (row.bytes !== null && row.bytes > MAX_PREVIEW_BYTES) {
       truncatedAttempts[String(row.attempt)] = row.bytes;
     }
   }

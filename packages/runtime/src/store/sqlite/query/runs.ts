@@ -1,13 +1,11 @@
 import {
   decodeRunCursor,
   type OverviewQuery,
-  type PendingHook,
-  PREVIEW_BYTES,
   type RunDefinitionCount,
   type RunPageQuery,
   type StatusCounts,
 } from "@loopy/contract";
-import type { RunRecord } from "@loopy/core";
+import { MAX_PREVIEW_BYTES, type PendingHook, type RunRecord } from "@loopy/core";
 import { Schema } from "effect";
 import { overviewBuckets } from "../../query-utils";
 import { storedDecoder } from "../../row-codec";
@@ -52,8 +50,8 @@ function runWhere(filter: RunFilter) {
 }
 
 export const RUN_PREVIEW_COLUMNS = `r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,
- CASE WHEN length(CAST(r.input_json AS BLOB))>${PREVIEW_BYTES} THEN 'null' ELSE r.input_json END AS input_json,
- CASE WHEN length(CAST(r.output_json AS BLOB))>${PREVIEW_BYTES} THEN 'null' ELSE r.output_json END AS output_json,
+ CASE WHEN length(CAST(r.input_json AS BLOB))>${MAX_PREVIEW_BYTES} THEN 'null' ELSE r.input_json END AS input_json,
+ CASE WHEN length(CAST(r.output_json AS BLOB))>${MAX_PREVIEW_BYTES} THEN 'null' ELSE r.output_json END AS output_json,
  length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes`;
 
 export type PreviewRunRow = RunRow & { input_bytes: number; output_bytes: number | null };
@@ -63,11 +61,11 @@ export function previewRun(row: PreviewRunRow) {
 
   const truncatedFields: NonNullable<RunRecord["truncatedFields"]> = {};
 
-  if (row.input_bytes > PREVIEW_BYTES) {
+  if (row.input_bytes > MAX_PREVIEW_BYTES) {
     truncatedFields.input = row.input_bytes;
   }
 
-  if (row.output_bytes !== null && row.output_bytes > PREVIEW_BYTES) {
+  if (row.output_bytes !== null && row.output_bytes > MAX_PREVIEW_BYTES) {
     truncatedFields.output = row.output_bytes;
   }
 

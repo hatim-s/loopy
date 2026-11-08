@@ -2,9 +2,9 @@ import {
   type AttemptRecord,
   decodeBoundary,
   dockerAttemptPlanSchema,
-  sandboxExecutionResultSchema,
+  executionResultSchema,
 } from "@loopy/contract";
-import { struct } from "@loopy/contract/codec";
+import { struct } from "@loopy/core";
 import { Schema } from "effect";
 
 // Retained datasets still hold flat receipts with inline results. The README lists the exit condition.
@@ -13,7 +13,7 @@ const legacyReceiptSchema = Schema.Union([
   struct({
     ...dockerAttemptPlanSchema.fields,
     kind: Schema.Literal("finished"),
-    result: sandboxExecutionResultSchema,
+    result: executionResultSchema,
   }),
 ]);
 

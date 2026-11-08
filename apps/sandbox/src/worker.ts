@@ -2,13 +2,13 @@ import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   decodeBoundary,
+  type ExecutionSpec,
+  executionSpecSchema,
   SANDBOX_MAX_CAPTURE_BYTES,
-  type SandboxExecutionSpec,
-  sandboxExecutionSpecSchema,
 } from "@loopy/contract";
-import { CommandExecutionError, durationMs, type Json } from "@loopy/core";
+import { durationMs, type Json } from "@loopy/core";
 import { bundleResult } from "@loopy/runtime/executor/protocol";
-import { renderCommand } from "@loopy/runtime/local/execution-host";
+import { CommandExecutionError, renderCommand } from "@loopy/runtime/local/execution-host";
 import { Effect } from "effect";
 import { bundleFile, CONTAINER, containerEnvironment } from "./container-layout";
 import { io } from "./operations";
@@ -35,7 +35,7 @@ function bundle(hash: string, input: Json, timeoutMs: number) {
   });
 }
 
-function command(spec: Extract<SandboxExecutionSpec, { kind: "command" }>) {
+function command(spec: Extract<ExecutionSpec, { kind: "command" }>) {
   return Effect.gen(function* () {
     const cwd = yield* io("worker cwd", () =>
       realpath(resolve(CONTAINER.workspace, spec.cwd ?? ".")),
@@ -86,7 +86,7 @@ function command(spec: Extract<SandboxExecutionSpec, { kind: "command" }>) {
   });
 }
 
-function executeSpec(spec: SandboxExecutionSpec) {
+function executeSpec(spec: ExecutionSpec) {
   return (
     spec.kind === "code" ? bundle(spec.bundleHash, spec.input, spec.timeoutMs) : command(spec)
   ).pipe(
@@ -105,7 +105,7 @@ function executeSpec(spec: SandboxExecutionSpec) {
 }
 
 if (import.meta.main) {
-  const spec = decodeBoundary(sandboxExecutionSpecSchema)(
+  const spec = decodeBoundary(executionSpecSchema)(
     await Bun.file(`${CONTAINER.input}/${CONTAINER.request}`).json(),
   );
 

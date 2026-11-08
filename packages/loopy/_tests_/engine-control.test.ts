@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { validateGraph } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
 import {
   and,
@@ -170,6 +171,37 @@ test("map bounds concurrency, fences scoped retries and collects failures in inp
   });
 });
 
+test("a map continues to its next node whatever order its edges are listed in", () => {
+  const built = loopy("map-then", {
+    input: { items: "string[]" },
+    run: ({ input }) => {
+      const items = map(input.get("items"), (item) => format("item {item}", { item }), {
+        concurrency: 2,
+        onError: "fail",
+      });
+
+      return parallel({ items: () => items, time: now });
+    },
+  }).graph;
+
+  const owner = built.nodes.find((node) => node.kind === "map")?.id;
+
+  const backEdge = (edge: (typeof built.edges)[number]) =>
+    edge.kind === "join" && edge.to === owner;
+
+  const graph = {
+    ...built,
+    edges: [...built.edges.filter(backEdge), ...built.edges.filter((edge) => !backEdge(edge))],
+  };
+
+  expect(graph.edges.some(backEdge)).toBe(true);
+  expect(validateGraph(graph)).toEqual([]);
+  expect(start(graph, { items: ["a", "b"] }).state.phase).toMatchObject({
+    kind: "finished",
+    outcome: { status: "succeeded", output: { items: ["item a", "item b"], time: at } },
+  });
+});
+
 test("parallel joins out of order completions without dispatching running siblings twice", () => {
   const graph = loopy("parallel", {
     input: {},
@@ -303,7 +335,10 @@ test("entropy is supplied by host and persisted values survive rehydration", () 
     result = step(graph, result.state, {
       kind: "value_sampled",
       executionKey: sample.executionKey,
-      value: sample.valueKind === "uuid" ? "12345678-1234-4123-8123-123456789abc" : 0.25,
+      sample:
+        sample.valueKind === "uuid"
+          ? { valueKind: "uuid", value: "12345678-1234-4123-8123-123456789abc" }
+          : { valueKind: "random", value: 0.25 },
       at: "2026-10-20T00:00:10.000Z",
     });
   }

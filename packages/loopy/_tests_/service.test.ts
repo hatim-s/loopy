@@ -536,10 +536,9 @@ test("putLoopy preserves every author option from graph meta", async () => {
   await Effect.runPromise(
     service.putLoopy("metadata", await compiledBody("metadata", join(root, "metadata.ts"), meta)),
   );
-  expect(await Effect.runPromise(registry.get("metadata"))).toMatchObject({
-    ...meta,
-    graph: { meta },
-  });
+  const saved = await Effect.runPromise(registry.get("metadata"));
+  expect(saved).toMatchObject({ version: 3, graph: { meta } });
+  expect(saved).not.toHaveProperty("description");
 });
 
 test("service maps completion between requireRun and claim to not_claimable", async () => {

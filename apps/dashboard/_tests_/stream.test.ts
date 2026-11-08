@@ -2,8 +2,8 @@ import { expect, jest, test } from "bun:test";
 import {
   decodeBoundary,
   executionKeyString,
-  type NodeRunView,
-  nodeRunViewSchema,
+  type NodeRun,
+  nodeRunSchema,
   type RunSnapshotView,
   type RunView,
   type Schedule,
@@ -58,7 +58,6 @@ function snapshot(overrides: Partial<RunSnapshotView> = {}): RunSnapshotView {
   return {
     run,
     nodeRuns: [],
-    steps: [],
     logs: [],
     hooks: [],
     cursor: 10,
@@ -83,7 +82,7 @@ function logEvent(sequence: number, seq: number) {
     record: {
       runId: "run-1",
       seq,
-      position: { kind: "workflow", afterStep: 0, afterFinish: 0, index: seq },
+      position: { kind: "node", executionKey: "run-1/node", attempt: 1, index: seq },
       level: "info",
       message: `log ${seq}`,
       at: AT,
@@ -125,7 +124,7 @@ test("a list keeps a run that is newer than the event", () => {
 });
 
 function nodeEvent(sequence: number, index: number, attempt: number, status: string) {
-  const record: NodeRunView = decodeBoundary(nodeRunViewSchema)({
+  const record: NodeRun = decodeBoundary(nodeRunSchema)({
     key: { runId: run.id, nodeId: `1:classify-${index}`, scope: [] },
     attempt,
     maxAttempts: 3,
@@ -780,7 +779,7 @@ test("stream overflow keeps the execution keyset boundary and preview metadata b
   const keysWritten: string[] = [];
 
   for (let index = 0; index < 201; index++) {
-    const record = decodeBoundary(nodeRunViewSchema)({
+    const record = decodeBoundary(nodeRunSchema)({
       key: { runId: run.id, nodeId: `${index}:work`, scope: [] },
       attempt: 1,
       maxAttempts: 1,
@@ -852,7 +851,7 @@ test("scoped node bursts invalidate aggregates and refetch active queries once",
 
     const scoped: ServerEvent = {
       ...root,
-      record: decodeBoundary(nodeRunViewSchema)({
+      record: decodeBoundary(nodeRunSchema)({
         ...root.record,
         key: { ...root.record.key, scope: [{ nodeId: "0:map", index: 0 }] },
       }),

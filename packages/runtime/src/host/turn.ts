@@ -8,12 +8,7 @@ import {
   type Store,
   type StoreEffect,
 } from "@loopy/core";
-import {
-  type Effect as EngineEffect,
-  type EngineEvent,
-  initialState,
-  step,
-} from "@loopy/core/engine";
+import { type EngineEffect, type EngineEvent, initialState, step } from "@loopy/core/engine";
 import { Effect } from "effect";
 
 export type Dispatch = Extract<EngineEffect, { kind: "dispatch" }>;
@@ -82,7 +77,10 @@ export function sampleEvent(work: Extract<HostWork, { kind: "sample" }>, at: str
   return {
     kind: "value_sampled",
     executionKey: work.executionKey,
-    value: work.valueKind === "uuid" ? crypto.randomUUID() : Math.random(),
+    sample:
+      work.valueKind === "uuid"
+        ? { valueKind: "uuid", value: crypto.randomUUID() }
+        : { valueKind: "random", value: Math.random() },
     at,
   };
 }

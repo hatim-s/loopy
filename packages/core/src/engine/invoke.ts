@@ -1,4 +1,8 @@
-import { durationMs, isBoolean, isNumber, isString, type Node, type NodeRun } from "..";
+import { durationMs } from "../duration";
+import type { NodeRun } from "../graph/node-run";
+import type { Node } from "../graph/nodes";
+import { isBoolean, isNumber, isString } from "../validation";
+import type { ControlNode } from "./control";
 import { captureInput } from "./input";
 import { write } from "./node-run";
 import { type ResolutionContext, resolve } from "./resolve";
@@ -130,7 +134,7 @@ function formatted(
 
 export function invoke(
   traversal: Traversal,
-  node: Node,
+  node: Exclude<Node, ControlNode>,
   options: { previous: NodeRun | undefined; context: ResolutionContext },
 ): TraversalResult {
   const { previous, context } = options;
@@ -190,7 +194,5 @@ export function invoke(
             ? null
             : resolve(node.result.value, transition.state, context),
       };
-    default:
-      throw new Error(`Control '${node.kind}' reached the value executor.`);
   }
 }

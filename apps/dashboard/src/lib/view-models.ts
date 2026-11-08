@@ -3,7 +3,7 @@ import type {
   LogRecord,
   LogSummaryView,
   LoopyView,
-  NodeRunView,
+  NodeRun,
   RunStatus,
   RunView,
   ScopeItemsPage,
@@ -46,18 +46,18 @@ export type RunListFilters = {
   period?: Period;
 };
 
-export type ScopeTuple = NodeRunView["key"]["scope"];
+export type ScopeTuple = NodeRun["key"]["scope"];
 
 export type ScopeItemRow = ScopeItemsPage["items"][number];
 
 export type ScopeItemQuery = {
   nodeId: string;
   parentScope: ScopeTuple;
-  status?: NodeRunView["status"];
+  status?: NodeRun["status"];
 };
 
 export type ExecutionRow = {
-  execution: NodeRunView;
+  execution: NodeRun;
   truncatedOutputBytes: number | null;
 };
 

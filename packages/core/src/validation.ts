@@ -1,8 +1,3 @@
-/**
- * Guards for data that arrives from outside the type system: JSON files, HTTP
- * bodies, queue messages and `unknown` module exports. Each guard names the
- * location it is checking so an error tells the reader where the bad value is.
- */
 // BOUNDARY: JSON files, HTTP bodies and imported module fields remain untrusted until their domain validators check each field.
 type UnknownRecord = Record<string, unknown>;
 
@@ -32,15 +27,6 @@ export function requireString(value: unknown, location: string): string {
   return value;
 }
 
-// BOUNDARY: External JSON and module fields must be nonempty strings before their callers consume them.
-export function requireNonEmptyString(value: unknown, location: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${location} is required.`);
-  }
-
-  return value;
-}
-
 // BOUNDARY: External workflow fields must be positive safe integers before execution limits are applied.
 export function requirePositiveInteger(value: unknown, location: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
@@ -61,19 +47,6 @@ export function requireOneOf<const Choices extends readonly string[]>(
   }
 
   return value;
-}
-
-/** Rejects keys the schema does not know, so a typo never silently disappears. */
-export function allowKeys(
-  value: UnknownRecord,
-  location: string,
-  allowed: readonly string[],
-): void {
-  for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) {
-      throw new Error(`${location} has an unsupported field '${key}'.`);
-    }
-  }
 }
 
 /**

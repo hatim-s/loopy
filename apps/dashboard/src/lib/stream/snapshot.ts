@@ -1,7 +1,7 @@
 import {
   executionKeyString,
   type Json,
-  type NodeRunView,
+  type NodeRun,
   type RunSnapshotView,
   type RunView,
   type ServerEvent,
@@ -61,7 +61,7 @@ export function waitingAfter(run: RunView, event: HookEvent): RunView["waitingOn
   return { hook: hook.name, token: hook.token, seq: hook.seq, since: hook.createdAt, expiresAt };
 }
 
-function withNodeRun(runs: NodeRunView[], record: NodeRunView): NodeRunView[] {
+function withNodeRun(runs: NodeRun[], record: NodeRun): NodeRun[] {
   const key = executionKeyString(record.key);
 
   return runs.some((run) => executionKeyString(run.key) === key)

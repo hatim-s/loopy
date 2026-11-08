@@ -1,13 +1,13 @@
 import { resolve } from "node:path";
 import {
   decodeBoundary,
+  executionSpecSchema,
   type RunSnapshotView,
+  receiptSchema,
   routes,
   type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
-  sandboxExecutionSpecSchema,
-  sandboxReceiptSchema,
 } from "@loopy/contract";
 import { assert, JourneyFailure } from "../shared/assert";
 import { ApiClient, EvidenceLog } from "../shared/fixture-client";
@@ -107,7 +107,7 @@ export class FailureJourney {
       "effect_not_observed",
     );
 
-    const spec = decodeBoundary(sandboxExecutionSpecSchema)(
+    const spec = decodeBoundary(executionSpecSchema)(
       JSON.parse(
         await docker([
           "exec",
@@ -164,7 +164,7 @@ export class FailureJourney {
   }
 
   async duplicate(request: SandboxAttemptRequest, kind: "started" | "finished") {
-    const admit = () => this.provider.json(sandboxReceiptSchema, "/attempts", { body: request });
+    const admit = () => this.provider.json(receiptSchema, "/attempts", { body: request });
     const responses = await Promise.all([admit(), admit()]);
 
     assert(

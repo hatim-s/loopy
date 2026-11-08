@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   decodeBoundary,
+  type ExecutionResult,
   nodeIdSchema,
-  type SandboxExecutionResult,
   sandboxAttemptRequestSchema,
 } from "@loopy/contract";
 import { Effect } from "effect";
@@ -17,13 +17,13 @@ import { FilesystemResults } from "../../../../apps/sandbox/src/filesystem/resul
 import { validateStateRoot } from "../../../../apps/sandbox/src/state-root";
 import type { DockerAttemptPlan } from "../../../contract/src/sandbox-journal";
 
-export const successful: SandboxExecutionResult = {
+export const successful: ExecutionResult = {
   kind: "succeeded",
   output: { ok: true },
   logs: [],
 };
 
-export const uncertain: SandboxExecutionResult = {
+export const uncertain: ExecutionResult = {
   kind: "failed",
   error: { code: "uncertain", message: "No worker" },
   exitCode: null,

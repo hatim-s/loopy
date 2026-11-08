@@ -1,14 +1,13 @@
 import {
-  acquireWindow,
   isTerminalRun,
   OwnershipError,
-  type RateLimitWindow,
   type RunOutcome,
   type RunRecord,
   type RuntimeEvent,
   type WakeError,
 } from "@loopy/core";
 import { StoreRejectedError } from "../operation";
+import { acquireWindow, type RateLimitWindow } from "../rate-limit-window";
 import { normalizeRun, utc } from "../timestamps";
 import type { SqlContext, SqlWrite } from "./context";
 import { emit } from "./events";

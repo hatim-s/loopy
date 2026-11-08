@@ -1,114 +1,46 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary } from "@loopy/contract";
-import { Effect } from "effect";
+import { FIELD_TYPES, type FieldType, type Json, parseFieldText, recordFields } from "@loopy/core";
 
-test("dashboard json field coercion parses values and reports invalid JSON", async () => {
-  const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
+const samples: [FieldType, Json][] = [
+  ["string", "hello"],
+  ["number", 2],
+  ["boolean", true],
+  ["json", { nested: [null, true] }],
+  ["string[]", ["a", "b"]],
+  ["number[]", [1, 2]],
+  ["boolean[]", [true, false]],
+  ["json[]", [null, 1, "a", { nested: [] }]],
+];
 
-  const fields = inputFields({ data: "json", "extra?": "json" });
-  expect(coerceInput(fields, { data: '{"nested":[true,null,2]}' })).toEqual({
-    valid: true,
-    value: { data: { nested: [true, null, 2] } },
-  });
-  expect(coerceInput(fields, { data: "null" })).toEqual({ valid: true, value: { data: null } });
-  expect(coerceInput(fields, { data: "bad" })).toEqual({
-    valid: false,
-    issues: [{ key: "data", message: "Enter valid JSON." }],
-  });
-});
+test("field text parses to the value of every field type", () => {
+  expect(samples.map(([kind]) => kind)).toEqual([...FIELD_TYPES]);
 
-const allFields = {
-  text: "string",
-  count: "number",
-  enabled: "boolean",
-  data: "json",
-  texts: "string[]",
-  counts: "number[]",
-  flags: "boolean[]",
-  values: "json[]",
-} as const;
+  for (const [kind, value] of samples) {
+    const text = kind === "string" ? String(value) : JSON.stringify(value);
 
-const allValues = {
-  text: "hello",
-  count: 2,
-  enabled: true,
-  data: { nested: [null, true] },
-  texts: ["a", "b"],
-  counts: [1, 2],
-  flags: [true, false],
-  values: [null, 1, "a", { nested: [] }],
-};
-
-test("RecordSpec round-trips every field type through contracts and input boundaries", async () => {
-  const { FIELD_TYPES } = await import("@loopy/core");
-  const { graphSchema, outputSchema } = await import("@loopy/contract");
-  const { graphInput } = await import("../../cli/src/input");
-  const { approveDemoGraph } = await import("./fixtures/graphs");
-
-  const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
-
-  const output = decodeBoundary(outputSchema)({
-    kind: "record",
-    fields: JSON.parse(JSON.stringify(allFields)),
-  });
-
-  if (output.kind !== "record") {
-    throw new Error("Expected a record output.");
+    expect(parseFieldText(kind, text)).toEqual({ ok: true, value });
   }
-
-  const spec = output.fields;
-  expect(spec).toEqual(allFields);
-  expect(Object.values(allFields)).toEqual([...FIELD_TYPES]);
-  expect(decodeBoundary(graphSchema)({ ...approveDemoGraph, input: spec }).input).toEqual(
-    allFields,
-  );
-
-  const namedInput = Object.fromEntries(
-    Object.entries(allValues).map(([key, value]) => [
-      key,
-      key === "text" ? allValues.text : JSON.stringify(value),
-    ]),
-  );
-
-  const input = await Effect.runPromise(
-    graphInput(spec, {
-      cwd: "/unused",
-      values: {},
-      namedInput,
-    }),
-  );
-
-  expect(input).toEqual(allValues);
-  expect(coerceInput(inputFields(allFields), namedInput)).toEqual({
-    valid: true,
-    value: allValues,
-  });
 });
 
-for (const [kind, invalid] of [
-  ["string[]", [1]],
-  ["number[]", ["1"]],
-  ["boolean[]", ["true"]],
-  ["json[]", {}],
-] as const) {
-  test(`${kind} rejects wrong elements or non-arrays at each input boundary`, async () => {
-    const { graphInput } = await import("../../cli/src/input");
+test("field text rejects malformed JSON, wrong kinds and loose scalars", () => {
+  expect(parseFieldText("json", "{bad")).toEqual({ ok: false, reason: "json" });
 
-    const { coerceInput, inputFields } = await import("../../../apps/dashboard/src/lib/input-form");
+  for (const [kind, text] of [
+    ["string[]", "[1]"],
+    ["number[]", '["1"]'],
+    ["boolean[]", '["true"]'],
+    ["json[]", "{}"],
+    ["number", " "],
+    ["number", "12abc"],
+    ["boolean", "yes"],
+  ] as const) {
+    expect(parseFieldText(kind, text)).toEqual({ ok: false, reason: "kind" });
+  }
+});
 
-    const spec = { items: kind };
-    await expect(
-      Effect.runPromise(
-        graphInput(spec, {
-          cwd: "/unused",
-          values: {},
-          namedInput: { items: JSON.stringify(invalid) },
-        }),
-      ),
-    ).rejects.toThrow(`Input --items must be a ${kind}. Provide a valid value.`);
-    expect(coerceInput(inputFields(spec), { items: JSON.stringify(invalid) })).toEqual({
-      valid: false,
-      issues: [{ key: "items", message: `Enter a ${kind} as JSON.` }],
-    });
-  });
-}
+test("a trailing ? marks a record field optional and drops from its key", () => {
+  expect(recordFields({ name: "string", "count?": "number" })).toEqual([
+    { key: "name", optional: false, kind: "string" },
+    { key: "count", optional: true, kind: "number" },
+  ]);
+});

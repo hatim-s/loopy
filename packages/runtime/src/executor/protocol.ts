@@ -1,21 +1,19 @@
-import { jsonSchema } from "@loopy/contract";
+import { decodeJson, jsonSchema } from "@loopy/contract";
 import {
   type AttemptLog,
+  attemptLogSchema,
   type CommandResult,
   type ExecutionResult,
   isString,
   limitLogs,
 } from "@loopy/core";
-import { Schema } from "effect";
 import { redactValue } from "./redact";
 
 type Redact = (text: string, truncated?: boolean) => string;
 
-const logSchema = Schema.Struct({ message: Schema.String, data: jsonSchema });
-
 function parseRecord(line: string): AttemptLog | undefined {
   try {
-    return Schema.decodeUnknownSync(logSchema)(JSON.parse(line), { onExcessProperty: "error" });
+    return decodeJson(attemptLogSchema)(line);
   } catch {
     return undefined;
   }
@@ -57,7 +55,7 @@ function stderrLogs(stderr: string, redact: Redact, cut: boolean): AttemptLog[] 
 
 function parseOutput(line: string) {
   try {
-    return Schema.decodeUnknownSync(jsonSchema)(JSON.parse(line));
+    return decodeJson(jsonSchema)(line);
   } catch {
     return undefined;
   }

@@ -1,6 +1,6 @@
-import { type ExecutionSpec, type NodeRun, outputBytes } from "..";
-
-const MAX_INPUT_BYTES = 16 * 1024;
+import { MAX_PREVIEW_BYTES, outputBytes } from "../effects";
+import type { ExecutionSpec } from "../executor";
+import type { NodeRun } from "../graph/node-run";
 
 export function captureInput(spec: ExecutionSpec): NodeRun["inputView"] {
   // Command descriptors can contain credentials in several fields, including env.
@@ -10,7 +10,7 @@ export function captureInput(spec: ExecutionSpec): NodeRun["inputView"] {
 
   const bytes = outputBytes(spec.input);
 
-  return bytes > MAX_INPUT_BYTES
+  return bytes > MAX_PREVIEW_BYTES
     ? { state: "truncated", bytes }
     : { state: "available", value: structuredClone(spec.input) };
 }

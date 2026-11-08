@@ -91,14 +91,12 @@ function fixture() {
       Effect.sync(() => {
         const { graph } = body;
         entries.set(graph.name, {
-          version: 2,
+          version: 3,
           slug: graph.name,
           graph,
           revision: body.revision,
           bundles: [],
           source: body.source.path,
-          input: graph.input,
-          ...graph.meta,
           savedAt: new Date(now).toISOString(),
         });
         graphs.set(body.revision, graph);

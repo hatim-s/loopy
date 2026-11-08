@@ -45,8 +45,7 @@ test("stored run and node events parse over SSE", async () => {
     const wire = serverEvent(event, (run) =>
       runView({
         run,
-        steps: [],
-        hooks: [],
+        hook: undefined,
         loopy: { slug: run.slug, description: null },
         now: run.updatedAt,
         leaseMs: store.leaseMs,

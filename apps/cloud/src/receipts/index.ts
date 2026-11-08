@@ -7,11 +7,11 @@ import {
   authorityCommandSchema,
   authorityOperations,
   decodeBoundary,
+  type ExecutionResult,
   encodeBoundary,
   type ResultRef,
   resultOperations,
   SANDBOX_MAX_REQUEST_BYTES,
-  type SandboxExecutionResult,
 } from "@loopy/contract";
 import { Cause, Effect, Result } from "effect";
 import type { Environment } from "../environment";
@@ -143,7 +143,7 @@ export class SandboxReceipts {
   private command(
     command: AuthorityCommand,
   ): Effect.Effect<
-    AuthorityOutput<keyof typeof authorityOperations> | ResultRef | SandboxExecutionResult,
+    AuthorityOutput<keyof typeof authorityOperations> | ResultRef | ExecutionResult,
     CloudError | AuthorityError
   > {
     return Effect.gen({ self: this }, function* () {

@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import type { CommandExecutionError } from "@loopy/core";
 import { Effect } from "effect";
+import type { CommandExecutionError } from "../command-error";
 import { rejected, unstarted } from "../spawn";
 import type { ProcessFilesystemError } from "./io";
 import { filesystem } from "./io";

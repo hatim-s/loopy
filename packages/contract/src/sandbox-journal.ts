@@ -1,18 +1,21 @@
+import {
+  type ExecutionResult,
+  executionResultSchema,
+  hashSchema,
+  positiveInt,
+  struct,
+} from "@loopy/core";
 import { Schema } from "effect";
-import { struct } from "./codec";
-
-import { hashSchema } from "./compiled-loopy";
+import { boundedToken } from "./codec";
 import {
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptIdentity,
-  type SandboxExecutionResult,
   sandboxAttemptIdentitySchema,
-  sandboxExecutionResultSchema,
 } from "./sandbox";
 
 export const authoritySessionSchema = struct({
-  epoch: Schema.Int.check(Schema.isGreaterThan(0)),
-  nonce: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
+  epoch: positiveInt,
+  nonce: boundedToken,
 });
 
 export const dockerAttemptPlanSchema = struct({
@@ -22,19 +25,17 @@ export const dockerAttemptPlanSchema = struct({
   container: Schema.String.check(Schema.isPattern(/^loopy-attempt-[a-f0-9]{64}$/)),
   inputVolume: Schema.String.check(Schema.isPattern(/^loopy-input-[a-f0-9]{64}$/)),
   volume: Schema.String.check(Schema.isPattern(/^loopy-workspace-[a-f0-9]{64}$/)),
-  deadline: Schema.Int.check(Schema.isGreaterThan(0)),
+  deadline: positiveInt,
 });
 
 export const resultRefSchema = struct({
   sha256: hashSchema,
-  size: Schema.Int.check(Schema.isGreaterThan(0)).check(
-    Schema.isLessThanOrEqualTo(SANDBOX_MAX_CAPTURE_BYTES),
-  ),
+  size: positiveInt.check(Schema.isLessThanOrEqualTo(SANDBOX_MAX_CAPTURE_BYTES)),
 });
 
-export const resultLocationSchema = Schema.Union([
+const resultLocationSchema = Schema.Union([
   struct({ kind: Schema.Literal("blob"), ref: resultRefSchema }),
-  struct({ kind: Schema.Literal("inline"), value: sandboxExecutionResultSchema }),
+  struct({ kind: Schema.Literal("inline"), value: executionResultSchema }),
 ]);
 
 export const startedAttemptRecordSchema = struct({
@@ -56,7 +57,7 @@ export const attemptRecordSchema = Schema.Union([
 ]);
 
 export const exportRecordSchema = struct({
-  token: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
+  token: boundedToken,
   session: authoritySessionSchema,
   attemptId: hashSchema,
   volume: dockerAttemptPlanSchema.fields.volume,
@@ -92,8 +93,8 @@ export class AuthorityError extends Error {
 }
 
 export interface ImmutableResults {
-  put(result: SandboxExecutionResult): Promise<ResultRef>;
-  get(ref: ResultRef): Promise<SandboxExecutionResult>;
+  put(result: ExecutionResult): Promise<ResultRef>;
+  get(ref: ResultRef): Promise<ExecutionResult>;
 }
 
 // Composition binds the workspace before any bytes or digest select storage paths.

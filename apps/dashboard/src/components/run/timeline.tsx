@@ -1,4 +1,4 @@
-import { isTerminalRun, type NodeRunView, type RunView } from "@loopy/contract";
+import { isTerminalRun, type NodeRun, type RunView } from "@loopy/contract";
 import { useId, useState } from "react";
 import { elapsed } from "../../lib/format";
 import type { GraphNodeModel } from "../../lib/graph";
@@ -14,7 +14,7 @@ const BAR = {
   neutral: "bg-[var(--chart-cancel)]",
 } as const;
 
-function end(execution: NodeRunView, now: number): number {
+function end(execution: NodeRun, now: number): number {
   return "endedAt" in execution ? Date.parse(execution.endedAt) : now;
 }
 

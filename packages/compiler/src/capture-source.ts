@@ -1,5 +1,10 @@
 import { basename } from "node:path";
-import { type SourceArtifact, sourceArtifactSchema } from "@loopy/contract";
+import {
+  boundaryOptions,
+  type SourceArtifact,
+  sourceArtifactSchema,
+  unavailableSource,
+} from "@loopy/contract";
 import type { Graph } from "@loopy/core";
 import { Schema } from "effect";
 import type { AuthorModule } from "./types";
@@ -37,7 +42,10 @@ export function captureSource(
     ];
   });
 
-  const result = Schema.decodeUnknownResult(sourceArtifactSchema, { onExcessProperty: "error" })({
+  const result = Schema.decodeUnknownResult(
+    sourceArtifactSchema,
+    boundaryOptions,
+  )({
     version: 1,
     status: "available",
     revision,
@@ -49,7 +57,5 @@ export function captureSource(
     ranges,
   });
 
-  return result._tag === "Success"
-    ? result.success
-    : { version: 1, status: "unavailable", revision, reason: "too_large" };
+  return result._tag === "Success" ? result.success : unavailableSource(revision, "too_large");
 }

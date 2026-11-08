@@ -1,6 +1,6 @@
-import type { NodeRunView, RunStatus, RunView } from "@loopy/contract";
+import type { NodeRun, RunStatus, RunView } from "@loopy/contract";
 
-export type NodeRunStatus = NodeRunView["status"];
+export type NodeRunStatus = NodeRun["status"];
 
 /**
  * Every state a pill can name. Runs, node executions and schedules share one vocabulary, so a

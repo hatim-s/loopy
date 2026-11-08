@@ -1,18 +1,13 @@
 import {
-  decodeBoundary,
-  isFieldValue,
+  decodeJson,
   type Json,
   jsonSchema,
   type LoopyView,
+  parseFieldText,
+  type RecordField,
 } from "@loopy/contract";
 
 export type RecordSpec = Exclude<LoopyView["input"], "schema">;
-
-export type InputField = {
-  key: string;
-  kind: RecordSpec[string];
-  optional: boolean;
-};
 
 /** Every field holds the text of its control; booleans are "true", "false" or "" for unset. */
 export type FieldValues = Record<string, string>;
@@ -21,57 +16,26 @@ export type FieldIssue = { key: string; message: string };
 
 export type Coerced = { valid: true; value: Json } | { valid: false; issues: FieldIssue[] };
 
-/** A key ending in "?" is optional; the input object uses the key without it. */
-export function inputFields(spec: RecordSpec): InputField[] {
-  return Object.entries(spec).map(([field, kind]) => {
-    const optional = field.endsWith("?");
-
-    return { key: optional ? field.slice(0, -1) : field, kind, optional };
-  });
-}
-
 /** Required booleans start false so the form is submittable without touching them. */
-export function initialValues(fields: InputField[]): FieldValues {
+export function initialValues(fields: RecordField[]): FieldValues {
   return Object.fromEntries(
     fields.map((field) => [field.key, field.kind === "boolean" && !field.optional ? "false" : ""]),
   );
 }
 
-type FieldResult = { valid: true; value: Json } | { valid: false; message: string };
+function fieldIssue(kind: RecordField["kind"], reason: "json" | "kind"): string {
+  if (reason === "json") {
+    return "Enter valid JSON.";
+  }
 
-function coerceField(kind: InputField["kind"], text: string): FieldResult {
   switch (kind) {
-    case "string[]":
-    case "number[]":
-    case "boolean[]":
-    case "json[]":
-    case "json": {
-      const parsed = parseJsonInput(text);
-
-      if (!parsed.valid) {
-        return { valid: false, message: "Enter valid JSON." };
-      }
-
-      return isFieldValue(kind, parsed.value)
-        ? parsed
-        : { valid: false, message: `Enter a ${kind} as JSON.` };
-    }
-
-    case "string": {
-      return { valid: true, value: text };
-    }
-
-    case "number": {
-      const value = Number(text.trim());
-
-      return Number.isFinite(value)
-        ? { valid: true, value }
-        : { valid: false, message: "Enter a number." };
-    }
-
-    case "boolean": {
-      return { valid: true, value: text === "true" };
-    }
+    case "string":
+    case "number":
+      return `Enter a ${kind}.`;
+    case "boolean":
+      return "Choose true or false.";
+    default:
+      return `Enter a ${kind} as JSON.`;
   }
 }
 
@@ -79,7 +43,7 @@ function coerceField(kind: InputField["kind"], text: string): FieldResult {
  * Turns form text into the JSON the server validates against the spec. An empty optional
  * field is left out of the object; an empty required one is an issue.
  */
-export function coerceInput(fields: InputField[], values: FieldValues): Coerced {
+export function coerceInput(fields: RecordField[], values: FieldValues): Coerced {
   const entries: [string, Json][] = [];
   const issues: FieldIssue[] = [];
 
@@ -94,12 +58,12 @@ export function coerceInput(fields: InputField[], values: FieldValues): Coerced 
       continue;
     }
 
-    const coerced = coerceField(field.kind, text);
+    const parsed = parseFieldText(field.kind, text);
 
-    if (coerced.valid) {
-      entries.push([field.key, coerced.value]);
+    if (parsed.ok) {
+      entries.push([field.key, parsed.value]);
     } else {
-      issues.push({ key: field.key, message: coerced.message });
+      issues.push({ key: field.key, message: fieldIssue(field.kind, parsed.reason) });
     }
   }
 
@@ -113,7 +77,7 @@ export type ParsedJson = { valid: true; value: Json } | { valid: false };
 /** Editor text for a loopy whose input is a schema; the server checks it against the schema. */
 export function parseJsonInput(text: string): ParsedJson {
   try {
-    return { valid: true, value: decodeBoundary(jsonSchema)(JSON.parse(text)) };
+    return { valid: true, value: decodeJson(jsonSchema)(text) };
   } catch {
     return { valid: false };
   }

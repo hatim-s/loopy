@@ -1,34 +1,17 @@
-import type { Duration } from "./duration";
+import { Schema } from "effect";
+import { positiveInt, struct } from "./codec";
+import { durationMs, durationSchema } from "./duration";
 
-export type RateLimit = { key: string; limit: number; window: Duration };
+export const rateLimitSchema = struct({
+  key: Schema.String.check(Schema.isMinLength(1)),
+  limit: positiveInt,
+  window: durationSchema.check(
+    Schema.makeFilter((value) => durationMs(value) > 0, {
+      message: "Supply a positive rate-limit window.",
+    }),
+  ),
+});
+
+export type RateLimit = Schema.Schema.Type<typeof rateLimitSchema>;
 
 export type RateLimitResult = { ok: true } | { ok: false; retryAt: string };
-
-export type RateLimitWindow = { windowStart: string; count: number };
-
-export function acquireWindow(
-  window: RateLimitWindow | undefined,
-  count: number,
-  windowMs: number,
-  now: string,
-) {
-  const current =
-    !window || Date.parse(now) >= Date.parse(window.windowStart) + windowMs
-      ? { windowStart: new Date(now).toISOString(), count: 0 }
-      : window;
-
-  if (current.count >= count) {
-    return {
-      result: {
-        ok: false,
-        retryAt: new Date(Date.parse(current.windowStart) + windowMs).toISOString(),
-      } satisfies RateLimitResult,
-      window: current,
-    };
-  }
-
-  return {
-    result: { ok: true } satisfies RateLimitResult,
-    window: { ...current, count: current.count + 1 },
-  };
-}

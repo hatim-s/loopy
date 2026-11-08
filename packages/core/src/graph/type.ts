@@ -1,13 +1,27 @@
-import { isString } from "../validation";
-import { ERROR_FIELDS, type Graph, type Node, type NodeId, type RecordSpec, type Value } from ".";
-import { binding, type Context as GraphContext, scopeReaches, targets } from "./context";
+import { recordField } from "../record-spec";
+import {
+  ERROR_FIELDS,
+  type Graph,
+  INPUT_REF,
+  type Node,
+  type NodeId,
+  type RecordSpec,
+  type Value,
+} from ".";
+import {
+  binding,
+  type Context as GraphContext,
+  isBodyTail,
+  scopeReaches,
+  targets,
+} from "./context";
 import { operandType } from "./predicate";
 import { isRef, projectValue } from "./ref";
 
 type Context = GraphContext & { refTypes: Map<string, string | null>; resolving: Set<string> };
 
 function declaredSchema(context: Context, ref: { ref: string; path: string[] }) {
-  if (ref.ref === "input") {
+  if (ref.ref === INPUT_REF) {
     return context.graph.input === "schema"
       ? null
       : { kind: "record" as const, fields: context.graph.input };
@@ -27,13 +41,9 @@ function recordPathType(schema: RecordSpec, path: string[]): string | null {
     return "object";
   }
 
-  if (path.length !== 1) {
-    return null;
-  }
+  const [key] = path;
 
-  const type = projectValue(schema, path) ?? projectValue(schema, [`${path[0]}?`]);
-
-  return isString(type) ? type : null;
+  return path.length === 1 && key !== undefined ? (recordField(schema, key) ?? null) : null;
 }
 
 function bodyResultType(
@@ -46,7 +56,7 @@ function bodyResultType(
     (child) =>
       child.scope === owner.id &&
       (child.kind === "join" || child.kind === "fail") &&
-      !context.graph.edges.some((edge) => edge.from === child.id && edge.kind === "next") &&
+      isBodyTail(context, child.id) &&
       scopeReaches(context, entry, child.id),
   );
 
@@ -162,7 +172,8 @@ function declaredRefType(context: Context, ref: { ref: string; path: string[] })
     return "never";
   }
 
-  if (owner?.kind === "map" && ref.ref !== "input") {
+  // A binding named like the input ref is reported as duplicate_ref; it must not also retype input.
+  if (owner?.kind === "map" && ref.ref !== INPUT_REF) {
     const array = resolveRefType(context, owner.over);
 
     const type =

@@ -1,5 +1,5 @@
+import { describeCron } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
-import { describeCron } from "../../lib/cron";
 import { elapsed, runElapsed, shortId, span } from "../../lib/format";
 import { useRunPages } from "../../lib/pages";
 import { useLoopyRows, useScheduleOverview } from "../../lib/ui-data";

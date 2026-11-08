@@ -4,9 +4,9 @@ import { join } from "node:path";
 import type { ResultRef } from "@loopy/contract";
 import {
   decodeBoundary,
+  type ExecutionResult,
+  executionResultSchema,
   SANDBOX_MAX_CAPTURE_BYTES,
-  type SandboxExecutionResult,
-  sandboxExecutionResultSchema,
 } from "@loopy/contract";
 import { canonicalJson, errnoCode } from "@loopy/core";
 import { Effect } from "effect";
@@ -15,7 +15,7 @@ import type { ImmutableResults } from "../operations";
 import { checked, failure, io } from "../operations";
 import { stateLayout } from "../state-root";
 
-export function resultBytes(result: SandboxExecutionResult) {
+export function resultBytes(result: ExecutionResult) {
   const bytes = Buffer.from(canonicalJson(result));
 
   if (bytes.byteLength > SANDBOX_MAX_CAPTURE_BYTES) {
@@ -29,7 +29,7 @@ function bytesReference(bytes: Buffer): ResultRef {
   return { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.byteLength };
 }
 
-export function resultReference(result: SandboxExecutionResult): ResultRef {
+export function resultReference(result: ExecutionResult): ResultRef {
   return bytesReference(resultBytes(result));
 }
 
@@ -65,12 +65,12 @@ export class FilesystemResults implements ImmutableResults {
       }
 
       return yield* checked("decode", () =>
-        decodeBoundary(sandboxExecutionResultSchema)(JSON.parse(bytes.toString("utf8"))),
+        decodeBoundary(executionResultSchema)(JSON.parse(bytes.toString("utf8"))),
       );
     }).pipe(Effect.uninterruptible);
   }
 
-  put(result: SandboxExecutionResult) {
+  put(result: ExecutionResult) {
     return Effect.gen({ self: this }, function* () {
       const bytes = yield* checked("result bytes", () => resultBytes(result));
       const ref = bytesReference(bytes);

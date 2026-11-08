@@ -2,7 +2,7 @@ import {
   executionKeyString,
   type GraphView,
   isTerminalRun,
-  type NodeRunView,
+  type NodeRun,
   type RunStatus,
 } from "@loopy/contract";
 import { kindDetail } from "./graph-text";
@@ -57,7 +57,7 @@ export type GraphNodeModel = {
   role: NodeRole;
   title: string;
   detail: string | null;
-  executions: NodeRunView[];
+  executions: NodeRun[];
   state: NodeState;
 };
 
@@ -77,10 +77,10 @@ export type GraphModel = {
   nodes: GraphNodeModel[];
   edges: GraphEdgeModel[];
   /** Records whose node is absent from the graph, which means the graph is not the pinned one. */
-  orphans: NodeRunView[];
+  orphans: NodeRun[];
 };
 
-function nodeState(executions: NodeRunView[], run: RunStatus | null, complete: boolean): NodeState {
+function nodeState(executions: NodeRun[], run: RunStatus | null, complete: boolean): NodeState {
   if (run === null) {
     return { kind: "definition" };
   }
@@ -106,7 +106,7 @@ function nodeState(executions: NodeRunView[], run: RunStatus | null, complete: b
   return { kind: "ran", status, counts };
 }
 
-function scopeId(execution: NodeRunView): string {
+function scopeId(execution: NodeRun): string {
   return JSON.stringify(execution.key.scope);
 }
 
@@ -116,7 +116,7 @@ function scopeId(execution: NodeRunView): string {
  * only `next` edges, which makes that exact for it. Control edges stay unmarked until branch,
  * switch and scope nodes record the arm they chose.
  */
-function tookNext(edge: GraphEdge, byNode: Map<string, NodeRunView[]>): boolean {
+function tookNext(edge: GraphEdge, byNode: Map<string, NodeRun[]>): boolean {
   if (edge.kind !== "next") {
     return false;
   }
@@ -155,9 +155,9 @@ export function graphModel(
   graph: GraphView,
   run: {
     status: RunStatus;
-    nodeRuns: NodeRunView[];
+    nodeRuns: NodeRun[];
     coverage: ExecutionCoverage[];
-    selectedExecutions?: NodeRunView[];
+    selectedExecutions?: NodeRun[];
   } | null,
 ): GraphModel {
   const records = new Map(
@@ -168,7 +168,7 @@ export function graphModel(
     records.set(executionKeyString(execution.key), execution);
   }
 
-  const byNode = new Map<string, NodeRunView[]>();
+  const byNode = new Map<string, NodeRun[]>();
 
   for (const execution of records.values()) {
     byNode.set(execution.key.nodeId, [...(byNode.get(execution.key.nodeId) ?? []), execution]);

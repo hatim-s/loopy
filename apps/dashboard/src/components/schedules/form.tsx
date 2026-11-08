@@ -1,7 +1,6 @@
-import type { PutScheduleBody, ScheduleView } from "@loopy/contract";
+import { describeCron, type PutScheduleBody, type ScheduleView } from "@loopy/contract";
 import { type ReactNode, useState } from "react";
 import { BackendError } from "../../backend/backend";
-import { describeCron } from "../../lib/cron";
 import { useSaveSchedule } from "../../lib/mutations";
 import { Button } from "../button";
 import { CodedError } from "../error-banner";

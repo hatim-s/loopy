@@ -1,4 +1,4 @@
-import type { NodeRunView, ScopeCountsView } from "@loopy/contract";
+import type { NodeRun, ScopeCountsView } from "@loopy/contract";
 import { type ReactNode, useState } from "react";
 import type { GraphNodeModel } from "../../lib/graph";
 import { useScopeItems } from "../../lib/pages";
@@ -21,7 +21,7 @@ const FILTER_STATUS = {
   running: "running",
   retrying: "retrying",
   succeeded: "succeeded",
-} satisfies Record<ItemFilter, NodeRunView["status"] | undefined>;
+} satisfies Record<ItemFilter, NodeRun["status"] | undefined>;
 
 /** One map's item list. The page owns it, so its page and filter outlive a change of node. */
 export type ItemPicker = {
@@ -47,7 +47,7 @@ export function MapPicker(props: {
 }
 
 // The worst status among an item's executions, so a failed item reads as failed.
-function itemStatus(counts: ScopeCountsView["counts"]): NodeRunView["status"] | null {
+function itemStatus(counts: ScopeCountsView["counts"]): NodeRun["status"] | null {
   return countedStatuses(counts)[0]?.status ?? null;
 }
 

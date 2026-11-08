@@ -1,8 +1,13 @@
+import {
+  counter,
+  executionResultSchema,
+  hashSchema,
+  PAGE_LIMIT,
+  positiveInt,
+  struct,
+} from "@loopy/core";
 import { Schema } from "effect";
-import { struct } from "./codec";
-
-import { hashSchema } from "./compiled-loopy";
-import { sandboxExecutionResultSchema } from "./sandbox";
+import { boundedToken } from "./codec";
 import {
   type AuthoritySession,
   attemptRecordSchema,
@@ -22,12 +27,12 @@ const session = { session: authoritySessionSchema };
 export const authorityOperations = {
   status: {
     input: struct({}),
-    output: struct({ epoch: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
+    output: struct({ epoch: counter }),
   },
   openSession: {
     input: struct({
-      expectedEpoch: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      nonce: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
+      expectedEpoch: counter,
+      nonce: boundedToken,
     }),
     output: authoritySessionSchema,
   },
@@ -51,7 +56,7 @@ export const authorityOperations = {
     input: struct({
       ...session,
       attemptId: hashSchema,
-      token: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
+      token: boundedToken,
     }),
     output: Schema.Union([
       struct({ kind: Schema.Literal("granted"), record: exportRecordSchema }),
@@ -61,16 +66,14 @@ export const authorityOperations = {
   endExport: {
     input: struct({
       ...session,
-      token: Schema.String.check(Schema.isMinLength(1)).check(Schema.isMaxLength(256)),
+      token: boundedToken,
     }),
     output: Schema.Null,
   },
   exportGuards: {
     input: struct({
       after: Schema.NullOr(Schema.String.check(Schema.isMaxLength(256))),
-      limit: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).check(
-        Schema.isLessThanOrEqualTo(200),
-      ),
+      limit: positiveInt.check(Schema.isLessThanOrEqualTo(PAGE_LIMIT)),
       volume: dockerAttemptPlanSchema.fields.volume,
     }),
     output: struct({
@@ -81,9 +84,7 @@ export const authorityOperations = {
   recoverable: {
     input: struct({
       after: Schema.NullOr(Schema.String),
-      limit: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).check(
-        Schema.isLessThanOrEqualTo(200),
-      ),
+      limit: positiveInt.check(Schema.isLessThanOrEqualTo(PAGE_LIMIT)),
     }),
     output: struct({
       attempts: Schema.Array(startedAttemptRecordSchema).pipe(Schema.mutable),
@@ -117,13 +118,13 @@ export const resultOperations = {
   resultPut: {
     input: struct({
       workspace: dockerAttemptPlanSchema.fields.workspace,
-      value: sandboxExecutionResultSchema,
+      value: executionResultSchema,
     }),
     output: resultRefSchema,
   },
   resultGet: {
     input: struct({ workspace: dockerAttemptPlanSchema.fields.workspace, ref: resultRefSchema }),
-    output: sandboxExecutionResultSchema,
+    output: executionResultSchema,
   },
 };
 

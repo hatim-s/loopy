@@ -1,60 +1,24 @@
-import type {
-  Graph as CoreGraph,
-  HookRecord,
-  RunRecord,
-  RuntimeEvent,
-  Schedule,
-  StepRecord,
+import {
+  emptyRunCounts,
+  type Graph,
+  type Json,
+  MAX_PREVIEW_BYTES,
+  outputBytes,
+  type PendingHook,
+  type RunRecord,
+  type RuntimeEvent,
+  type Schedule,
 } from "@loopy/core";
-import { PREVIEW_BYTES } from "./dashboard";
 import type { GraphView } from "./graph";
 import type { LoopyView, RunView, ServerEvent } from "./views";
 
 type RunViewOptions = {
   run: RunRecord;
   loopy: RunView["loopy"];
-  steps: StepRecord[];
-  hooks: HookRecord[];
+  hook: PendingHook | undefined;
   now: string;
   leaseMs: number;
 };
-
-function waitingOn({ run, steps, hooks, now }: RunViewOptions): RunView["waitingOn"] {
-  if (run.status !== "running" && run.status !== "suspended") {
-    return null;
-  }
-
-  const latest = steps
-    .filter((step) => step.runId === run.id)
-    .reduce<StepRecord | null>(
-      (last, step) => (last === null || step.seq > last.seq ? step : last),
-      null,
-    );
-
-  if (latest?.status !== "waiting" || latest.kind !== "hook") {
-    return null;
-  }
-
-  const hook = hooks.find(
-    (item) =>
-      item.runId === run.id &&
-      item.seq === latest.seq &&
-      item.resolvedAt === undefined &&
-      item.expiredAt === undefined,
-  );
-
-  if (!hook || (latest.wakeAt !== undefined && Date.parse(latest.wakeAt) <= Date.parse(now))) {
-    return null;
-  }
-
-  return {
-    hook: hook.name,
-    token: hook.token,
-    seq: hook.seq,
-    expiresAt: latest.wakeAt ?? null,
-    since: hook.createdAt,
-  };
-}
 
 function outcome(run: RunRecord) {
   switch (run.status) {
@@ -74,23 +38,17 @@ function outcome(run: RunRecord) {
       return { status: run.status, error: run.error };
     }
 
-    case "suspended": {
+    case "suspended":
       return { status: run.status, wakeAt: run.wakeAt ?? null };
-    }
-
-    default: {
+    default:
       return { status: run.status };
-    }
   }
 }
 
-function previewPayload(value: RunRecord["input"]): {
-  value: RunRecord["input"];
-  bytes: number | null;
-} {
-  const bytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+function previewPayload(value: Json): { value: Json; bytes: number | null } {
+  const bytes = outputBytes(value);
 
-  return bytes > PREVIEW_BYTES ? { value: null, bytes } : { value, bytes: null };
+  return bytes > MAX_PREVIEW_BYTES ? { value: null, bytes } : { value, bytes: null };
 }
 
 export function runView(options: RunViewOptions): RunView {
@@ -110,11 +68,11 @@ export function runView(options: RunViewOptions): RunView {
     truncatedFields.input = input.bytes;
   }
 
-  if (output?.bytes) {
+  if (output !== null && output.bytes !== null) {
     truncatedFields.output = output.bytes;
   }
 
-  if (result.status === "succeeded" && output) {
+  if (result.status === "succeeded" && output !== null) {
     result.output = output.value;
   }
 
@@ -128,7 +86,15 @@ export function runView(options: RunViewOptions): RunView {
     updatedAt: run.updatedAt,
     owner,
     ownerStale: owner !== null && Date.parse(now) - Date.parse(owner.heartbeatAt) > leaseMs,
-    waitingOn: waitingOn(options),
+    waitingOn: options.hook
+      ? {
+          hook: options.hook.name,
+          token: options.hook.token,
+          seq: options.hook.seq,
+          expiresAt: options.hook.expiresAt,
+          since: options.hook.createdAt,
+        }
+      : null,
     ...result,
   };
 
@@ -139,10 +105,9 @@ export function runView(options: RunViewOptions): RunView {
   return view;
 }
 
-type SavedLoopyInput = Pick<LoopyView, "slug" | "workspace" | "scope" | "mode"> & {
-  description?: string | null;
-  input: Readonly<Exclude<LoopyView["input"], "schema">> | "schema";
-  schedule?: { cron: string; tz?: string } | null;
+type SavedLoopyInput = Pick<LoopyView, "slug" | "workspace" | "scope" | "mode" | "input"> & {
+  description: string | null;
+  schedule: Graph["meta"]["schedule"];
 };
 
 function scheduleView(
@@ -150,10 +115,7 @@ function scheduleView(
   declared: SavedLoopyInput["schedule"],
 ): LoopyView["schedule"] {
   if (schedule === null) {
-    // LoopyView can show a schedule declared in the definition, not scheduled yet.
-    return declared
-      ? { cron: declared.cron, tz: declared.tz ?? "UTC", enabled: false, nextFireAt: null }
-      : null;
+    return declared ? { ...declared, enabled: false, nextFireAt: null } : null;
   }
 
   return {
@@ -171,7 +133,7 @@ export function loopyView(
 ): LoopyView {
   const matching = runs.filter((run) => run.slug === saved.slug);
 
-  const counts = { queued: 0, running: 0, suspended: 0, succeeded: 0, failed: 0, cancelled: 0 };
+  const counts = emptyRunCounts();
 
   let lastRun: RunView | null = null;
 
@@ -186,7 +148,7 @@ export function loopyView(
   return {
     slug: saved.slug,
     workspace: saved.workspace,
-    description: saved.description ?? null,
+    description: saved.description,
     scope: saved.scope,
     mode: saved.mode,
     input: saved.input,
@@ -204,7 +166,7 @@ export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunVi
   return event;
 }
 
-export function graphView(graph: CoreGraph): GraphView {
+export function graphView(graph: Graph): GraphView {
   return {
     ...graph,
     nodes: graph.nodes.map((node) => {

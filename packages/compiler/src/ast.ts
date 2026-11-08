@@ -1,15 +1,9 @@
 import { dirname, resolve } from "node:path";
-import {
-  type CompilerDiagnosticCode,
-  isBoolean,
-  isNumber,
-  isReservedGraphName,
-  isString,
-} from "@loopy/core";
+import { isBoolean, isNumber, isReservedGraphName, isString } from "@loopy/core";
 import { sdkCalls } from "@loopy/sdk/graph-host";
 import type { Expression, Node, Statement } from "oxc-parser";
 import { diagnostic } from "./diagnostic";
-import type { CompilerDiagnostic, ParserSource, SourceCall } from "./types";
+import type { CompilerDiagnostic, CompilerDiagnosticCode, ParserSource, SourceCall } from "./types";
 
 type Binding = "sdk" | "subgraph" | "command" | "value" | "ref" | "function" | "graph";
 

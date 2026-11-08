@@ -3,12 +3,12 @@ import { join } from "node:path";
 import {
   type DockerAttemptPlan,
   decodeBoundary,
+  type ExecutionResult,
+  executionResultSchema,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptRequest,
-  type SandboxExecutionResult,
-  sandboxExecutionResultSchema,
 } from "@loopy/contract";
-import { CommandExecutionError } from "@loopy/core";
+import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Result, Schema } from "effect";
 import type { SandboxConfig } from "../config";
 import { bundleFile, CONTAINER } from "../container-layout";
@@ -36,11 +36,11 @@ export interface AttemptBackend {
     plan: DockerAttemptPlan,
     request: SandboxAttemptRequest,
     signal?: AbortSignal,
-  ): Effect.Effect<SandboxExecutionResult, SandboxOperationError | CommandExecutionError>;
+  ): Effect.Effect<ExecutionResult, SandboxOperationError | CommandExecutionError>;
   recover(
     plan: DockerAttemptPlan,
     signal?: AbortSignal,
-  ): Effect.Effect<SandboxExecutionResult, SandboxOperationError | CommandExecutionError>;
+  ): Effect.Effect<ExecutionResult, SandboxOperationError | CommandExecutionError>;
 }
 
 export class DockerBackend implements AttemptBackend {
@@ -238,7 +238,7 @@ export class DockerBackend implements AttemptBackend {
         });
 
         return yield* checked("worker result", () =>
-          decodeBoundary(sandboxExecutionResultSchema)(JSON.parse(output.stdout)),
+          decodeBoundary(executionResultSchema)(JSON.parse(output.stdout)),
         );
       }).pipe(Effect.result);
 

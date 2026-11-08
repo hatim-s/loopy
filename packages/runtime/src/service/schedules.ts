@@ -1,5 +1,5 @@
 import type { PutScheduleBody, SavedLoopy } from "@loopy/contract";
-import { errorMessage, nextFire, parseCron, type Schedule } from "@loopy/core";
+import { DEFAULT_TIME_ZONE, errorMessage, nextFire, parseCron, type Schedule } from "@loopy/core";
 import { Effect } from "effect";
 import { requireDefinition } from "./definition";
 import { ServiceError } from "./error";
@@ -39,7 +39,8 @@ export function makeScheduleOperations(options: ServiceOptions) {
     callerWorkspace = "",
   ) {
     const { saved, workspace } = yield* scheduleTarget(slug, callerWorkspace);
-    const cron = body.cron ?? saved.schedule?.cron;
+    const declared = saved.graph.meta.schedule;
+    const cron = body.cron ?? declared?.cron;
 
     if (cron === undefined) {
       return yield* Effect.fail(
@@ -50,7 +51,7 @@ export function makeScheduleOperations(options: ServiceOptions) {
       );
     }
 
-    const tz = body.tz ?? saved.schedule?.tz ?? "UTC";
+    const tz = body.tz ?? declared?.tz ?? DEFAULT_TIME_ZONE;
     yield* validateTimezone(tz);
     const nextFireAt = yield* scheduleNextFire(cron, tz);
     const input = yield* scheduleInput(saved, body);

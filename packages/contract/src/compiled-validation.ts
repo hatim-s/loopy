@@ -1,7 +1,7 @@
-import { revision, validateGraph } from "@loopy/core";
+import { graphBundles, revision, sha256Hex, validateGraph } from "@loopy/core";
 import { Data, Effect } from "effect";
 import type { PutLoopyBody } from "./compiled-loopy";
-import type { SourceArtifact } from "./source-artifact";
+import { unavailableSource } from "./source-artifact";
 
 export class CompiledValidationError extends Data.TaggedError("CompiledValidationError")<{
   code:
@@ -15,8 +15,6 @@ export class CompiledValidationError extends Data.TaggedError("CompiledValidatio
 
 export class CompiledHashError extends Data.TaggedError("CompiledHashError")<{ cause: unknown }> {}
 
-/** Accepts a PutLoopyBody already decoded at its boundary and verifies compiled content before storage. */
-
 export const validateCompiled = Effect.fn("contract.validateCompiled")(function* (
   body: PutLoopyBody,
 ) {
@@ -29,13 +27,7 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
     });
   }
 
-  const expected = body.graph.nodes.flatMap((node) =>
-    node.kind === "code"
-      ? [{ nodeId: node.id, bundleHash: node.module.bundleHash }]
-      : node.kind === "command" && node.parse
-        ? [{ nodeId: node.id, bundleHash: node.parse.bundleHash }]
-        : [],
-  );
+  const expected = graphBundles(body.graph);
 
   if (
     expected.length !== body.bundles.length ||
@@ -69,14 +61,10 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
   for (const value of body.bundles) {
     const bytes = Uint8Array.from(atob(value.bytes), (character) => character.charCodeAt(0));
 
-    const digest = yield* Effect.tryPromise({
-      try: () => crypto.subtle.digest("SHA-256", bytes),
+    const hash = yield* Effect.tryPromise({
+      try: () => sha256Hex(bytes),
       catch: (cause) => new CompiledHashError({ cause }),
     });
-
-    const hash = Array.from(new Uint8Array(digest), (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("");
 
     if (hash !== value.bundleHash) {
       return yield* new CompiledValidationError({
@@ -88,12 +76,7 @@ export const validateCompiled = Effect.fn("contract.validateCompiled")(function*
     bundles.push({ ...value, bytes });
   }
 
-  const sourceArtifact: SourceArtifact = body.sourceArtifact ?? {
-    version: 1,
-    status: "unavailable",
-    revision: body.revision,
-    reason: "not_captured",
-  };
+  const sourceArtifact = body.sourceArtifact ?? unavailableSource(body.revision, "not_captured");
 
   const nodeIds = new Set(body.graph.nodes.map((node) => node.id));
 
