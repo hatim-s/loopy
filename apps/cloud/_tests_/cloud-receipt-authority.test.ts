@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { decodeBoundary } from "@loopy/contract";
-import { AuthorityError, authorityCommandSchema } from "@loopy/contract/sandbox";
+import { AuthorityError, authorityCommandSchema, RECEIPTS_PATH } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { HttpSandboxAuthority } from "../../sandbox/src/http-authority";
 import {
@@ -189,7 +189,7 @@ test("lost admission/completion responses survive full workerd reconstruction wi
         return new Response(null, { status: 503 });
       }
 
-      const response = await fetch(new URL("/internal/sandbox-receipts", harness.origin), {
+      const response = await fetch(new URL(RECEIPTS_PATH, harness.origin), {
         method: "POST",
         headers: request.headers,
         body,

@@ -3,11 +3,14 @@ import { decodeBoundary } from "@loopy/contract";
 import {
   type AuthorityCommand,
   AuthorityError,
+  RECEIPTS_NAMESPACE_HEADER,
+  RECEIPTS_PATH,
   resultOperations,
   SANDBOX_MAX_CAPTURE_BYTES,
 } from "@loopy/contract/sandbox";
 import { sha256Hex } from "@loopy/core";
 import { Effect } from "effect";
+import { r2Key } from "../src/artifacts/storage";
 import {
   bridgeToken,
   namespace,
@@ -26,7 +29,7 @@ afterAll(async () => {
 });
 
 function key(hash: string, workspace = "alpha") {
-  return `receipts/${namespace}/workspaces/${workspace}/results/${hash}`;
+  return r2Key.results(namespace, workspace) + hash;
 }
 
 test("actual R2 request counts are one PUT on fresh publication and one GET for pointer verification", async () => {
@@ -34,9 +37,9 @@ test("actual R2 request counts are one PUT on fresh publication and one GET for 
   const object = ns.get(ns.idFromName(namespace));
 
   async function command(value: AuthorityCommand) {
-    const response = await object.fetch("http://127.0.0.1/internal/sandbox-receipts", {
+    const response = await object.fetch(`http://127.0.0.1${RECEIPTS_PATH}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${bridgeToken}`, "X-Loopy-Receipts-Namespace": namespace },
+      headers: { Authorization: `Bearer ${bridgeToken}`, [RECEIPTS_NAMESPACE_HEADER]: namespace },
       body: JSON.stringify(value),
     });
 

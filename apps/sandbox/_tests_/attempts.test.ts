@@ -8,8 +8,10 @@ import {
   type DockerAttemptPlan,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
+  sandboxAttemptQuerySchema,
   sandboxAttemptRequestSchema,
   sandboxErrorSchema,
+  searchParams,
 } from "@loopy/contract/sandbox";
 import { canonicalJson } from "@loopy/core";
 import { CommandExecutionError } from "@loopy/runtime/os";
@@ -112,9 +114,7 @@ function post(body: SandboxAttemptRequest, authorization = `Bearer ${token}`) {
 
 function lookup(value: SandboxAttemptRequest) {
   const url = new URL("http://127.0.0.1/attempts");
-  url.searchParams.set("workspace", value.workspace);
-  url.searchParams.set("key", JSON.stringify(value.executionKey));
-  url.searchParams.set("attempt", String(value.attempt));
+  url.search = searchParams(sandboxAttemptQuerySchema, value).toString();
 
   return new Request(url, { headers: { authorization: `Bearer ${token}` } });
 }
@@ -629,8 +629,9 @@ test("lost Docker start acknowledgement and wait transport failure retain starte
 });
 
 function artifactLookup(input: SandboxAttemptRequest, path: string) {
-  const url = new URL(lookup(input).url);
-  url.pathname = "/artifacts";
+  const url = new URL("http://127.0.0.1/artifacts");
+  url.search = searchParams(sandboxAttemptQuerySchema, input).toString();
+  // The path stays raw so tests can send paths the wire schema rejects.
   url.searchParams.set("path", path);
 
   return new Request(url, { headers: { authorization: `Bearer ${token}` } });

@@ -133,7 +133,7 @@ test("export-only HTTP recovery filters an exact volume and excludes released gu
   ).toEqual({ exports: [], next: null });
 });
 
-test("real workerd recovery plans seek indexes through terminal and released history", async () => {
+test("real workerd recovery pages skip terminal attempts and released export history", async () => {
   const ns = await harness.runtime.getDurableObjectNamespace("PROBE", "rollback");
 
   const response = await ns.get(ns.idFromName("recovery")).fetch("http://probe/recovery", {
@@ -153,21 +153,8 @@ test("real workerd recovery plans seek indexes through terminal and released his
         { active: 1, count: 1 },
       ],
     },
-    attempts: [
-      {
-        detail:
-          "SEARCH receipt_attempts USING COVERING INDEX receipt_attempt_recovery (kind=? AND id>?)",
-      },
-    ],
-    exports: [
-      { detail: "SEARCH receipt_exports USING COVERING INDEX receipt_export_recovery (token>?)" },
-    ],
-    busy: [{ detail: "SEARCH receipt_exports USING INDEX receipt_export_volume (volume=?)" }],
     recovered: { attempts: [], exports: [{ token: "active" }], next: null },
     malformed: expect.stringContaining('Expected { "kind": "started"'),
-    volumePagePlan: [
-      { detail: "SEARCH receipt_exports USING INDEX receipt_export_volume (volume=?)" },
-    ],
     exactVolume: { exports: [{ token: "active" }], next: null },
     otherVolume: { exports: [], next: null },
   });

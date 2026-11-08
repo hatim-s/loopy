@@ -1,5 +1,5 @@
 import { decodeBoundary, type Json, receiptSchema } from "@loopy/contract";
-import { sandboxAttemptIdentitySchema, sandboxAttemptRequestSchema } from "@loopy/contract/sandbox";
+import { sandboxAttemptQuerySchema, sandboxAttemptRequestSchema } from "@loopy/contract/sandbox";
 import { SANDBOX_REQUEST_TIMEOUT_MS } from "../../src/provider";
 
 export type QueueProofDetails = Record<string, Json | undefined>;
@@ -61,11 +61,7 @@ export function readQueueProvider(
         const identity =
           request.method === "POST"
             ? decodeBoundary(sandboxAttemptRequestSchema)(body)
-            : decodeBoundary(sandboxAttemptIdentitySchema)({
-                workspace: url.searchParams.get("workspace"),
-                executionKey: JSON.parse(url.searchParams.get("key") ?? "null"),
-                attempt: Number(url.searchParams.get("attempt")),
-              });
+            : decodeBoundary(sandboxAttemptQuerySchema)(Object.fromEntries(url.searchParams));
 
         if (identity.workspace !== mode) {
           throw new Error("Provider request crossed the synthetic workspace boundary.");

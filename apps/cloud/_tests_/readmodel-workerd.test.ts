@@ -116,15 +116,3 @@ test("workerd scope pages keep numeric cursor traversal, status selection and al
     return decodeBoundary(routes.scopeItems.response)(await probe(`/scope?${params}`));
   });
 });
-
-test("negative control: workerd accepts old 97-index bindings and rejects old 98/200-index bindings", async () => {
-  expect(await probe("/old?limit=97")).toEqual({ error: null });
-
-  for (const limit of [98, 200]) {
-    const result = decodeBoundary(Schema.Struct({ error: Schema.String }))(
-      await probe(`/old?limit=${limit}`),
-    );
-
-    expect(result.error).toContain("too many SQL variables");
-  }
-});

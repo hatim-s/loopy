@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import type { AuthorityInput } from "@loopy/contract/sandbox";
+import {
+  type AuthorityInput,
+  sandboxArtifactQuerySchema,
+  searchParams,
+} from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { bounded } from "../../../packages/runtime/_tests_/fixtures/wait";
 import type { AttemptDependencies } from "../src/attempt/dependencies";
@@ -195,10 +199,10 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
       await run(service.attempts.start(fixture.request));
       await run(service.attempts.drain());
       const url = new URL("/artifacts", service.server.url);
-      url.searchParams.set("workspace", fixture.request.workspace);
-      url.searchParams.set("key", JSON.stringify(fixture.request.executionKey));
-      url.searchParams.set("attempt", "1");
-      url.searchParams.set("path", "out.txt");
+      url.search = searchParams(sandboxArtifactQuerySchema, {
+        ...fixture.request,
+        path: "out.txt",
+      }).toString();
       request = fetch(url, { headers: { authorization: `Bearer ${fixture.config.token}` } }).then(
         async (response) => {
           await response.arrayBuffer();
