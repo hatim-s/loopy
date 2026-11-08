@@ -10,7 +10,8 @@ import {
   type SourceArtifact,
   sourceArtifactSchema,
 } from "@loopy/contract";
-import { Registry, SecretStore } from "@loopy/runtime/local";
+import { Registry } from "@loopy/runtime/local";
+import { SecretStore } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
 import { saveCompiled } from "../../runtime/src/local/save-compiled";
 import { compiledBody } from "./compiled-fixture";

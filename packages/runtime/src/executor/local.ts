@@ -9,7 +9,7 @@ import {
   ExecutorError,
 } from "@loopy/core";
 import { Effect } from "effect";
-import { spawnCaptured } from "../local/execution-host";
+import { spawnCaptured } from "../os";
 import { specBundles } from "./prepare";
 import { FilesystemReceipts } from "./receipts";
 import { workerFailure } from "./response";

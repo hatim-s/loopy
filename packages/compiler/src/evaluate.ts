@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { boundaryOptions, diagnosticSchema, graphSchema } from "@loopy/contract";
 import { errorMessage } from "@loopy/core";
-import { compilerLauncher, spawnCaptured } from "@loopy/runtime/local";
+import { compilerLauncher, spawnCaptured } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
 import {
   AuthorDiagnostics,

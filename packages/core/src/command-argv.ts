@@ -1,3 +1,4 @@
+import type { ExecutionSpec } from "./executor";
 import type { CommandFlag, CommandFlagSpec } from "./graph";
 import type { Json } from "./json";
 
@@ -177,4 +178,12 @@ export function renderCommandArgv(
   const separator = spec?.positionalSeparator && operands.length ? ["--"] : [];
 
   return [...(spec?.path ?? []), ...rendered.before, ...separator, ...operands, ...rendered.after];
+}
+
+export function renderCommand(
+  spec: Extract<ExecutionSpec, { kind: "command" }>,
+): [string, ...string[]] {
+  const [program = "", ...operands] = spec.argv;
+
+  return [program, ...renderCommandArgv(spec.node.flagSpec, operands, spec.flags)];
 }

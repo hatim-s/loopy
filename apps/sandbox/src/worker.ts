@@ -6,9 +6,9 @@ import {
   executionSpecSchema,
   SANDBOX_MAX_CAPTURE_BYTES,
 } from "@loopy/contract";
-import { durationMs, type Json } from "@loopy/core";
+import { durationMs, type Json, renderCommand } from "@loopy/core";
 import { bundleResult } from "@loopy/runtime/executor/protocol";
-import { CommandExecutionError, renderCommand } from "@loopy/runtime/local/execution-host";
+import { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect } from "effect";
 import { bundleFile, CONTAINER, containerEnvironment } from "./container-layout";
 import { io } from "./operations";

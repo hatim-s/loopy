@@ -1,8 +1,9 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { decodeJson } from "@loopy/contract";
+import { errnoCode } from "@loopy/core";
 import { Schema } from "effect";
-import { errnoCode, writeFileAtomically } from "../fs";
+import { writeFileAtomically } from "../../os";
 
 const daemonFileSchema = Schema.Struct({
   pid: Schema.Int.check(Schema.isGreaterThan(0)),

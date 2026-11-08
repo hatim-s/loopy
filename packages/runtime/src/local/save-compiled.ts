@@ -8,8 +8,8 @@ import {
 } from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
 import { Effect } from "effect";
+import { writeFileAtomically } from "../os";
 import { type ArtifactRegistry, ArtifactValidationError, RegistryError } from "../service";
-import { writeFileAtomically } from "./fs";
 import type { Registry } from "./registry";
 import { registrySync } from "./registry";
 import { redactSourceArtifact } from "./source-view";

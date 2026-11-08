@@ -1,7 +1,13 @@
 import { realpath } from "node:fs/promises";
-import { type ExecutionMode, type ExecutionSpec, ExecutorError, errorMessage } from "@loopy/core";
+import {
+  type ExecutionMode,
+  type ExecutionSpec,
+  ExecutorError,
+  errorMessage,
+  renderCommand,
+} from "@loopy/core";
 import { Effect, Result } from "effect";
-import { renderCommand, SecretStore, secretRedactor } from "../local/execution-host";
+import { SecretStore, secretRedactor } from "../os";
 
 export type ExecutionOptions = {
   home: string;

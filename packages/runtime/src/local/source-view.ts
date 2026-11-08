@@ -1,8 +1,7 @@
 import { type SourceArtifact, unavailableSource } from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
 import { Effect } from "effect";
-import { secretRedactor } from "./secret-redactor";
-import { SecretStore } from "./secrets";
+import { SecretStore, secretRedactor } from "../os";
 
 // Source never contains runtime substitutions. Withhold a snapshot that also contains a stored secret.
 export const redactSourceArtifact = (home: string, artifact: SourceArtifact) =>

@@ -4,7 +4,7 @@ export { canonicalJson } from "./canonical-json";
 
 export { counter, hashSchema, positiveInt, struct } from "./codec";
 
-export { checkCommandFlags, renderCommandArgv } from "./command-argv";
+export { checkCommandFlags, renderCommand, renderCommandArgv } from "./command-argv";
 
 export { nextFire, parseCron } from "./cron";
 
@@ -14,7 +14,7 @@ export * from "./duration";
 
 export * from "./effects";
 
-export { errnoCode, errorMessage } from "./errors";
+export { errnoCode, errorMessage, SecretError } from "./errors";
 
 export * from "./executor";
 

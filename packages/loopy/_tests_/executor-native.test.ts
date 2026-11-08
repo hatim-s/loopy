@@ -6,8 +6,8 @@ import { LocalExecutor } from "@loopy/runtime/executor";
 import { Effect, Schema } from "effect";
 import { bundleResult } from "../../runtime/src/executor/protocol";
 import { FilesystemReceipts, receiptPath } from "../../runtime/src/executor/receipts";
-import { secretRedactor } from "../../runtime/src/local/secret-redactor";
-import { SecretStore } from "../../runtime/src/local/secrets";
+import { secretRedactor } from "../../runtime/src/os/secret-redactor";
+import { SecretStore } from "../../runtime/src/os/secrets";
 import { commandSpec, fixture } from "./fixtures/executor";
 
 test("code protocol captures stderr logs and leading stdout, and retains its trusted completion receipt", async () => {

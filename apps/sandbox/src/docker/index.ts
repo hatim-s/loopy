@@ -8,7 +8,7 @@ import {
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptRequest,
 } from "@loopy/contract";
-import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
+import { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect, Result, Schema } from "effect";
 import type { SandboxConfig } from "../config";
 import { bundleFile, CONTAINER } from "../container-layout";

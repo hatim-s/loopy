@@ -21,16 +21,17 @@ const ALLOWED: Record<Package, readonly Package[]> = {
   loopy: ["core", "contract", "sdk", "runtime", "compiler", "cli"],
 };
 
-const RUNTIME_LAYERS = ["host", "store", "executor", "service", "local"] as const;
+const RUNTIME_LAYERS = ["os", "host", "store", "executor", "service", "local"] as const;
 
 type RuntimeLayer = (typeof RUNTIME_LAYERS)[number];
 
 const RUNTIME_IMPORTS: Record<RuntimeLayer, readonly RuntimeLayer[]> = {
+  os: [],
   host: [],
-  store: [],
-  executor: ["local"],
+  store: ["os"],
+  executor: ["os"],
   service: [],
-  local: ["host", "store", "executor", "service"],
+  local: ["os", "host", "store", "executor", "service"],
 };
 
 interface Manifest {
@@ -174,10 +175,7 @@ function runtimeViolations(file: string, target: string): string[] {
     return [`${relative(ROOT, file)} may not import runtime ${targetLayer}.`];
   }
 
-  if (
-    target !== join(root, targetLayer, "index.ts") &&
-    !(layer === "executor" && target === join(root, "local/execution-host.ts"))
-  ) {
+  if (target !== join(root, targetLayer, "index.ts")) {
     return [`${relative(ROOT, file)} must import runtime ${targetLayer} through its barrel.`];
   }
 

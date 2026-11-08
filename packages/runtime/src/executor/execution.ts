@@ -15,7 +15,7 @@ import {
   executeLocalCommand,
   spawnCaptured,
   withBundleSandbox,
-} from "../local/execution-host";
+} from "../os";
 import { type ExecutionOptions, type PreparedExecution, prepareExecution } from "./prepare";
 import { bundleResult } from "./protocol";
 import type { FilesystemReceipts } from "./receipts";

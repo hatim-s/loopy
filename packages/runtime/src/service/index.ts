@@ -15,7 +15,6 @@ export {
   GenerationError,
   RegistryConflictError,
   RegistryError,
-  SecretError,
   WorkspaceError,
 } from "./registry";
 

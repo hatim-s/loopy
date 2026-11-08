@@ -1,4 +1,5 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
+import { SecretError } from "@loopy/core";
 import {
   apiRoutes,
   dispatch,
@@ -6,7 +7,6 @@ import {
   GenerationError,
   json,
   makeService,
-  SecretError,
   ServiceError,
 } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";

@@ -1,6 +1,6 @@
 import type { ExecutionResult, ExecutionSpec, RunOutcome } from "@loopy/core";
+import { renderCommand } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
-import { renderCommand } from "@loopy/runtime/local/execution-host";
 import { loopy } from "loopy/graph";
 
 type Capture = {

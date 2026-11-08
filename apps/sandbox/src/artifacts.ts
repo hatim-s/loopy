@@ -5,7 +5,7 @@ import {
   type SandboxArtifact,
   sandboxArtifactReadSchema,
 } from "@loopy/contract";
-import type { CommandExecutionError } from "@loopy/runtime/local/execution-host";
+import type { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
 import { verifiedBytes } from "./bytes";
 import type { SandboxConfig } from "./config";

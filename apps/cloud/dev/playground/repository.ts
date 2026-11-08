@@ -15,7 +15,7 @@ import { promisify } from "node:util";
 import { decodeBoundary } from "@loopy/contract";
 import { errnoCode } from "@loopy/core";
 import { Schema } from "effect";
-import { within } from "../../../../packages/runtime/src/local/sandbox/paths";
+import { within } from "../../../../packages/runtime/src/os/sandbox/paths";
 import { profile, root as workspace } from "./config";
 import { type Group, groups } from "./journal";
 import { burstGroups, FIXTURES_PER_GROUP } from "./plan";

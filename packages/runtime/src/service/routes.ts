@@ -7,12 +7,11 @@ import {
   encodeBoundary,
   routes,
 } from "@loopy/contract";
-import type { Store } from "@loopy/core";
+import { SecretError, type Store } from "@loopy/core";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { ServiceError } from "./error";
 import type { EventReader } from "./events";
 import { eventStream } from "./events";
-import { SecretError } from "./registry";
 import type { Service } from "./service";
 
 const STATUS: Record<ErrorCode, number> = {

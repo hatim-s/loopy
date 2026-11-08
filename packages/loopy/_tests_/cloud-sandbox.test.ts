@@ -14,7 +14,7 @@ import {
   sandboxErrorSchema,
 } from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
-import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
+import { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect, Result, Schema } from "effect";
 import { type ArtifactReader, DockerArtifacts } from "../../../apps/sandbox/src/artifacts";
 import type { Attempts } from "../../../apps/sandbox/src/attempt";

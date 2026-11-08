@@ -14,9 +14,6 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { errnoCode } from "@loopy/core";
 
-/** The `code` of a Node filesystem error, or undefined for anything else. */
-export { errnoCode } from "@loopy/core";
-
 /** Canonical path for ownership checks: symlinks resolve, missing files stay absolute. */
 export function canonicalPath(path: string): string {
   return existsSync(path) ? realpathSync(path) : resolve(path);

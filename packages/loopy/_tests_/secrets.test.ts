@@ -14,8 +14,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { localDaemon, openRunStore } from "@loopy/runtime/local";
 import { Effect, Exit, Scope } from "effect";
-import { secretRedactor } from "../../runtime/src/local/secret-redactor";
-import { SecretStore } from "../../runtime/src/local/secrets";
+import { secretRedactor } from "../../runtime/src/os/secret-redactor";
+import { SecretStore } from "../../runtime/src/os/secrets";
 
 const scopes: Scope.Closeable[] = [];
 

@@ -17,7 +17,7 @@ await Effect.runPromise(
       ...(yield* fixtureIO("script evidence", () =>
         Array.fromAsync(new Bun.Glob("**/*.ts").scan({ cwd: resolve(root, "apps/sandbox/src") })),
       )).map((name) => `apps/sandbox/src/${name}`),
-      "packages/runtime/src/local/spawn.ts",
+      "packages/runtime/src/os/spawn.ts",
       "packages/runtime/src/executor/protocol.ts",
       "packages/contract/src/sandbox.ts",
       ...["index.ts", "resources.ts", "faults.ts", "scenario.ts"].map(

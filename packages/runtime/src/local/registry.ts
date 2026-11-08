@@ -13,10 +13,10 @@ import {
   sourceArtifactSchema,
   unavailableSource,
 } from "@loopy/contract";
-import { canonicalJson, isRecord, validateSlug } from "@loopy/core";
+import { canonicalJson, errnoCode, isRecord, validateSlug } from "@loopy/core";
 import { Data, Effect } from "effect";
+import { canonicalPath, withLockDirectory, writeFileAtomically } from "../os";
 import { RegistryConflictError, RegistryError } from "../service";
-import { canonicalPath, errnoCode, withLockDirectory, writeFileAtomically } from "./fs";
 import { redactSourceArtifact } from "./source-view";
 
 function readEntry(file: string) {

@@ -12,10 +12,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
+import { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
-import { executeLocalCommand } from "../../runtime/src/local/process";
-import { filesystem } from "../../runtime/src/local/sandbox/io";
+import { executeLocalCommand } from "../../runtime/src/os/process";
+import { filesystem } from "../../runtime/src/os/sandbox/io";
 
 const workspaces: string[] = [];
 

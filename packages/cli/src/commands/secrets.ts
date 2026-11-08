@@ -1,6 +1,6 @@
 import { routes } from "@loopy/contract";
 import { validateSecretName } from "@loopy/core";
-import { validateSecretValue } from "@loopy/runtime/local";
+import { validateSecretValue } from "@loopy/runtime/os";
 import { Effect } from "effect";
 import { request } from "../client";
 import { defineCommand } from "../command";
