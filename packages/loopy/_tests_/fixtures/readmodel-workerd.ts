@@ -1,10 +1,9 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
-import { decodeBoundary, routes } from "@loopy/contract";
-import type { ScopeItemsQuery } from "@loopy/core";
+import { decodeBoundary, routes, type ScopeItemsQuery } from "@loopy/contract";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect } from "effect";
 import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
-import { countHistory, readmodelAt } from "./readmodel-history";
+import { countHistory } from "./readmodel-history";
 import { seedScopes } from "./readmodel-scopes";
 
 export class ReadmodelProbe {
@@ -15,7 +14,6 @@ export class ReadmodelProbe {
 
     const store = new SqlRunStore(new DurableSqlDriver(this.ctx.storage), {
       owner: { identity: { pid: null, host: "readmodel-probe" }, isAlive: () => false },
-      now: () => Date.parse(readmodelAt),
     });
 
     const schema = () =>

@@ -1,9 +1,4 @@
-export {
-  makeSqliteRunStore,
-  openRunStore,
-  type SqliteRunStore,
-  sqliteStoreLayer,
-} from "../store";
+export { makeSqliteRunStore, openRunStore, type SqliteRunStore } from "../store";
 
 export { compilerLauncher } from "./compiler-launcher";
 

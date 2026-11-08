@@ -1,3 +1,4 @@
+import { PAGE_LIMIT } from "@loopy/core";
 import { Effect, Schema, SchemaGetter } from "effect";
 import { queryNumber, struct } from "./codec";
 import { putLoopyBodySchema } from "./compiled-loopy";
@@ -102,7 +103,7 @@ export const runsQuerySchema = struct({
   limit: queryNumber
     .check(Schema.isInt())
     .check(Schema.isGreaterThan(0))
-    .check(Schema.isLessThanOrEqualTo(200))
+    .check(Schema.isLessThanOrEqualTo(PAGE_LIMIT))
     .pipe(Schema.withDecodingDefault(Effect.succeed(50))),
   before: Schema.optional(
     Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)),
@@ -127,8 +128,8 @@ export const logsQuerySchema = struct({
   limit: queryNumber
     .check(Schema.isInt())
     .check(Schema.isGreaterThan(0))
-    .check(Schema.isLessThanOrEqualTo(200))
-    .pipe(Schema.withDecodingDefault(Effect.succeed(200))),
+    .check(Schema.isLessThanOrEqualTo(PAGE_LIMIT))
+    .pipe(Schema.withDecodingDefault(Effect.succeed(PAGE_LIMIT))),
   after: Schema.optional(queryNumber.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))),
 });
 

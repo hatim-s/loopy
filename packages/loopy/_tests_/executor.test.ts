@@ -6,12 +6,13 @@ import { graphSchema } from "@loopy/contract";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { activate } from "@loopy/runtime/host";
 import { localDaemon, makeLocalService, openRunStore, SecretStore } from "@loopy/runtime/local";
-import { MemoryStore } from "@loopy/runtime/store";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { receiptPath } from "../../runtime/src/executor/receipts";
 import { newRun } from "./fixture";
 import { fixture } from "./fixtures/executor";
 import { approveDemoGraph } from "./fixtures/graphs";
+import { waitUntil } from "./fixtures/service-runtime";
+import { MemorySqlStore } from "./store-fixture";
 
 test("compiled command parser gets result and prepared input, then code runs through service and daemon", async () => {
   const f = await fixture();
@@ -89,7 +90,10 @@ export default loopy("sequence", {input: {}, run: () => {sh.exec(["printf", "raw
     );
     expect(replacement.revision).not.toBe(compiled.revision);
     expect((await Effect.runPromise(store.getRun(run.id)))?.revision).toBe(compiled.revision);
-    expect(await Effect.runPromise(daemon.tick)).toEqual({ fired: 0, activated: 1 });
+    await Effect.runPromise(Effect.forkIn(daemon.run, scope));
+    await Effect.runPromise(
+      waitUntil(Effect.map(store.getRun(run.id), (stored) => stored?.status === "succeeded")),
+    );
     const snapshot = await Effect.runPromise(service.runSnapshot(run.id));
     expect(snapshot.run).toMatchObject({ status: "succeeded", output: { message: "hello hello" } });
     expect(snapshot.nodeRuns.map((node) => node.status)).toEqual([
@@ -144,7 +148,7 @@ for (const failure of ["timeout", "output_limit", "nonzero"] as const) {
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
     node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const store = new MemoryStore();
+    const store = new MemorySqlStore();
     await Effect.runPromise(store.createRun({ ...newRun(), input: { subject: "test" } }));
 
     const outcome = await Effect.runPromise(
@@ -216,7 +220,7 @@ for (const ending of ["timeout", "success"] as const) {
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
     node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const runs = new MemoryStore();
+    const runs = new MemorySqlStore();
     await Effect.runPromise(runs.createRun({ ...newRun(), input: { subject: "test" } }));
 
     const outcome = await Effect.runPromise(
@@ -292,7 +296,7 @@ for (const ending of ["success", "timeout", "output_limit", "nonzero"] as const)
     node.module.bundleHash = "a".repeat(64);
     node.timeout = 500;
     node.retry = { attempts: 1, backoff: "exponential", retryOnExit: false };
-    const runs = new MemoryStore();
+    const runs = new MemorySqlStore();
     await Effect.runPromise(runs.createRun({ ...newRun(), input: { subject: "test" } }));
 
     const outcome = await Effect.runPromise(

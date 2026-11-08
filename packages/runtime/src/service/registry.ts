@@ -1,4 +1,5 @@
 import type {
+  DashboardReader,
   DefinitionSummary,
   Graph,
   PutLoopyBody,
@@ -63,7 +64,7 @@ export interface SecretOperations {
 }
 
 export interface ServiceOptions {
-  store: Store;
+  store: Store & DashboardReader;
   registry: (workspace: string) => Effect.Effect<ArtifactRegistry, RegistryError | ServiceError>;
   clock: { now(): number };
   canonicalWorkspace: (workspace: string) => Effect.Effect<string, WorkspaceError | ServiceError>;

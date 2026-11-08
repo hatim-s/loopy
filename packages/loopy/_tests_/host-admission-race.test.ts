@@ -1,34 +1,20 @@
 import { expect, test } from "bun:test";
 import type { Executor } from "@loopy/core";
-import { MemoryStore } from "@loopy/runtime/store";
+import { activate } from "@loopy/runtime/host";
 import { loopy, parallel, sh, wait } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { activate } from "../../runtime/src/host/activation";
 import { newRun } from "./fixture";
+import { RetryGateStore } from "./host-policy-fixture";
 
 test("admission commits work first and reloads a signal before reducing denial", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
-      let now = Date.parse(newRun().createdAt);
+      const now = Date.parse(newRun().createdAt);
       yield* TestClock.setTime(now);
       const denied = yield* Deferred.make<void>();
 
-      class RecordingStore extends MemoryStore {
-        override apply(batch: Parameters<MemoryStore["apply"]>[0]) {
-          return super
-            .apply(batch)
-            .pipe(
-              Effect.tap(() =>
-                batch.effects.some((effect) => effect.kind === "schedule_retry")
-                  ? Deferred.succeed(denied, undefined)
-                  : Effect.void,
-              ),
-            );
-        }
-      }
-
-      const store = new RecordingStore(() => now);
+      const store = new RetryGateStore(denied);
 
       const graph = loopy("admission-race", {
         input: {},
@@ -88,7 +74,6 @@ test("admission commits work first and reloads a signal before reducing denial",
         ]),
       );
       expect(attempts).toEqual([]);
-      now += 60_000;
       yield* TestClock.adjust(60_000);
       expect(yield* Fiber.join(running)).toMatchObject({
         status: "succeeded",

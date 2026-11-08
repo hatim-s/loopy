@@ -4,13 +4,13 @@ import { join } from "node:path";
 import type { Json } from "@loopy/core";
 import { revision } from "@loopy/core";
 import { activate } from "@loopy/runtime/host";
-import { MemoryStore } from "@loopy/runtime/store";
 import { loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
 import { Registry } from "../../runtime/src/local/registry";
 import { makeLocalService } from "../../runtime/src/local/service";
 import { FakeExecutor } from "./fixture";
 import { fixture } from "./fixtures/executor";
+import { MemorySqlStore } from "./store-fixture";
 
 async function setup() {
   const f = await fixture();
@@ -32,7 +32,7 @@ async function setup() {
       source: { path: source, workspace: f.workspace },
     }),
   );
-  const store = new MemoryStore();
+  const store = new MemorySqlStore();
 
   const service = makeLocalService({
     store,
@@ -57,7 +57,9 @@ for (const input of invalidInputs) {
     await expect(
       Effect.runPromise(f.service.startRun("input", input, f.workspace)),
     ).rejects.toThrow("Input does not match the saved graph schema.");
-    expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+    expect(
+      await Effect.runPromise(f.store.queryRuns({ limit: 200, now: new Date().toISOString() })),
+    ).toEqual([]);
   });
 }
 

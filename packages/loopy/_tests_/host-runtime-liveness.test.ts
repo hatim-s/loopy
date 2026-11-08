@@ -2,16 +2,17 @@ import { expect, test } from "bun:test";
 import { type Executor, OwnershipError, StorageError } from "@loopy/core";
 import {
   DriverCleanupFailed,
+  LeaseReleaseUnknown,
   makeDaemon,
   PreparationError,
-  PreparationReleaseUnknown,
   ScheduleRevisionError,
 } from "@loopy/runtime/host";
-import { MemoryStore } from "@loopy/runtime/store";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Cause, Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "./fixture";
+import { countPasses, nextPass, waitUntil } from "./fixtures/service-runtime";
+import { MemorySqlStore } from "./store-fixture";
 
 const graph = loopy("test", { input: {}, run: () => sh(["true"]) }).graph;
 
@@ -31,7 +32,7 @@ function schedule(slug = "test") {
   };
 }
 
-test("joining tick leaves background schedule and run admission live", async () => {
+test("a held activation leaves background schedule and run admission live", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -41,8 +42,8 @@ test("joining tick leaves background schedule and run admission live", async () 
         const completed = yield* Deferred.make<void>();
         let finishes = 0;
 
-        class RecordingStore extends MemoryStore {
-          override apply(batch: Parameters<MemoryStore["apply"]>[0]) {
+        class RecordingStore extends MemorySqlStore {
+          override apply(batch: Parameters<MemorySqlStore["apply"]>[0]) {
             return super.apply(batch).pipe(
               Effect.tap(() => {
                 if (
@@ -62,7 +63,7 @@ test("joining tick leaves background schedule and run admission live", async () 
           }
         }
 
-        const store = new RecordingStore(() => base);
+        const store = new RecordingStore();
 
         const executor: Executor = {
           lookup: () => Effect.succeed({ kind: "none" }),
@@ -87,21 +88,21 @@ test("joining tick leaves background schedule and run admission live", async () 
         });
 
         yield* store.createRun({ ...newRun(), id: "held" });
-        const ticking = yield* Effect.forkChild(daemon.tick);
+        const running = yield* Effect.forkChild(daemon.run);
         yield* Deferred.await(entered);
         yield* store.putSchedule(schedule());
         yield* store.createRun({ ...newRun(), id: "new" });
-        const running = yield* Effect.forkChild(daemon.run);
         const duplicate = yield* Effect.forkChild(daemon.run);
         yield* Deferred.await(completed);
         expect((yield* store.getRun("held"))?.status).toBe("running");
-        expect(yield* store.listRuns({ status: "succeeded" })).toHaveLength(2);
+        expect(
+          yield* store.queryRuns({ status: "succeeded", limit: 200, now: newRun().createdAt }),
+        ).toHaveLength(2);
         expect((yield* store.listSchedules())[0]?.nextFireAt).toBe(
           new Date(base + 60_000).toISOString(),
         );
         yield* Deferred.succeed(held, undefined);
         yield* daemon.stop;
-        yield* Fiber.join(ticking);
         yield* Fiber.join(running);
         yield* Fiber.join(duplicate);
       }),
@@ -116,7 +117,7 @@ test("preparation cleanup deadline unblocks stop and retains the original failur
         const releasing = yield* Deferred.make<void>();
         const errors: Cause.Cause<unknown>[] = [];
 
-        class StalledStore extends MemoryStore {
+        class StalledStore extends MemorySqlStore {
           override release() {
             return Deferred.succeed(releasing, undefined).pipe(Effect.andThen(Effect.never));
           }
@@ -136,30 +137,22 @@ test("preparation cleanup deadline unblocks stop and retains the original failur
         });
 
         yield* store.createRun(newRun());
-        const tick = yield* Effect.forkChild(daemon.tick);
+        const running = yield* Effect.forkChild(daemon.run);
         yield* Deferred.await(releasing);
         const stop = yield* Effect.forkChild(daemon.stop);
         yield* TestClock.adjust(5000);
         yield* Fiber.join(stop);
-        yield* Fiber.join(tick);
+        yield* Fiber.join(running);
 
-        const diagnostic = errors
-          .flatMap((cause) =>
-            cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error),
-          )
-          .find((error) => error instanceof PreparationReleaseUnknown);
+        const reported = errors.flatMap((cause) =>
+          cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error),
+        );
 
-        expect(diagnostic).toBeInstanceOf(PreparationReleaseUnknown);
+        const diagnostic = reported.find((error) => error instanceof LeaseReleaseUnknown);
 
-        if (!(diagnostic instanceof PreparationReleaseUnknown)) {
-          throw new Error("Missing cleanup diagnostic");
-        }
-
-        expect(diagnostic.preparation).toBe(preparation);
-        expect(diagnostic.primary._tag === "Success" && diagnostic.primary.value).toEqual({
-          status: "failed",
-          error: "Missing revision",
-        });
+        expect(diagnostic).toBeInstanceOf(LeaseReleaseUnknown);
+        expect(diagnostic?.primary._tag).toBe("Success");
+        expect(reported).toContain(preparation);
         expect((yield* store.getRun("run"))?.error).toBe("Missing revision");
       }),
     ).pipe(Effect.provide(TestClock.layer())),
@@ -175,7 +168,7 @@ for (const failure of ["schedule", "scan"] as const) {
           let scans = 0;
           let errors = 0;
 
-          class CountingStore extends MemoryStore {
+          class CountingStore extends MemorySqlStore {
             override dueRuns(at: string) {
               scans++;
 
@@ -191,7 +184,7 @@ for (const failure of ["schedule", "scan"] as const) {
             }
           }
 
-          const store = new CountingStore(() => base);
+          const store = new CountingStore();
 
           if (failure === "schedule") {
             yield* store.putSchedule(schedule());
@@ -232,13 +225,14 @@ test("claim contention is silent while another queued run completes", async () =
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        class ContendedStore extends MemoryStore {
+        class ContendedStore extends MemorySqlStore {
           override claim(id: string, token: string) {
             return id === "run" ? Effect.fail(new OwnershipError(id)) : super.claim(id, token);
           }
         }
 
         const store = new ContendedStore();
+        const passes = countPasses(store);
         const errors: Cause.Cause<unknown>[] = [];
 
         const daemon = yield* makeDaemon({
@@ -253,74 +247,74 @@ test("claim contention is silent while another queued run completes", async () =
 
         yield* store.createRun(newRun());
         yield* store.createRun({ ...newRun(), id: "second" });
-        expect(yield* daemon.tick).toEqual({ fired: 0, activated: 1 });
+        yield* Effect.forkScoped(daemon.run);
+        yield* waitUntil(Effect.map(store.getRun("second"), (run) => run?.status === "succeeded"));
+        yield* nextPass(daemon, passes);
+        expect((yield* store.getRun("run"))?.status).toBe("queued");
         expect(errors).toEqual([]);
       }),
     ),
   );
 });
 
-for (const caller of ["tick", "run"] as const) {
-  test(`stop waits for an in-flight ${caller} scan and prevents another scan`, async () => {
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const entered = yield* Deferred.make<void>();
-          const gate = yield* Deferred.make<void>();
-          let scans = 0;
-          let stopped = false;
+test("stop waits for an in-flight scan and prevents another scan", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const gate = yield* Deferred.make<void>();
+        let scans = 0;
+        let stopped = false;
 
-          class GatedStore extends MemoryStore {
-            override dueRuns(at: string) {
-              return Effect.gen({ self: this }, function* () {
-                scans++;
-                yield* Deferred.succeed(entered, undefined);
-                yield* Deferred.await(gate);
+        class GatedStore extends MemorySqlStore {
+          override dueRuns(at: string) {
+            return Effect.gen({ self: this }, function* () {
+              scans++;
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(gate);
 
-                return yield* superDue(at);
-              });
-            }
+              return yield* superDue(at);
+            });
           }
+        }
 
-          // Capture the inherited operation before injecting the scan gate.
-          const store = new GatedStore();
-          const superDue = MemoryStore.prototype.dueRuns.bind(store);
+        // Capture the inherited operation before injecting the scan gate.
+        const store = new GatedStore();
+        const superDue = MemorySqlStore.prototype.dueRuns.bind(store);
 
-          const daemon = yield* makeDaemon({
-            store,
-            concurrency: 1,
-            prepare: () => Effect.succeed({ graph: empty, executor: new FakeExecutor() }),
-            revisionFor: () => Effect.succeed("bundle"),
-          });
+        const daemon = yield* makeDaemon({
+          store,
+          concurrency: 1,
+          prepare: () => Effect.succeed({ graph: empty, executor: new FakeExecutor() }),
+          revisionFor: () => Effect.succeed("bundle"),
+        });
 
-          const active = yield* Effect.forkChild(caller === "run" ? daemon.run : daemon.tick);
-          yield* Deferred.await(entered);
+        const active = yield* Effect.forkChild(daemon.run);
+        yield* Deferred.await(entered);
 
-          const stop = yield* Effect.forkChild(
-            daemon.stop.pipe(
-              Effect.tap(() =>
-                Effect.sync(() => {
-                  stopped = true;
-                }),
-              ),
+        const stop = yield* Effect.forkChild(
+          daemon.stop.pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                stopped = true;
+              }),
             ),
-          );
+          ),
+        );
 
-          yield* Effect.yieldNow;
-          expect(stopped).toBe(false);
-          yield* Deferred.succeed(gate, undefined);
-          yield* Fiber.join(stop);
-          yield* Fiber.join(active);
-          expect(stopped).toBe(true);
-          expect(scans).toBe(1);
-          yield* daemon.tick;
-          yield* daemon.run;
-          expect(scans).toBe(1);
-        }),
-      ),
-    );
-  });
-}
+        yield* Effect.yieldNow;
+        expect(stopped).toBe(false);
+        yield* Deferred.succeed(gate, undefined);
+        yield* Fiber.join(stop);
+        yield* Fiber.join(active);
+        expect(stopped).toBe(true);
+        expect(scans).toBe(1);
+        yield* daemon.run;
+        expect(scans).toBe(1);
+      }),
+    ),
+  );
+});
 
 test("schedule mutation wakes the loop without repeated scans before its deadline", async () => {
   await Effect.runPromise(
@@ -329,7 +323,7 @@ test("schedule mutation wakes the loop without repeated scans before its deadlin
         yield* TestClock.setTime(base);
         let scans = 0;
 
-        class CountingStore extends MemoryStore {
+        class CountingStore extends MemorySqlStore {
           override dueRuns(at: string) {
             scans++;
 
@@ -337,7 +331,7 @@ test("schedule mutation wakes the loop without repeated scans before its deadlin
           }
         }
 
-        const store = new CountingStore(() => base);
+        const store = new CountingStore();
 
         const daemon = yield* makeDaemon({
           store,
@@ -377,7 +371,7 @@ test("unrelated terminal run events leave idle sleep intact", async () => {
       Effect.gen(function* () {
         let scans = 0;
 
-        class CountingStore extends MemoryStore {
+        class CountingStore extends MemorySqlStore {
           override dueRuns(at: string) {
             scans++;
 
@@ -417,11 +411,11 @@ test("ownership loss reports activation unsubscribe defects instead of suppressi
         const errors: Cause.Cause<unknown>[] = [];
         let subscriptions = 0;
 
-        class LosingStore extends MemoryStore {
+        class LosingStore extends MemorySqlStore {
           override heartbeat() {
             return Effect.succeed(false);
           }
-          override subscribe(listener: Parameters<MemoryStore["subscribe"]>[0]) {
+          override subscribe(listener: Parameters<MemorySqlStore["subscribe"]>[0]) {
             const unsubscribe = super.subscribe(listener);
             const index = ++subscriptions;
 
@@ -435,7 +429,7 @@ test("ownership loss reports activation unsubscribe defects instead of suppressi
           }
         }
 
-        const store = new LosingStore(undefined, 1000);
+        const store = new LosingStore({ leaseMs: 1000 });
 
         const executor: Executor = {
           lookup: () => Effect.succeed({ kind: "none" }),
@@ -453,10 +447,10 @@ test("ownership loss reports activation unsubscribe defects instead of suppressi
         });
 
         yield* store.createRun(newRun());
-        const ticking = yield* Effect.forkChild(daemon.tick);
+        yield* Effect.forkScoped(daemon.run);
         yield* Deferred.await(entered);
         yield* TestClock.adjust(250);
-        expect(yield* Fiber.join(ticking)).toEqual({ fired: 0, activated: 0 });
+        yield* waitUntil(Effect.sync(() => errors.length > 0));
         expect(errors).toHaveLength(1);
 
         const cleanup = errors
@@ -495,7 +489,7 @@ test("mixed preparation/interruption Cause never persists a business failure", a
       Effect.gen(function* () {
         const preparation = new PreparationError({ cause: new Error("prepare interrupted") });
         const cause = Cause.combine(Cause.fail(preparation), Cause.interrupt(123));
-        const store = new MemoryStore();
+        const store = new MemorySqlStore();
         const errors: Cause.Cause<unknown>[] = [];
 
         const daemon = yield* makeDaemon({
@@ -509,12 +503,14 @@ test("mixed preparation/interruption Cause never persists a business failure", a
         });
 
         yield* store.createRun(newRun());
-        const exit = yield* Effect.exit(daemon.tick);
-        expect(exit._tag === "Failure" && Cause.hasInterrupts(exit.cause)).toBe(true);
+        yield* Effect.forkScoped(daemon.run);
+        // TestClock holds the loop in its backoff after this single admission.
+        yield* waitUntil(Effect.sync(() => errors.length > 0));
+        expect(errors).toHaveLength(1);
+        expect(errors.every((cause) => Cause.hasInterrupts(cause))).toBe(true);
         expect((yield* store.getRun("run"))?.status).toBe("queued");
         expect((yield* store.getRun("run"))?.owner).toBeUndefined();
-        expect(errors).toHaveLength(1);
       }),
-    ),
+    ).pipe(Effect.provide(TestClock.layer())),
   );
 });

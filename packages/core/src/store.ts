@@ -1,20 +1,12 @@
 import type { Effect } from "effect";
-import { Context, Data } from "effect";
+import { Data } from "effect";
 import type { StoreEffect } from "./effects";
 import type { ExecutionKey, NodeRun, OutSchema } from "./graph";
-import type {
-  HookRecord,
-  Json,
-  LogRecord,
-  RunOutcome,
-  RunRecord,
-  RunSnapshot,
-  RunStatus,
-  RuntimeEvent,
-  Schedule,
-} from "./model";
-import type { DashboardReader } from "./queries";
+import type { HookRecord, Json, LogRecord, RunRecord, RuntimeEvent, Schedule } from "./model";
 import type { RateLimitResult } from "./rate-limit";
+
+// Every page and snapshot list shares this cap, so a full list can be told from a truncated one.
+export const PAGE_LIMIT = 200;
 
 export class StorageError extends Data.TaggedError("StorageError")<{
   readonly operation: string;
@@ -46,9 +38,8 @@ export type WaitResolution =
   | { kind: "resolved"; runId: string }
   | { kind: "rejected"; code: "unknown_hook" | "bad_request"; message: string };
 
-export interface Store extends DashboardReader {
+export interface Store {
   getWaits(runId: string): Effect.Effect<WaitRecord[], StorageError>;
-  getWait(token: string): Effect.Effect<WaitRecord | undefined, StorageError>;
   resolveWait(options: {
     token: string;
     payload: Json;
@@ -57,11 +48,9 @@ export interface Store extends DashboardReader {
   wakeRun(runId: string, at: string): Effect.Effect<WakeError | undefined, StorageError>;
   oldestEventSequence(): Effect.Effect<number | undefined, StorageError>;
   transactionEvents(txn: string, after: number): Effect.Effect<RuntimeEvent[], StorageError>;
-  dataVersion?(): Effect.Effect<number, StorageError>;
   events(after: number, limit: number): Effect.Effect<RuntimeEvent[], StorageError>;
   epoch(): Effect.Effect<string, StorageError>;
   eventCursor(): Effect.Effect<{ cursor: number; epoch: string }, StorageError>;
-  snapshotRun(id: string): Effect.Effect<RunSnapshot | undefined, StorageError>;
   pruneEvents(now: string): Effect.Effect<number, StorageError>;
   subscribe(listener: (events: RuntimeEvent[]) => void): () => void;
   acquireRateLimit(
@@ -73,22 +62,8 @@ export interface Store extends DashboardReader {
   readonly leaseMs: number;
   createRun(run: RunRecord): Effect.Effect<void, StorageError>;
   getRun(id: string): Effect.Effect<RunRecord | undefined, StorageError>;
-  listRuns(filter?: {
-    slug?: string;
-    status?: RunStatus;
-  }): Effect.Effect<RunRecord[], StorageError>;
   claim(runId: string, token: string): Effect.Effect<RunRecord, StorageError | OwnershipError>;
   heartbeat(runId: string, token: string): Effect.Effect<boolean, StorageError>;
-  suspend(
-    runId: string,
-    token: string,
-    wakeAt?: string,
-  ): Effect.Effect<void, StorageError | OwnershipError>;
-  finishRun(
-    runId: string,
-    token: string,
-    outcome: RunOutcome,
-  ): Effect.Effect<void, StorageError | OwnershipError>;
   release(runId: string, token: string): Effect.Effect<void, StorageError | OwnershipError>;
   getNodeRun(key: ExecutionKey): Effect.Effect<NodeRun | undefined, StorageError>;
   getNodeRuns(runId: string): Effect.Effect<NodeRun[], StorageError>;
@@ -100,6 +75,7 @@ export interface Store extends DashboardReader {
   getLogs(runId: string, after?: number, limit?: number): Effect.Effect<LogRecord[], StorageError>;
   dueRuns(now: string): Effect.Effect<RunRecord[], StorageError>;
   nextWakeAt(): Effect.Effect<string | undefined, StorageError>;
+  nextScheduleAt(): Effect.Effect<string | undefined, StorageError>;
   putSchedule(schedule: Omit<Schedule, "version">): Effect.Effect<Schedule, StorageError>;
   setScheduleEnabled(
     options: Pick<Schedule, "workspace" | "slug" | "enabled"> & {
@@ -118,5 +94,3 @@ export interface Store extends DashboardReader {
     },
   ): Effect.Effect<boolean, StorageError>;
 }
-
-export class StoreService extends Context.Service<StoreService, Store>()("loopy/Store") {}

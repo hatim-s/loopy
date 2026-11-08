@@ -2,13 +2,14 @@ import { expect, test } from "bun:test";
 import type { Executor } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
 import { activate } from "@loopy/runtime/host";
-import { MemoryStore } from "@loopy/runtime/store";
 import { code, loopy, sh } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { newRun } from "./fixture";
+import { RetryGateStore } from "./host-policy-fixture";
+import { MemorySqlStore } from "./store-fixture";
 
-export function graph() {
+function graph() {
   const graph = loopy("test", {
     input: {},
     run: () =>
@@ -33,7 +34,7 @@ test.each(["none", "finished"] as const)(
   async (kind) => {
     await Effect.runPromise(
       Effect.gen(function* () {
-        const store = new MemoryStore();
+        const store = new MemorySqlStore();
         const plan = graph();
         yield* store.createRun(newRun());
         yield* store.claim("run", "old");
@@ -100,24 +101,9 @@ for (const mode of ["retry", "rate"] as const) {
       Effect.gen(function* () {
         const base = Date.parse(newRun().createdAt);
         yield* TestClock.setTime(base);
-        let now = base;
         const waiting = yield* Deferred.make<void>();
 
-        class RetryStore extends MemoryStore {
-          override apply(batch: Parameters<MemoryStore["apply"]>[0]) {
-            return super
-              .apply(batch)
-              .pipe(
-                Effect.tap(() =>
-                  batch.effects.some((effect) => effect.kind === "schedule_retry")
-                    ? Deferred.succeed(waiting, undefined)
-                    : Effect.void,
-                ),
-              );
-          }
-        }
-
-        const store = new RetryStore(() => now);
+        const store = new RetryGateStore(waiting);
         const attempts: number[] = [];
 
         const plan =
@@ -169,7 +155,6 @@ for (const mode of ["retry", "rate"] as const) {
           nextRetryAt: new Date(base + (mode === "retry" ? 1000 : 60_000)).toISOString(),
         });
         expect(attempts).toEqual(mode === "retry" ? [1] : [1, 1]);
-        now += mode === "retry" ? 1000 : 60_000;
         yield* TestClock.adjust(mode === "retry" ? 1000 : 60_000);
         expect(yield* Fiber.join(running)).toMatchObject({ status: "succeeded" });
         expect(attempts).toEqual(mode === "retry" ? [1, 2] : [1, 1, 1]);

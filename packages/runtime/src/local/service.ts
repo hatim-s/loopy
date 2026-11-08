@@ -1,3 +1,4 @@
+import type { DashboardReader } from "@loopy/contract";
 import type { Store } from "@loopy/core";
 import { Effect } from "effect";
 import { GenerationError, makeService, WorkspaceError } from "../service";
@@ -12,7 +13,7 @@ export { ServiceError } from "../service";
 export function makeLocalService(options: {
   home: string;
   cwd: string;
-  store: Store;
+  store: Store & DashboardReader;
   clock: { now(): number };
 }) {
   return makeService({

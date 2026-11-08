@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { nodeIdSchema } from "@loopy/contract";
+import { type DashboardReader, nodeIdSchema } from "@loopy/contract";
 import type { NodeRun, Store, StoreEffect } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { newRun } from "./fixture";
@@ -19,7 +19,9 @@ const node: NodeRun = {
   receipt: "finished",
 };
 
-export function storeRecordContract(makeStore: () => Store | Promise<Store>) {
+export function storeRecordContract(
+  makeStore: () => (Store & DashboardReader) | Promise<Store & DashboardReader>,
+) {
   test("run, node and log inputs and every returned view isolate nested records", async () => {
     const store = await makeStore();
     const run = newRun();
@@ -58,7 +60,7 @@ export function storeRecordContract(makeStore: () => Store | Promise<Store>) {
 
     const views = [
       await Effect.runPromise(store.getRun("run")),
-      ...(await Effect.runPromise(store.listRuns())),
+      ...(await Effect.runPromise(store.queryRuns({ limit: 200, now: at }))),
       ...(await Effect.runPromise(store.dueRuns(at))),
     ];
 
@@ -82,7 +84,7 @@ export function storeRecordContract(makeStore: () => Store | Promise<Store>) {
       logs[0].message = "changed";
     }
 
-    const snapshot = await Effect.runPromise(store.snapshotRun("run"));
+    const snapshot = await Effect.runPromise(store.dashboardSnapshot("run"));
 
     if (snapshot) {
       snapshot.run.input = null;
@@ -99,7 +101,9 @@ export function storeRecordContract(makeStore: () => Store | Promise<Store>) {
       { message: "hello", data: { nested: [1] } },
     ]);
     const outcome = { status: "succeeded" as const, output: { nested: [1] } };
-    await Effect.runPromise(store.finishRun("run", "owner", outcome));
+    await Effect.runPromise(
+      store.apply({ runId: "run", token: "owner", effects: [{ kind: "finish_run", outcome, at }] }),
+    );
     outcome.output.nested.push(2);
     expect((await Effect.runPromise(store.getRun("run")))?.output).toEqual({ nested: [1] });
     await Effect.runPromise(store.release("run", "owner"));
@@ -219,7 +223,13 @@ export function storeRecordContract(makeStore: () => Store | Promise<Store>) {
       nextRetryAt: at,
       wakeAt: at,
     });
-    await Effect.runPromise(store.suspend("run", "next", offset));
+    await Effect.runPromise(
+      store.apply({
+        runId: "run",
+        token: "next",
+        effects: [{ kind: "suspend_run", wakeAt: offset, at: offset }],
+      }),
+    );
     await Effect.runPromise(store.release("run", "next"));
     expect((await Effect.runPromise(store.getRun("run")))?.wakeAt).toBe(at);
     expect(await Effect.runPromise(store.dueRuns("2026-10-16T04:59:59+05:00"))).toEqual([]);

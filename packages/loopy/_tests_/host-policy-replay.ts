@@ -3,38 +3,41 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OwnershipError } from "@loopy/core";
-import { MemoryStore } from "@loopy/runtime/store";
+import { activateDurable, type DurableActivationResult } from "@loopy/runtime/host";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect } from "effect";
-import { activateDurable, type DurableActivationResult } from "../../runtime/src/host/durable";
 import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
-import { createSqlSchema } from "../../runtime/src/store/sqlite/schema";
 import { newRun } from "./fixture";
 import { PolicyProvider, policyGraph, policyRetry, policySuccess } from "./host-policy-fixture";
 import { initialModel, type ModelAction, modelStep } from "./host-policy-model";
+import { NEVER_ALIVE, runAt } from "./store-fixture";
 
+export function policyStore(file = ":memory:") {
+  return new SqlRunStore(new BunSqlDriver(file), { leaseMs: 3000, owner: NEVER_ALIVE });
+}
+
+export async function withFilePolicyStore(use: (store: SqlRunStore) => Promise<void>) {
+  const root = mkdtempSync(join(tmpdir(), "loopy-host-model-"));
+  const store = policyStore(join(root, "runs.sqlite"));
+
+  try {
+    await use(store);
+  } finally {
+    await Effect.runPromise(store.close());
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// Each trace replays as its own run, so one store serves every trace of a search.
 export async function replayPolicy(
   trace: ModelAction[],
-  backend: "memory" | "sqlite",
+  store: SqlRunStore,
+  runId: string,
   maxWork: number,
 ) {
-  const root = backend === "sqlite" ? mkdtempSync(join(tmpdir(), "loopy-host-model-")) : null;
   let model = initialModel();
   const at = () => new Date(Date.parse(newRun().createdAt) + model.now).toISOString();
-  const now = () => Date.parse(at());
-  const db = root ? new BunSqlDriver(join(root, "runs.sqlite")) : null;
-
-  if (db) {
-    createSqlSchema(db);
-  }
-
-  const store = db
-    ? new SqlRunStore(db, {
-        now,
-        leaseMs: 3000,
-        owner: { identity: { pid: 0, host: "model" }, isAlive: () => false },
-      })
-    : new MemoryStore(now, 3000);
+  const run = runAt(() => Date.parse(at()));
 
   const provider = new PolicyProvider();
   const admit = provider.start.bind(provider);
@@ -53,7 +56,7 @@ export async function replayPolicy(
     throw new Error("Expected execution node.");
   }
 
-  await Effect.runPromise(store.createRun(newRun()));
+  await run(store.createRun({ ...newRun(), id: runId }));
   let cursor: string | null = null;
 
   try {
@@ -92,16 +95,14 @@ export async function replayPolicy(
         }
 
         case "signal": {
-          const hook = (await Effect.runPromise(store.getWaits("run")))[0];
+          const hook = (await run(store.getWaits(runId)))[0];
 
           if (!hook) {
             throw new Error("Expected registered hook.");
           }
 
           expect(
-            await Effect.runPromise(
-              store.resolveWait({ token: hook.token, payload: true, at: at() }),
-            ),
+            await run(store.resolveWait({ token: hook.token, payload: true, at: at() })),
           ).toMatchObject({ kind: "resolved" });
           break;
         }
@@ -133,15 +134,16 @@ export async function replayPolicy(
           }
 
           try {
-            const result: DurableActivationResult = await Effect.runPromise(
+            const result: DurableActivationResult = await run(
               activateDurable({
                 store,
                 provider,
                 graph,
-                runId: "run",
+                runId,
                 token: `owner${model.token}`,
                 at: at(),
                 maxWork,
+                pollMs: 1000,
                 cursor,
               }),
             );
@@ -163,19 +165,19 @@ export async function replayPolicy(
 
       model = expected.state;
       expect(error).toBe(expected.error);
-      const run = await Effect.runPromise(store.getRun("run"));
-      expect(run?.status).toBe(model.run);
-      expect(run?.owner?.token ?? null).toBe(model.owner === null ? null : `owner${model.owner}`);
+      const record = await run(store.getRun(runId));
+      expect(record?.status).toBe(model.run);
+      expect(record?.owner?.token ?? null).toBe(
+        model.owner === null ? null : `owner${model.owner}`,
+      );
 
       if (model.owner !== null) {
-        expect(run?.owner?.heartbeatAt).toBe(
+        expect(record?.owner?.heartbeatAt).toBe(
           new Date(Date.parse(newRun().createdAt) + model.heartbeat).toISOString(),
         );
       }
 
-      const node = await Effect.runPromise(
-        store.getNodeRun({ runId: "run", nodeId: codeNode.id, scope: [] }),
-      );
+      const node = await run(store.getNodeRun({ runId, nodeId: codeNode.id, scope: [] }));
 
       expect(node?.status ?? "new").toBe(model.node);
       expect(node?.attempt ?? 0).toBe(model.attempt);
@@ -183,10 +185,8 @@ export async function replayPolicy(
       expect(new Set(provider.starts.map((item) => provider.id(item.key, item.attempt))).size).toBe(
         model.starts,
       );
-      expect((await Effect.runPromise(store.getLogs("run"))).map((log) => log.message)).toEqual(
-        model.logs,
-      );
-      const hook = (await Effect.runPromise(store.getWaits("run")))[0];
+      expect((await run(store.getLogs(runId))).map((log) => log.message)).toEqual(model.logs);
+      const hook = (await run(store.getWaits(runId)))[0];
       expect(
         hook ? (hook.resolvedAt ? "resolved" : hook.expiredAt ? "expired" : "waiting") : "new",
       ).toBe(model.wait);
@@ -196,14 +196,6 @@ export async function replayPolicy(
       }
     }
   } catch (cause) {
-    throw new Error(`Counterexample ${backend} budget=${maxWork}: ${trace.join(" -> ")}`, {
-      cause,
-    });
-  } finally {
-    db?.close();
-
-    if (root) {
-      rmSync(root, { recursive: true, force: true });
-    }
+    throw new Error(`Counterexample budget=${maxWork}: ${trace.join(" -> ")}`, { cause });
   }
 }

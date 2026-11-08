@@ -13,31 +13,12 @@ import {
   type WaitRecord,
   type WaitResolution,
 } from "@loopy/core";
+import { Struct } from "effect";
 import { StoreInvariantError } from "./operation";
 import { utc } from "./timestamps";
 
 export function publicHook(wait: WaitRecord): HookRecord {
-  const hook: HookRecord = {
-    token: wait.token,
-    runId: wait.runId,
-    seq: wait.seq,
-    name: wait.name,
-    createdAt: wait.createdAt,
-  };
-
-  if (wait.payload !== undefined) {
-    hook.payload = wait.payload;
-  }
-
-  if (wait.resolvedAt !== undefined) {
-    hook.resolvedAt = wait.resolvedAt;
-  }
-
-  if (wait.expiredAt !== undefined) {
-    hook.expiredAt = wait.expiredAt;
-  }
-
-  return hook;
+  return Struct.omit(wait, ["executionKey", "schema"]);
 }
 
 export function registerWait(

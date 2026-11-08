@@ -34,7 +34,7 @@ const sources = [
   "packages/runtime/src/store/sqlite/query/runs.ts",
   "packages/runtime/src/store/sqlite/query/feeds.ts",
   "packages/runtime/src/store/sqlite/query/nodes.ts",
-  "packages/runtime/src/store/sqlite/schema.ts",
+  "packages/runtime/src/store/sqlite/schema/fresh.ts",
   "apps/cloud/src/scheduler.ts",
   "apps/cloud/src/sql-driver.ts",
   "apps/cloud/dev/playground/metrics/sql-queries.ts",

@@ -9,8 +9,11 @@ type Options = {
   store: Store;
   revisionFor: (schedule: Schedule) => Effect.Effect<string, ScheduleRevisionError>;
   stopped: () => boolean;
-  onError: (cause: Cause.Cause<unknown>) => void;
+  report: (cause: Cause.Cause<unknown>) => Effect.Effect<void>;
 };
+
+// A daemon that starts this late after a fire time advances the schedule instead of firing it.
+const STARTUP_LATE_MS = 60_000;
 
 export class ScheduleScheduler {
   private started = false;
@@ -29,7 +32,7 @@ export class ScheduleScheduler {
         }
 
         yield* Effect.gen({ self: this }, function* () {
-          if (starting && Date.parse(now) - Date.parse(schedule.nextFireAt) > 60_000) {
+          if (starting && Date.parse(now) - Date.parse(schedule.nextFireAt) > STARTUP_LATE_MS) {
             yield* this.options.store.advanceSchedule({
               workspace: schedule.workspace,
               slug: schedule.slug,
@@ -49,9 +52,7 @@ export class ScheduleScheduler {
           }
         }).pipe(
           Effect.catchCause((cause) =>
-            Cause.hasInterrupts(cause)
-              ? Effect.failCause(cause)
-              : Effect.sync(() => this.options.onError(cause)),
+            Cause.hasInterrupts(cause) ? Effect.failCause(cause) : this.options.report(cause),
           ),
         );
       }

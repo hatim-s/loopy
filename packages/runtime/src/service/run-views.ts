@@ -1,19 +1,16 @@
 import {
+  emptyRunCounts,
   type LoopyView,
   loopyView,
+  type RunDefinitionCount,
+  type RunPageQuery,
   type RunView,
   type routes,
   runView,
+  type StatusCounts,
   serverEvent,
 } from "@loopy/contract";
-import {
-  emptyRunCounts,
-  type RunDefinitionCount,
-  type RunFilter,
-  type RunRecord,
-  type RuntimeEvent,
-  type StatusCounts,
-} from "@loopy/core";
+import type { RunRecord, RuntimeEvent } from "@loopy/core";
 import type { Schema } from "effect";
 import { Effect } from "effect";
 import { type DefinitionCatalog, makeDefinitionCatalog } from "./definition-catalog";
@@ -130,7 +127,7 @@ export function makeRunViews(options: ServiceOptions) {
           continue;
         }
 
-        const filter: RunFilter = { slug: saved.slug };
+        const filter: Pick<RunPageQuery, "slug" | "workspace"> = { slug: saved.slug };
 
         if (saved.scope !== "global") {
           filter.workspace = identity;

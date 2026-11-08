@@ -3,10 +3,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Store } from "@loopy/core";
-import { MemoryStore, makeSqliteRunStore } from "@loopy/runtime/store";
+import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { Effect, Exit, Scope } from "effect";
-import { SCHEMA, WAIT_SCHEMA } from "../../runtime/src/store/sqlite/store-schema";
+import { legacyDatabase } from "./fixtures/sqlite/legacy";
+import { memoryStore } from "./store-fixture";
 
 const scopes: Scope.Closeable[] = [];
 
@@ -29,7 +29,7 @@ afterEach(async () => {
   }
 });
 
-for (const kind of ["memory", "sqlite"] as const) {
+for (const kind of ["portable", "local"] as const) {
   test(`${kind} schedule overview counts all workspaces and caps ordered summaries without input`, async () => {
     const root = mkdtempSync(join(tmpdir(), "loopy-schedule-overview-"));
     cleanups.push(() => {
@@ -37,7 +37,7 @@ for (const kind of ["memory", "sqlite"] as const) {
     });
 
     const sqlite =
-      kind === "sqlite"
+      kind === "local"
         ? await Effect.runPromise(
             makeSqliteRunStore(join(root, "runs.sqlite")).pipe(
               Effect.provideService(Scope.Scope, fixtureScope()),
@@ -45,7 +45,7 @@ for (const kind of ["memory", "sqlite"] as const) {
           )
         : null;
 
-    const store: Store = sqlite ?? new MemoryStore();
+    const store = sqlite ?? memoryStore();
     expect(await Effect.runPromise(store.scheduleOverview())).toEqual({
       workspaces: [],
       active: 0,
@@ -93,7 +93,7 @@ for (const kind of ["memory", "sqlite"] as const) {
   });
 }
 
-for (const version of [13, 14, 15]) {
+for (const version of [13, 14, 15] as const) {
   test(`schema ${version} retains schedule payload, version, event and epoch while adding the overview index`, async () => {
     const root = mkdtempSync(join(tmpdir(), `loopy-schedule-v${version}-`));
     cleanups.push(() => rmSync(root, { recursive: true, force: true }));
@@ -107,15 +107,13 @@ for (const version of [13, 14, 15]) {
       await Effect.runPromise(store.close());
     }
 
-    const db = new Database(file);
-
-    if (version !== 15) {
-      db.exec(version === 13 ? SCHEMA.replace(WAIT_SCHEMA, "") : SCHEMA);
-    }
+    const db = version === 15 ? new Database(file) : legacyDatabase(file, version);
 
     db.exec("DROP INDEX IF EXISTS schedules_enabled_next");
     db.exec("INSERT OR REPLACE INTO meta VALUES ('epoch','schedule-retained')");
-    db.query("INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?,?)").run(
+    db.query(
+      "INSERT INTO schedules(workspace,slug,cron,tz,input_json,enabled,last_fire_key,next_fire_at,version) VALUES (?,?,?,?,?,?,?,?,?)",
+    ).run(
       "/b",
       "shared",
       "@daily",
@@ -154,7 +152,10 @@ for (const version of [13, 14, 15]) {
     await Effect.runPromise(store.close());
 
     const persisted = new Database(file);
-    expect(persisted.query("PRAGMA user_version").get()).toEqual({ user_version: 15 });
+    expect(persisted.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
+    expect(persisted.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
+      value: "15",
+    });
 
     const plans = persisted
       .query<{ detail: string }, []>(

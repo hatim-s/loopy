@@ -7,13 +7,12 @@ import type {
   StorageError,
   Store,
 } from "@loopy/core";
-import { type EngineEvent, initialState, step } from "@loopy/core/engine";
-import { Clock, Data, Effect, type Exit } from "effect";
+import type { EngineEvent } from "@loopy/core/engine";
+import { Clock, Effect } from "effect";
 import { type DriverCleanupFailed, withHeartbeat } from "../heartbeat";
-import { planActivation } from "./plan";
+import { withLease } from "../lease";
+import { commitTurn, type TurnOptions } from "../turn";
 import { type ActivationWorkCleanupFailed, makeActivationWork } from "./work";
-
-export const LEASE_RELEASE_TIMEOUT_MS = 5000;
 
 export type ActivationOptions = { store: Store; executor: Executor; runId: string; graph: Graph };
 
@@ -26,29 +25,9 @@ export type ActivationError =
   | DriverCleanupFailed
   | ActivationWorkCleanupFailed;
 
-export class LeaseReleaseUnknown extends Data.TaggedError("LeaseReleaseUnknown")<{
-  runId: string;
-  primary: Exit.Exit<ActivationResult, ActivationError>;
-}> {}
-
-export class LeaseReleaseFailed extends Data.TaggedError("LeaseReleaseFailed")<{
-  runId: string;
-  primary: Exit.Exit<ActivationResult, ActivationError>;
-  cause: StorageError | OwnershipError;
-}> {}
-
-function drive(options: ActivationOptions, token: string) {
+function drive(options: ActivationOptions, turn: TurnOptions) {
   return Effect.scoped(
     Effect.gen(function* () {
-      const { store, graph, runId } = options;
-      const run = yield* store.getRun(runId);
-
-      if (!run) {
-        return yield* Effect.die(new Error("Run disappeared before execution."));
-      }
-
-      let state = initialState(runId, run.input);
-
       let event: EngineEvent = {
         kind: "run_started",
         at: new Date(yield* Clock.currentTimeMillis).toISOString(),
@@ -62,21 +41,17 @@ function drive(options: ActivationOptions, token: string) {
           Effect.scoped(
             Effect.gen(function* () {
               while (true) {
-                state = { ...state, nodeRuns: yield* store.getNodeRuns(runId) };
-                const transition = step(graph, state, event);
-                const plan = planActivation(transition);
-                yield* store.apply({ runId, token, effects: plan.storeEffects });
-                state = transition.state;
+                const { disposition, work: next, retryAt } = yield* commitTurn(turn, event);
 
-                if (plan.disposition.kind === "finished") {
-                  return plan.disposition.outcome;
+                if (disposition.kind === "finished") {
+                  return disposition.outcome;
                 }
 
-                if (plan.disposition.kind === "suspended") {
+                if (disposition.kind === "suspended") {
                   return { status: "suspended" } as const;
                 }
 
-                yield* work.dispatch(plan.work);
+                yield* work.dispatch(next, retryAt);
                 event = yield* work.next;
               }
             }),
@@ -88,21 +63,14 @@ function drive(options: ActivationOptions, token: string) {
 }
 
 export function activate(options: ActivationOptions) {
-  return Effect.suspend(() => {
-    const token = crypto.randomUUID();
+  const { store, runId, graph } = options;
 
-    return Effect.acquireUseRelease(
-      options.store.claim(options.runId, token),
-      () => withHeartbeat(options.store, options.runId, token, drive(options, token)),
-      (lease, primary) =>
-        options.store.release(options.runId, token).pipe(
-          Effect.mapError((cause) => new LeaseReleaseFailed({ runId: lease.id, primary, cause })),
-          Effect.interruptible,
-          Effect.timeoutOrElse({
-            duration: LEASE_RELEASE_TIMEOUT_MS,
-            orElse: () => Effect.fail(new LeaseReleaseUnknown({ runId: lease.id, primary })),
-          }),
-        ),
-    );
-  });
+  return withLease(store, runId, (token, run) =>
+    withHeartbeat(
+      store,
+      runId,
+      token,
+      drive(options, { store, graph, runId, token, input: run.input }),
+    ),
+  );
 }

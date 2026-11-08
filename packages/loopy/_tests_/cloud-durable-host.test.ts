@@ -6,16 +6,16 @@ import {
   type Graph,
   type Receipt,
 } from "@loopy/core";
-import { MemoryStore } from "@loopy/runtime/store";
-import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "@loopy/sdk/graph";
-import { Effect } from "effect";
 import {
   activateDurable,
   type DurableActivationOptions,
   type DurableExecutionProvider,
   DurableProviderError,
-} from "../../runtime/src/host/durable";
+} from "@loopy/runtime/host";
+import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "@loopy/sdk/graph";
+import { Effect } from "effect";
 import { newRun } from "./fixture";
+import { MemorySqlStore, runAt } from "./store-fixture";
 
 const success: ExecutionResult = {
   kind: "succeeded",
@@ -82,24 +82,32 @@ class Provider implements DurableExecutionProvider {
   }
 }
 
-async function fixture(graph = compiled(), store?: MemoryStore) {
+async function fixture(graph = compiled(), store = new MemorySqlStore({ leaseMs: 10_000 })) {
   let now = Date.parse(newRun().createdAt);
-  const memory = store ?? new MemoryStore(() => now, 10_000);
+  const run = runAt(() => now);
   const provider = new Provider();
-  await Effect.runPromise(memory.createRun(newRun()));
-  const options = { store: memory, provider, graph, runId: "run", token: "session-1" };
+  await run(store.createRun(newRun()));
+
+  const options = {
+    store,
+    provider,
+    graph,
+    runId: "run",
+    token: "session-1",
+    maxWork: 32,
+    pollMs: 1000,
+  };
 
   return {
-    store: memory,
+    store,
     provider,
+    run,
     now: () => now,
     advance: (ms: number) => {
       now += ms;
     },
     turn: (changes: Partial<DurableActivationOptions> = {}) =>
-      Effect.runPromise(
-        activateDurable({ ...options, at: new Date(now).toISOString(), ...changes }),
-      ),
+      run(activateDurable({ ...options, at: new Date(now).toISOString(), ...changes })),
   };
 }
 
@@ -120,12 +128,10 @@ test("persists running before start, returns promptly and renews the same sessio
     status: "pending",
     nextWakeAt: "2026-10-16T00:00:01.000Z",
   });
-  expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([
-    { receipt: "started" },
-  ]);
+  expect(await f.run(f.store.getNodeRuns("run"))).toMatchObject([{ receipt: "started" }]);
   f.advance(1000);
   await f.turn();
-  expect(await Effect.runPromise(f.store.getRun("run"))).toMatchObject({
+  expect(await f.run(f.store.getRun("run"))).toMatchObject({
     status: "running",
     owner: { token: "session-1", heartbeatAt: "2026-10-16T00:00:01.000Z" },
   });
@@ -143,7 +149,7 @@ test("reconstruction waits for the stale lease then reconciles the same external
     outcome: { status: "succeeded", output: 42 },
   });
   expect(f.provider.starts).toHaveLength(1);
-  expect((await Effect.runPromise(f.store.getRun("run")))?.owner).toBeUndefined();
+  expect((await f.run(f.store.getRun("run")))?.owner).toBeUndefined();
 });
 
 test("lost start responses preserve running state and reconcile without repeating the effect", async () => {
@@ -157,11 +163,11 @@ test("lost start responses preserve running state and reconcile without repeatin
   };
 
   await expect(f.turn()).rejects.toThrow("Transport response lost.");
-  expect(await Effect.runPromise(f.store.getRun("run"))).toMatchObject({
+  expect(await f.run(f.store.getRun("run"))).toMatchObject({
     status: "running",
     owner: { token: "session-1" },
   });
-  expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([
+  expect(await f.run(f.store.getNodeRuns("run"))).toMatchObject([
     { status: "running", attempt: 1, receipt: "none" },
   ]);
   expect(await f.turn()).toMatchObject({ status: "pending" });
@@ -175,7 +181,7 @@ test("a disappeared started receipt fails uncertain without a retry", async () =
   await f.turn();
   f.provider.receipts.clear();
   expect(await f.turn()).toMatchObject({ outcome: { status: "failed" } });
-  expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([
+  expect(await f.run(f.store.getNodeRuns("run"))).toMatchObject([
     { attempt: 1, status: "failed", error: { code: "uncertain" } },
   ]);
   expect(f.provider.starts).toHaveLength(1);
@@ -188,7 +194,7 @@ test("controlled retries retain ownership and fence old receipts and duplicate l
     status: "pending",
     nextWakeAt: "2026-10-16T00:00:01.000Z",
   });
-  expect(await Effect.runPromise(f.store.getRun("run"))).toMatchObject({
+  expect(await f.run(f.store.getRun("run"))).toMatchObject({
     status: "running",
     owner: { token: "session-1" },
   });
@@ -202,7 +208,7 @@ test("controlled retries retain ownership and fence old receipts and duplicate l
   await f.turn();
   expect(f.provider.lookups).toHaveLength(calls);
   expect(f.provider.starts.map((start) => start.attempt)).toEqual([1, 2]);
-  expect((await Effect.runPromise(f.store.getLogs("run"))).map((log) => log.message)).toEqual([
+  expect((await f.run(f.store.getLogs("run"))).map((log) => log.message)).toEqual([
     "retry",
     "completed",
   ]);
@@ -237,10 +243,10 @@ test("an in-flight old completion cannot overwrite a newer persisted attempt", a
   };
 
   expect(await f.turn()).toMatchObject({ status: "pending" });
-  expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([
+  expect(await f.run(f.store.getNodeRuns("run"))).toMatchObject([
     { attempt: 2, status: "running" },
   ]);
-  expect(await Effect.runPromise(f.store.getLogs("run"))).toEqual([]);
+  expect(await f.run(f.store.getLogs("run"))).toEqual([]);
   f.provider.result = { kind: "finished" as const, result: success };
   expect(await f.turn()).toMatchObject({ outcome: { status: "succeeded" } });
   expect(f.provider.starts.map((start) => start.attempt)).toEqual([1, 2]);
@@ -254,14 +260,14 @@ test("hook waits release ownership and resume from the same persisted store", as
 
   const f = await fixture(graph);
   expect(await f.turn()).toEqual({ status: "suspended", nextWakeAt: null, cursor: null });
-  expect((await Effect.runPromise(f.store.getRun("run")))?.owner).toBeUndefined();
-  const hook = (await Effect.runPromise(f.store.getWaits("run")))[0];
+  expect((await f.run(f.store.getRun("run")))?.owner).toBeUndefined();
+  const hook = (await f.run(f.store.getWaits("run")))[0];
 
   if (!hook) {
     throw new Error("Expected hook.");
   }
 
-  await Effect.runPromise(
+  await f.run(
     f.store.resolveWait({
       token: hook.token,
       payload: true,
@@ -271,7 +277,7 @@ test("hook waits release ownership and resume from the same persisted store", as
   expect(await f.turn({ token: "session-2" })).toMatchObject({
     outcome: { status: "succeeded", output: true },
   });
-  expect(await Effect.runPromise(f.store.getWaits("run"))).toHaveLength(1);
+  expect(await f.run(f.store.getWaits("run"))).toHaveLength(1);
 });
 
 test("sleep returns its deadline and releases ownership until the next alarm", async () => {
@@ -280,7 +286,7 @@ test("sleep returns its deadline and releases ownership until the next alarm", a
     status: "suspended",
     nextWakeAt: "2026-10-16T00:00:02.000Z",
   });
-  expect((await Effect.runPromise(f.store.getRun("run")))?.owner).toBeUndefined();
+  expect((await f.run(f.store.getRun("run")))?.owner).toBeUndefined();
   f.advance(2000);
   expect(await f.turn({ token: "session-2" })).toMatchObject({ outcome: { status: "succeeded" } });
 });
@@ -300,14 +306,14 @@ test("a waiting sibling does not surrender a retry's lease or concurrency slot",
   const f = await fixture(graph);
   f.provider.result = { kind: "finished" as const, result: temporary };
   expect(await f.turn()).toMatchObject({ status: "pending" });
-  expect(await Effect.runPromise(f.store.getRun("run"))).toMatchObject({
+  expect(await f.run(f.store.getRun("run"))).toMatchObject({
     status: "running",
     owner: { token: "session-1" },
   });
   f.advance(1000);
   f.provider.result = { kind: "finished" as const, result: success };
   expect(await f.turn()).toMatchObject({ status: "suspended" });
-  expect((await Effect.runPromise(f.store.getRun("run")))?.owner).toBeUndefined();
+  expect((await f.run(f.store.getRun("run")))?.owner).toBeUndefined();
 });
 
 test("small budgets preserve all dispatches and entropy samples across turns", async () => {
@@ -322,9 +328,7 @@ test("small budgets preserve all dispatches and entropy samples across turns", a
   let result = await f.turn({ maxWork: 1 });
   expect(result).toMatchObject({ status: "pending", nextWakeAt: newRun().createdAt });
   expect(
-    (await Effect.runPromise(f.store.getNodeRuns("run"))).filter(
-      (node) => node.status === "running",
-    ),
+    (await f.run(f.store.getNodeRuns("run"))).filter((node) => node.status === "running"),
   ).toHaveLength(4);
 
   for (let turn = 0; turn < 12 && result.status !== "finished"; turn++) {
@@ -345,7 +349,7 @@ test("small budgets preserve all dispatches and entropy samples across turns", a
     },
   });
   expect(f.provider.starts).toHaveLength(2);
-  expect(await Effect.runPromise(f.store.getLogs("run"))).toHaveLength(2);
+  expect(await f.run(f.store.getLogs("run"))).toHaveLength(2);
 });
 
 test("failed admission consumes quota without creating a new attempt or releasing ownership", async () => {
@@ -366,10 +370,10 @@ test("failed admission consumes quota without creating a new attempt or releasin
   await expect(f.turn()).rejects.toThrow("Provider unavailable before admission.");
   f.advance(1000);
   expect(await f.turn()).toMatchObject({ status: "pending" });
-  expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([
+  expect(await f.run(f.store.getNodeRuns("run"))).toMatchObject([
     { attempt: 1, status: "rate_limited", nextRetryAt: "2026-10-16T00:01:00.000Z" },
   ]);
-  expect(await Effect.runPromise(f.store.getRun("run"))).toMatchObject({
+  expect(await f.run(f.store.getRun("run"))).toMatchObject({
     status: "running",
     owner: { token: "session-1" },
   });
@@ -380,7 +384,7 @@ test("failed admission consumes quota without creating a new attempt or releasin
   f.advance(1);
   await expect(f.turn()).rejects.toThrow("Provider unavailable before admission.");
   expect(admissions).toBe(2);
-  expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([{ attempt: 1 }]);
+  expect(await f.run(f.store.getNodeRuns("run"))).toMatchObject([{ attempt: 1 }]);
 });
 
 test("rate limited dispatch retains the attempt and bounds the next alarm by the lease", async () => {
@@ -390,13 +394,13 @@ test("rate limited dispatch retains the attempt and bounds the next alarm by the
   }).graph;
 
   const f = await fixture(graph);
-  await Effect.runPromise(f.store.acquireRateLimit("shared", 1, 60_000, newRun().createdAt));
+  await f.run(f.store.acquireRateLimit("shared", 1, 60_000, newRun().createdAt));
   expect(await f.turn()).toMatchObject({
     status: "pending",
-    nextWakeAt: "2026-10-16T00:00:03.333Z",
+    nextWakeAt: "2026-10-16T00:00:02.500Z",
   });
   expect(f.provider.starts).toHaveLength(0);
-  expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([
+  expect(await f.run(f.store.getNodeRuns("run"))).toMatchObject([
     { attempt: 1, status: "rate_limited" },
   ]);
   f.advance(60_000);
@@ -428,7 +432,7 @@ test("wide started graphs poll fairly without an immediate-alarm loop", async ()
   }
 
   expect(
-    (await Effect.runPromise(f.store.getNodeRuns("run"))).find(
+    (await f.run(f.store.getNodeRuns("run"))).find(
       (node) => node.key.nodeId === f.provider.starts.at(-1)?.key.nodeId,
     ),
   ).toMatchObject({ status: "succeeded", attempt: 1 });
@@ -436,7 +440,7 @@ test("wide started graphs poll fairly without an immediate-alarm loop", async ()
 });
 
 test("interrupted suspension releases ownership when the same session resumes", async () => {
-  class InterruptedReleaseStore extends MemoryStore {
+  class InterruptedReleaseStore extends MemorySqlStore {
     interrupted = true;
 
     override release(runId: string, token: string) {
@@ -461,12 +465,12 @@ test("interrupted suspension releases ownership when the same session resumes", 
   const f = await fixture(graph, new InterruptedReleaseStore());
   await expect(f.turn()).rejects.toThrow("Release interrupted.");
   expect(await f.turn()).toMatchObject({ status: "suspended" });
-  expect((await Effect.runPromise(f.store.getRun("run")))?.owner).toBeUndefined();
-  expect(await Effect.runPromise(f.store.getWaits("run"))).toHaveLength(1);
+  expect((await f.run(f.store.getRun("run")))?.owner).toBeUndefined();
+  expect(await f.run(f.store.getWaits("run"))).toHaveLength(1);
 });
 
 test("a persistence failure prevents dispatch and retains ownership for reconciliation", async () => {
-  class UnavailableStore extends MemoryStore {
+  class UnavailableStore extends MemorySqlStore {
     override apply() {
       return Effect.gen(function* () {
         throw new Error("Storage unavailable.");
@@ -477,7 +481,7 @@ test("a persistence failure prevents dispatch and retains ownership for reconcil
   const f = await fixture(compiled(), new UnavailableStore());
   await expect(f.turn()).rejects.toThrow("Storage unavailable.");
   expect(f.provider.starts).toHaveLength(0);
-  expect(await Effect.runPromise(f.store.getRun("run"))).toMatchObject({
+  expect(await f.run(f.store.getRun("run"))).toMatchObject({
     status: "running",
     owner: { token: "session-1" },
   });
@@ -503,6 +507,8 @@ test("provider transport failure remains typed and never becomes absent receipt"
       runId: "run",
       token: "session-1",
       at: newRun().createdAt,
+      maxWork: 32,
+      pollMs: 1000,
     }),
   );
 
@@ -515,7 +521,7 @@ test("provider transport failure remains typed and never becomes absent receipt"
   }
 
   expect(f.provider.starts).toHaveLength(0);
-  expect(await Effect.runPromise(f.store.getRun("run"))).toMatchObject({
+  expect(await f.run(f.store.getRun("run"))).toMatchObject({
     status: "running",
     owner: { token: "session-1" },
   });

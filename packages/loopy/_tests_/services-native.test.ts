@@ -81,7 +81,9 @@ test("HTTP preserves input rejection, durable queued admission and terminal canc
   });
 
   expect(bad.status).toBe(400);
-  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: new Date().toISOString() })),
+  ).toEqual([]);
   const run = await Effect.runPromise(f.service.startRun("workflow", {}, f.root));
   expect(run.status).toBe("queued");
   await Effect.runPromise(f.store.claim(run.id, "fixture-owner"));
@@ -218,9 +220,13 @@ test("hook resolution is atomic and SSE refuses a cursor inside a commit", async
   );
 
   expect(Exit.isFailure(rejected)).toBe(true);
-  expect((await Effect.runPromise(f.store.getWait(wait.token)))?.resolvedAt).toBeFalsy();
+
+  const stored = async () =>
+    (await Effect.runPromise(f.store.getWaits(run.id))).find((hook) => hook.token === wait.token);
+
+  expect((await stored())?.resolvedAt).toBeFalsy();
   await Effect.runPromise(f.service.resolveHook(wait.token, { ok: true }));
-  expect((await Effect.runPromise(f.store.getWait(wait.token)))?.resolvedAt).toBe(at);
+  expect((await stored())?.resolvedAt).toBe(at);
   expect(
     Exit.isFailure(await Effect.runPromiseExit(f.service.resolveHook(wait.token, { ok: false }))),
   ).toBe(true);
@@ -378,12 +384,12 @@ test("an unfinished execution rejects cancellation before ownership changes", as
     }),
   );
   await Effect.runPromise(f.store.release(run.id, "worker"));
-  const before = await Effect.runPromise(f.store.snapshotRun(run.id));
+  const before = await Effect.runPromise(f.store.dashboardSnapshot(run.id));
   await expect(Effect.runPromise(f.service.cancelRun(run.id))).rejects.toMatchObject({
     code: "not_claimable",
     message: "This run has an unfinished execution. Resume it before cancelling.",
   });
-  expect(await Effect.runPromise(f.store.snapshotRun(run.id))).toEqual(before);
+  expect(await Effect.runPromise(f.store.dashboardSnapshot(run.id))).toEqual(before);
 });
 
 test("native service and HTTP secret lists retain the store receiver and expose names only", async () => {

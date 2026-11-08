@@ -1,9 +1,10 @@
 import { executionKeyString, type NodeRun } from "@loopy/core";
-import type { DurableWork } from "./work";
+import { leaseRenewalMs } from "../heartbeat";
+import type { HostWork } from "../turn";
 
 export function durableWakeAt(options: {
   nodes: NodeRun[];
-  remaining: Iterable<DurableWork>;
+  remaining: Iterable<HostWork>;
   now: number;
   pollMs: number;
   leaseMs: number;
@@ -30,8 +31,7 @@ export function durableWakeAt(options: {
       : [];
   });
 
-  // Retry delays keep the run leased, so even distant deadlines need a heartbeat alarm.
-  const heartbeatAt = now + Math.max(1, Math.floor(leaseMs / 3));
+  const heartbeatAt = now + leaseRenewalMs(leaseMs);
   const checkAt = nodes.some((node) => node.status === "running") ? now + pollMs : heartbeatAt;
 
   return new Date(

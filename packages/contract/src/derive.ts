@@ -6,6 +6,7 @@ import type {
   Schedule,
   StepRecord,
 } from "@loopy/core";
+import { PREVIEW_BYTES } from "./dashboard";
 import type { GraphView } from "./graph";
 import type { LoopyView, RunView, ServerEvent } from "./views";
 
@@ -89,7 +90,7 @@ function previewPayload(value: RunRecord["input"]): {
 } {
   const bytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
-  return bytes > 16_384 ? { value: null, bytes } : { value, bytes: null };
+  return bytes > PREVIEW_BYTES ? { value: null, bytes } : { value, bytes: null };
 }
 
 export function runView(options: RunViewOptions): RunView {

@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { type ExecutionKey, OwnershipError, StorageError } from "@loopy/core";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { activate, makeDaemon } from "@loopy/runtime/host";
-import { MemoryStore } from "@loopy/runtime/store";
 import { code, loopy, sh } from "@loopy/sdk/graph";
 import { Cause, Effect, Fiber } from "effect";
 import { FilesystemReceipts } from "../../runtime/src/executor/receipts";
 import { newRun } from "./fixture";
+import { MemorySqlStore } from "./store-fixture";
 
 function waitForMarker(path: string) {
   return Effect.gen(function* () {
@@ -41,13 +41,13 @@ for (const kind of ["command", "code"] as const) {
       await writeFile(bundle, script);
       let owned = true;
 
-      class LosingStore extends MemoryStore {
+      class LosingStore extends MemorySqlStore {
         override heartbeat() {
-          return Effect.succeed(owned);
+          return Effect.sync(() => owned);
         }
       }
 
-      const store = new LosingStore(undefined, 400);
+      const store = new LosingStore({ leaseMs: 400 });
 
       const executor = new LocalExecutor({
         home,
@@ -152,8 +152,8 @@ test("a completed real worker receipt wins after completion apply fails", async 
   await mkdir(home, { recursive: true });
   let reject = true;
 
-  class UnavailableStore extends MemoryStore {
-    override apply(batch: Parameters<MemoryStore["apply"]>[0]) {
+  class UnavailableStore extends MemorySqlStore {
+    override apply(batch: Parameters<MemorySqlStore["apply"]>[0]) {
       if (
         reject &&
         batch.effects.some(
@@ -218,7 +218,7 @@ test("graceful daemon stop drains a real worker and retains its finished success
   const home = join(root, "home");
   await mkdir(join(workspace, ".loopy", "loopies"), { recursive: true });
   await mkdir(home, { recursive: true });
-  const store = new MemoryStore();
+  const store = new MemorySqlStore();
 
   const executor = new LocalExecutor({
     home,

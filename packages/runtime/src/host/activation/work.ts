@@ -1,74 +1,64 @@
-import { executionKeyString } from "@loopy/core";
 import type { EngineEvent } from "@loopy/core/engine";
 import { Cause, Clock, Data, Effect, Exit, Queue } from "effect";
-import { completionEvent } from "../completion-event";
-import { acquireDispatch } from "../rate-limit";
+import { subscribeStore } from "../subscription";
+import {
+  admitDispatch,
+  completionEvent,
+  type Dispatch,
+  type HostWork,
+  sampleEvent,
+  workId,
+} from "../turn";
 import type { ActivationOptions } from ".";
-import type { ActivationWorkEffect } from "./plan";
 
 const timestamp = Effect.map(Clock.currentTimeMillis, (now) => new Date(now).toISOString());
 
-function execute(
-  options: ActivationOptions,
-  work: Extract<ActivationWorkEffect, { kind: "dispatch" }>,
-) {
+function dispatchResult(options: ActivationOptions, work: Dispatch) {
   return Effect.gen(function* () {
     while (true) {
       const receipt = yield* options.executor.lookup(work.executionKey, work.attempt);
 
       if (receipt.kind === "finished") {
-        return receipt.result;
+        return completionEvent(work, receipt.result, yield* timestamp);
       }
 
       if (receipt.kind === "none") {
-        // The signal bridge belongs to the Executor contract until that owner removes it.
-        return yield* Effect.scoped(
+        const at = yield* timestamp;
+        const denial = yield* admitDispatch({ ...options, dispatch: work, at });
+
+        if (denial) {
+          return denial;
+        }
+
+        const result = yield* Effect.scoped(
           Effect.flatMap(Effect.abortSignal, (signal) =>
             options.executor.execute(work.executionKey, work.attempt, work.spec, signal),
           ),
         );
+
+        return completionEvent(work, result, yield* timestamp);
       }
 
-      // Started receipts are never re-executed, including after observer interruption.
       yield* Effect.sleep(100);
     }
   });
 }
 
-function perform(options: ActivationOptions, work: ActivationWorkEffect) {
+function perform(options: ActivationOptions, work: HostWork) {
+  return work.kind === "dispatch"
+    ? dispatchResult(options, work)
+    : Effect.map(timestamp, (at) => sampleEvent(work, at));
+}
+
+function retryWhenDue(at: string) {
   return Effect.gen(function* () {
-    if (work.kind === "dispatch") {
-      const denial = yield* acquireDispatch({
-        graph: options.graph,
-        store: options.store,
-        lookup: (key, attempt) => options.executor.lookup(key, attempt),
-        dispatch: work,
-        at: yield* timestamp,
-      });
+    yield* Effect.sleep(Math.max(0, Date.parse(at) - (yield* Clock.currentTimeMillis)));
 
-      if (denial) {
-        return denial;
-      }
-
-      return completionEvent(work, yield* execute(options, work), yield* timestamp);
-    }
-
-    if (work.kind === "schedule_retry") {
-      yield* Effect.sleep(Math.max(0, Date.parse(work.at) - (yield* Clock.currentTimeMillis)));
-
-      return { kind: "retry_due", at: yield* timestamp } satisfies EngineEvent;
-    }
-
-    return {
-      kind: "value_sampled",
-      executionKey: work.executionKey,
-      value: work.valueKind === "uuid" ? crypto.randomUUID() : Math.random(),
-      at: yield* timestamp,
-    } satisfies EngineEvent;
+    return { kind: "retry_due", at: yield* timestamp } satisfies EngineEvent;
   });
 }
 
-type WorkError = Effect.Error<ReturnType<typeof perform>>;
+type WorkError = Effect.Error<ReturnType<typeof dispatchResult>>;
 
 export class ActivationWorkCleanupFailed extends Data.TaggedError("ActivationWorkCleanupFailed")<{
   runId: string;
@@ -85,48 +75,46 @@ export const makeActivationWork = (options: ActivationOptions) =>
     const inbox = yield* Queue.unbounded<Message>();
     const pending = new Map<string, Exit.Exit<EngineEvent, WorkError> | undefined>();
     let wakeQueued = false;
-    yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        options.store.subscribe((events) => {
-          if (
-            !wakeQueued &&
-            events.some(
-              (event) =>
-                event.runId === options.runId &&
-                event.entity === "hook" &&
-                event.kind === "resolved",
-            )
-          ) {
-            wakeQueued = true;
-            Queue.offerUnsafe(inbox, { kind: "wake" });
-          }
-        }),
-      ),
-      (unsubscribe) => Effect.sync(unsubscribe),
-    );
 
-    const dispatch = (effects: ActivationWorkEffect[]) =>
+    yield* subscribeStore(options.store, (events) => {
+      if (
+        !wakeQueued &&
+        events.some(
+          (event) =>
+            event.runId === options.runId && event.entity === "hook" && event.kind === "resolved",
+        )
+      ) {
+        wakeQueued = true;
+        Queue.offerUnsafe(inbox, { kind: "wake" });
+      }
+    });
+
+    const start = (id: string, effect: Effect.Effect<EngineEvent, WorkError>) =>
+      Effect.gen(function* () {
+        if (pending.has(id)) {
+          return;
+        }
+
+        pending.set(id, undefined);
+        yield* effect.pipe(
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              pending.set(id, exit);
+              Queue.offerUnsafe(inbox, { kind: "completion", id, exit });
+            }),
+          ),
+          Effect.forkScoped,
+        );
+      });
+
+    const dispatch = (effects: HostWork[], retryAt: string | null) =>
       Effect.gen(function* () {
         for (const work of effects) {
-          const id =
-            work.kind === "schedule_retry"
-              ? `retry/${work.at}`
-              : `${executionKeyString(work.executionKey)}/${work.kind === "dispatch" ? work.attempt : "sample"}`;
+          yield* start(workId(work), perform(options, work));
+        }
 
-          if (pending.has(id)) {
-            continue;
-          }
-
-          pending.set(id, undefined);
-          yield* perform(options, work).pipe(
-            Effect.onExit((exit) =>
-              Effect.sync(() => {
-                pending.set(id, exit);
-                Queue.offerUnsafe(inbox, { kind: "completion", id, exit });
-              }),
-            ),
-            Effect.forkScoped,
-          );
+        if (retryAt !== null) {
+          yield* start(`retry/${retryAt}`, retryWhenDue(retryAt));
         }
       });
 

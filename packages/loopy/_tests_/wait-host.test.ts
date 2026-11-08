@@ -6,11 +6,12 @@ import { runSnapshotViewSchema, runViewSchema } from "@loopy/contract";
 import { type Executor } from "@loopy/core";
 import { activate } from "@loopy/runtime/host";
 import { makeLocalService, Registry } from "@loopy/runtime/local";
-import { MemoryStore, makeSqliteRunStore } from "@loopy/runtime/store";
+import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { code, finally_, loopy, parallel, sleep, uuid, wait } from "@loopy/sdk/graph";
-import { Clock, Deferred, Effect, Exit, Schema, Scope } from "effect";
+import { Deferred, Effect, Exit, Schema, Scope } from "effect";
 import { apiRoutes, dispatch } from "../../runtime/src/local/server/routes";
 import { FakeExecutor, newRun } from "./fixture";
+import { MemorySqlStore, runAt } from "./store-fixture";
 
 const homes: string[] = [];
 
@@ -33,27 +34,15 @@ async function fixture() {
   let now = Date.parse("2026-10-20T00:00:00.000Z");
 
   const clock = { now: () => now };
-  const platform = Effect.runSync(Clock.Clock);
-
-  const effectClock: Clock.Clock = {
-    currentTimeMillisUnsafe: clock.now,
-    currentTimeMillis: Effect.sync(clock.now),
-    currentTimeNanosUnsafe: () => BigInt(now) * 1_000_000n,
-    currentTimeNanos: Effect.sync(() => BigInt(now) * 1_000_000n),
-    monotonicTimeNanosUnsafe: () => platform.monotonicTimeNanosUnsafe(),
-    monotonicTimeNanos: platform.monotonicTimeNanos,
-    sleep: (duration) => platform.sleep(duration),
-  };
-
-  const run = <A, E>(effect: Effect.Effect<A, E>) =>
-    Effect.runPromise(effect.pipe(Effect.provideService(Clock.Clock, effectClock)));
+  // The service, store and host share this clock.
+  const run = runAt(clock.now);
 
   const file = join(home, "runs.sqlite");
   const scope = Scope.makeUnsafe();
   scopes.push(scope);
 
   const store = await Effect.runPromise(
-    makeSqliteRunStore(file, clock.now).pipe(Effect.provideService(Scope.Scope, scope)),
+    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, scope)),
   );
 
   const service = makeLocalService({ home, cwd: home, store, clock });
@@ -134,7 +123,7 @@ test("approval suspends without executing, named HTTP signal wakes once, and res
   scopes.push(reopenScope);
 
   const reopened = await Effect.runPromise(
-    makeSqliteRunStore(f.file, f.clock.now).pipe(Effect.provideService(Scope.Scope, reopenScope)),
+    makeSqliteRunStore(f.file).pipe(Effect.provideService(Scope.Scope, reopenScope)),
   );
 
   expect(
@@ -277,7 +266,7 @@ test("a signal accepted while a parallel execution runs survives its completion"
 });
 
 test("parallel dispatches run concurrently and sampling completes without an executor", async () => {
-  const store = new MemoryStore();
+  const store = new MemorySqlStore();
   let active = 0;
   let peak = 0;
 
@@ -338,7 +327,7 @@ test("cancelling a suspended approval expires its token and cancels its pending 
   expect(await Effect.runPromise(f.store.getNodeRuns("run"))).toMatchObject([
     { status: "cancelled" },
   ]);
-  expect((await Effect.runPromise(f.store.getWait(wait.token)))?.expiredAt).toBeDefined();
+  expect((await Effect.runPromise(f.store.getWaits("run")))[0]?.expiredAt).toBeDefined();
   await expect(
     Effect.runPromise(f.service.resolveHook(wait.token, { approved: true })),
   ).rejects.toMatchObject({
@@ -363,13 +352,13 @@ test("cancellation refuses suspended finally graphs without changing their wait"
     f.store.createRun({ ...newRun(), revision: "a".repeat(64), input: {}, workspace: f.home }),
   );
   await f.run(activate({ ...f, graph, executor: new FakeExecutor(), runId: "run" }));
-  const before = await Effect.runPromise(f.store.snapshotRun("run"));
+  const before = await Effect.runPromise(f.store.dashboardSnapshot("run"));
   await expect(Effect.runPromise(f.service.cancelRun("run"))).rejects.toMatchObject({
     code: "not_claimable",
     message:
       "This run requires finally cleanup. Cancellation with cleanup is not available; resume the run instead.",
   });
-  expect(await Effect.runPromise(f.store.snapshotRun("run"))).toEqual(before);
+  expect(await Effect.runPromise(f.store.dashboardSnapshot("run"))).toEqual(before);
 });
 
 test("an indefinite signal advances its branch before a long sibling completes", async () => {

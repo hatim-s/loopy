@@ -1,17 +1,24 @@
 import { expect, test } from "bun:test";
-import { OwnershipError, StorageError } from "@loopy/core";
-import { MemoryStore } from "@loopy/runtime/store";
+import { StorageError, type Store } from "@loopy/core";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { DriverCleanupFailed, withHeartbeat } from "../../runtime/src/host/heartbeat";
+import { withHeartbeat } from "../../runtime/src/host/heartbeat";
 import { newRun } from "./fixture";
+import { MemorySqlStore } from "./store-fixture";
+
+type HeartbeatStore = Pick<Store, "heartbeat" | "leaseMs">;
+
+// Each renewal runs the heartbeat Effect again, so the fake decides its result when it runs.
+function heartbeatStore(beat: () => ReturnType<Store["heartbeat"]>): HeartbeatStore {
+  return { leaseMs: 1000, heartbeat: () => Effect.suspend(beat) };
+}
 
 test("heartbeat renews ownership using Effect time", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const renewed = yield* Deferred.make<void>();
 
-      class RecordingStore extends MemoryStore {
+      class RecordingStore extends MemorySqlStore {
         override heartbeat(id: string, token: string) {
           return super
             .heartbeat(id, token)
@@ -19,7 +26,7 @@ test("heartbeat renews ownership using Effect time", async () => {
         }
       }
 
-      const store = new RecordingStore(undefined, 2000);
+      const store = new RecordingStore({ leaseMs: 2000 });
       yield* store.createRun(newRun());
       yield* store.claim("run", "owner");
 
@@ -42,23 +49,19 @@ for (const recovery of ["recover", "expire"] as const) {
         let calls = 0;
         let stopped = false;
 
-        class OutageStore extends MemoryStore {
-          override heartbeat() {
-            calls++;
+        const store = heartbeatStore(() => {
+          calls++;
 
-            return recovery === "recover" && calls > 1
-              ? Effect.succeed(true)
-              : Effect.fail(
-                  new StorageError({
-                    operation: "heartbeat",
-                    reason: "unavailable",
-                    cause: "fixture",
-                  }),
-                );
-          }
-        }
-
-        const store = new OutageStore(undefined, 1000);
+          return recovery === "recover" && calls > 1
+            ? Effect.succeed(true)
+            : Effect.fail(
+                new StorageError({
+                  operation: "heartbeat",
+                  reason: "unavailable",
+                  cause: "fixture",
+                }),
+              );
+        });
 
         const fiber = yield* Effect.forkChild(
           withHeartbeat(
@@ -105,17 +108,11 @@ test("heartbeat stays alive until interrupted driver cleanup is joined", async (
       const releaseCleanup = yield* Deferred.make<void>();
       let calls = 0;
 
-      class RecordingStore extends MemoryStore {
-        override heartbeat() {
-          return Effect.sync(() => {
-            calls++;
+      const store = heartbeatStore(() => {
+        calls++;
 
-            return true;
-          });
-        }
-      }
-
-      const store = new RecordingStore(undefined, 1000);
+        return Effect.succeed(true);
+      });
 
       const work = Deferred.succeed(began, undefined).pipe(
         Effect.andThen(Effect.never),
@@ -160,17 +157,13 @@ for (const mixed of ["interrupt", "defect"] as const) {
 
         let calls = 0;
 
-        class BrokenStore extends MemoryStore {
-          override heartbeat() {
-            calls++;
+        const store = heartbeatStore(() => {
+          calls++;
 
-            return Effect.failCause(original);
-          }
-        }
+          return Effect.failCause(original);
+        });
 
-        const fiber = yield* Effect.forkChild(
-          withHeartbeat(new BrokenStore(undefined, 1000), "run", "owner", Effect.never),
-        );
+        const fiber = yield* Effect.forkChild(withHeartbeat(store, "run", "owner", Effect.never));
 
         yield* TestClock.adjust(250);
         const exit = yield* Fiber.await(fiber);
@@ -214,15 +207,11 @@ test("expired heartbeat retains every storage failure reason", async () => {
         cause: "second",
       });
 
-      class BrokenStore extends MemoryStore {
-        override heartbeat() {
-          return Effect.failCause(Cause.combine(Cause.fail(first), Cause.fail(second)));
-        }
-      }
-
-      const fiber = yield* Effect.forkChild(
-        withHeartbeat(new BrokenStore(undefined, 1000), "run", "owner", Effect.never),
+      const store = heartbeatStore(() =>
+        Effect.failCause(Cause.combine(Cause.fail(first), Cause.fail(second))),
       );
+
+      const fiber = yield* Effect.forkChild(withHeartbeat(store, "run", "owner", Effect.never));
 
       yield* TestClock.adjust(1000);
       const exit = yield* Fiber.await(fiber);
@@ -236,73 +225,3 @@ test("expired heartbeat retains every storage failure reason", async () => {
     }).pipe(Effect.provide(TestClock.layer())),
   );
 });
-
-for (const primary of ["loss", "interrupt"] as const) {
-  test(`${primary} retains driver cleanup defect along with supervision interruption`, async () => {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const began = yield* Deferred.make<void>();
-        const defect = new Error("driver cleanup defect");
-
-        class LosingStore extends MemoryStore {
-          override heartbeat() {
-            return Effect.succeed(false);
-          }
-        }
-
-        const work = Deferred.succeed(began, undefined).pipe(
-          Effect.andThen(Effect.never),
-          Effect.ensuring(Effect.die(defect)),
-        );
-
-        const fiber = yield* Effect.forkChild(
-          withHeartbeat(new LosingStore(undefined, 1000), "run", "owner", work),
-        );
-
-        yield* Deferred.await(began);
-
-        if (primary === "loss") {
-          yield* TestClock.adjust(250);
-        } else {
-          yield* Fiber.interrupt(fiber);
-        }
-
-        const exit = yield* Fiber.await(fiber);
-        expect(Exit.isFailure(exit)).toBe(true);
-
-        if (Exit.isFailure(exit)) {
-          const cleanup = exit.cause.reasons
-            .filter(Cause.isFailReason)
-            .map((reason) => reason.error)
-            .find((error) => error instanceof DriverCleanupFailed);
-
-          expect(cleanup).toBeInstanceOf(DriverCleanupFailed);
-
-          if (!(cleanup instanceof DriverCleanupFailed)) {
-            throw new Error("Missing driver cleanup diagnostic");
-          }
-
-          expect(
-            Exit.isFailure(cleanup.driver) &&
-              cleanup.driver.cause.reasons.some(
-                (reason) => Cause.isDieReason(reason) && reason.defect === defect,
-              ),
-          ).toBe(true);
-          expect(Exit.isFailure(cleanup.driver) && Cause.hasInterrupts(cleanup.driver.cause)).toBe(
-            true,
-          );
-
-          if (primary === "loss") {
-            expect(
-              exit.cause.reasons.some(
-                (reason) => Cause.isFailReason(reason) && reason.error instanceof OwnershipError,
-              ),
-            ).toBe(true);
-          } else {
-            expect(Cause.hasInterrupts(exit.cause)).toBe(true);
-          }
-        }
-      }).pipe(Effect.provide(TestClock.layer())),
-    );
-  });
-}

@@ -128,7 +128,9 @@ test("start and schedule use direct get, distinguishing absent definitions from 
     ).rejects.toMatchObject(error);
   }
 
-  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: "2026-10-23T00:00:00.000Z" })),
+  ).toEqual([]);
   expect(await Effect.runPromise(f.store.listSchedules())).toEqual([]);
   expect(f.calls.graphs).toEqual(["missing", "missing", "corrupt", "corrupt"]);
   expect(f.calls.lists.size).toBe(0);
@@ -182,5 +184,7 @@ test("native adapter distinguishes absence from corrupt existing files", async (
     "_tag",
     "RegistryError",
   );
-  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: "2026-10-23T00:00:00.000Z" })),
+  ).toEqual([]);
 });

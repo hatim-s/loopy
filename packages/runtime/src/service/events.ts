@@ -6,7 +6,7 @@ import type { Service } from "./service";
 
 export type EventReader = Pick<
   Store,
-  "oldestEventSequence" | "epoch" | "events" | "transactionEvents" | "subscribe" | "dataVersion"
+  "oldestEventSequence" | "epoch" | "events" | "transactionEvents" | "subscribe"
 >;
 
 type EventService = Pick<Service, "events">;
@@ -52,12 +52,9 @@ export const eventStream = Effect.fn("events.eventStream")(function* (
 class EventFeed {
   private closed = false;
   private pending = false;
-  private polling = false;
-  private version?: number;
   private dirty = false;
   private drained?: () => void;
   private stalled?: ReturnType<typeof setTimeout>;
-  private tail?: ReturnType<typeof setInterval>;
   private heartbeat?: ReturnType<typeof setInterval>;
   private unsubscribe?: () => void;
   private controller?: ReadableStreamDefaultController<Uint8Array>;
@@ -74,36 +71,6 @@ class EventFeed {
     this.controller = controller;
     controller.enqueue(ENCODER.encode(": connected\n\n"));
     this.unsubscribe = this.store.subscribe(this.enqueue);
-
-    if (this.store.dataVersion) {
-      this.tail = setInterval(() => {
-        const dataVersion = this.store.dataVersion;
-
-        if (this.polling || this.closed || !dataVersion) {
-          return;
-        }
-
-        this.polling = true;
-        void Effect.runPromise(dataVersion.call(this.store))
-          .then(
-            (version) => {
-              if (!this.closed && version !== this.version) {
-                this.version = version;
-                this.enqueue();
-              }
-            },
-            (error) => {
-              if (!this.closed) {
-                this.close();
-                this.controller?.error(error);
-              }
-            },
-          )
-          .finally(() => {
-            this.polling = false;
-          });
-      }, 100);
-    }
 
     this.heartbeat = setInterval(() => {
       if ((controller.desiredSize ?? 0) > 0) {
@@ -126,7 +93,6 @@ class EventFeed {
 
     this.closed = true;
     this.pull();
-    clearInterval(this.tail);
     clearInterval(this.heartbeat);
     this.unsubscribe?.();
     this.signal.removeEventListener("abort", this.abort);

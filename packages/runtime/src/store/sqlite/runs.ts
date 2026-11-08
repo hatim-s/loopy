@@ -1,250 +1,280 @@
-import type { RunOutcome, RunRecord, RunStatus, RuntimeEvent } from "@loopy/core";
-import { acquireWindow, isTerminalRun, OwnershipError, type RateLimitWindow } from "@loopy/core";
-import { type EventTransaction } from "../event-outbox";
-import { ownedStorageOperation, StoreRejectedError, storageOperation } from "../operation";
+import {
+  acquireWindow,
+  isTerminalRun,
+  OwnershipError,
+  type RateLimitWindow,
+  type RunOutcome,
+  type RunRecord,
+  type RuntimeEvent,
+  type WakeError,
+} from "@loopy/core";
+import { StoreRejectedError } from "../operation";
 import { normalizeRun, utc } from "../timestamps";
-import { rowToRun, SQL } from "./store-rows";
-import { type RunRow } from "./store-schema";
-import { SqliteWaitRecords } from "./wait-records";
+import type { SqlContext, SqlWrite } from "./context";
+import { emit } from "./events";
+import { type RunRow, rowToRun } from "./rows";
 
-export class SqliteRuns extends SqliteWaitRecords {
-  acquireRateLimit(key: string, count: number, windowMs: number, now: string) {
-    return storageOperation("acquireRateLimit", () => {
-      return this.db.transaction(() => {
-        const window =
-          this.db.query<RateLimitWindow, [string]>(SQL.rateLimit).get(key) ?? undefined;
+const RELEASE =
+  "UPDATE runs SET wake_at=CASE WHEN status='running' THEN ? ELSE wake_at END,status=CASE WHEN status='running' THEN 'suspended' ELSE status END,owner_token=NULL,owner_pid=NULL,owner_host=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND owner_token=?";
 
-        const acquired = acquireWindow(window, count, windowMs, now);
-        this.db
-          .query(SQL.putRateLimit)
-          .run(key, acquired.window.windowStart, acquired.window.count);
+const WAKE = "UPDATE runs SET wake_at=?,updated_at=? WHERE id=?";
 
-        return acquired.result;
-      }, "immediate");
-    });
+export function readRun(ctx: SqlContext, runId: string): RunRow | undefined {
+  return ctx.db.query<RunRow, [string]>("SELECT * FROM runs WHERE id=?").get(runId) ?? undefined;
+}
+
+export function requireRun(ctx: SqlContext, runId: string): RunRow {
+  const row = readRun(ctx, runId);
+
+  if (!row) {
+    throw new StoreRejectedError(`Run '${runId}' does not exist. Create the run first.`);
   }
 
-  createRun(run: RunRecord) {
-    return storageOperation("createRun", () => {
-      this.commit((txn) => {
-        if (this.row(run.id)) {
-          throw new StoreRejectedError(`Run '${run.id}' already exists. Use a new run ID.`);
-        }
+  return row;
+}
 
-        this.insertRun(run);
-        this.emitRun(txn, run.id, "created");
-      });
-    });
+export function requireRunning(ctx: SqlContext, runId: string, token: string): RunRow {
+  const row = requireRun(ctx, runId);
+
+  if (row.owner_token !== token) {
+    throw new OwnershipError(runId);
   }
 
-  getRun(id: string) {
-    return storageOperation("getRun", () => {
-      const row = this.row(id);
-
-      return row ? rowToRun(row) : undefined;
-    });
+  if (row.status !== "running") {
+    throw new StoreRejectedError(
+      `Run '${row.id}' cannot transition from '${row.status}'. Claim a queued or suspended run first.`,
+    );
   }
 
-  listRuns(filter: { slug?: string; status?: RunStatus } = {}) {
-    return storageOperation("listRuns", () => {
-      return this.db
-        .query<RunRow, [string | null, RunStatus | null]>(SQL.listRuns)
-        .all(filter.slug ?? null, filter.status ?? null)
-        .map(rowToRun);
-    });
+  return row;
+}
+
+export function isStale(ctx: SqlContext, row: RunRow, now: number): boolean {
+  if (
+    (row.status !== "running" && row.status !== "suspended") ||
+    row.owner_token === null ||
+    row.heartbeat_at === null
+  ) {
+    return false;
   }
 
-  claim(runId: string, token: string) {
-    return ownedStorageOperation("claim", () => {
-      return this.commit((txn) => {
-        const timestamp = this.timestamp();
-
-        const previous = this.requireRow(runId);
-
-        if (this.stale(previous, this.now())) {
-          this.recoverRun(txn, previous, timestamp);
-        }
-
-        const result = this.db
-          .query(SQL.claim)
-          .run(
-            token,
-            this.options.owner.identity.pid,
-            this.options.owner.identity.host,
-            timestamp,
-            timestamp,
-            runId,
-          );
-
-        if (result.changes !== 1) {
-          const row = this.requireRow(runId);
-
-          if (row.owner_token !== null) {
-            throw new OwnershipError(runId);
-          }
-
-          throw new StoreRejectedError(
-            `Run '${runId}' cannot be claimed in status '${row.status}'. Activate a queued or suspended run.`,
-          );
-        }
-
-        this.emitRun(txn, runId, "claimed");
-
-        return rowToRun(this.requireRow(runId));
-      });
-    });
+  if (row.owner_host !== null && ctx.owner.isAlive({ host: row.owner_host, pid: row.owner_pid })) {
+    return false;
   }
 
-  protected recoverRun(txn: EventTransaction, previous: RunRow, timestamp: string): void {
-    const runId = previous.id;
-    this.db.query(SQL.release).run(timestamp, timestamp, runId, previous.owner_token);
-    this.emitRun(txn, runId, "released");
+  return now - Date.parse(row.heartbeat_at) > ctx.leaseMs;
+}
+
+export function emitRun(
+  write: SqlWrite,
+  runId: string,
+  kind: Extract<RuntimeEvent, { entity: "run" }>["kind"],
+): void {
+  emit(write, { entity: "run", kind, runId, record: rowToRun(requireRun(write, runId)) });
+}
+
+export function insertRun(write: SqlWrite, input: RunRecord): void {
+  if (readRun(write, input.id)) {
+    throw new StoreRejectedError(`Run '${input.id}' already exists. Use a new run ID.`);
   }
 
-  wakeRun(id: string, at: string) {
-    return storageOperation("wakeRun", () => {
-      return this.commit((txn) => {
-        const row = this.row(id);
+  const run = normalizeRun(input);
 
-        if (!row) {
-          return "not_found";
-        }
+  write.db
+    .query(
+      "INSERT INTO runs(id,slug,revision,workspace,input_json,status,output_json,error,wake_at,next_retry_at,created_at,updated_at,owner_token,owner_pid,owner_host,heartbeat_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      run.id,
+      run.slug,
+      run.revision,
+      run.workspace,
+      JSON.stringify(run.input),
+      run.status,
+      run.output === undefined ? null : JSON.stringify(run.output),
+      run.error ?? null,
+      run.wakeAt ?? null,
+      run.nextRetryAt ?? null,
+      run.createdAt,
+      run.updatedAt,
+      run.owner?.token ?? null,
+      run.owner?.pid ?? null,
+      run.owner?.host ?? null,
+      run.owner?.heartbeatAt ?? null,
+    );
+  emitRun(write, run.id, "created");
+}
 
-        if (row.owner_token !== null) {
-          if (!this.stale(row, this.now())) {
-            return "owned_elsewhere";
-          }
+function recoverRun(write: SqlWrite, previous: RunRow, at: string): void {
+  write.db.query(RELEASE).run(at, at, previous.id, previous.owner_token);
+  emitRun(write, previous.id, "released");
+}
 
-          this.recoverRun(txn, row, at);
-        }
+export function claimRun(write: SqlWrite, runId: string, token: string): RunRecord {
+  const previous = requireRun(write, runId);
 
-        if (isTerminalRun(row.status)) {
-          return "not_claimable";
-        }
-
-        this.db.query(SQL.wakeRun).run(utc(at), utc(at), id);
-        this.emitRun(txn, id, "woken");
-
-        return undefined;
-      });
-    });
+  if (isStale(write, previous, write.now)) {
+    recoverRun(write, previous, write.at);
   }
 
-  heartbeat(runId: string, token: string) {
-    return storageOperation("heartbeat", () => {
-      return this.commit((txn) => {
-        this.requireRow(runId);
-        const timestamp = this.timestamp();
+  const claimed = write.db
+    .query(
+      "UPDATE runs SET owner_token=?,owner_pid=?,owner_host=?,heartbeat_at=?,updated_at=?,status='running',wake_at=NULL,next_retry_at=NULL WHERE id=? AND owner_token IS NULL AND status IN ('queued','suspended','running')",
+    )
+    .run(token, write.owner.identity.pid, write.owner.identity.host, write.at, write.at, runId);
 
-        const changed =
-          this.db.query(SQL.heartbeat).run(timestamp, timestamp, runId, token).changes === 1;
+  if (claimed.changes !== 1) {
+    const row = requireRun(write, runId);
 
-        if (changed) {
-          this.emitRun(txn, runId, "heartbeat");
-        }
+    if (row.owner_token !== null) {
+      throw new OwnershipError(runId);
+    }
 
-        return changed;
-      });
-    });
+    throw new StoreRejectedError(
+      `Run '${runId}' cannot be claimed in status '${row.status}'. Activate a queued or suspended run.`,
+    );
   }
 
-  suspend(runId: string, token: string, wakeAt?: string) {
-    return ownedStorageOperation("suspend", () => {
-      this.commit((txn) => {
-        const run = this.owned(runId, token);
-        this.requireRunning(run);
+  emitRun(write, runId, "claimed");
 
-        this.db
-          .query(SQL.suspend)
-          .run(wakeAt === undefined ? null : utc(wakeAt), this.timestamp(), runId, token);
-        this.emitRun(txn, runId, "suspended");
-      });
-    });
+  return rowToRun(requireRun(write, runId));
+}
+
+export function wakeRun(write: SqlWrite, runId: string, at: string): WakeError | undefined {
+  const row = readRun(write, runId);
+
+  if (!row) {
+    return "not_found";
   }
 
-  finishRun(runId: string, token: string, outcome: RunOutcome) {
-    return ownedStorageOperation("finishRun", () => {
-      this.commit((txn) => {
-        this.requireRunning(this.owned(runId, token));
-        this.expireWaits(txn, runId, this.timestamp());
-        this.db
-          .query(SQL.finish)
-          .run(
-            outcome.status,
-            outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
-            outcome.status === "failed" ? outcome.error : null,
-            this.timestamp(),
-            runId,
-            token,
-          );
-        this.emitRun(txn, runId, "finished");
-      });
-    });
+  if (row.owner_token !== null) {
+    if (!isStale(write, row, write.now)) {
+      return "owned_elsewhere";
+    }
+
+    recoverRun(write, row, at);
   }
 
-  release(runId: string, token: string) {
-    return ownedStorageOperation("release", () => {
-      this.commit((txn) => {
-        const previous = this.owned(runId, token);
-        const timestamp = this.timestamp();
-        this.db.query(SQL.release).run(timestamp, timestamp, runId, token);
-        this.emitRun(txn, runId, "released");
-
-        if (previous.status === "running") {
-          this.emitRun(txn, runId, "suspended");
-        }
-      });
-    });
+  if (isTerminalRun(row.status)) {
+    return "not_claimable";
   }
 
-  dueRuns(now: string) {
-    return storageOperation("dueRuns", () => {
-      return this.db
-        .query<RunRow, [string]>(SQL.dueRuns)
-        .all(utc(now))
-        .filter((row) => row.owner_token === null || this.stale(row, Date.parse(now)))
-        .map(rowToRun);
-    });
+  write.db.query(WAKE).run(utc(at), utc(at), runId);
+  emitRun(write, runId, "woken");
+}
+
+// A resolved hook wakes its run whether or not an activation owns it.
+export function markWoken(write: SqlWrite, runId: string, at: string): void {
+  write.db.query(WAKE).run(utc(at), utc(at), runId);
+  emitRun(write, runId, "woken");
+}
+
+export function heartbeatRun(write: SqlWrite, runId: string, token: string): boolean {
+  requireRun(write, runId);
+
+  const changed =
+    write.db
+      .query("UPDATE runs SET heartbeat_at=?,updated_at=? WHERE id=? AND owner_token=?")
+      .run(write.at, write.at, runId, token).changes === 1;
+
+  if (changed) {
+    emitRun(write, runId, "heartbeat");
   }
 
-  nextWakeAt() {
-    return storageOperation("nextWakeAt", () => {
-      return (
-        this.db.query<{ wake_at: string | null }, []>(SQL.nextWakeAt).get()?.wake_at ?? undefined
-      );
-    });
+  return changed;
+}
+
+export function releaseRun(write: SqlWrite, runId: string, token: string): void {
+  const previous = requireRun(write, runId);
+
+  if (previous.owner_token !== token) {
+    throw new OwnershipError(runId);
   }
 
-  protected emitRun(
-    txn: EventTransaction,
-    runId: string,
-    kind: Extract<RuntimeEvent, { entity: "run" }>["kind"],
-  ): void {
-    this.emit(txn, { entity: "run", kind, runId, record: rowToRun(this.requireRow(runId)) });
-  }
+  write.db.query(RELEASE).run(write.at, write.at, runId, token);
+  emitRun(write, runId, "released");
 
-  protected insertRun(input: RunRecord): void {
-    const run = normalizeRun(input);
-
-    this.db
-      .query(SQL.createRun)
-      .run(
-        run.id,
-        run.slug,
-        run.revision,
-        run.workspace,
-        JSON.stringify(run.input),
-        run.status,
-        run.output === undefined ? null : JSON.stringify(run.output),
-        run.error ?? null,
-        run.wakeAt ?? null,
-        run.nextRetryAt ?? null,
-        run.createdAt,
-        run.updatedAt,
-        run.owner?.token ?? null,
-        run.owner?.pid ?? null,
-        run.owner?.host ?? null,
-        run.owner?.heartbeatAt ?? null,
-      );
+  if (previous.status === "running") {
+    emitRun(write, runId, "suspended");
   }
+}
+
+export function suspendRun(
+  write: SqlWrite,
+  runId: string,
+  token: string,
+  wakeAt: string | null,
+  at: string,
+): void {
+  write.db
+    .query(
+      "UPDATE runs SET status='suspended',wake_at=?,updated_at=? WHERE id=? AND owner_token=? AND status='running'",
+    )
+    .run(wakeAt, utc(at), runId, token);
+  emitRun(write, runId, "suspended");
+}
+
+export function finishRun(
+  write: SqlWrite,
+  runId: string,
+  token: string,
+  outcome: RunOutcome,
+  at: string,
+): void {
+  write.db
+    .query(
+      "UPDATE runs SET status=?,output_json=?,error=?,wake_at=NULL,next_retry_at=NULL,updated_at=? WHERE id=? AND owner_token=? AND status='running'",
+    )
+    .run(
+      outcome.status,
+      outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
+      outcome.status === "failed" ? outcome.error : null,
+      utc(at),
+      runId,
+      token,
+    );
+  emitRun(write, runId, "finished");
+}
+
+export function readDueRuns(ctx: SqlContext, now: string): RunRecord[] {
+  return ctx.db
+    .query<RunRow, [string]>(
+      `SELECT * FROM runs WHERE (owner_token IS NULL AND
+    (status IN ('queued','running') OR (status='suspended' AND wake_at<=?))) OR
+    (owner_token IS NOT NULL AND status IN ('running','suspended')) ORDER BY created_at,rowid`,
+    )
+    .all(utc(now))
+    .filter((row) => row.owner_token === null || isStale(ctx, row, Date.parse(now)))
+    .map(rowToRun);
+}
+
+export function readNextWakeAt(ctx: SqlContext): string | undefined {
+  return (
+    ctx.db
+      .query<{ wake_at: string | null }, []>(
+        "SELECT MIN(wake_at) AS wake_at FROM runs WHERE status='suspended' AND owner_token IS NULL",
+      )
+      .get()?.wake_at ?? undefined
+  );
+}
+
+export function acquireRateLimit(
+  ctx: SqlContext,
+  limit: { key: string; count: number; windowMs: number; now: string },
+) {
+  const window =
+    ctx.db
+      .query<RateLimitWindow, [string]>(
+        "SELECT window_start AS windowStart,count FROM rate_limits WHERE key=?",
+      )
+      .get(limit.key) ?? undefined;
+
+  const acquired = acquireWindow(window, limit.count, limit.windowMs, limit.now);
+  ctx.db
+    .query(
+      "INSERT INTO rate_limits VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=excluded.count",
+    )
+    .run(limit.key, acquired.window.windowStart, acquired.window.count);
+
+  return acquired.result;
 }

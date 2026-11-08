@@ -49,7 +49,6 @@ function fixture() {
 
   const store = new SqlRunStore(driver, {
     owner: { identity: { pid: 0, host: "cloud" }, isAlive: () => false },
-    now: () => now,
   });
 
   const entries = new Map<string, SavedLoopy>();
@@ -140,7 +139,9 @@ test("portable service validates input and pins graph/source revisions through a
   ).rejects.toMatchObject({
     code: "bad_request",
   });
-  expect(await Effect.runPromise(store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(store.queryRuns({ limit: 200, now: new Date(now).toISOString() })),
+  ).toEqual([]);
 
   const run = await Effect.runPromise(
     service.startRun("portable", { name: "Hatim" }, "cloud-workspace"),
@@ -258,7 +259,9 @@ test("portable routes use explicit daemon identity and return unsupported operat
     });
   }
 
-  expect(await Effect.runPromise(store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(store.queryRuns({ limit: 200, now: new Date(now).toISOString() })),
+  ).toEqual([]);
   expect(await Effect.runPromise(store.listSchedules())).toEqual([]);
 });
 
@@ -292,7 +295,6 @@ async function seededTransaction() {
 
 test("portable SSE delivers whole SQL transactions and aborts without polling", async () => {
   const { service, store, before } = await seededTransaction();
-  expect("dataVersion" in store).toBe(false);
   const aborter = new AbortController();
   aborters.push(aborter);
 

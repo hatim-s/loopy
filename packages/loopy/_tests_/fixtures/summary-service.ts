@@ -3,13 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type RunRecord, revision } from "@loopy/core";
 import { type ArtifactRegistry, makeService, RegistryError } from "@loopy/runtime/service";
-import { MemoryStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
 import { Registry } from "../../../runtime/src/local/registry";
 import { makeArtifactRegistry } from "../../../runtime/src/local/save-compiled";
 import { compiledBody } from "../compiled-fixture";
+import { MemorySqlStore } from "../store-fixture";
 
-export class SummaryCountsStore extends MemoryStore {
+export class SummaryCountsStore extends MemorySqlStore {
   groupedReads = 0;
 
   override runCountsByDefinition() {

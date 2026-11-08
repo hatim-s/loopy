@@ -58,7 +58,9 @@ test("HTTP commands queue schema-validated graph runs and pin the saved revision
   const f = await graphFixture();
   expect((await cli(f, "save", f.file)).code).toBe(0);
   expect((await cli(f, "run", "compiled", "--count", "bad")).code).toBe(1);
-  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: new Date().toISOString() })),
+  ).toEqual([]);
   const queued = await cli(f, "run", "compiled", "--count", "2");
   expect(queued).toMatchObject({ code: 0, stderr: "" });
   const run = object(queued.stdout);
@@ -252,7 +254,17 @@ test("HTTP logs drains every page for normal output and terminal follow", async 
   }
 
   await Effect.runPromise(
-    f.store.finishRun("logged", "log-owner", { status: "succeeded", output: null }),
+    f.store.apply({
+      runId: "logged",
+      token: "log-owner",
+      effects: [
+        {
+          kind: "finish_run",
+          outcome: { status: "succeeded", output: null },
+          at: new Date().toISOString(),
+        },
+      ],
+    }),
   );
   await Effect.runPromise(f.store.release("logged", "log-owner"));
   const result = await cli(f, "logs", "logged", "--follow");
@@ -292,7 +304,9 @@ test("HTTP run reports named JSON input errors before creating a run", async () 
     expect(result.stderr).toContain(message ?? "");
   }
 
-  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: new Date().toISOString() })),
+  ).toEqual([]);
 });
 
 function registryEntry(home: string, cwd: string, slug: string) {

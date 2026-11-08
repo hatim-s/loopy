@@ -71,8 +71,6 @@ export { validateSecretName, validateSlug } from "./names";
 
 export * from "./process";
 
-export * from "./queries";
-
 export * from "./rate-limit";
 
 export { revision, revisionInput } from "./revision";
