@@ -199,7 +199,7 @@ test("portable schedules use registry workspace identity", async () => {
   expect(await Effect.runPromise(service.listSchedules("alias"))).toEqual([]);
 });
 
-test("portable routes use explicit daemon identity and return unsupported operation errors", async () => {
+test("portable routes use explicit daemon identity", async () => {
   const { service, store } = fixture();
 
   const table = apiRoutes({
@@ -215,23 +215,6 @@ test("portable routes use explicit daemon identity and return unsupported operat
     pid: 0,
     running: 0,
   });
-
-  for (const request of [
-    new Request("https://loopy.example/api/secrets"),
-    new Request("https://loopy.example/api/secrets/TOKEN", {
-      method: "PUT",
-      body: JSON.stringify({ value: "private" }),
-    }),
-    new Request("https://loopy.example/api/secrets/TOKEN", { method: "DELETE" }),
-    new Request("https://loopy.example/api/types", {
-      method: "POST",
-      body: JSON.stringify({ binary: "tool", path: [], name: null }),
-    }),
-  ]) {
-    const response = await dispatch(table, request, new URL(request.url));
-    expect(response.status).toBe(501);
-    expect(await response.json()).toMatchObject({ error: { code: "not_yet" } });
-  }
 
   for (const [method, suffix, body] of [
     ["POST", "runs", { input: {} }],

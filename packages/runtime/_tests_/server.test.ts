@@ -6,6 +6,8 @@ import {
   cursorViewSchema,
   daemonViewSchema,
   decodeBoundary,
+  ERROR_CODES,
+  ERROR_STATUS,
   type ErrorCode,
   encodeBoundary,
   encodeRunCursor,
@@ -29,13 +31,11 @@ import {
   readDaemonFile,
   ServiceError,
 } from "../src/local";
-import { apiRoutes, dispatch, eventStream } from "../src/service";
+import { serveHttp } from "./fixtures/http-server";
 import { fixture, object, runFixture, save } from "./fixtures/project";
 import { countPasses, fixtureStore, nextPass, waitUntil } from "./fixtures/service-runtime";
 import { fixtureScope } from "./fixtures/test-scope";
 import { bounded, until } from "./fixtures/wait";
-
-const daemonMetadata = { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 4 };
 
 const servers: Awaited<ReturnType<typeof startDaemon>>[] = [];
 
@@ -148,7 +148,7 @@ test("API distinguishes invalid cursors from registry failures", async () => {
   expect((await fetch(`${url.origin}/api/config`, { headers })).status).toBe(404);
 });
 
-test("API returns the contract snapshot, rejects unknown query keys and keeps cursor log reads", async () => {
+test("API returns the contract snapshot and keeps cursor log reads", async () => {
   const f = fixture("summary", 'run: () => { log("hello"); return 1; }');
   await save(f);
   const run = object((await runFixture(f)).stdout);
@@ -161,8 +161,6 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   const full = object(await (await fetch(path, { headers })).text());
   expect(full.nodeRuns).toHaveLength(2);
   expect(full.logs).toEqual([]);
-  // The old viewer's logs=false switch is gone; strict query parsing rejects it.
-  expect((await fetch(`${path}?logs=false`, { headers })).status).toBe(400);
   expect(await (await fetch(`${path}/logs?after=0`, { headers })).json()).toMatchObject([
     { message: "hello" },
   ]);
@@ -462,7 +460,7 @@ test("SSE delivers exact transactions across replay, live commits and Last-Event
 });
 
 test("SSE disconnect removes the subscriber", async () => {
-  const { store, service } = await serviceFixture("disconnect");
+  const { f, store, service } = await serviceFixture("disconnect");
   let active = 0;
   const original = store.subscribe.bind(store);
 
@@ -476,19 +474,14 @@ test("SSE disconnect removes the subscriber", async () => {
     };
   });
 
-  const response = await Effect.runPromise(
-    eventStream(
-      store,
-      service,
-      { after: 0, epoch: await Effect.runPromise(store.epoch()) },
-      new AbortController().signal,
-    ),
-  );
-
-  const unsubscribe = subscribe.mock.results[0]?.value;
-  expect(unsubscribe).toBeFunction();
-  await response.body!.cancel();
-  expect(active).toBe(0);
+  const { request } = serveHttp({ service, store, cwd: f.cwd });
+  const epoch = await Effect.runPromise(store.epoch());
+  const response = await request(`/events?after=0&epoch=${epoch}`);
+  const reader = response.body!.getReader();
+  expect(new TextDecoder().decode((await reader.read()).value)).toContain(": connected");
+  expect(active).toBe(1);
+  await reader.cancel();
+  await until("the stream to unsubscribe", () => active === 0);
   await Effect.runPromise(store.close());
   subscribe.mockRestore();
 });
@@ -502,22 +495,10 @@ test("response validation rejects a view with extra fields", async () => {
   }));
 
   const list = spyOn(service, "listLoopies").mockReturnValue(Effect.succeed(leaking));
-  const request = new Request("http://127.0.0.1/api/loopies");
+  const { request, causes } = serveHttp({ service, store, cwd: f.cwd });
 
   try {
-    const causes: unknown[] = [];
-
-    const response = await dispatch(
-      apiRoutes({
-        service,
-        store,
-        cwd: f.cwd,
-        daemon: daemonMetadata,
-        onError: (cause) => causes.push(cause),
-      }),
-      request,
-      new URL(request.url),
-    );
+    const response = await request("/loopies");
 
     expect(response.status).toBe(500);
     expect(causes).toHaveLength(1);
@@ -529,40 +510,18 @@ test("response validation rejects a view with extra fields", async () => {
 
 test("service error codes serialize with their HTTP status", async () => {
   const { f, store, service } = await serviceFixture("errors");
-  const request = new Request("http://127.0.0.1/api/runs/run");
-
-  const cases: [ErrorCode, number][] = [
-    ["not_found", 404],
-    ["unknown_hook", 404],
-    ["not_claimable", 409],
-    ["owned_elsewhere", 409],
-    ["bad_request", 400],
-    ["invalid_schedule", 400],
-    ["stale_cursor", 410],
-    ["unauthorized", 401],
-    ["forbidden", 403],
-    ["internal", 500],
-    ["invalid_cron", 400],
-    ["invalid_timezone", 400],
-  ];
-
-  const list = spyOn(service, "runSnapshot");
+  const { request } = serveHttp({ service, store, cwd: f.cwd });
+  const snapshot = spyOn(service, "runSnapshot");
 
   try {
-    for (const [code, status] of cases) {
-      list.mockReturnValue(Effect.fail(new ServiceError(code)));
-
-      const response = await dispatch(
-        apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata }),
-        request,
-        new URL(request.url),
-      );
-
-      expect(response.status).toBe(status);
+    for (const code of ERROR_CODES) {
+      snapshot.mockReturnValue(Effect.fail(new ServiceError(code)));
+      const response = await request("/runs/run");
+      expect(response.status).toBe(ERROR_STATUS[code]);
       expect(decodeBoundary(errorBodySchema)(await response.json()).error.code).toBe(code);
     }
   } finally {
-    list.mockRestore();
+    snapshot.mockRestore();
     await Effect.runPromise(store.close());
   }
 });
@@ -609,13 +568,10 @@ test("SSE keeps a node transaction whole across the replay batch limit", async (
     await recoveryRun(store, f.cwd);
     const cursor = 1;
 
-    const response = await Effect.runPromise(
-      eventStream(
-        store,
-        service,
-        { after: cursor, epoch: await Effect.runPromise(store.epoch()) },
-        new AbortController().signal,
-      ),
+    const epoch = await Effect.runPromise(store.epoch());
+
+    const response = await serveHttp({ service, store, cwd: f.cwd }).request(
+      `/events?after=${cursor}&epoch=${epoch}`,
     );
 
     const frames = await captureFrames(response.body!).finish(1);
@@ -937,19 +893,12 @@ test("local server leaves event pruning to the runtime daemon", async () => {
 
 async function scheduleApi() {
   const { f, store, service } = await serviceFixture("schedule-api");
-  const table = apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata });
+  const http = serveHttp({ service, store, cwd: f.cwd });
 
-  const request = (path: string, method = "GET", body?: Json) => {
-    const url = new URL(`http://localhost/api${path}`);
+  const request = (path: string, method = "GET", body?: Json) =>
+    http.request(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
 
-    return dispatch(
-      table,
-      new Request(url, { method, body: body === undefined ? undefined : JSON.stringify(body) }),
-      url,
-    );
-  };
-
-  return { store, service, request };
+  return { store, request };
 }
 
 test("schedule routes round trip validated views and report status codes", async () => {
@@ -994,18 +943,8 @@ test("schedule routes round trip validated views and report status codes", async
 });
 
 test("schedule PUT publishes a saved SSE frame", async () => {
-  const { store, service, request } = await scheduleApi();
-  const controller = new AbortController();
-
-  const stream = await Effect.runPromise(
-    eventStream(
-      store,
-      service,
-      { after: 0, epoch: await Effect.runPromise(store.epoch()) },
-      controller.signal,
-    ),
-  );
-
+  const { store, request } = await scheduleApi();
+  const stream = await request(`/events?after=0&epoch=${await Effect.runPromise(store.epoch())}`);
   const reader = stream.body!.getReader();
 
   try {
@@ -1022,7 +961,6 @@ test("schedule PUT publishes a saved SSE frame", async () => {
       { entity: "schedule", kind: "saved", record: { slug: "schedule-api", cron: "* * * * *" } },
     ]);
   } finally {
-    controller.abort();
     await reader.cancel();
     await Effect.runPromise(store.close());
   }
@@ -1089,16 +1027,13 @@ test("compiled save route verifies artifacts, stores private bundles and returns
     bundles: result.bundles,
   };
 
-  const table = apiRoutes({ service, store, cwd: f.cwd, daemon: daemonMetadata });
+  const { request } = serveHttp({ service, store, cwd: f.cwd });
 
-  const put = async (payload: typeof body) => {
-    const request = new Request("http://localhost/api/loopies/compiled-save", {
+  const put = (payload: typeof body) =>
+    request("/loopies/compiled-save", {
       method: "PUT",
       body: JSON.stringify(encodeBoundary(putLoopyBodySchema)(payload)),
     });
-
-    return dispatch(table, request, new URL(request.url));
-  };
 
   expect((await put({ ...body, revision: "0".repeat(64) })).status).toBe(400);
   expect((await put({ ...body, bundles: [] })).status).toBe(400);

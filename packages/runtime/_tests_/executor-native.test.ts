@@ -248,7 +248,8 @@ test("complete log records keep keys and values that end in a secret prefix", ()
   }
 });
 
-test("a live claim makes execution wait for its receipt instead of running again", async () => {
+// The completion may land before or after execution reads the claim; neither order runs the bundle.
+test("a live claim is never run again and execution returns its completion", async () => {
   const f = await fixture();
   await writeFile(f.bundle, 'await Bun.write("effect", "repeated"); console.log(1);');
   const identity = { executionKey: f.key, attempt: 1 };
@@ -263,7 +264,6 @@ test("a live claim makes execution wait for its receipt instead of running again
     f.executor.execute(f.key, 1, f.spec, new AbortController().signal),
   );
 
-  await Bun.sleep(100);
   const result = { kind: "succeeded" as const, output: 42, logs: [] };
   await Effect.runPromise(receipts.finish({ ...identity, kind: "finished", result }));
 
