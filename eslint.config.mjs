@@ -1,63 +1,7 @@
-import { dirname, relative, resolve } from "node:path";
 import sonarjs from "eslint-plugin-sonarjs";
 import unicorn from "eslint-plugin-unicorn";
 import tseslint from "typescript-eslint";
 import antiSlopConfig from "./tools/anti-slop/config.mjs";
-
-const relativeInternalImports = {
-  meta: {
-    type: "problem",
-    schema: [],
-    messages: {
-      alias: "Use relative imports within a package and explicit @loopy exports across packages.",
-      extension: "Internal imports must omit code extensions and the index filename.",
-      boundary: "Cross-package imports must use explicit workspace package exports.",
-    },
-  },
-  create(context) {
-    function check(source) {
-      if (source?.type !== "Literal" || !['"', "'"].includes(source.raw?.[0])) {
-        return;
-      }
-
-      const value = source.value;
-
-      const filename = context.filename;
-      const packageRoot = /^(.*\/packages\/[^/]+)\/src\//.exec(filename)?.[1];
-
-      if (packageRoot && value.startsWith(".")) {
-        const target = relative(packageRoot, resolve(dirname(filename), value));
-
-        if (target === ".." || target.startsWith("../")) {
-          context.report({ node: source, messageId: "boundary" });
-        }
-      }
-
-      const authorSource = /\/(?:_tests_|examples)\//.test(filename);
-
-      if (
-        (!authorSource && (value === "loopy" || value.startsWith("loopy/"))) ||
-        value.startsWith("@/")
-      ) {
-        context.report({ node: source, messageId: "alias" });
-      } else if (
-        value.startsWith(".") &&
-        (/\.(?:[jt]sx?)(?:[?#].*)?$/.test(value) || /(?:^|\/)index(?:[?#].*)?$/.test(value))
-      ) {
-        context.report({ node: source, messageId: "extension" });
-      }
-    }
-
-    return {
-      ImportDeclaration: (node) => check(node.source),
-      ExportNamedDeclaration: (node) => check(node.source),
-      ExportAllDeclaration: (node) => check(node.source),
-      ImportExpression: (node) => check(node.source),
-      TSImportType: (node) => check(node.source),
-      TSExternalModuleReference: (node) => check(node.expression),
-    };
-  },
-};
 
 export default tseslint.config(
   {
@@ -66,7 +10,6 @@ export default tseslint.config(
       "**/dist/**",
       "**/.wrangler/**",
       "coverage/**",
-      "research/**",
       ".notes/**",
       ".loopy/**",
       "**/routeTree.gen.ts",
@@ -76,14 +19,9 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,tsx}"],
-    plugins: {
-      unicorn,
-      sonarjs,
-      internal: { rules: { "relative-imports": relativeInternalImports } },
-    },
+    plugins: { unicorn, sonarjs },
     rules: {
       "sonarjs/cognitive-complexity": ["error", 20],
-      "internal/relative-imports": "error",
       "no-useless-concat": "error",
       curly: ["error", "all"],
       "@typescript-eslint/consistent-type-imports": "error",
@@ -112,25 +50,11 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/cli/src/**", "scripts/**", "apps/cloud/dev/**", "examples/**"],
+    files: ["packages/cli/src/output.ts", "scripts/**", "apps/cloud/dev/**", "examples/**"],
     rules: { "no-console": "off" },
   },
   {
     files: ["packages/loopy/_tests_/**", "examples/**"],
     rules: { "sonarjs/cognitive-complexity": "off", "no-console": "off" },
-  },
-  {
-    files: ["packages/core/src/**"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: ["bun", "bun:sqlite", "bun:test"].map((name) => ({
-            name,
-            message: "Core and runtime stay portable. Do not use Bun APIs.",
-          })),
-        },
-      ],
-    },
   },
 );

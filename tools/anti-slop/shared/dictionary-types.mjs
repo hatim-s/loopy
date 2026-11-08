@@ -293,13 +293,6 @@ function classifyAliasBroadTarget(type, environment, substitutions, resolvingAli
   nextResolving.add(name);
   return classifyAliasBroadTarget(alias.typeAnnotation, environment, nextSubstitutions, nextResolving);
 }
-export function isPopulatedObjectExpression(expression) {
-  let current = expression;
-  while (current.type === "ParenthesizedExpression" || current.type === "TSAsExpression" || current.type === "TSTypeAssertion" || current.type === "TSNonNullExpression") {
-    current = current.expression;
-  }
-  return current.type === "ObjectExpression" && current.properties.length > 0;
-}
 export function isKnownEvidenceExpression(expression) {
   let current = expression;
   while (current.type === "ParenthesizedExpression" || current.type === "TSAsExpression" || current.type === "TSTypeAssertion" || current.type === "TSNonNullExpression" || current.type === "TSSatisfiesExpression") {

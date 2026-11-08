@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { Schema } from "effect";
 import ts from "typescript";
@@ -52,12 +53,14 @@ function sourceRoot(owner: Package): string {
   return join(packageRoot(owner), "src");
 }
 
+const GENERATED = new Set(["node_modules", "dist", ".wrangler"]);
+
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
 
     if (entry.isDirectory()) {
-      return sourceFiles(path);
+      return GENERATED.has(entry.name) ? [] : sourceFiles(path);
     }
 
     return /\.tsx?$/.test(entry.name) ? [path] : [];
@@ -198,10 +201,6 @@ test("workspace source imports follow package ownership and explicit exports", (
             violations.push(`${name} crosses a package through ${specifier}.`);
           }
 
-          if (/\.[jt]sx?$|(?:^|\/)index$/.test(specifier)) {
-            violations.push(`${name} must omit extensions and index filenames (${specifier}).`);
-          }
-
           if (
             owner === "core" &&
             !relative(sourceRoot(owner), file).startsWith("engine/") &&
@@ -220,7 +219,7 @@ test("workspace source imports follow package ownership and explicit exports", (
         const imported = workspaceImport(specifier);
 
         if (!imported) {
-          if (specifier.startsWith("@loopy/") || specifier.startsWith("@/")) {
+          if (specifier.startsWith("@loopy/")) {
             violations.push(`${name} imports an unknown workspace alias (${specifier}).`);
           }
 
@@ -308,7 +307,7 @@ test("private manifests expose explicit existing source entries and declare the 
 test("apps use public workspace exports and dashboard uses only contract", () => {
   const violations: string[] = [];
 
-  for (const app of ["dashboard", "cloud", "sandbox"]) {
+  for (const app of readdirSync(join(ROOT, "apps"))) {
     const root = join(ROOT, "apps", app, "src");
     const config = manifest(join(ROOT, "apps", app));
 
@@ -320,6 +319,7 @@ test("apps use public workspace exports and dashboard uses only contract", () =>
           const target = manifest(packageRoot(imported.owner));
 
           if (
+            imported.owner === "loopy" ||
             !Object.hasOwn(target.exports, imported.key) ||
             (app === "dashboard" && imported.owner !== "contract")
           ) {
@@ -344,17 +344,62 @@ test("apps use public workspace exports and dashboard uses only contract", () =>
   expect(violations).toEqual([]);
 });
 
-test("portable entries bundle without host dependencies", async () => {
-  const result = await Bun.build({
-    entrypoints: [
-      join(sourceRoot("core"), "index.ts"),
-      join(sourceRoot("core"), "engine/index.ts"),
-      join(sourceRoot("contract"), "index.ts"),
-      join(sourceRoot("runtime"), "service/index.ts"),
-    ],
-    target: "browser",
-  });
+test("relative imports omit extensions and index filenames and nothing uses an @/ alias", () => {
+  const violations = ["packages", "apps", "scripts", "examples"].flatMap((root) =>
+    sourceFiles(join(ROOT, root)).flatMap((file) =>
+      importsOf(file).flatMap((specifier) =>
+        specifier.startsWith("@/") ||
+        (specifier.startsWith(".") && /\.[jt]sx?$|(?:^|\/)index$/.test(specifier))
+          ? [`${relative(ROOT, file)} imports ${specifier}.`]
+          : [],
+      ),
+    ),
+  );
 
-  expect(result.success).toBe(true);
-  expect(result.logs).toEqual([]);
+  expect(violations).toEqual([]);
+});
+
+test("the entries tsconfig.portable.json typechecks without Bun also bundle for the browser", async () => {
+  const { include } = Schema.decodeUnknownSync(
+    Schema.Struct({ include: Schema.Array(Schema.String) }),
+  )(JSON.parse(readFileSync(join(ROOT, "tsconfig.portable.json"), "utf8")));
+
+  const outdir = mkdtempSync(join(tmpdir(), "loopy-portable-"));
+
+  try {
+    // Bun.build inside bun test misresolves some nested relative imports, so bundle in a child.
+    const child = Bun.spawn(
+      [process.execPath, "build", "--target=browser", "--outdir", outdir, ...include],
+      { cwd: ROOT, stdout: "pipe", stderr: "pipe" },
+    );
+
+    const [stderr, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+  } finally {
+    rmSync(outdir, { recursive: true, force: true });
+  }
+});
+
+test("the published manifest depends on exactly the vendored packages' external dependencies", () => {
+  const external = new Map<string, string>();
+  const conflicts: string[] = [];
+
+  for (const owner of PACKAGES.filter((candidate) => candidate !== "loopy")) {
+    for (const [name, version] of Object.entries(manifest(packageRoot(owner)).dependencies ?? {})) {
+      if (name.startsWith("@loopy/")) {
+        continue;
+      }
+
+      if ((external.get(name) ?? version) !== version) {
+        conflicts.push(
+          `${owner} pins ${name} as ${version}, another package as ${external.get(name)}.`,
+        );
+      }
+
+      external.set(name, version);
+    }
+  }
+
+  expect(conflicts).toEqual([]);
+  expect(manifest(packageRoot("loopy")).dependencies).toEqual(Object.fromEntries(external));
 });
