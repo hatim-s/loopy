@@ -1,4 +1,4 @@
-import type { CommandResult } from "@loopy/core";
+import type { ParserInput } from "@loopy/core";
 import { lines, nulFields, unexpected } from "./shared";
 
 type Change = {
@@ -192,7 +192,7 @@ function statusRecord(result: Status, line: string, from?: string) {
   addChange(result.unstaged, xy.charAt(1), path, from);
 }
 
-export function parseStatus({ stdout }: CommandResult): Status {
+export function parseStatus({ stdout }: ParserInput): Status {
   const result: Status = {
     branch: null,
     upstream: null,
@@ -232,7 +232,7 @@ export function parseStatus({ stdout }: CommandResult): Status {
 // lines and even ASCII record-separator bytes in bodies intact; -z terminates each record.
 export const LOG_FORMAT = "%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b";
 
-export function parseLog({ stdout }: CommandResult): LogEntry[] {
+export function parseLog({ stdout }: ParserInput): LogEntry[] {
   const fields = nulFields(stdout, "git log");
 
   if (fields.length % 7 !== 0) {
@@ -266,7 +266,7 @@ function diffPaths(fields: string[], index: number, path: string, cmd: string) {
   return { entry: { path: to, from }, consumed: 2 };
 }
 
-export function parseDiff({ stdout }: CommandResult): DiffEntry[] {
+export function parseDiff({ stdout }: ParserInput): DiffEntry[] {
   const fields = nulFields(stdout, "git diff");
   const result: DiffEntry[] = [];
 
@@ -290,7 +290,7 @@ export function parseDiff({ stdout }: CommandResult): DiffEntry[] {
   return result;
 }
 
-export function parseDiffNames({ stdout }: CommandResult): DiffName[] {
+export function parseDiffNames({ stdout }: ParserInput): DiffName[] {
   const fields = nulFields(stdout, "git diffNames");
   const result: DiffName[] = [];
 
@@ -318,7 +318,7 @@ export function parseDiffNames({ stdout }: CommandResult): DiffName[] {
   return result;
 }
 
-export function parseBranch({ stdout }: CommandResult): Branch[] {
+export function parseBranch({ stdout }: ParserInput): Branch[] {
   return lines(stdout).map((line) => {
     const [name, head, upstream, sha, track, extra] = line.split("\0");
 
@@ -444,7 +444,7 @@ function worktreeField(entry: Worktree, line: string) {
   worktreeState(entry, line);
 }
 
-export function parseWorktreeList({ stdout }: CommandResult): Worktree[] {
+export function parseWorktreeList({ stdout }: ParserInput): Worktree[] {
   if (!stdout) {
     return [];
   }
@@ -480,7 +480,7 @@ export function parseWorktreeList({ stdout }: CommandResult): Worktree[] {
     });
 }
 
-export function parseStashList({ stdout }: CommandResult): Stash[] {
+export function parseStashList({ stdout }: ParserInput): Stash[] {
   return lines(stdout).map((line) => {
     const [ref, sha, message, extra] = line.split("\0");
 
@@ -499,7 +499,7 @@ export function parseStashList({ stdout }: CommandResult): Stash[] {
   });
 }
 
-export function parseTag({ stdout }: CommandResult): Tag[] {
+export function parseTag({ stdout }: ParserInput): Tag[] {
   return lines(stdout).map((line) => {
     const [name, sha, date, extra] = line.split("\0");
 
@@ -518,7 +518,7 @@ export function parseTag({ stdout }: CommandResult): Tag[] {
   });
 }
 
-export function parseRemote({ stdout }: CommandResult): Remote[] {
+export function parseRemote({ stdout }: ParserInput): Remote[] {
   const remotes = new Map<string, Remote>();
 
   for (const line of lines(stdout)) {
@@ -543,7 +543,7 @@ export function parseRemote({ stdout }: CommandResult): Remote[] {
   return [...remotes.values()];
 }
 
-export function parseRevParse({ stdout }: CommandResult): string {
+export function parseRevParse({ stdout }: ParserInput): string {
   const value = stdout.trim();
 
   if (!value || /[\n\r\0]/.test(value)) {
@@ -553,6 +553,6 @@ export function parseRevParse({ stdout }: CommandResult): string {
   return value;
 }
 
-export function parseLsFiles({ stdout }: CommandResult): string[] {
+export function parseLsFiles({ stdout }: ParserInput): string[] {
   return nulFields(stdout, "git ls-files").map((path) => required(path, "git ls-files", stdout));
 }

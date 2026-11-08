@@ -7,6 +7,7 @@ import {
   type ExecutionResult,
   isString,
   limitLogs,
+  type ParserInput,
 } from "@loopy/core";
 import type { CommandExecutionError } from "../os";
 import { redactValue } from "./redact";
@@ -51,7 +52,7 @@ export type CommandStep =
       kind: "parse";
       bundleHash: string;
       timeoutMs: number;
-      result: Omit<CommandResult, "durationMs">;
+      result: ParserInput;
       logs: AttemptLog[];
     };
 

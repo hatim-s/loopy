@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { type CommandResult } from "@loopy/sdk";
+import type { ParserInput } from "@loopy/sdk";
 import {
   parseBranch,
   parseDiff,
@@ -15,8 +15,8 @@ import {
   parseWorktreeList,
 } from "../../sdk/src/shell/parse/git";
 
-function result(stdout: string): CommandResult {
-  return { stdout, stderr: "", exitCode: 0, durationMs: 1 };
+function result(stdout: string): ParserInput {
+  return { stdout, stderr: "", exitCode: 0 };
 }
 
 function fixture(name: string, platform: string) {

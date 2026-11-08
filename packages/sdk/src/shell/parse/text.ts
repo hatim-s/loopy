@@ -1,4 +1,4 @@
-import type { CommandResult, Json } from "@loopy/core";
+import type { Json, ParserInput } from "@loopy/core";
 import { jsonValue, lines, unexpected } from "./shared";
 
 type Wc = { lines: number; words: number; bytes: number; file?: string };
@@ -11,7 +11,7 @@ type Grep = { matches: GrepMatch[]; binaryMatches: string[] };
 
 type Sha256 = { hash: string; file: string };
 
-export function parseWc({ stdout }: CommandResult): Wc[] {
+export function parseWc({ stdout }: ParserInput): Wc[] {
   const rows = lines(stdout);
 
   // wc prints a total row exactly when it reads more than one operand.
@@ -32,7 +32,7 @@ export function parseWc({ stdout }: CommandResult): Wc[] {
   });
 }
 
-export function parseUniqCount({ stdout }: CommandResult): UniqCount[] {
+export function parseUniqCount({ stdout }: ParserInput): UniqCount[] {
   return lines(stdout).map((line) => {
     const match = /^\s*(\d+) ([\s\S]*)$/.exec(line);
 
@@ -70,7 +70,7 @@ function parseGrepMatch(line: string): GrepMatch {
   return { file: match[1] ?? null, line: grepLine(match[2] ?? "", line), text: match[3] ?? "" };
 }
 
-export function parseGrep({ stdout, exitCode }: CommandResult): Grep {
+export function parseGrep({ stdout, exitCode }: ParserInput): Grep {
   const result: Grep = { matches: [], binaryMatches: [] };
 
   if (exitCode === 1) {
@@ -91,7 +91,7 @@ export function parseGrep({ stdout, exitCode }: CommandResult): Grep {
   return result;
 }
 
-export function parseGrepCount({ stdout }: CommandResult): number {
+export function parseGrepCount({ stdout }: ParserInput): number {
   const value = stdout.trim();
 
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
@@ -128,7 +128,7 @@ function checksumPath(path: string, escaped: boolean, line: string): string {
   return decoded;
 }
 
-export function parseSha256({ stdout }: CommandResult): Sha256[] {
+export function parseSha256({ stdout }: ParserInput): Sha256[] {
   return lines(stdout).map((line) => {
     const match = /^(\\?)([a-fA-F0-9]{64}) [ *](.+)$/.exec(line);
 
@@ -140,7 +140,7 @@ export function parseSha256({ stdout }: CommandResult): Sha256[] {
   });
 }
 
-export function parseJq({ stdout }: CommandResult): Json {
+export function parseJq({ stdout }: ParserInput): Json {
   const values = lines(stdout).map((line) => jsonValue(line, "jq"));
 
   return values.length === 1 ? (values[0] ?? null) : values;

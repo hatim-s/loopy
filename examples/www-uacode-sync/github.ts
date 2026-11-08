@@ -1,4 +1,4 @@
-import { type CommandResult, command, sh } from "loopy";
+import { command, type ParserInput, sh } from "loopy";
 import { readOptions } from "../options";
 import { object, parse, string } from "./json-edit";
 import { parseCommit, parsePullRequests, selectPullRequest } from "./publication";
@@ -21,7 +21,7 @@ export function remoteSha(repo: string, ref: string) {
   );
 }
 
-function parseRemoteSha(result: CommandResult) {
+function parseRemoteSha(result: ParserInput) {
   if (result.exitCode !== 0) {
     if (/\(HTTP 404\)/.test(result.stderr)) {
       return null;

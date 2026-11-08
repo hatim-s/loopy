@@ -5,12 +5,10 @@ import { NODE_RUN_STATUSES, nodeRunSchema } from "./graph/node-run";
 import { outputSchema } from "./graph/values";
 import { jsonSchema } from "./json";
 
-export type CommandResult = {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  durationMs: number;
-};
+/** What a parser bundle reads on stdin after its command exits. */
+export type ParserInput = { stdout: string; stderr: string; exitCode: number };
+
+export type CommandResult = ParserInput & { durationMs: number };
 
 export const RUN_STATUSES = [
   "queued",

@@ -1,4 +1,4 @@
-export type { CommandResult, Json } from "@loopy/core";
+export type { Json, ParserInput } from "@loopy/core";
 
 export type { CommandDescriptor } from "./descriptor";
 
