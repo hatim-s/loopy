@@ -82,7 +82,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
     const bytes = await Effect.runPromise(
       readBoundedBody(response.body, SANDBOX_MAX_REQUEST_BYTES).pipe(
         Effect.catchTag("BodyLimitError", () =>
-          Effect.fail(new Error("Receipt authority response exceeds its byte limit.")),
+          Effect.die(new Error("Receipt authority response exceeds its byte limit.")),
         ),
       ),
     );
