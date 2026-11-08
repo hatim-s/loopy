@@ -202,7 +202,7 @@ test("warm metadata endpoints read zero graphs while direct get, start and sched
     body: {
       value: {
         loopies: [{ description: "warm metadata", counts: { queued: 1 } }],
-        runs: [{ loopy: { description: "warm metadata" } }],
+        runs: [{ status: "queued" }],
       },
       graphReads: 0,
     },

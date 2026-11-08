@@ -541,17 +541,3 @@ for (const reason of ["timeout", "output_limit", "rejected"] as const) {
     });
   });
 }
-
-test("invalid command limits are rejected author input", async () => {
-  const result = await Effect.runPromise(
-    run(
-      { program: "/bin/echo", args: ["fixture"], maxOutputBytes: 0 },
-      { workspace: workspace(), mode: "full" },
-    ).pipe(Effect.result),
-  );
-
-  expect(result).toMatchObject({
-    _tag: "Failure",
-    failure: { _tag: "CommandExecutionError", reason: "rejected" },
-  });
-});

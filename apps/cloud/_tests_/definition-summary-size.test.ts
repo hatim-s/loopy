@@ -88,7 +88,7 @@ for (const sourceBytes of [1_100_001, ARTIFACT_LIMITS.metadataRowBytes + 300]) {
       body: {
         value: {
           loopies: [{ description: body.graph.meta.description }],
-          runs: [{ loopy: { description: body.graph.meta.description } }],
+          runs: [{ status: "queued" }],
         },
         graphReads: 0,
         artifactWrites: 0,

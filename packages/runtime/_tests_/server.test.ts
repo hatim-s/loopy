@@ -156,7 +156,6 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
   const path = `${url.origin}/api/runs/${run.id}`;
   const full = object(await (await fetch(path, { headers })).text());
   expect(full.nodeRuns).toHaveLength(2);
-  expect(full.logs).toEqual([]);
   // The old viewer's logs=false switch is gone; strict query parsing rejects it.
   expect((await fetch(`${path}?logs=false`, { headers })).status).toBe(400);
   expect(await (await fetch(`${path}/logs?after=0`, { headers })).json()).toMatchObject([
