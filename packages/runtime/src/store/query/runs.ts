@@ -27,6 +27,11 @@ export const pendingHook = (column: string) => `SELECT ${column} FROM waits w
   AND json_extract(w.record,'$.resolvedAt') IS NULL AND json_extract(w.record,'$.expiredAt') IS NULL
   AND (json_extract(n.record,'$.wakeAt') IS NULL OR json_extract(n.record,'$.wakeAt')>?) LIMIT 1`;
 
+/** Each run's id with its first pending wait and that wait's deadline as `expiresAt`, or null. */
+export const PENDING_HOOK_PROJECTION = `SELECT r.id,(${pendingHook(
+  "json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))",
+)}) AS record FROM runs r`;
+
 function runWhere(filter: RunFilter) {
   const clauses: string[] = [];
   const values: SqlValue[] = [];
@@ -144,7 +149,7 @@ export function readPendingHooks(ctx: SqlContext, ids: string[], now: string) {
   // One array binding keeps a full run page below workerd's SQL variable limit.
   const rows = ctx.db
     .query<{ id: string; record: string | null }, SqlValue[]>(
-      `SELECT r.id,(${pendingHook("json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN (SELECT value FROM json_each(?))`,
+      `${PENDING_HOOK_PROJECTION} WHERE r.id IN (SELECT value FROM json_each(?))`,
     )
     .all(now, JSON.stringify(ids));
 
