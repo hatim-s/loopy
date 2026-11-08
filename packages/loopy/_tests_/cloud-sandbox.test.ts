@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { decodeBoundary, type ExecutionResult, nodeIdSchema } from "@loopy/contract";
 import {
@@ -31,13 +31,12 @@ import { failure } from "../../../apps/sandbox/src/operations";
 import type { CommandRunner } from "../../../apps/sandbox/src/process";
 import { attemptHandler } from "../../../apps/sandbox/src/server";
 import { stateLayout, validateStateRoot } from "../../../apps/sandbox/src/state-root";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
 import {
   artifactReader as idleArtifactReader,
   succeedingBackend,
 } from "./fixtures/sandbox-authority";
-import { closeAttemptScopes, openAttempts, openSandbox, run } from "./fixtures/sandbox-run";
-
-const roots: string[] = [];
+import { openAttempts, openSandbox, run } from "./fixtures/sandbox-run";
 
 const services: Attempts[] = [];
 
@@ -45,19 +44,14 @@ const token = "sandbox-fixture-token-32-characters";
 
 const succeeded: ExecutionResult = { kind: "succeeded", output: { ok: true }, logs: [] };
 
+// Services close before the test scope releases their attempt scopes and roots.
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => run(service.close())));
-  await closeAttemptScopes();
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 async function fixture() {
-  const parent = resolve(import.meta.dir, "../../../.loopy/quality-tests");
-  await mkdir(parent, { recursive: true });
-  const worktree = await realpath(await mkdtemp(join(parent, "cloud-sandbox-")));
+  const worktree = qualityTestRoot("cloud-sandbox");
   await writeFile(join(worktree, "package.json"), JSON.stringify({ private: true }));
-  await mkdir(join(worktree, ".loopy/loopies"), { recursive: true });
-  roots.push(worktree);
 
   const config = decodeBoundary(sandboxConfigSchema)({
     worktree,

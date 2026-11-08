@@ -1,14 +1,16 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import type { ExecutionResult } from "@loopy/contract";
 import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
-import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
-import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
-import { run } from "./fixtures/sandbox-run";
-
-afterEach(cleanup);
+import {
+  artifactReader,
+  authorityFixture,
+  successful,
+  uncertain,
+} from "./fixtures/sandbox-authority";
+import { openAttemptsWith, run } from "./fixtures/sandbox-run";
 
 class DelayedCommit extends FilesystemAuthority {
   private pending: AuthorityInput<"admit"> | null = null;
@@ -42,13 +44,13 @@ class DelayedCommit extends FilesystemAuthority {
 
 for (const trigger of ["start", "lookup"] as const) {
   test(`delayed admission commit after absent resolving read starts once on later ${trigger}`, async () => {
-    const { config, request, resultsFor } = await fixture();
+    const { config, request, resultsFor } = await authorityFixture();
     const authority = new DelayedCommit(config.stateRoot);
     const completed = Promise.withResolvers<ExecutionResult>();
     let starts = 0;
     let recoveries = 0;
 
-    const service = await open(config, {
+    const service = await openAttemptsWith(config, {
       authority,
       resultsFor,
       artifactReader,
@@ -83,13 +85,13 @@ for (const trigger of ["start", "lookup"] as const) {
 }
 
 test("a failed admission releases its retained request at the plan deadline", async () => {
-  const { config, request, resultsFor } = await fixture();
+  const { config, request, resultsFor } = await authorityFixture();
   config.maxTimeoutMs = 50;
   const authority = new DelayedCommit(config.stateRoot);
   let starts = 0;
   let recoveries = 0;
 
-  const service = await open(config, {
+  const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,

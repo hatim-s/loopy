@@ -41,6 +41,31 @@ export function waitForFile(path: string, options?: WaitOptions) {
   return until(`${path} to exist`, () => Bun.file(path).exists(), options);
 }
 
+/** Waits until no process has `pid`. EPERM means the process exists under another owner. */
+export function waitForExit(pid: number, options?: WaitOptions) {
+  return until(
+    `process ${pid} to exit`,
+    () => {
+      try {
+        process.kill(pid, 0);
+
+        return false;
+      } catch (cause) {
+        if (cause instanceof Error && "code" in cause && cause.code === "EPERM") {
+          return false;
+        }
+
+        if (cause instanceof Error && "code" in cause && cause.code === "ESRCH") {
+          return true;
+        }
+
+        throw cause;
+      }
+    },
+    options,
+  );
+}
+
 /** Settles with `promise`, or throws with the label once `ms` pass first. */
 export async function bounded<T>(promise: Promise<T>, label: string, ms: number): Promise<T> {
   const timer = new AbortController();

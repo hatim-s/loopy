@@ -1,18 +1,15 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import type { NodeRun, StoreEffect } from "@loopy/core";
 import { makeLocalService, openRunStore } from "@loopy/runtime/local";
 import { Effect } from "effect";
+import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
 
 /** Persisted synthetic records let HTTP and browser checks inspect the same bounded pages. */
 export const reviewDataFixture = Effect.fn(function* () {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-review-data-")));
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => rmSync(root, { recursive: true, force: true })),
-  );
+  const root = qualityTestRoot("review-data", { scope: yield* Effect.scope });
   const home = join(root, "home");
   const workspaceA = join(root, "project-a");
   const workspaceB = join(root, "project-b");

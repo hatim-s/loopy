@@ -6,18 +6,13 @@ import { ExecutionWorker } from "../../runtime/src/executor/execution";
 import { FilesystemReceipts } from "../../runtime/src/executor/receipts";
 import { workerFailure } from "../../runtime/src/executor/worker-protocol";
 import { commandSpec, fixture } from "./fixtures/executor";
+import { waitForFile } from "./fixtures/wait";
 
 const activeProgram =
   'require("node:fs").appendFileSync("runs", "x"); await Bun.write("ready.json", JSON.stringify({pid: process.pid})); await Bun.write("ready", "ready"); setInterval(() => {}, 1000);';
 
 async function waitForAuthor(workspace: string) {
-  for (
-    let index = 0;
-    index < 300 && !(await Bun.file(join(workspace, "ready")).exists());
-    index++
-  ) {
-    await Bun.sleep(10);
-  }
+  await waitForFile(join(workspace, "ready"));
 
   return Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number }))(
     await Bun.file(join(workspace, "ready.json")).json(),

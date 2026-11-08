@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readdir, rm } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { AuthorityError } from "@loopy/contract/sandbox";
 import { Cause, Deferred, Effect, Exit, Fiber, Result } from "effect";
@@ -19,13 +19,7 @@ import {
 } from "./fixtures/sandbox-authority";
 
 async function fixture(run: (value: Awaited<ReturnType<typeof boundaryFixture>>) => Promise<void>) {
-  const value = await boundaryFixture();
-
-  try {
-    await run(value);
-  } finally {
-    await rm(value.root, { recursive: true, force: true });
-  }
+  await run(await boundaryFixture());
 }
 
 async function boundaryFixture() {

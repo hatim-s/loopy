@@ -1,8 +1,9 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { executionKeyString, type ScheduleView } from "@loopy/contract";
 import { QueryClient } from "@tanstack/react-query";
-import { Effect, Exit, Scope } from "effect";
+import { Effect } from "effect";
+import { onCleanup, runScoped } from "../../../packages/loopy/_tests_/fixtures/test-scope";
 import { startServer } from "../../../packages/runtime/src/local/server/start-server";
 import { localHttpBackend } from "../src/backend/local-http";
 import { graphModel } from "../src/lib/graph";
@@ -13,21 +14,8 @@ import { runMarks } from "../src/lib/run-marks";
 import { applyScheduleView, removeScheduleView } from "../src/lib/stream/schedules";
 import { reviewDataFixture } from "./review-data-fixture";
 
-const cleanups: (() => void | Promise<void>)[] = [];
-
-afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) {
-    await cleanup();
-  }
-});
-
 async function fixture() {
-  const scope = Scope.makeUnsafe();
-  cleanups.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-
-  const f = await Effect.runPromise(
-    reviewDataFixture().pipe(Effect.provideService(Scope.Scope, scope)),
-  );
+  const f = await runScoped(reviewDataFixture());
 
   const token = "isolated-review-test";
 
@@ -41,7 +29,7 @@ async function fixture() {
     daemon: { pid: process.pid, startedAt: new Date().toISOString(), concurrency: 1 },
   });
 
-  cleanups.push(() => server.stop());
+  onCleanup(() => server.stop());
 
   return {
     ...f,
@@ -67,7 +55,7 @@ test("schedule HTTP and cache mutations keep default A and project B independent
   expect(await backend.call("schedules", { query: { workspace: workspaceB } })).toEqual([b]);
 
   const client = new QueryClient();
-  cleanups.push(() => client.clear());
+  onCleanup(() => client.clear());
   client.setQueryData(keys.schedules(workspaceA), [a]);
   client.setQueryData(keys.schedules(workspaceB), [b]);
 
@@ -288,7 +276,7 @@ test("fresh HTTP schedule overview and loopy rows list B beside default A's same
   );
 
   const client = new QueryClient();
-  cleanups.push(() => client.clear());
+  onCleanup(() => client.clear());
   client.setQueryData(keys.schedules(workspaceA), [a]);
   client.setQueryData(keys.schedules(workspaceB), [b]);
   await client.fetchQuery(loopiesQuery(backend, workspaceB));

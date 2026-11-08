@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { rm } from "node:fs/promises";
 import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import type { AttemptDependencies } from "../../../apps/sandbox/src/attempt/dependencies";
@@ -13,13 +12,10 @@ import {
   uncertain,
 } from "./fixtures/sandbox-authority";
 import { openSandbox, run } from "./fixtures/sandbox-run";
+import { bounded } from "./fixtures/wait";
 
-function within<T>(operation: Promise<T>, message: string) {
-  const deadline = Promise.withResolvers<never>();
-  const timer = setTimeout(() => deadline.reject(new Error(message)), 750);
-
-  return Promise.race([operation, deadline.promise]).finally(() => clearTimeout(timer));
-}
+// A hang fails here with its own message, well before the suite timeout, with load headroom.
+const within = <T>(operation: Promise<T>, message: string) => bounded(operation, message, 5000);
 
 async function post(
   service: Awaited<ReturnType<typeof openSandbox>>,
@@ -137,12 +133,11 @@ test("server close aborts an outage-bound admission handler and successor only r
       await run(successor.close());
     }
   } finally {
-    // Close every owner even when an assertion above failed, so the fixture root can be removed.
+    // Close every owner even when an assertion above failed, before the test scope removes the root.
     await run(service.attempts.close());
     await closing;
     await run(service.close());
     await pending;
-    await rm(fixture.root, { recursive: true, force: true });
   }
 });
 
@@ -243,7 +238,6 @@ async function assertDrainOrdering(kind: "effect" | "artifact") {
     await closing;
     await run(service.close());
     await request;
-    await rm(fixture.root, { recursive: true, force: true });
   }
 }
 

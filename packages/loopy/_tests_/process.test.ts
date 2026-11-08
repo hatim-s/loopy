@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -10,26 +10,18 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CommandExecutionError, type ResolvedCommand, spawnCaptured } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
 import { executeLocalCommand, type LocalExecutionOptions } from "../../runtime/src/os/process";
+import { qualityTestRoot } from "./fixtures/quality-test-root";
+import { onCleanup } from "./fixtures/test-scope";
+import { bounded, waitForExit, waitForFile } from "./fixtures/wait";
 
-const workspaces: string[] = [];
+// Sandboxed bun children read ancestor tsconfig.json files, so stay outside the checkout.
+const workspace = () => qualityTestRoot("process", { outsideCheckout: true });
 
-function workspace(): string {
-  const path = mkdtempSync(join(tmpdir(), "loopy-process-"));
-  workspaces.push(path);
-
-  return path;
-}
-
-afterEach(() => {
-  for (const path of workspaces.splice(0)) {
-    rmSync(path, { recursive: true, force: true });
-  }
-});
+const pidIn = (cwd: string, name: string) => Number(readFileSync(join(cwd, name), "utf8"));
 
 const hasBubblewrap =
   process.platform === "linux" && (existsSync("/usr/bin/bwrap") || existsSync("/bin/bwrap"));
@@ -142,59 +134,60 @@ describe("process executor", () => {
     expect(output.stdout).toBe("input:hello\n");
   });
 
+  // Each descendant records its pid and outlives the test unless the spawn kills it.
   test("stops a timed out process and its descendants", async () => {
     const cwd = workspace();
     await expect(
       Effect.runPromise(
-        spawn(cwd, ["/bin/sh", "-c", "(sleep 1; touch child-survived) & wait"], { timeoutMs: 150 }),
+        spawn(cwd, ["/bin/sh", "-c", "sleep 30 & echo $! > child.pid; wait"], { timeoutMs: 1000 }),
       ),
     ).rejects.toThrow("timed out");
-    await Bun.sleep(1_200);
-    expect(existsSync(join(cwd, "child-survived"))).toBe(false);
+    await waitForExit(pidIn(cwd, "child.pid"));
   });
 
   test("stops background children after a successful parent exit", async () => {
     const cwd = workspace();
 
     const output = await Effect.runPromise(
-      spawn(cwd, ["/bin/sh", "-c", "(sleep 0.5; touch orphan) & exit 0"]),
+      spawn(cwd, ["/bin/sh", "-c", "sleep 30 & echo $! > orphan.pid; exit 0"]),
     );
 
     expect(output.exitCode).toBe(0);
-    await Bun.sleep(700);
-    expect(existsSync(join(cwd, "orphan"))).toBe(false);
+    await waitForExit(pidIn(cwd, "orphan.pid"));
   });
 
   test("settles when a separate session inherits output pipes", async () => {
     const cwd = workspace();
-    const started = Date.now();
 
     const source = `
       const { spawn } = require("node:child_process");
-      const child = spawn("/bin/sh", ["-c", "sleep 2"], {
+      const child = spawn("/bin/sleep", ["60"], {
         detached: true,
         stdio: ["ignore", "inherit", "inherit"],
       });
+      require("node:fs").writeFileSync("session.pid", String(child.pid));
       child.unref();
     `;
 
-    await expect(
-      Effect.runPromise(spawn(cwd, [process.execPath, "-e", source], { timeoutMs: 100 })),
-    ).rejects.toThrow("timed out");
-    expect(Date.now() - started).toBeLessThan(1_500);
+    const settled = Effect.runPromise(spawn(cwd, [process.execPath, "-e", source]));
+
+    // The separate session keeps the pipes open for a minute, so waiting for them would hang.
+    expect((await bounded(settled, "spawn settling", 10_000)).exitCode).toBe(0);
+    const session = pidIn(cwd, "session.pid");
+    onCleanup(() => {
+      process.kill(session, "SIGKILL");
+    });
   });
 
   test("kills descendants that ignore termination", async () => {
     const cwd = workspace();
+    // An ignored signal stays ignored across exec, so the sleep itself ignores SIGTERM.
+    const script = `sh -c 'trap "" TERM; echo $$ > ignored.pid; exec sleep 30' & wait`;
+
     await expect(
-      Effect.runPromise(
-        spawn(cwd, ["/bin/sh", "-c", "(trap '' TERM; sleep 0.5; touch ignored) & wait"], {
-          timeoutMs: 100,
-        }),
-      ),
+      Effect.runPromise(spawn(cwd, ["/bin/sh", "-c", script], { timeoutMs: 1000 })),
     ).rejects.toThrow("timed out");
-    await Bun.sleep(700);
-    expect(existsSync(join(cwd, "ignored"))).toBe(false);
+    await waitForExit(pidIn(cwd, "ignored.pid"));
   });
 
   test("honors cancellation", async () => {
@@ -351,9 +344,14 @@ describe("process executor", () => {
   );
 
   test.skipIf(!hasBubblewrap)("Linux sandbox keeps a /tmp workspace writable", async () => {
+    // A literal /tmp, because this case proves bubblewrap keeps a /tmp workspace writable.
     const cwd = mkdtempSync("/tmp/loopy-process-");
     const outside = mkdtempSync("/tmp/loopy-process-");
-    workspaces.push(cwd, outside);
+
+    onCleanup(() => {
+      rmSync(cwd, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    });
 
     const inside = await Effect.runPromise(
       run(
@@ -495,9 +493,7 @@ test.skipIf(process.platform !== "darwin" && !hasBubblewrap)(
     const rejected = pending.catch((error) => error);
 
     try {
-      for (let index = 0; index < 200 && !existsSync(join(cwd, "ready.json")); index++) {
-        await Bun.sleep(10);
-      }
+      await waitForFile(join(cwd, "ready.json"));
 
       const ready = Schema.decodeUnknownSync(
         Schema.Struct({ pid: Schema.Number, scratch: Schema.String }),

@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AuthorityInput } from "@loopy/contract/sandbox";
@@ -8,14 +8,16 @@ import { Attempts } from "../../../apps/sandbox/src/attempt";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
 import { stateLayout } from "../../../apps/sandbox/src/state-root";
-import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
-import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
-import { run } from "./fixtures/sandbox-run";
-
-afterEach(cleanup);
+import {
+  artifactReader,
+  authorityFixture,
+  successful,
+  uncertain,
+} from "./fixtures/sandbox-authority";
+import { openAttemptsWith, run } from "./fixtures/sandbox-run";
 
 test("observed terminal result survives result and terminal-pointer publication failures", async () => {
-  const { config, request, resultsFor } = await fixture();
+  const { config, request, resultsFor } = await authorityFixture();
 
   class FailingComplete extends FilesystemAuthority {
     failures = 1;
@@ -36,7 +38,7 @@ test("observed terminal result survives result and terminal-pointer publication 
   let puts = 0;
   let recoveries = 0;
 
-  const service = await open(config, {
+  const service = await openAttemptsWith(config, {
     authority,
     artifactReader,
     resultsFor: (workspace) => ({
@@ -74,7 +76,7 @@ test("observed terminal result survives result and terminal-pointer publication 
 });
 
 test("failed helper cleanup holds its guard across requests and restart while unrelated volumes progress", async () => {
-  const { config, request, resultsFor } = await fixture();
+  const { config, request, resultsFor } = await authorityFixture();
   let helperPresent = false;
   let cleanupFails = true;
   let exports = 0;
@@ -110,7 +112,7 @@ test("failed helper cleanup holds its guard across requests and restart while un
 
   const authority = new FilesystemAuthority(config.stateRoot);
 
-  const first = await open(config, {
+  const first = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader: reader,
@@ -131,7 +133,7 @@ test("failed helper cleanup holds its guard across requests and restart while un
   await run(first.close());
   const successor = new FilesystemAuthority(config.stateRoot);
 
-  const second = await open(config, {
+  const second = await openAttemptsWith(config, {
     authority: successor,
     resultsFor,
     artifactReader: reader,
@@ -154,7 +156,7 @@ test("failed helper cleanup holds its guard across requests and restart while un
 });
 
 test("dependency construction happens under the process lock, which a failed open releases", async () => {
-  const { config } = await fixture();
+  const { config } = await authorityFixture();
   const lock = stateLayout(config.stateRoot).lock;
   let called = false;
 
@@ -178,10 +180,10 @@ test("dependency construction happens under the process lock, which a failed ope
 });
 
 test("oversized terminal metadata becomes a publishable output-limit result", async () => {
-  const { config, request, resultsFor } = await fixture();
+  const { config, request, resultsFor } = await authorityFixture();
   const authority = new FilesystemAuthority(config.stateRoot);
 
-  const service = await open(config, {
+  const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,
@@ -212,13 +214,13 @@ test("oversized terminal metadata becomes a publishable output-limit result", as
 });
 
 test("artifact export uses terminal authority without reading unavailable result bytes", async () => {
-  const { config, request, resultsFor, plan } = await fixture();
+  const { config, request, resultsFor, plan } = await authorityFixture();
   const authority = new FilesystemAuthority(config.stateRoot);
   let reads = 0;
   let cleanups = 0;
   let exports = 0;
 
-  const service = await open(config, {
+  const service = await openAttemptsWith(config, {
     authority,
     resultsFor: (workspace) => ({
       put: (result) => resultsFor(workspace).put(result),
@@ -275,7 +277,7 @@ test("artifact export uses terminal authority without reading unavailable result
 });
 
 test("new admission reconciles only export metadata despite multiple pages of unrelated attempts and terminal history", async () => {
-  const { config, request, resultsFor, plan } = await fixture();
+  const { config, request, resultsFor, plan } = await authorityFixture();
 
   class CountingAuthority extends FilesystemAuthority {
     recoveryQueries = 0;
@@ -302,7 +304,7 @@ test("new admission reconciles only export metadata despite multiple pages of un
 
   const authority = new CountingAuthority(config.stateRoot);
 
-  const service = await open(config, {
+  const service = await openAttemptsWith(config, {
     authority,
     resultsFor,
     artifactReader,
