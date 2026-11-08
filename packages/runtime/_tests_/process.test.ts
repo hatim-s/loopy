@@ -11,6 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { DEFAULT_MAX_OUTPUT_BYTES } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { CommandExecutionError, type ResolvedCommand, spawnCaptured } from "../src/os";
 import { executeLocalCommand, type LocalExecutionOptions } from "../src/os/process";
@@ -36,7 +37,14 @@ function run(
   options: Pick<LocalExecutionOptions, "workspace" | "mode"> & Partial<LocalExecutionOptions>,
 ) {
   return executeLocalCommand(
-    { cwd: null, env: {}, stdin: null, timeoutMs: 300_000, maxOutputBytes: null, ...fields },
+    {
+      cwd: null,
+      env: {},
+      stdin: null,
+      timeoutMs: 300_000,
+      maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
+      ...fields,
+    },
     { protectedHome: workspace(), sensitiveEnv: {}, ...options },
   );
 }
@@ -541,17 +549,3 @@ for (const reason of ["timeout", "output_limit", "rejected"] as const) {
     });
   });
 }
-
-test("invalid command limits are rejected author input", async () => {
-  const result = await Effect.runPromise(
-    run(
-      { program: "/bin/echo", args: ["fixture"], maxOutputBytes: 0 },
-      { workspace: workspace(), mode: "full" },
-    ).pipe(Effect.result),
-  );
-
-  expect(result).toMatchObject({
-    _tag: "Failure",
-    failure: { _tag: "CommandExecutionError", reason: "rejected" },
-  });
-});

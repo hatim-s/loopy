@@ -2,7 +2,7 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ExecutionMode } from "@loopy/core";
-import { errnoCode, requirePositiveInteger } from "@loopy/core";
+import { errnoCode } from "@loopy/core";
 import { Effect, Exit } from "effect";
 import type { ResolvedCommand } from "./command-error";
 import { filesystem, removeScratch } from "./sandbox/io";
@@ -10,8 +10,6 @@ import { sandboxLauncher } from "./sandbox/launcher";
 import { envArgs, resolveProgram, within } from "./sandbox/paths";
 import type { Launch } from "./spawn";
 import { aborted, rejected, spawnCaptured } from "./spawn";
-
-const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 export type LocalExecutionOptions = {
   workspace: string;
@@ -174,24 +172,17 @@ export function executeLocalCommand(command: ResolvedCommand, options: LocalExec
       return yield* Effect.fail(aborted(options.signal));
     }
 
-    const limits = yield* Effect.try({
-      try: () => ({
-        timeoutMs: requirePositiveInteger(command.timeoutMs, "timeoutMs"),
-        maxOutputBytes: requirePositiveInteger(
-          command.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
-          "maxOutputBytes",
-        ),
-      }),
-      catch: rejected,
-    });
-
     return yield* Effect.acquireUseRelease(
       prepareLaunch(command, options),
       (launch) =>
         Effect.exit(
           options.signal?.aborted
             ? Effect.fail(aborted(options.signal))
-            : spawnCaptured(launch, { ...limits, signal: options.signal }),
+            : spawnCaptured(launch, {
+                timeoutMs: command.timeoutMs,
+                maxOutputBytes: command.maxOutputBytes,
+                signal: options.signal,
+              }),
         ),
       (launch, primary) => removeScratch(launch.scratch, primary),
     ).pipe(Effect.flatMap((primary) => primary));

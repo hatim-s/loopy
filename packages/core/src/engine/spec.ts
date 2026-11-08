@@ -1,5 +1,5 @@
 import { durationMs } from "../duration";
-import { DEFAULT_TIMEOUT_MS, type ExecutionSpec } from "../executor";
+import { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS, type ExecutionSpec } from "../executor";
 import type { Node } from "../graph/nodes";
 import { bundleHash, carriesBundle } from "../revision";
 import { isStringArray } from "../validation";
@@ -62,7 +62,7 @@ export function executionSpec(
     ),
     stdin: options.stdin === null ? null : String(resolve(options.stdin, state, context)),
     timeoutMs: options.timeout === undefined ? DEFAULT_TIMEOUT_MS : durationMs(options.timeout),
-    maxOutputBytes: options.maxOutputBytes ?? null,
+    maxOutputBytes: options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
     okExitCodes: [...node.okExitCodes],
     parse: carriesBundle(node)
       ? { bundleHash: bundleHash(node), timeoutMs: DEFAULT_TIMEOUT_MS }

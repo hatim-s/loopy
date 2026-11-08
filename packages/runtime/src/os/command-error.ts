@@ -16,5 +16,5 @@ export type ResolvedCommand = {
   env: Record<string, string>;
   stdin: string | null;
   timeoutMs: number;
-  maxOutputBytes: number | null;
+  maxOutputBytes: number;
 };
