@@ -12,6 +12,6 @@ export const runs = defineCommand({
   run: (cli) =>
     Effect.gen(function* () {
       const [slug] = cli.args;
-      printJson(yield* request(cli, routes.runs, { query: { slug } }));
+      printJson((yield* request(cli, routes.runs, { query: { slug } })).runs);
     }),
 });

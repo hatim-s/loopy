@@ -1,5 +1,6 @@
 import {
   emptyRunCounts,
+  encodeRunCursor,
   type LoopyView,
   loopyView,
   type RunDefinitionCount,
@@ -55,10 +56,21 @@ export function makeRunViews(context: ServiceContext) {
   const listRuns = Effect.fn("run-views.listRuns")(function* (
     query: Schema.Schema.Type<typeof routes.runs.query>,
   ) {
-    const runs = yield* context.store.queryRuns({ ...query, now: yield* context.now });
+    // One extra row tells whether an older page exists, so a full last page offers no empty next.
+    const rows = yield* context.store.queryRuns({
+      ...query,
+      limit: query.limit + 1,
+      now: yield* context.now,
+    });
+
+    const runs = rows.slice(0, query.limit);
+    const last = runs.at(-1);
     const resolved = yield* resolve(runs);
 
-    return runs.map(resolved);
+    return {
+      runs: runs.map(resolved),
+      next: rows.length > query.limit && last ? encodeRunCursor(last) : null,
+    };
   });
 
   const listLoopies = Effect.fn("run-views.listLoopies")(function* (callerWorkspace: string) {

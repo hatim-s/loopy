@@ -87,7 +87,7 @@ test("run views read no registry, including runs of deleted definitions", async 
   await f.run("canonical", f.a, "chosen", "queued");
   await f.run("alias", "alias", "chosen", "queued");
   await f.run("missing", f.a, "removed", "queued");
-  const runs = await Effect.runPromise(f.service.listRuns({ limit: 200 }));
+  const { runs } = await Effect.runPromise(f.service.listRuns({ limit: 200 }));
   expect(runs.map((run) => [run.id, run.slug]).sort()).toEqual([
     ["alias", "chosen"],
     ["canonical", "chosen"],

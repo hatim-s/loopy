@@ -148,7 +148,7 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
     const body: unknown = await response.json();
     expect({ status: response.status, body }).toMatchObject({ status: 200 });
 
-    return decodeBoundary(routes.runs.response)(body);
+    return decodeBoundary(routes.runs.response)(body).runs;
   }
 
   const boundaries = [];
@@ -159,7 +159,7 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
     boundaries.push({
       limit,
       status: response.status,
-      result: response.ok ? decodeBoundary(routes.runs.response)(body).length : body,
+      result: response.ok ? decodeBoundary(routes.runs.response)(body).runs.length : body,
     });
   }
 

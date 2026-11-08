@@ -184,17 +184,18 @@ test("service pages newest runs by createdAt with default and maximum page sizes
   const first = await onClock(service.startRun("service", { name: "first" }, root));
   advance();
   const second = await onClock(service.startRun("service", { name: "second" }, root));
-  expect(await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })))).toEqual([
-    second,
-  ]);
+  expect(await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })))).toEqual({
+    runs: [second],
+    next: encodeRunCursor(second),
+  });
   expect(
     await onClock(
       service.listRuns(decodeBoundary(routes.runs.query)({ before: encodeRunCursor(second) })),
     ),
-  ).toEqual([first]);
+  ).toEqual({ runs: [first], next: null });
   expect(
     await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ status: "failed" }))),
-  ).toEqual([]);
+  ).toEqual({ runs: [], next: null });
 
   for (let i = 0; i < 205; i++) {
     await onClock(
@@ -212,9 +213,9 @@ test("service pages newest runs by createdAt with default and maximum page sizes
   }
 
   expect(
-    await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ slug: "page" }))),
+    (await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ slug: "page" })))).runs,
   ).toHaveLength(50);
-  expect(await onClock(service.listRuns({ slug: "page", limit: 200 }))).toHaveLength(200);
+  expect((await onClock(service.listRuns({ slug: "page", limit: 200 }))).runs).toHaveLength(200);
 });
 
 test("run paging includes every run sharing a timestamp", async () => {
@@ -236,21 +237,14 @@ test("run paging includes every run sharing a timestamp", async () => {
   }
 
   const first = await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })));
-
-  expect(first.map((run) => run.id)).toEqual(["b"]);
+  expect(first.runs.map((run) => run.id)).toEqual(["b"]);
 
   const second = await onClock(
-    service.listRuns(
-      decodeBoundary(routes.runs.query)({ limit: 1, before: encodeRunCursor(first[0]!) }),
-    ),
+    service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1, before: first.next ?? "" })),
   );
 
-  expect(second.map((run) => run.id)).toEqual(["a"]);
-  expect(
-    await onClock(
-      service.listRuns(decodeBoundary(routes.runs.query)({ before: encodeRunCursor(second[0]!) })),
-    ),
-  ).toEqual([]);
+  // A page that ends exactly at the last run offers no next page.
+  expect(second).toMatchObject({ runs: [{ id: "a" }], next: null });
 });
 
 test("service schedules create, replace, toggle, delete and emit persisted events", async () => {

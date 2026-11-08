@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { decodeBoundary, type Json, routes } from "@loopy/contract";
+import { decodeBoundary, type Json, routes, runViewSchema } from "@loopy/contract";
 import { Schema } from "effect";
 
 // The same entry as the root `loopy` script.
@@ -62,7 +62,7 @@ const daemonFile = Schema.Struct({ port: Schema.Number, token: Schema.String });
 
 const runView = decodeBoundary(routes.startRun.response);
 
-const runList = decodeBoundary(routes.runs.response);
+const runList = decodeBoundary(Schema.Array(runViewSchema));
 
 async function start(slug: string, input: Json): Promise<string> {
   return runView(JSON.parse(await loopy("run", slug, "--input-json", JSON.stringify(input)))).id;

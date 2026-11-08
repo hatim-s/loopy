@@ -46,10 +46,10 @@ async function probe(route: "runs" | "loopies" | "events", mode: "direct" | "sha
 
   if (route === "runs") {
     await measure(label, routes.runs, { query: { limit: 50 } }, (value) => ({
-      items: value.length,
-      queued: value.filter((run) => run.status === "queued").length,
-      running: value.filter((run) => run.status === "running").length,
-      terminal: value.filter((run) => isTerminalRun(run.status)).length,
+      items: value.runs.length,
+      queued: value.runs.filter((run) => run.status === "queued").length,
+      running: value.runs.filter((run) => run.status === "running").length,
+      terminal: value.runs.filter((run) => isTerminalRun(run.status)).length,
     }));
   } else if (route === "loopies") {
     await measure(label, routes.loopies, {}, (value) => ({

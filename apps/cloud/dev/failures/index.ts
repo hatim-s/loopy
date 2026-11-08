@@ -170,7 +170,7 @@ try {
     const slug = "cloud-failure-schedule";
     const runs = { query: { slug, limit: 200 } };
     const prior = await api.call(routes.runs, runs);
-    const existing = new Set(prior.map((run) => run.id));
+    const existing = new Set(prior.runs.map((run) => run.id));
 
     const schedule = await api.call(routes.putSchedule, {
       params: { slug },
@@ -181,7 +181,7 @@ try {
       api.call(routes.setScheduleEnabled, { params: { slug }, body: { enabled: false } });
 
     const list = async () =>
-      (await api.call(routes.runs, runs)).filter((run) => !existing.has(run.id));
+      (await api.call(routes.runs, runs)).runs.filter((run) => !existing.has(run.id));
 
     try {
       const first = (

@@ -76,7 +76,7 @@ test("production Workspace queues runs, loopies and event history during provide
     try {
       const controlWarm = await api("/runs?limit=50", controlToken);
       expect(controlWarm.status).toBe(200);
-      expect(decodeBoundary(routes.runs.response)(controlWarm.body)).toEqual([]);
+      expect(decodeBoundary(routes.runs.response)(controlWarm.body).runs).toEqual([]);
 
       const body = await compiledBody("read-queue", "synthetic/read-queue.ts", {
         workspace: mode,
@@ -109,7 +109,7 @@ test("production Workspace queues runs, loopies and event history during provide
       void allReads.catch(() => undefined);
       const control = await api(paths[0], controlToken);
       expect(control.status).toBe(200);
-      expect(decodeBoundary(routes.runs.response)(control.body)).toEqual([]);
+      expect(decodeBoundary(routes.runs.response)(control.body).runs).toEqual([]);
       // The control read was sent after the held reads and has answered, so a held read that
       // bypassed the queue would have answered too.
       expect(provider.releaseReason).toBeNull();

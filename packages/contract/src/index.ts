@@ -65,6 +65,7 @@ export {
   type PutScheduleBody,
   putScheduleBodySchema,
   type Route,
+  type RunPage,
   type RunsQuery,
   routes,
   scheduleEnabledBodySchema,

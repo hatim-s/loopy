@@ -1,4 +1,4 @@
-import { decodeRouteResponse, encodeRunCursor, routes, routeUrl } from "@loopy/contract";
+import { decodeRouteResponse, routes, routeUrl } from "@loopy/contract";
 import { PlaygroundClient } from "../client";
 import { evidence, state } from "../config";
 import { journalDirectory, readAdmissions } from "../journal";
@@ -40,13 +40,13 @@ for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
   pages.push({
     pageIndex,
     at: new Date().toISOString(),
-    items: page.length,
+    items: page.runs.length,
     bytes,
     status: response.status,
     clientEndToEndMs: performance.now() - start,
   });
   runs.push(
-    ...page.map((run) => ({
+    ...page.runs.map((run) => ({
       id: run.id,
       slug: run.slug,
       status: run.status,
@@ -55,17 +55,11 @@ for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
     })),
   );
 
-  if (page.length < 50) {
+  if (page.next === null) {
     break;
   }
 
-  const last = page.at(-1);
-
-  if (!last) {
-    throw new Error("Inventory page unexpectedly empty.");
-  }
-
-  cursor = encodeRunCursor(last);
+  cursor = page.next;
   await Bun.sleep(Math.max(0, 1000 - (performance.now() - start)));
 }
 

@@ -4,6 +4,7 @@ import {
   executionKeyString,
   type NodeRun,
   nodeRunSchema,
+  type RunPage,
   type RunSnapshotView,
   type RunsQuery,
   type RunView,
@@ -13,7 +14,7 @@ import {
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import type { EventSubscription, StreamState } from "../src/backend/backend";
 import { keys } from "../src/lib/keys";
-import { type RunPage, runQuery, scopesQuery } from "../src/lib/queries";
+import { runQuery, scopesQuery } from "../src/lib/queries";
 import { applyBatch } from "../src/lib/stream/apply";
 import { followSession } from "../src/lib/stream/follow";
 import { applyScheduleView } from "../src/lib/stream/schedules";
@@ -42,7 +43,7 @@ const run: RunView = {
 };
 
 function page(runs: RunView[]): RunPage {
-  return { runs, nextCursor: undefined };
+  return { runs, next: null };
 }
 
 /** A cached run list, as the run pages write it: the filters plus the page size. */

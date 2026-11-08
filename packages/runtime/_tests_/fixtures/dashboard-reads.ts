@@ -51,7 +51,7 @@ export function dashboardReads(map: LargeMap, runs: ManyRuns) {
     ),
     runPage: measured(
       () => Effect.runPromise(runs.service.listRuns({ limit: 50 })),
-      (value) => value.length,
+      (value) => value.runs.length,
     ),
     workspaceRunPage: measured(
       () =>

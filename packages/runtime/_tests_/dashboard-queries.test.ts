@@ -191,7 +191,7 @@ test("run lists and streamed run records preview large payloads with explicit by
   await Effect.runPromise(
     store.createRun({ ...newRun(), input: { large }, status: "succeeded", output: { large } }),
   );
-  const [row] = await Effect.runPromise(service.listRuns({ limit: 50 }));
+  const [row] = (await Effect.runPromise(service.listRuns({ limit: 50 }))).runs;
   expect(row).toMatchObject({
     input: null,
     output: null,

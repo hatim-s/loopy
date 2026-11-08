@@ -121,7 +121,7 @@ export function useRunPages(filters: RunListFilters, pageSize: number): Pager<Ru
         limit: Math.min(PAGE_LIMIT, pageSize),
         before,
       }),
-    nextCursor: (data) => data.nextCursor ?? null,
+    nextCursor: (data) => data.next,
     view: (data) => ({ rows: data.runs }),
   });
 }

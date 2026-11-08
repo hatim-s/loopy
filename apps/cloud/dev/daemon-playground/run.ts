@@ -123,7 +123,7 @@ export async function run() {
     }
 
     const census = await daemon.call(routes.runs, { query: { limit: 200 } });
-    apiRuns = census.map(({ id, status }) => ({ id, status }));
+    apiRuns = census.runs.map(({ id, status }) => ({ id, status }));
   } catch (cause) {
     failure = errorMessage(cause);
     throw cause;
