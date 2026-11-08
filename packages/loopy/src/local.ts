@@ -1,5 +1,4 @@
 export {
-  DEFAULT_PORT,
   daemonUrl,
   defaultHome,
   type LocalService,

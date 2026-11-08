@@ -1,6 +1,6 @@
 import { graphSchema, hashSchema, nodeIdSchema, struct } from "@loopy/core";
 import { Schema } from "effect";
-import { base64Text } from "./codec";
+import { base64Bytes } from "./codec";
 import { sourceArtifactSchema } from "./source-artifact";
 
 const bundleReferenceSchema = struct({ nodeId: nodeIdSchema, bundleHash: hashSchema });
@@ -8,7 +8,7 @@ const bundleReferenceSchema = struct({ nodeId: nodeIdSchema, bundleHash: hashSch
 export const putLoopyBodySchema = struct({
   graph: graphSchema,
   revision: hashSchema,
-  bundles: Schema.Array(struct({ ...bundleReferenceSchema.fields, bytes: base64Text })).pipe(
+  bundles: Schema.Array(struct({ ...bundleReferenceSchema.fields, bytes: base64Bytes })).pipe(
     Schema.mutable,
   ),
   source: struct({ path: Schema.String, workspace: Schema.String }),

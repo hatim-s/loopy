@@ -33,50 +33,6 @@ import {
   serverEventSchema,
 } from "./views";
 
-export const ERROR_CODES = [
-  "not_yet",
-  "not_found",
-  "not_claimable",
-  "conflict",
-  "owned_elsewhere",
-  "unknown_hook",
-  "bad_request",
-  "invalid_schedule",
-  "stale_cursor",
-  "unauthorized",
-  "forbidden",
-  "internal",
-  "invalid_cron",
-  "invalid_timezone",
-] as const;
-
-const errorCodeSchema = Schema.Literals(ERROR_CODES);
-
-export type ErrorCode = Schema.Schema.Type<typeof errorCodeSchema>;
-
-export const DEFAULT_ERROR_MESSAGES = {
-  not_yet: "This operation is not implemented yet.",
-  not_found: "The requested resource was not found.",
-  not_claimable: "The run cannot be claimed in its current state.",
-  conflict: "The resource is busy. Retry after the current operation finishes.",
-  owned_elsewhere: "Another worker owns this run. Try again after its lease expires.",
-  unknown_hook: "The hook is unknown or no longer pending.",
-  bad_request: "The request is invalid. Check its parameters and body.",
-  invalid_schedule: "The schedule is invalid. Check its cron expression, timezone and input.",
-  stale_cursor: "The event cursor is stale. Fetch a fresh snapshot.",
-  unauthorized: "Open the viewer URL printed by loopy ui to authenticate.",
-  forbidden: "Cross-origin access is disabled.",
-  internal: "An internal server error occurred.",
-  invalid_cron: "The cron expression is invalid. Provide five valid fields or a supported alias.",
-  invalid_timezone: "The time zone is invalid. Provide an IANA time zone such as Asia/Kolkata.",
-} satisfies Record<ErrorCode, string>;
-
-export const errorBodySchema = struct({
-  error: struct({ code: errorCodeSchema, message: Schema.String }),
-});
-
-export type ErrorBody = Schema.Schema.Type<typeof errorBodySchema>;
-
 const emptySchema = Schema.Record(Schema.String, Schema.Never);
 
 const workspaceQuerySchema = struct({ workspace: Schema.optional(Schema.String) });
@@ -144,13 +100,30 @@ export const scheduleEnabledBodySchema = struct({ enabled: Schema.Boolean });
 
 const scheduleParamsSchema = struct({ slug: Schema.String });
 
-type Route = {
-  method: "GET" | "POST" | "PUT" | "DELETE";
-  path: string;
-  params: Schema.Top;
-  query: Schema.Top;
-  body: Schema.Top;
-  response: Schema.Top;
+export const MAX_SECRET_VALUE_BYTES = 64 * 1024;
+
+const ENCODER = new TextEncoder();
+
+export const secretValueSchema = Schema.String.check(
+  Schema.makeFilter(
+    (value) =>
+      value !== "" &&
+      !value.includes("\0") &&
+      ENCODER.encode(value).byteLength <= MAX_SECRET_VALUE_BYTES,
+    { message: "A secret must be nonempty, contain no NUL bytes, and fit within 64 KiB." },
+  ),
+);
+
+/** The local daemon listens here unless the caller picks another port. */
+export const DEFAULT_PORT = 4310;
+
+export type Route = {
+  readonly method: "GET" | "POST" | "PUT" | "DELETE";
+  readonly path: string;
+  readonly params: Schema.Codec<Readonly<Record<string, string | number>>, unknown>;
+  readonly query: Schema.Codec<object, object>;
+  readonly body: Schema.Codec<unknown, unknown>;
+  readonly response: Schema.Codec<unknown, unknown>;
 };
 
 export const routes = {
@@ -263,7 +236,7 @@ export const routes = {
     path: "/secrets/:name",
     params: struct({ name: Schema.String }),
     query: emptySchema,
-    body: struct({ value: Schema.String }),
+    body: struct({ value: secretValueSchema }),
     response: struct({ name: Schema.String, saved: Schema.Literal(true) }),
   },
   deleteSecret: {
