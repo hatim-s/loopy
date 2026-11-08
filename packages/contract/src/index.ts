@@ -82,6 +82,7 @@ export {
 } from "./client";
 
 export {
+  base64Encode,
   boundaryOptions,
   decodeBoundary,
   decodeJson,
@@ -95,12 +96,6 @@ export {
   type SavedLoopy,
   savedLoopySchema,
 } from "./compiled-loopy";
-
-export {
-  CompiledHashError,
-  CompiledValidationError,
-  validateCompiled,
-} from "./compiled-validation";
 
 export * from "./dashboard";
 
@@ -119,6 +114,7 @@ export {
   nodeDetailEvent,
   previewPayload,
   runView,
+  scheduleView,
   serverEvent,
 } from "./derive";
 
@@ -135,7 +131,13 @@ export * from "./graph";
 
 export * from "./limits";
 
-export { canCancelRun, cancelRefusal, canResumeRun, runMatchesQuery } from "./run-rules";
+export {
+  canCancelRun,
+  canResumeRun,
+  cleanupRefusal,
+  runMatchesQuery,
+  runningRefusal,
+} from "./run-rules";
 
 export {
   MAX_SOURCE_BYTES,
@@ -150,7 +152,6 @@ export {
 
 export {
   decodeEventBatch,
-  eventFrame,
   SSE_CONNECTED,
   SSE_HEARTBEAT,
   type SseFrame,

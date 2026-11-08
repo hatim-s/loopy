@@ -1,4 +1,4 @@
-import { fail, loopy } from "loopy/graph";
+import { fail, loopy } from "loopy";
 
 export default loopy("acceptance-failure", {
   input: {},

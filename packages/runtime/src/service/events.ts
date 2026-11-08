@@ -1,4 +1,5 @@
-import { eventFrame, type routes, SSE_CONNECTED, SSE_HEARTBEAT } from "@loopy/contract";
+import { type routes, SSE_CONNECTED, SSE_HEARTBEAT } from "@loopy/contract";
+import { eventFrame } from "@loopy/contract/server";
 import type { RuntimeEvent, Store } from "@loopy/core";
 import { Effect, type Schema } from "effect";
 import { ServiceError } from "./error";

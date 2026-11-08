@@ -9,10 +9,10 @@ import { loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
 import { FakeExecutor, runIn } from "../../core/_tests_/fixtures/run";
 import { makeLocalService, Registry } from "../src/local";
+import { runAt } from "./fixtures/clock";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { fixtureDaemon, fixtureStore } from "./fixtures/service-runtime";
-import { runAt } from "./fixtures/stores";
 import { eventually } from "./fixtures/wait";
 
 const serviceGraph = loopy("test", { input: { name: "string" }, run: ({ input }) => input });
@@ -166,6 +166,42 @@ test("service pages newest runs by createdAt with default and maximum page sizes
     await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ slug: "page" }))),
   ).toHaveLength(50);
   expect(await onClock(service.listRuns({ slug: "page", limit: 200 }))).toHaveLength(200);
+});
+
+test("run paging includes every run sharing a timestamp", async () => {
+  const { service, store, root, onClock } = await fixture();
+
+  for (const id of ["a", "b"]) {
+    await onClock(
+      store.createRun({
+        id,
+        slug: "paging",
+        workspace: root,
+        revision: "a".repeat(64),
+        input: {},
+        status: "queued",
+        createdAt: "2026-10-17T00:00:00.000Z",
+        updatedAt: "2026-10-17T00:00:00.000Z",
+      }),
+    );
+  }
+
+  const first = await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })));
+
+  expect(first.map((run) => run.id)).toEqual(["b"]);
+
+  const second = await onClock(
+    service.listRuns(
+      decodeBoundary(routes.runs.query)({ limit: 1, before: encodeRunCursor(first[0]!) }),
+    ),
+  );
+
+  expect(second.map((run) => run.id)).toEqual(["a"]);
+  expect(
+    await onClock(
+      service.listRuns(decodeBoundary(routes.runs.query)({ before: encodeRunCursor(second[0]!) })),
+    ),
+  ).toEqual([]);
 });
 
 test("service schedules create, replace, toggle, delete and emit persisted events", async () => {

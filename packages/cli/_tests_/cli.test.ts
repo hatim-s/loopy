@@ -81,7 +81,7 @@ test("compiler diagnostics include locations and do not create registry entries"
   const f = await graphFixture();
   writeFileSync(
     f.file,
-    `import {loopy} from "loopy/graph"; export default loopy("bad", {input:{},run:async()=>1});`,
+    `import {loopy} from "loopy"; export default loopy("bad", {input:{},run:async()=>1});`,
   );
   const result = await cli(f, "save", f.file);
   expect(result.code).toBe(1);
@@ -270,7 +270,7 @@ test("HTTP run reports named JSON input errors before creating a run", async () 
   const f = await graphFixture();
   writeFileSync(
     f.file,
-    'import {loopy} from "loopy/graph"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',
+    'import {loopy} from "loopy"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',
   );
   expect((await cli(f, "save", f.file)).code).toBe(0);
 

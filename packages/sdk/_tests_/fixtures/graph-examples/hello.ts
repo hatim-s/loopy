@@ -1,4 +1,4 @@
-import { code, log, loopy } from "loopy/graph";
+import { code, log, loopy } from "loopy";
 
 export default loopy("hello", {
   input: { name: "string", "enthusiastic?": "boolean" },

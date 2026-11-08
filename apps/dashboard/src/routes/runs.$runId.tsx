@@ -141,7 +141,7 @@ function Workspace(props: {
     [selectedPage],
   );
 
-  const rootComplete = snapshot.nodeRunsNext == null;
+  const rootComplete = snapshot.nodeRunsNext === null;
   const itemComplete = itemPage.state === "ready" && itemPage.data.complete;
 
   const model = useMemo(
@@ -252,7 +252,7 @@ function Workspace(props: {
     side = (
       <div className="min-h-0 flex-1 overflow-y-auto">
         <RunGuide model={model} marks={marks} onSelect={select} />
-        <HookHistory hooks={snapshot.hooks} truncated={snapshot.hooksTruncated === true} />
+        <HookHistory hooks={snapshot.hooks} truncated={snapshot.hooksTruncated} />
       </div>
     );
   } else if (focus === null) {

@@ -1,18 +1,13 @@
 import { expect, test } from "bun:test";
+import { initialState, nextDeadline, step } from "@loopy/core/engine";
 import {
-  fail,
-  finally_,
-  log,
-  loopy,
-  map,
-  parallel,
-  rescue,
-  sh,
-  sleep,
-  wait,
-} from "@loopy/sdk/graph";
-import { initialState, nextDeadline, step } from "../src/engine";
-import { at, complete, dispatches, failed, start } from "./fixtures/engine-control";
+  at,
+  complete,
+  dispatches,
+  failed,
+  start,
+} from "../../core/_tests_/fixtures/engine-control";
+import { fail, finally_, log, loopy, map, parallel, rescue, sh, sleep, wait } from "../src/graph";
 
 test("map failure settles started item cleanup before outer cleanup and never starts later items", () => {
   const graph = loopy("settle", {

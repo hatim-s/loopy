@@ -20,10 +20,6 @@
       "types": "./dist/types/loopy/src/contract.d.ts",
       "default": "./dist/loopy/src/contract.js"
     },
-    "./graph": {
-      "types": "./dist/types/loopy/src/graph.d.ts",
-      "default": "./dist/loopy/src/graph.js"
-    },
     "./engine": {
       "types": "./dist/types/loopy/src/engine.d.ts",
       "default": "./dist/loopy/src/engine.js"

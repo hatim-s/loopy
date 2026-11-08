@@ -4,8 +4,8 @@ import { type NodeRun, type StoreEffect } from "@loopy/core";
 import { Effect, Scope } from "effect";
 import { makeLocalService, Registry } from "../../src/local";
 import { openRunStore } from "../../src/store";
+import { runAt } from "./clock";
 import { compileOrThrow } from "./compile";
-import { runAt } from "./stores";
 
 // The dashboard-scale test and the apps/cloud/dev/dashboard-queries.ts benchmark both seed these
 // datasets, so the caller owns the root and the scope.

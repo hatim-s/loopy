@@ -1,14 +1,18 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { join } from "node:path";
 import type { DashboardReader } from "@loopy/contract";
 import type { RunRecord, Schedule } from "@loopy/core";
 import { loopy } from "@loopy/sdk/graph";
 import type { Cause } from "effect";
-import { Effect } from "effect";
+import { Effect, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { makeDaemon, PreparationError, ScheduleDefinitionError } from "../src/host";
+import { localDaemon } from "../src/local";
+import { serviceFixture } from "./fixtures/server";
 import { countPasses, nextPass } from "./fixtures/service-runtime";
 import { MemorySqlStore } from "./fixtures/stores";
+import { fixtureScope } from "./fixtures/test-scope";
 import { eventually } from "./fixtures/wait";
 
 function schedule(overrides: Partial<Schedule> = {}): Schedule {
@@ -221,4 +225,35 @@ test("queued runs activate and prune runs at startup and hourly", async () => {
       }),
     ).pipe(Effect.provide(TestClock.layer())),
   );
+});
+
+test("local server leaves event pruning to the runtime daemon", async () => {
+  const { f, store } = await serviceFixture("retention-owner");
+  const prune = spyOn(store, "pruneEvents");
+  const passes = countPasses(store);
+  const scope = fixtureScope();
+
+  const daemon = await Effect.runPromise(
+    localDaemon({ concurrency: 4, ...f, store, port: 0, assets: join(f.cwd, "assets") }).pipe(
+      Effect.provideService(Scope.Scope, scope),
+    ),
+  );
+
+  try {
+    await Effect.runPromise(daemon.start);
+    expect(prune).not.toHaveBeenCalled();
+    await Effect.runPromise(Effect.forkIn(daemon.run, scope));
+    await Effect.runPromise(
+      eventually(
+        "the daemon to prune events",
+        Effect.sync(() => prune.mock.calls.length > 0),
+      ),
+    );
+    await Effect.runPromise(nextPass(daemon, passes));
+    expect(prune).toHaveBeenCalledTimes(1);
+  } finally {
+    await Effect.runPromise(daemon.stop);
+    prune.mockRestore();
+    await Effect.runPromise(store.close());
+  }
 });

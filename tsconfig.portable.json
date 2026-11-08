@@ -8,6 +8,7 @@
     "packages/core/src/engine/index.ts",
     "packages/contract/src/index.ts",
     "packages/contract/src/sandbox/index.ts",
+    "packages/contract/src/server.ts",
     "packages/runtime/src/service/index.ts",
     "packages/runtime/src/host/index.ts",
     "packages/runtime/src/store/portable.ts"

@@ -172,8 +172,11 @@ test("serialized loopy and snapshot views exclude private registry and owner key
 
   const snapshot: contract.RunSnapshotView = {
     nodeRuns: [],
+    nodeRunsNext: null,
+    truncatedOutputs: {},
     run,
     hooks: [],
+    hooksTruncated: false,
     cursor: 0,
     epoch: "epoch",
   };
@@ -184,6 +187,11 @@ test("serialized loopy and snapshot views exclude private registry and owner key
   for (const serialized of [JSON.stringify(loopy), JSON.stringify(snapshot)]) {
     expect(serialized).not.toMatch(/"(?:bundleHash|token|source|secrets)"\s*:/);
   }
+
+  // Every producer pages the root nodes and hooks, so a snapshot without those markers is malformed.
+  const unpaged: Partial<contract.RunSnapshotView> = { ...snapshot };
+  delete unpaged.nodeRunsNext;
+  expect(() => contract.decodeBoundary(contract.runSnapshotViewSchema)(unpaged)).toThrow();
 });
 
 test("strict edges reject misspelled request keys and injected view tokens", () => {

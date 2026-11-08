@@ -1,4 +1,4 @@
-import { code, loopy } from "loopy/graph";
+import { code, loopy } from "loopy";
 
 export default loopy("acceptance-invalid", {
   input: {},

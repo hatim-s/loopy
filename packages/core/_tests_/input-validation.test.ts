@@ -1,18 +1,13 @@
 import { expect, test } from "bun:test";
-import { loopy } from "@loopy/sdk/graph";
-import { graphSchema, validateGraph, validateGraphInput } from "../src";
-import { decode } from "./fixtures/decode";
+import { validateGraph, validateGraphInput } from "../src";
+import { inputGraph } from "./fixtures/graphs";
 
 function graph() {
-  return loopy("import-files", {
-    input: { paths: "string[]" },
-    inputValidation: { minItems: { paths: 1 }, unknownKeys: "strip" },
-    run: ({ input }) => input,
-  });
+  return inputGraph({ paths: "string[]" }, { minItems: { paths: 1 }, unknownKeys: "strip" });
 }
 
 test("nonempty array input rejects empty and malformed values before execution", () => {
-  const definition = decode(graphSchema)(graph());
+  const definition = graph();
 
   expect(validateGraphInput(definition, { paths: [] }).ok).toBe(false);
   expect(validateGraphInput(definition, { paths: [12] }).ok).toBe(false);
@@ -34,27 +29,23 @@ test("schema unknown-key policy strips unrecognized inputs without mutating the 
 });
 
 test("minimum constraints cannot target a missing or scalar field", () => {
-  const definition = graph();
-  definition.input = { paths: "string" };
+  const scalar = graph();
+  scalar.input = { paths: "string" };
+  const missing = inputGraph({}, { minItems: { missing: 1 }, unknownKeys: "reject" });
 
-  expect(validateGraph(definition).map((item) => item.message)).toEqual([
+  expect(validateGraph(scalar).map((item) => item.message)).toEqual([
     "Input minimum 'paths' requires an array field.",
   ]);
-  expect(() =>
-    loopy("invalid-input", {
-      input: {},
-      inputValidation: { minItems: { missing: 1 }, unknownKeys: "reject" },
-      run: () => null,
-    }),
-  ).toThrow("requires an array field");
+  expect(validateGraph(missing).map((item) => item.message)).toEqual([
+    "Input minimum 'missing' requires an array field.",
+  ]);
 });
 
 test("open records retain unknown fields and defer missing optional references to execution", () => {
-  const definition = loopy("open-input", {
-    input: { "message?": "json" },
-    inputValidation: { minItems: {}, unknownKeys: "passthrough" },
-    run: ({ input }) => input,
-  });
+  const definition = inputGraph(
+    { "message?": "json" },
+    { minItems: {}, unknownKeys: "passthrough" },
+  );
 
   expect(validateGraphInput(definition, { extra: 42 })).toEqual({ ok: true, value: { extra: 42 } });
   expect(validateGraphInput(definition, { message: 12, extra: [true] })).toEqual({
@@ -64,11 +55,10 @@ test("open records retain unknown fields and defer missing optional references t
 });
 
 test("JSON-root input contracts preserve all JSON values without pre-queue field checks", () => {
-  const definition = loopy("json-input", {
-    input: { "config?": "json" },
-    inputValidation: { minItems: {}, unknownKeys: "passthrough", root: "json" },
-    run: ({ input }) => input,
-  });
+  const definition = inputGraph(
+    { "config?": "json" },
+    { minItems: {}, unknownKeys: "passthrough", root: "json" },
+  );
 
   for (const input of [null, false, 7, "config", [1], { extra: true }]) {
     expect(validateGraphInput(definition, input)).toEqual({ ok: true, value: input });

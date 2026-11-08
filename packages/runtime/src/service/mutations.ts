@@ -1,4 +1,4 @@
-import { cancelRefusal, isTerminalRun, type Json } from "@loopy/contract";
+import { cleanupRefusal, isTerminalRun, type Json, runningRefusal } from "@loopy/contract";
 import {
   executionKeyString,
   isPendingWait,
@@ -87,10 +87,10 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
   const cancellableNodes = Effect.fn("mutations.cancellableNodes")(function* (id: string) {
     const nodes = yield* store.getNodeRuns(id);
 
-    // The graph is read only when node state alone cannot refuse.
+    // An unstarted run has nothing to clean up, so its graph is never read.
     const refusal =
-      cancelRefusal(nodes, { nodes: [] }) ??
-      (nodes.length > 0 ? cancelRefusal(nodes, (yield* context.runGraph(id)).graph) : null);
+      runningRefusal(nodes) ??
+      (nodes.length === 0 ? null : cleanupRefusal(nodes, (yield* context.runGraph(id)).graph));
 
     if (refusal !== null) {
       return yield* Effect.fail(new ServiceError("not_claimable", refusal));

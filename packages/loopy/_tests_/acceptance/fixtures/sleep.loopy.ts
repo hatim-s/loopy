@@ -1,4 +1,4 @@
-import { loopy, sh, sleep } from "loopy/graph";
+import { loopy, sh, sleep } from "loopy";
 
 export default loopy("acceptance-sleep", {
   input: {},

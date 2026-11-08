@@ -2,13 +2,7 @@ import { expect, test } from "bun:test";
 import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExecutionResult } from "@loopy/contract";
-import {
-  AuthorityError,
-  authorityCommandSchema,
-  resultBytes,
-  resultRef,
-} from "@loopy/contract/sandbox";
-import { Result, Schema } from "effect";
+import { AuthorityError, resultBytes, resultRef } from "@loopy/contract/sandbox";
 import { FilesystemAuthority } from "../src/filesystem/authority";
 import { stateLayout } from "../src/state-root";
 import { authorityFixture, successful } from "./fixtures/authority";
@@ -123,20 +117,6 @@ test("legacy receipts decode without rewriting and missing or corrupt results ne
   await expect(run(resultsFor("fixture").get(missingRef))).rejects.toThrow("immutable");
   await writeFile(path, "{malformed");
   await expect(run(authority.read({ id: legacy.id }))).rejects.toThrow();
-});
-
-test("wire operations reject missing admitting sessions and unscoped results", async () => {
-  for (const command of [
-    { operation: "resultPut", input: { value: successful } },
-    { operation: "resultGet", input: { ref: await resultReference(successful) } },
-    { operation: "admit", input: { plan: {} } },
-  ]) {
-    expect(
-      Result.isFailure(
-        Schema.decodeUnknownResult(authorityCommandSchema, { onExcessProperty: "error" })(command),
-      ),
-    ).toBe(true);
-  }
 });
 
 test("export-only recovery filters exact volume metadata without reading receipts", async () => {

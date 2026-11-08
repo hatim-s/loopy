@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { chmod, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { ExecutionSpec } from "@loopy/core";
 import { Cause, Effect, Fiber, Schema } from "effect";
 import { ExecutionWorker } from "../src/executor/execution";
 import { FilesystemReceipts } from "../src/executor/receipts";
@@ -10,6 +11,23 @@ import { waitForExit, waitForFile } from "./fixtures/wait";
 
 const activeProgram =
   'require("node:fs").appendFileSync("runs", "x"); await Bun.write("ready.json", JSON.stringify({pid: process.pid})); await Bun.write("ready", "ready"); setInterval(() => {}, 1000);';
+
+/** The command runs the active program itself; the code and parser bundles run it from the fixture. */
+function interruptSpec(kind: "command" | "code" | "parser", code: ExecutionSpec): ExecutionSpec {
+  if (kind === "code") {
+    return { ...code, timeoutMs: 10000 };
+  }
+
+  const spec = commandSpec(
+    kind === "command" ? [process.execPath, "-e", activeProgram] : ["/bin/echo", "fixture"],
+  );
+
+  if (kind === "parser" && spec.kind === "command") {
+    spec.parse = { bundleHash: "a".repeat(64), timeoutMs: 300_000 };
+  }
+
+  return spec;
+}
 
 async function waitForAuthor(workspace: string) {
   await waitForFile(join(workspace, "ready"));
@@ -24,16 +42,7 @@ for (const kind of ["command", "code", "parser"] as const) {
     const f = await fixture();
     await writeFile(f.bundle, activeProgram);
 
-    const spec =
-      kind === "code"
-        ? { ...f.spec, timeoutMs: 10000 }
-        : commandSpec(
-            kind === "command" ? [process.execPath, "-e", activeProgram] : ["/bin/echo", "fixture"],
-          );
-
-    if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), timeoutMs: 300_000 };
-    }
+    const spec = interruptSpec(kind, f.spec);
 
     const receipts = new FilesystemReceipts(f.home);
 
@@ -85,16 +94,7 @@ for (const kind of ["command", "code", "parser"] as const) {
     const f = await fixture();
     await writeFile(f.bundle, activeProgram);
 
-    const spec =
-      kind === "code"
-        ? { ...f.spec, timeoutMs: 10000 }
-        : commandSpec(
-            kind === "command" ? [process.execPath, "-e", activeProgram] : ["/bin/echo", "fixture"],
-          );
-
-    if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), timeoutMs: 300_000 };
-    }
+    const spec = interruptSpec(kind, f.spec);
 
     const receipts = new FilesystemReceipts(f.home);
 
@@ -140,16 +140,7 @@ for (const kind of ["command", "code", "parser"] as const) {
     const f = await fixture();
     await writeFile(f.bundle, activeProgram);
 
-    const spec =
-      kind === "code"
-        ? { ...f.spec, timeoutMs: 10000 }
-        : commandSpec(
-            kind === "command" ? [process.execPath, "-e", activeProgram] : ["/bin/echo", "fixture"],
-          );
-
-    if (kind === "parser" && spec.kind === "command") {
-      spec.parse = { bundleHash: "a".repeat(64), timeoutMs: 300_000 };
-    }
+    const spec = interruptSpec(kind, f.spec);
 
     const receipts = new FilesystemReceipts(f.home);
 

@@ -1,22 +1,13 @@
 import { expect, test } from "bun:test";
-import {
-  type ExecutionKey,
-  type ExecutionResult,
-  executionKeyString,
-  type Graph,
-  type Receipt,
-} from "@loopy/core";
+import type { ExecutionResult, Graph } from "@loopy/core";
 import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "@loopy/sdk/graph";
 import { Effect } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
-import {
-  activateDurable,
-  type DurableActivationOptions,
-  type DurableExecutionProvider,
-  DurableProviderError,
-} from "../src/host";
+import { activateDurable, type DurableActivationOptions, DurableProviderError } from "../src/host";
+import { runAt } from "./fixtures/clock";
 import { withBundles } from "./fixtures/compiled";
-import { MemorySqlStore, runAt } from "./fixtures/stores";
+import { PolicyProvider } from "./fixtures/host-policy";
+import { MemorySqlStore } from "./fixtures/stores";
 
 const success: ExecutionResult = {
   kind: "succeeded",
@@ -41,48 +32,10 @@ function compiled(graph = loopy("test", { input: {}, run: work })) {
   return graph;
 }
 
-class Provider implements DurableExecutionProvider {
-  receipts = new Map<string, Receipt>();
-  starts: { key: ExecutionKey; attempt: number }[] = [];
-  lookups: number[] = [];
-  result: Receipt = { kind: "started" };
-
-  id(key: ExecutionKey, attempt: number) {
-    return `${executionKeyString(key)}/${attempt}`;
-  }
-
-  lookup(key: ExecutionKey, attempt: number): Effect.Effect<Receipt, DurableProviderError> {
-    return Effect.gen({ self: this }, function* () {
-      this.lookups.push(attempt);
-
-      return this.receipts.get(this.id(key, attempt)) ?? { kind: "none" as const };
-    });
-  }
-
-  start(key: ExecutionKey, attempt: number): Effect.Effect<Receipt, DurableProviderError> {
-    return Effect.gen({ self: this }, function* () {
-      this.starts.push({ key, attempt });
-      this.receipts.set(this.id(key, attempt), this.result);
-
-      return this.result;
-    });
-  }
-
-  finish(result = success) {
-    const started = this.starts.at(-1);
-
-    if (!started) {
-      throw new Error("Expected a started execution.");
-    }
-
-    this.receipts.set(this.id(started.key, started.attempt), { kind: "finished", result });
-  }
-}
-
 async function fixture(graph = compiled(), store = new MemorySqlStore({ leaseMs: 10_000 })) {
   let now = Date.parse(newRun().createdAt);
   const run = runAt(() => now);
-  const provider = new Provider();
+  const provider = new PolicyProvider();
   await run(store.createRun(newRun()));
 
   const options = {

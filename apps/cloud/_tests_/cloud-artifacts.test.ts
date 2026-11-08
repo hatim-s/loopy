@@ -1,16 +1,9 @@
 import { beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import {
-  decodeBoundary,
-  nodeIdSchema,
-  type PutLoopyBody,
-  type SourceArtifact,
-  validateCompiled,
-} from "@loopy/contract";
+import type { PutLoopyBody, SourceArtifact } from "@loopy/contract";
 import { revision } from "@loopy/core";
 import { code, loopy } from "@loopy/sdk/graph";
-import { Effect } from "effect";
 import type { Miniflare } from "miniflare";
 import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
@@ -389,58 +382,8 @@ test("cloud rejects unsupported modes, declared secrets, oversized writes and bo
   });
 });
 
-test("shared validation rejects forged bundles, revisions and source mappings before storage", async () => {
+test("cloud save rejects a forged revision before storage", async () => {
   const body = await executable("validation");
-  await expect(
-    Effect.runPromise(validateCompiled({ ...body, revision: "f".repeat(64) })),
-  ).rejects.toThrow("The graph revision does not match its contents.");
-  await expect(Effect.runPromise(validateCompiled({ ...body, bundles: [] }))).rejects.toThrow(
-    "Supply exactly one bundle for each code node and parser in node order.",
-  );
-  await expect(
-    Effect.runPromise(
-      validateCompiled({
-        ...body,
-        bundles: body.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: new TextEncoder().encode("wrong"),
-        })),
-      }),
-    ),
-  ).rejects.toThrow("Bundle bytes do not match their hash.");
-  await expect(
-    Effect.runPromise(
-      validateCompiled({ ...body, sourceArtifact: artifact("f".repeat(64), "wrong") }),
-    ),
-  ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
-  const source = artifact(body.revision, "source");
-
-  if (source.status !== "available") {
-    throw new Error("Fixture requires source files.");
-  }
-
-  source.ranges = [
-    {
-      nodeId: decodeBoundary(nodeIdSchema)("missing-node"),
-      fileId: "file-0",
-      startLine: 1,
-      endLine: 2,
-    },
-  ];
-  await expect(
-    Effect.runPromise(validateCompiled({ ...body, sourceArtifact: source })),
-  ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
-  source.ranges = [
-    {
-      nodeId: decodeBoundary(nodeIdSchema)("missing-node"),
-      fileId: "file-0",
-      startLine: 1,
-      endLine: 1,
-    },
-  ];
-  await expect(
-    Effect.runPromise(validateCompiled({ ...body, sourceArtifact: source })),
-  ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
   expect(await call("validation", "save", { ...body, revision: "f".repeat(64) })).toMatchObject({
     status: 400,
   });

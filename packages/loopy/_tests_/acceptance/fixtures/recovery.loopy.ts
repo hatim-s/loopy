@@ -1,4 +1,4 @@
-import { fail, finally_, loopy, rescue, sh } from "loopy/graph";
+import { fail, finally_, loopy, rescue, sh } from "loopy";
 
 export default loopy("acceptance-recovery", {
   input: {},

@@ -2,7 +2,7 @@ import type { Store } from "@loopy/core";
 import { Clock, Effect } from "effect";
 import { type DaemonOptions, makeDaemon } from "../../src/host";
 import { openRunStore } from "../../src/store";
-import { fixedClock } from "./stores";
+import { fixedClock } from "./clock";
 import { runScoped } from "./test-scope";
 import { eventually } from "./wait";
 

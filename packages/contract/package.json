@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./sandbox": "./src/sandbox/index.ts"
+    "./sandbox": "./src/sandbox/index.ts",
+    "./server": "./src/server.ts"
   },
   "dependencies": {
     "effect": "catalog:",

@@ -93,9 +93,9 @@ export type LoopyView = Schema.Schema.Type<typeof loopyViewSchema>;
 export const runSnapshotViewSchema = struct({
   run: runViewSchema,
   nodeRuns: Schema.Array(nodeRunSchema).pipe(Schema.mutable),
-  nodeRunsNext: Schema.optional(Schema.NullOr(Schema.String)),
-  truncatedOutputs: Schema.optional(Schema.Record(Schema.String, Schema.mutableKey(Schema.Finite))),
-  hooksTruncated: Schema.optional(Schema.Boolean),
+  nodeRunsNext: Schema.NullOr(Schema.String),
+  truncatedOutputs: Schema.Record(Schema.String, Schema.mutableKey(Schema.Finite)),
+  hooksTruncated: Schema.Boolean,
   hooks: Schema.Array(hookRecordSchema).pipe(Schema.mutable),
   cursor: counter,
   epoch: Schema.String,

@@ -1,11 +1,12 @@
 import {
   canCancelRun,
-  cancelRefusal,
   canResumeRun,
+  cleanupRefusal,
   type GraphView,
   isTerminalRun,
   type RunSnapshotView,
   type RunView,
+  runningRefusal,
 } from "@loopy/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
@@ -65,7 +66,9 @@ function RunActions({ snapshot, graph }: { snapshot: RunSnapshotView; graph: Gra
   const action = useRunAction(run);
   const busy = action.pending !== null;
   const truncated = run.truncatedFields?.input !== undefined;
-  const refusal = cancelRefusal(snapshot.nodeRuns, graph ?? { nodes: [] });
+
+  const refusal =
+    runningRefusal(snapshot.nodeRuns) ?? cleanupRefusal(snapshot.nodeRuns, graph ?? { nodes: [] });
 
   return (
     <div className="flex flex-col items-end gap-2">

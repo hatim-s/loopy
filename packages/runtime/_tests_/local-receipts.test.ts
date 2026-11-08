@@ -5,13 +5,13 @@ import type { ExecutionResult } from "@loopy/core";
 import { Effect } from "effect";
 import { ExecutionWorker } from "../src/executor/execution";
 import { FilesystemReceipts, type LocalReceipt, receiptPath } from "../src/executor/receipts";
-import { receiptsFixture } from "./fixtures/local-receipts";
+import { fixture } from "./fixtures/executor";
 import { waitForExit, waitForFile } from "./fixtures/wait";
 
 const result: ExecutionResult = { kind: "succeeded", output: 42, logs: [] };
 
 test("filesystem claims are exclusive, private and retain the saved single-file format", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   expect(await Effect.runPromise(f.receipts.read(f.identity))).toBeNull();
   expect(await Effect.runPromise(f.receipts.claim(f.identity))).toEqual({ kind: "created" });
   expect(await Effect.runPromise(f.receipts.claim(f.identity))).toEqual({
@@ -39,7 +39,7 @@ test("filesystem claims are exclusive, private and retain the saved single-file 
 });
 
 test("saved started and finished receipts decode without rewriting, corruption fails closed", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
 
   const values = [
@@ -74,7 +74,7 @@ test("saved started and finished receipts decode without rewriting, corruption f
 });
 
 test("receipt reads reject a saved foreign execution identity or attempt", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
 
   for (const identity of [
@@ -92,7 +92,7 @@ test("receipt reads reject a saved foreign execution identity or attempt", async
 });
 
 test("receipt directories reject symlinks and encode traversal run ids", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   await symlink(f.workspace, join(f.home, "receipts"));
   await expect(Effect.runPromise(f.receipts.claim(f.identity))).rejects.toMatchObject({
     _tag: "ExecutorError",
@@ -110,7 +110,7 @@ test("receipt directories reject symlinks and encode traversal run ids", async (
 });
 
 test("unclaimed work cannot publish a terminal receipt", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   await expect(
     Effect.runPromise(f.receipts.finish({ ...f.identity, kind: "finished", result })),
   ).rejects.toMatchObject({
@@ -123,7 +123,7 @@ test("unclaimed work cannot publish a terminal receipt", async () => {
 });
 
 test("two execution workers sharing a receipt perform the side effect once", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   await writeFile(
     f.bundle,
     'const {appendFile} = await import("node:fs/promises"); await appendFile("effect", "once\\n"); console.log(42);',
@@ -152,7 +152,7 @@ test("two execution workers sharing a receipt perform the side effect once", asy
 });
 
 test("competing local parents cannot give two trusted children the same effect", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   await writeFile(
     f.bundle,
     'const {appendFile} = await import("node:fs/promises"); await appendFile("effect", "once\\n"); await Bun.sleep(100); console.log(42);',
@@ -176,7 +176,7 @@ test("competing local parents cannot give two trusted children the same effect",
 });
 
 test("a live trusted child retains completion authority, a killed child becomes uncertain", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   await writeFile(
     f.bundle,
     // The bundle outlives its killed worker until the test releases it, then completes as an orphan.
@@ -246,7 +246,7 @@ test("a live trusted child retains completion authority, a killed child becomes 
 
 for (const competing of [false, true]) {
   test(`a paused claim write stays invisible and publishes exclusively, competitor ${competing}`, async () => {
-    const f = await receiptsFixture();
+    const f = await fixture();
     const ready = join(f.root, "claim-ready");
     const release = join(f.root, "claim-release");
     const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
@@ -294,3 +294,68 @@ for (const competing of [false, true]) {
     }
   });
 }
+
+// The completion may land before or after execution reads the claim; neither order runs the bundle.
+test("a live claim is never run again and execution returns its completion", async () => {
+  const f = await fixture();
+  await writeFile(f.bundle, 'await Bun.write("effect", "repeated"); console.log(1);');
+  const identity = { executionKey: f.key, attempt: 1 };
+  const { receipts } = f;
+  expect(await Effect.runPromise(receipts.claim(identity))).toEqual({ kind: "created" });
+  expect(await Effect.runPromise(receipts.claim(identity))).toMatchObject({
+    kind: "existing",
+    receipt: { kind: "started" },
+  });
+
+  const pending = Effect.runPromise(
+    f.executor.execute(f.key, 1, f.spec, new AbortController().signal),
+  );
+
+  const result = { kind: "succeeded" as const, output: 42, logs: [] };
+  await Effect.runPromise(receipts.finish({ ...identity, kind: "finished", result }));
+
+  expect(await pending).toEqual(result);
+  expect(await Bun.file(join(f.workspace, "effect")).exists()).toBe(false);
+});
+
+test("dead unfinished work becomes uncertain and is never repeated", async () => {
+  const f = await fixture();
+
+  const child = Bun.spawn([process.execPath, "--no-env-file", "-e", "process.exit(0)"], {
+    env: {},
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+
+  await child.exited;
+  const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
+  await writeFile(
+    path,
+    JSON.stringify({ kind: "started", executionKey: f.key, attempt: 1, pid: child.pid }),
+  );
+  const receipt = await Effect.runPromise(f.executor.lookup(f.key, 1));
+  expect(receipt).toMatchObject({
+    kind: "finished",
+    result: { kind: "failed", error: { code: "uncertain" } },
+  });
+
+  if (receipt.kind !== "finished") {
+    throw new Error("Expected a finished uncertain receipt.");
+  }
+
+  expect(
+    await Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
+  ).toEqual(receipt.result);
+  expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject(receipt);
+});
+
+test("corrupt receipts fail lookup instead of becoming absence", async () => {
+  const f = await fixture();
+  const path = await Effect.runPromise(receiptPath(f.home, f.key, 1));
+  await writeFile(path, "{");
+  const result = await Effect.runPromise(f.executor.lookup(f.key, 1).pipe(Effect.result));
+  expect(result).toMatchObject({
+    _tag: "Failure",
+    failure: { _tag: "ExecutorError", operation: "receipt" },
+  });
+});

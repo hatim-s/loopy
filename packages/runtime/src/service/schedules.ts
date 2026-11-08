@@ -1,11 +1,5 @@
-import type { PutScheduleBody, SavedLoopy, ScheduleView } from "@loopy/contract";
-import {
-  DEFAULT_TIME_ZONE,
-  errorMessage,
-  nextFire,
-  type Schedule,
-  validateTimeZone,
-} from "@loopy/core";
+import { type PutScheduleBody, type SavedLoopy, scheduleView } from "@loopy/contract";
+import { DEFAULT_TIME_ZONE, errorMessage, nextFire, validateTimeZone } from "@loopy/core";
 import { Clock, Effect } from "effect";
 import type { ServiceContext } from "./context";
 import { requireDefinition } from "./definition";
@@ -42,11 +36,6 @@ export function makeScheduleOperations(context: ServiceContext) {
       .map((schedule) => scheduleView(schedule, failures.get(schedule.slug) ?? null));
   });
 
-  // Saving or toggling bumps the version, which retires any failure of the previous version.
-  const scheduleView = (schedule: Schedule, failure: ScheduleView["failure"] = null) => {
-    return { ...schedule, lastFireKey: schedule.lastFireKey ?? null, failure };
-  };
-
   const putSchedule = Effect.fn("schedules.putSchedule")(function* (
     slug: string,
     body: PutScheduleBody,
@@ -80,6 +69,7 @@ export function makeScheduleOperations(context: ServiceContext) {
         enabled: body.enabled ?? true,
         nextFireAt,
       }),
+      null,
     );
   });
 
@@ -131,6 +121,7 @@ export function makeScheduleOperations(context: ServiceContext) {
   ) {
     const current = yield* requireSchedule(slug, callerWorkspace);
 
+    // Saving or toggling bumps the version, which retires any failure of the previous version.
     const schedule = yield* context.store.setScheduleEnabled({
       workspace: current.workspace,
       slug,
@@ -138,7 +129,7 @@ export function makeScheduleOperations(context: ServiceContext) {
       nextFireAt: enabled ? yield* scheduleNextFire(current.cron, current.tz) : undefined,
     });
 
-    return scheduleView(schedule);
+    return scheduleView(schedule, null);
   });
 
   const deleteSchedule = Effect.fn("schedules.deleteSchedule")(function* (

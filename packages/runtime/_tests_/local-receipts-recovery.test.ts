@@ -2,12 +2,12 @@ import { expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { Effect } from "effect";
 import { type AttemptIdentity, FilesystemReceipts } from "../src/executor/receipts";
-import { receiptsFixture } from "./fixtures/local-receipts";
+import { fixture } from "./fixtures/executor";
 import { onCleanup } from "./fixtures/test-scope";
 import { waitForFile } from "./fixtures/wait";
 
 test("parent rereads completion published between its started read and confirmed child death", async () => {
-  const f = await receiptsFixture();
+  const f = await fixture();
   const ready = resolve(f.root, "ready");
   const finish = resolve(f.root, "finish");
 

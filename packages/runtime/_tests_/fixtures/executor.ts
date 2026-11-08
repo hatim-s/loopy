@@ -6,6 +6,7 @@ import { initialState, step } from "@loopy/core/engine";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Schema } from "effect";
 import { LocalExecutor } from "../../src/executor";
+import { FilesystemReceipts } from "../../src/executor/receipts";
 import { qualityTestRoot } from "./quality-test-root";
 
 export async function fixture() {
@@ -17,6 +18,8 @@ export async function fixture() {
   await Bun.write(join(home, "bundles", "seed"), "bundle");
   const bundle = join(home, "bundles", "bundle.js");
   const key = { runId: "run", nodeId: Schema.decodeUnknownSync(nodeIdSchema)("0:code"), scope: [] };
+  const identity = { executionKey: key, attempt: 1 };
+  const receipts = new FilesystemReceipts(home);
 
   const executor = new LocalExecutor({
     home,
@@ -33,7 +36,7 @@ export async function fixture() {
     timeoutMs: 3000,
   };
 
-  return { root, home, workspace, bundle, key, executor, spec };
+  return { root, home, workspace, bundle, key, identity, receipts, executor, spec };
 }
 
 export function commandSpec(argv: readonly string[]): ExecutionSpec {
