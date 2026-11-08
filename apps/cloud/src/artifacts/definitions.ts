@@ -9,7 +9,7 @@ import { validateSlug } from "@loopy/core";
 import { ArtifactValidationError, RegistryConflictError } from "@loopy/runtime/service";
 import { ArtifactCapacity } from "./capacity";
 import { checkProjectionRow, definitionProjectionSchema, projectionJson } from "./projection";
-import { ARTIFACT_LIMITS, type ArtifactStorage } from "./storage";
+import { ARTIFACT_LIMITS, type ImmutableBucket } from "./storage";
 import { artifactEntry } from "./validation";
 
 export type Publication = {
@@ -26,7 +26,7 @@ export class ArtifactDefinitions {
 
   constructor(
     private readonly storage: Pick<DurableObjectStorage, "sql" | "transactionSync">,
-    artifacts: ArtifactStorage,
+    artifacts: ImmutableBucket,
     private readonly workspace: string,
   ) {
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS artifact_definitions (

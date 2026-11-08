@@ -1,17 +1,35 @@
-import {
-  type ExecutionResult,
-  executionResultSchema,
-  hashSchema,
-  positiveInt,
-  struct,
-} from "@loopy/core";
+import { executionResultSchema, hashSchema, positiveInt, struct } from "@loopy/core";
 import { Schema } from "effect";
-import { boundedToken } from "./codec";
-import {
-  SANDBOX_MAX_CAPTURE_BYTES,
-  type SandboxAttemptIdentity,
-  sandboxAttemptIdentitySchema,
-} from "./sandbox";
+import { boundedToken } from "../codec";
+import { SANDBOX_MAX_CAPTURE_BYTES, sandboxAttemptIdentitySchema } from "./attempt";
+
+// Docker names carry these prefixes followed by a SHA-256 hex digest.
+const PREFIX = {
+  container: "loopy-attempt-",
+  inputVolume: "loopy-input-",
+  volume: "loopy-workspace-",
+  artifactHelper: "loopy-artifact-",
+} as const;
+
+const resourceName = (prefix: string) =>
+  Schema.String.check(Schema.isPattern(new RegExp(`^${prefix}[a-f0-9]{64}$`)));
+
+export function attemptResourceNames(id: string, volumeHash: string) {
+  return {
+    container: `${PREFIX.container}${id}`,
+    inputVolume: `${PREFIX.inputVolume}${id}`,
+    volume: `${PREFIX.volume}${volumeHash}`,
+  };
+}
+
+export function artifactHelperName(id: string) {
+  return `${PREFIX.artifactHelper}${id}`;
+}
+
+/** The stopped helper that stages request files into the input volume. */
+export function inputHelperName(plan: { container: string }) {
+  return `${plan.container}-input`;
+}
 
 export const authoritySessionSchema = struct({
   epoch: positiveInt,
@@ -22,9 +40,9 @@ export const dockerAttemptPlanSchema = struct({
   ...sandboxAttemptIdentitySchema.fields,
   id: hashSchema,
   requestHash: hashSchema,
-  container: Schema.String.check(Schema.isPattern(/^loopy-attempt-[a-f0-9]{64}$/)),
-  inputVolume: Schema.String.check(Schema.isPattern(/^loopy-input-[a-f0-9]{64}$/)),
-  volume: Schema.String.check(Schema.isPattern(/^loopy-workspace-[a-f0-9]{64}$/)),
+  container: resourceName(PREFIX.container),
+  inputVolume: resourceName(PREFIX.inputVolume),
+  volume: resourceName(PREFIX.volume),
   deadline: positiveInt,
 });
 
@@ -61,7 +79,7 @@ export const exportRecordSchema = struct({
   session: authoritySessionSchema,
   attemptId: hashSchema,
   volume: dockerAttemptPlanSchema.fields.volume,
-  helper: Schema.String.check(Schema.isPattern(/^loopy-artifact-[a-f0-9]{64}$/)),
+  helper: resourceName(PREFIX.artifactHelper),
 });
 
 export const authorityFailureSchema = Schema.Literals([
@@ -78,9 +96,11 @@ export type DockerAttemptPlan = Schema.Schema.Type<typeof dockerAttemptPlanSchem
 
 export type ResultRef = Schema.Schema.Type<typeof resultRefSchema>;
 
-export type ResultLocation = Schema.Schema.Type<typeof resultLocationSchema>;
-
 export type AttemptRecord = Schema.Schema.Type<typeof attemptRecordSchema>;
+
+export type StartedAttemptRecord = Schema.Schema.Type<typeof startedAttemptRecordSchema>;
+
+export type FinishedAttemptRecord = Schema.Schema.Type<typeof finishedAttemptRecordSchema>;
 
 export type ExportRecord = Schema.Schema.Type<typeof exportRecordSchema>;
 
@@ -90,37 +110,4 @@ export class AuthorityError extends Error {
   constructor(readonly code: AuthorityFailure) {
     super(`Sandbox authority rejected operation: ${code}.`);
   }
-}
-
-export interface ImmutableResults {
-  put(result: ExecutionResult): Promise<ResultRef>;
-  get(ref: ResultRef): Promise<ExecutionResult>;
-}
-
-// Composition binds the workspace before any bytes or digest select storage paths.
-export type ResultsFor = (workspace: string) => ImmutableResults;
-
-export function attemptIdInput(root: string, identity: SandboxAttemptIdentity) {
-  return {
-    root,
-    workspace: identity.workspace,
-    executionKey: identity.executionKey,
-    attempt: identity.attempt,
-  };
-}
-
-export function workspaceVolumeInput(root: string, identity: SandboxAttemptIdentity) {
-  return { root, workspace: identity.workspace, runId: identity.executionKey.runId };
-}
-
-export function attemptResourceNames(id: string, volumeHash: string) {
-  return {
-    container: `loopy-attempt-${id}`,
-    inputVolume: `loopy-input-${id}`,
-    volume: `loopy-workspace-${volumeHash}`,
-  };
-}
-
-export function artifactHelperName(id: string) {
-  return `loopy-artifact-${id}`;
 }

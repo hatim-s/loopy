@@ -17,12 +17,12 @@ async function finished(runId: string) {
 
   const session = await Effect.runPromise(
     authority.openSession({
-      expectedEpoch: (await Effect.runPromise(authority.status())).epoch,
+      expectedEpoch: (await Effect.runPromise(authority.status({}))).epoch,
       nonce: runId,
     }),
   );
 
-  const plan = harness.plan(runId);
+  const plan = await harness.plan(runId);
   await Effect.runPromise(authority.admit({ session, plan }));
 
   const result = await Effect.runPromise(
@@ -45,7 +45,7 @@ test("export guards exclude new same-volume admissions across restart and releas
     record: { volume: plan.volume, helper: `loopy-artifact-${plan.id}`, session },
   });
   expect(await Effect.runPromise(harness.authority.beginExport(request))).toEqual(granted);
-  const next = harness.plan("export", 2);
+  const next = await harness.plan("export", 2);
   expect(await Effect.runPromise(harness.authority.admit({ session, plan: next }))).toEqual({
     kind: "rejected",
     code: "workspace_busy",
@@ -75,7 +75,7 @@ test("export guards exclude new same-volume admissions across restart and releas
   });
   expect(
     await Effect.runPromise(
-      harness.authority.admit({ session: successor, plan: harness.plan("other-volume") }),
+      harness.authority.admit({ session: successor, plan: await harness.plan("other-volume") }),
     ),
   ).toMatchObject({ kind: "created" });
   // The test never creates a helper. The current trusted bridge may confirm that absence and release.
@@ -105,7 +105,7 @@ test("racing same-volume admission and export cannot both obtain authority", asy
     Effect.runPromise(
       harness.authority.beginExport({ session, attemptId: plan.id, token: "race-guard" }),
     ),
-    Effect.runPromise(harness.authority.admit({ session, plan: harness.plan("race", 2) })),
+    Effect.runPromise(harness.authority.admit({ session, plan: await harness.plan("race", 2) })),
   ]);
 
   expect([exported.kind, admitted.kind].sort()).toEqual(
@@ -126,7 +126,7 @@ test("recoverable pagination has one stable combined limit over attempts and exp
   );
 
   for (const name of ["page-a", "page-b", "page-c"]) {
-    await Effect.runPromise(harness.authority.admit({ session, plan: harness.plan(name) }));
+    await Effect.runPromise(harness.authority.admit({ session, plan: await harness.plan(name) }));
   }
 
   const all = await Effect.runPromise(harness.authority.recoverable({ after: null, limit: 200 }));

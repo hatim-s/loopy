@@ -1,16 +1,5 @@
-import type { SandboxError } from "@loopy/contract";
+import type { SandboxErrorCode } from "@loopy/contract/sandbox";
 import { Data } from "effect";
-
-export type SandboxErrorCode = SandboxError["error"]["code"];
-
-export const statusFor = {
-  unauthorized: 401,
-  invalid_request: 400,
-  conflict: 409,
-  not_found: 404,
-  output_limit: 413,
-  internal: 500,
-} as const satisfies Record<SandboxErrorCode, number>;
 
 export class SandboxRequestError extends Data.TaggedError("SandboxRequestError")<{
   code: SandboxErrorCode;

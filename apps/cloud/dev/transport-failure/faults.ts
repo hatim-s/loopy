@@ -1,9 +1,10 @@
 import { Effect } from "effect";
+import { ownerOf } from "../../../sandbox/src/docker/identity";
 import type { CommandRunner, ProcessOptions } from "../../../sandbox/src/process";
 import { runCommand } from "../../../sandbox/src/process";
 import { assert, equal } from "../shared/assert";
 import { fixtureIO } from "./fixture-effect";
-import { type Config, marker, oneReceipt, ownedContainer, ownerOf, until } from "./resources";
+import { type Config, marker, oneReceipt, ownedContainer, until } from "./resources";
 import { withWaitClient } from "./wait-client";
 
 export type FaultMode = "kill_wait_client" | "unavailable_inspect_socket";
@@ -61,7 +62,7 @@ export class TransportFaults {
 
             if (this.outage && ["container inspect", "container ls"].includes(operation)) {
               // Only this invocation sees the absent socket. The selected context and daemon stay intact.
-              const socket = `/var/empty/loopy-transport-${ownerOf(this.config).slice(0, 16)}.sock`;
+              const socket = `/var/empty/loopy-transport-${ownerOf(this.config.stateRoot).slice(0, 16)}.sock`;
 
               const output = yield* runCommand(
                 [argv[0] ?? "docker", "--host", `unix://${socket}`, ...argv.slice(3)],

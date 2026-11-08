@@ -18,7 +18,7 @@ test("real workerd recovery plans seek indexes through terminal and released his
     method: "POST",
     body: JSON.stringify({
       session: { epoch: 1, nonce: "recovery" },
-      plan: harness.plan("recovery"),
+      plan: await harness.plan("recovery"),
     }),
   });
 

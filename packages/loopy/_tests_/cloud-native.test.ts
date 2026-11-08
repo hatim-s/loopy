@@ -2,16 +2,12 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import {
-  attemptIdInput,
-  attemptResourceNames,
   authoritySessionSchema,
-  decodeBoundary,
   dockerAttemptPlanSchema,
-  nodeIdSchema,
   resultOperations,
-  workspaceVolumeInput,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { canonicalJson, type Json } from "@loopy/core";
 import { RegistryError } from "@loopy/runtime/service";
 import { Cause, Effect, Exit } from "effect";
@@ -102,13 +98,16 @@ function plan(runId: string, attempt = 1) {
     attempt,
   };
 
-  const id = hash(attemptIdInput(stateRoot, identity));
-  const volume = hash(workspaceVolumeInput(stateRoot, identity));
+  // Persisted receipts and Docker names depend on this derivation, so it is spelled out here.
+  const id = hash({ root: stateRoot, ...identity });
+  const volume = hash({ root: stateRoot, workspace: identity.workspace, runId });
 
   return decodeBoundary(dockerAttemptPlanSchema)({
     ...identity,
-    ...attemptResourceNames(id, volume),
     id,
+    container: `loopy-attempt-${id}`,
+    inputVolume: `loopy-input-${id}`,
+    volume: `loopy-workspace-${volume}`,
     requestHash: "a".repeat(64),
     deadline: 2_000_000_000_000,
   });

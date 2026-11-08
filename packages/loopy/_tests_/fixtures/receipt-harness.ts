@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { decodeBoundary, dockerAttemptPlanSchema, nodeIdSchema } from "@loopy/contract";
+import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
+import { attemptResources, dockerAttemptPlanSchema } from "@loopy/contract/sandbox";
 import { Miniflare } from "miniflare";
-import { attemptHash } from "../../../../apps/sandbox/src/admission";
 import { HttpSandboxAuthority } from "../../../../apps/sandbox/src/http-authority";
 
 export const bridgeToken = "synthetic-receipt-bridge-credential-0001";
@@ -102,19 +102,17 @@ export async function receiptHarness(configuration: { stage?: string; token?: st
     get authority() {
       return new HttpSandboxAuthority({ url: origin, token: bridgeToken, namespace });
     },
-    plan(runId: string, attempt = 1, workspace = "alpha") {
-      const executionKey = { runId, nodeId: decodeBoundary(nodeIdSchema)("0:command"), scope: [] };
-      const id = attemptHash({ root: stateRoot, workspace, executionKey, attempt });
+    async plan(runId: string, attempt = 1, workspace = "alpha") {
+      const identity = {
+        workspace,
+        executionKey: { runId, nodeId: decodeBoundary(nodeIdSchema)("0:command"), scope: [] },
+        attempt,
+      };
 
       return decodeBoundary(dockerAttemptPlanSchema)({
-        id,
-        workspace,
-        executionKey,
-        attempt,
+        ...identity,
+        ...(await attemptResources(stateRoot, identity)),
         requestHash: "a".repeat(64),
-        container: `loopy-attempt-${id}`,
-        inputVolume: `loopy-input-${id}`,
-        volume: `loopy-workspace-${attemptHash({ root: stateRoot, workspace, runId })}`,
         deadline: 2_000_000_000_000,
       });
     },

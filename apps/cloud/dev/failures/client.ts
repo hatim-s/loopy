@@ -5,14 +5,17 @@ import {
   type RunSnapshotView,
   receiptSchema,
   routes,
+} from "@loopy/contract";
+import {
   type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
+import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { assert, JourneyFailure } from "../shared/assert";
 import { ApiClient, EvidenceLog } from "../shared/fixture-client";
 import { until } from "../shared/poll";
-import { DOCKER_CONTEXT, root, SANDBOX_IMAGE } from "../stack/constants";
+import { root } from "../stack/constants";
 import { api, sandbox, state } from "./config";
 import { docker, ownedContainer, receipts } from "./resources";
 import { FailureStack } from "./stack";
@@ -31,7 +34,7 @@ export class FailureJourney {
     api,
     sandbox,
     stateRoot: state,
-    dockerContext: DOCKER_CONTEXT,
+    dockerContext: SANDBOX_DOCKER_CONTEXT,
     image: SANDBOX_IMAGE,
     gaps: [
       "No remote deployment or provider tested.",

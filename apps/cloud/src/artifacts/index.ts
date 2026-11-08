@@ -13,7 +13,7 @@ import {
   unavailableSource,
   validateCompiled,
 } from "@loopy/contract";
-import { canonicalJson, revision, validateSlug } from "@loopy/core";
+import { canonicalJson, revision } from "@loopy/core";
 import {
   type ArtifactRegistry,
   ArtifactValidationError,
@@ -22,7 +22,7 @@ import {
 } from "@loopy/runtime/service";
 import { Effect, Result } from "effect";
 import { ArtifactDefinitions, type Publication } from "./definitions";
-import { ARTIFACT_LIMITS, ArtifactStorage, bytesToBase64, hashKey } from "./storage";
+import { ARTIFACT_LIMITS, bytesToBase64, ImmutableBucket, r2Key } from "./storage";
 import { artifactEntry, checkArtifactLimits } from "./validation";
 
 export { ARTIFACT_LIMITS } from "./storage";
@@ -45,14 +45,14 @@ const registryError = (operation: string) => (cause: unknown) =>
   new RegistryError({ operation, cause });
 
 export class R2ArtifactRegistry implements ArtifactRegistry {
-  private readonly artifacts: ArtifactStorage;
+  private readonly artifacts: ImmutableBucket;
   private readonly definitions: ArtifactDefinitions;
   constructor(
     storage: Pick<DurableObjectStorage, "sql" | "transactionSync">,
     bucket: Pick<R2Bucket, "get" | "put">,
     private readonly workspaceId: string,
   ) {
-    this.artifacts = new ArtifactStorage(bucket, workspaceId);
+    this.artifacts = new ImmutableBucket(bucket, r2Key.workspace(workspaceId));
     this.definitions = new ArtifactDefinitions(storage, this.artifacts, workspaceId);
   }
   workspace() {
@@ -110,26 +110,12 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
 
         const repaired = yield* Effect.result(
           Effect.gen({ self: this }, function* () {
-            const key = yield* sync(
-              "graph key",
-              () => `graphs/${hashKey(publication.revision)}.json`,
+            const { graph, size } = yield* this.storedGraph(
+              publication.revision,
+              Math.min(budget.remaining, ARTIFACT_LIMITS.graphBytes),
             );
 
-            const bytes = yield* this.artifacts
-              .read(key, Math.min(budget.remaining, ARTIFACT_LIMITS.graphBytes))
-              .pipe(Effect.mapError(registryError("read graph")));
-
-            if (!bytes) {
-              return yield* Effect.fail(
-                new RegistryError({
-                  operation: "read graph",
-                  cause: "Published graph is missing. Save the loopy again.",
-                }),
-              );
-            }
-
-            budget.remaining -= bytes.byteLength;
-            const graph = yield* this.parseGraph(bytes, publication.revision);
+            budget.remaining -= size;
 
             return yield* sync("repair summary", () =>
               this.definitions.repair(
@@ -177,8 +163,21 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
       return yield* sync("read entry", () => artifactEntry(row, graph));
     });
   }
-  private parseGraph(bytes: Uint8Array, hash: string) {
-    return Effect.gen(function* () {
+  private storedGraph(hash: string, limit: number) {
+    return Effect.gen({ self: this }, function* () {
+      const bytes = yield* this.artifacts
+        .read(r2Key.graph(hash), limit)
+        .pipe(Effect.mapError(registryError("read graph")));
+
+      if (!bytes) {
+        return yield* Effect.fail(
+          new RegistryError({
+            operation: "read graph",
+            cause: "Published graph is missing. Save the loopy again.",
+          }),
+        );
+      }
+
       const graph = yield* Effect.try({
         try: () => decodeBoundary(graphSchema)(JSON.parse(decoder.decode(bytes))),
         catch: (cause) =>
@@ -202,39 +201,18 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
         );
       }
 
-      return graph;
+      return { graph, size: bytes.byteLength };
     });
   }
   revisionGraph(hash: string): Effect.Effect<Graph, RegistryError> {
-    return Effect.gen({ self: this }, function* () {
-      const key = yield* sync("graph key", () => `graphs/${hashKey(hash)}.json`);
-
-      const bytes = yield* this.artifacts
-        .read(key, ARTIFACT_LIMITS.graphBytes)
-        .pipe(Effect.mapError(registryError("read graph")));
-
-      if (!bytes) {
-        return yield* Effect.fail(
-          new RegistryError({
-            operation: "read graph",
-            cause: "Published graph is missing. Save the loopy again.",
-          }),
-        );
-      }
-
-      return yield* this.parseGraph(bytes, hash);
-    });
+    return this.storedGraph(hash, ARTIFACT_LIMITS.graphBytes).pipe(
+      Effect.map(({ graph }) => graph),
+    );
   }
   revisionSource(slug: string, hash: string): Effect.Effect<SourceArtifact, RegistryError> {
     return Effect.gen({ self: this }, function* () {
-      const key = yield* sync("source key", () => {
-        validateSlug(slug);
-
-        return `sources/${slug}/${hashKey(hash)}.json`;
-      });
-
       const bytes = yield* this.artifacts
-        .read(key, ARTIFACT_LIMITS.sourceBytes)
+        .read(r2Key.source(slug, hash), ARTIFACT_LIMITS.sourceBytes)
         .pipe(Effect.mapError(registryError("read source")));
 
       const artifact: SourceArtifact = bytes
@@ -257,10 +235,8 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
   }
   getBundle(hash: string) {
     return Effect.gen({ self: this }, function* () {
-      const key = yield* sync("bundle key", () => `bundles/${hashKey(hash)}.js`);
-
       const bytes = yield* this.artifacts
-        .read(key, ARTIFACT_LIMITS.bundleBytes)
+        .read(r2Key.bundle(hash), ARTIFACT_LIMITS.bundleBytes)
         .pipe(Effect.mapError(registryError("read bundle")));
 
       if (!bytes) {
@@ -300,15 +276,15 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
 
       for (const bundle of bundles) {
         yield* this.artifacts
-          .put(`bundles/${bundle.bundleHash}.js`, bundle.bytes)
+          .put(r2Key.bundle(bundle.bundleHash), bundle.bytes)
           .pipe(Effect.mapError(registryError("write bundle")));
       }
 
       yield* this.artifacts
-        .put(`sources/${body.graph.name}/${body.revision}.json`, canonicalJson(sourceArtifact))
+        .put(r2Key.source(body.graph.name, body.revision), canonicalJson(sourceArtifact))
         .pipe(Effect.mapError(registryError("write source")));
       yield* this.artifacts
-        .put(`graphs/${body.revision}.json`, graph)
+        .put(r2Key.graph(body.revision), graph)
         .pipe(Effect.mapError(registryError("write graph")));
       yield* publicationSync("publish definition", () =>
         this.definitions.publish(body, previous, graph.byteLength),

@@ -3,7 +3,7 @@ import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import type { RunRecord, StoreEffect } from "@loopy/core";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Clock, Effect } from "effect";
-import { ArtifactStorage } from "../../../../apps/cloud/src/artifacts/storage";
+import { ImmutableBucket, r2Key } from "../../../../apps/cloud/src/artifacts/storage";
 import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
 import { EVENT_RETENTION } from "../../../runtime/src/store/event-outbox";
 import { paginationResponse } from "./cloud-pagination-probe";
@@ -68,7 +68,7 @@ export class CloudWorkerProbe {
 
   private async command(path: string) {
     if (path === "/r2") {
-      const storage = new ArtifactStorage(this.env.ARTIFACTS, "probe");
+      const storage = new ImmutableBucket(this.env.ARTIFACTS, r2Key.workspace("probe"));
       await Effect.runPromise(storage.put("immutable", "original"));
       await Effect.runPromise(storage.put("immutable", "replacement"));
 
@@ -76,7 +76,7 @@ export class CloudWorkerProbe {
         onlyIf: { etagDoesNotMatch: "*" },
       });
 
-      const other = new ArtifactStorage(this.env.ARTIFACTS, "other");
+      const other = new ImmutableBucket(this.env.ARTIFACTS, r2Key.workspace("other"));
 
       return {
         value: new TextDecoder().decode(

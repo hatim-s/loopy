@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { DOCKER_CONTEXT, root, SANDBOX_IMAGE } from "./constants";
+import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
+import { root } from "./constants";
 
 export type Child = ReturnType<typeof Bun.spawn>;
 
@@ -28,7 +29,7 @@ export function sandboxArgv(options: { worktree: string; stateRoot: string; port
     "--state-root",
     options.stateRoot,
     "--docker-context",
-    DOCKER_CONTEXT,
+    SANDBOX_DOCKER_CONTEXT,
     "--image",
     SANDBOX_IMAGE,
     "--port",
@@ -70,13 +71,22 @@ export function dashboardArgv(port: number) {
 
 export async function requireSandboxImage(image: string, env: Record<string, string | undefined>) {
   const inspection = Bun.spawn(
-    ["docker", "--context", DOCKER_CONTEXT, "image", "inspect", image, "--format", "{{.Id}}"],
+    [
+      "docker",
+      "--context",
+      SANDBOX_DOCKER_CONTEXT,
+      "image",
+      "inspect",
+      image,
+      "--format",
+      "{{.Id}}",
+    ],
     { env, stdout: "ignore", stderr: "ignore" },
   );
 
   if ((await inspection.exited) !== 0) {
     throw new Error(
-      `Docker image ${image} is unavailable in context ${DOCKER_CONTEXT}. Run bun run cloud:build-sandbox. No services started.`,
+      `Docker image ${image} is unavailable in context ${SANDBOX_DOCKER_CONTEXT}. Run bun run cloud:build-sandbox. No services started.`,
     );
   }
 }

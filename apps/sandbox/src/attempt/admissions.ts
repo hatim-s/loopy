@@ -1,15 +1,17 @@
+import type { Receipt } from "@loopy/contract";
 import {
   type AttemptRecord,
+  type AttemptResources,
   type AuthoritySession,
-  attemptResourceNames,
+  attemptId,
+  attemptRequestHash,
+  attemptResources,
   type DockerAttemptPlan,
-  type Receipt,
   type SandboxAttemptRequest,
-  workspaceVolumeInput,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { durationMs } from "@loopy/core";
 import { Effect, FiberMap, Result, Semaphore } from "effect";
-import { attemptHash, attemptId, validateBundles } from "../admission";
+import { validateBundles } from "../admission";
 import type { SandboxConfig } from "../config";
 import type { SandboxFailure } from "../operations";
 import { publicReceipt } from "../receipt-view";
@@ -74,13 +76,17 @@ export class AttemptAdmissions {
   start(request: SandboxAttemptRequest): Effect.Effect<Receipt, SandboxFailure> {
     return Effect.gen({ self: this }, function* () {
       yield* validateBundles(request);
-      const id = attemptId(this.options.config.stateRoot, request);
+      const id = yield* Effect.promise(() => attemptId(this.options.config.stateRoot, request));
 
       return yield* this.withAdmission(id, this.admit(id, request));
     });
   }
 
-  private plan(id: string, requestHash: string, request: SandboxAttemptRequest): DockerAttemptPlan {
+  private plan(
+    resources: AttemptResources,
+    requestHash: string,
+    request: SandboxAttemptRequest,
+  ): DockerAttemptPlan {
     const { config } = this.options;
     const spec = request.spec;
 
@@ -92,12 +98,11 @@ export class AttemptAdmissions {
             : durationMs(spec.node.options.timeout)) + (spec.parse ? 300_000 : 0);
 
     return {
-      id,
+      ...resources,
       requestHash,
       workspace: request.workspace,
       executionKey: request.executionKey,
       attempt: request.attempt,
-      ...attemptResourceNames(id, attemptHash(workspaceVolumeInput(config.stateRoot, request))),
       deadline: Date.now() + Math.min(timeout + 30_000, config.maxTimeoutMs),
     };
   }
@@ -171,7 +176,7 @@ export class AttemptAdmissions {
 
       if (Result.isFailure(admitted)) {
         yield* this.retain(plan, request);
-        const record = yield* stopping.retry(authority.read(plan.id));
+        const record = yield* stopping.retry(authority.read({ id: plan.id }));
 
         if (record === null) {
           return yield* Effect.fail(admitted.failure);
@@ -196,15 +201,15 @@ export class AttemptAdmissions {
     return Effect.gen({ self: this }, function* () {
       const { dependencies, exports, stopping } = this.options;
 
-      const requestHash = attemptHash({
-        ...request,
-        bundles: [...request.bundles].sort((a, b) => a.hash.localeCompare(b.hash)),
-      });
-
-      let record = yield* dependencies.authority.read(id);
+      const requestHash = yield* Effect.promise(() => attemptRequestHash(request));
+      let record = yield* dependencies.authority.read({ id });
 
       if (record === null) {
-        const plan = this.plan(id, requestHash, request);
+        const resources = yield* Effect.promise(() =>
+          attemptResources(this.options.config.stateRoot, request),
+        );
+
+        const plan = this.plan(resources, requestHash, request);
         yield* exports.reconcile(plan.volume);
 
         if (stopping.stopped) {

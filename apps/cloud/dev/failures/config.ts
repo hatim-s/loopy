@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { sha256Hex } from "../shared/hash";
+import { ownerOf } from "../../../sandbox/src/docker/identity";
 import { root } from "../stack/constants";
 import { toolEnvironment } from "../stack/environment";
 
@@ -9,7 +9,7 @@ export const runtime = resolve(state, "runtime-root");
 
 export const sandboxState = resolve(runtime, ".loopy/cloud/sandbox");
 
-export const owner = sha256Hex(sandboxState);
+export const owner = ownerOf(sandboxState);
 
 export const ports = { api: 14970, sandbox: 14971, inspector: 14973 } as const;
 

@@ -5,10 +5,10 @@ import type { AttemptDependenciesFactory } from "../../../sandbox/src/attempt/de
 import { sandboxConfigSchema } from "../../../sandbox/src/config";
 import { DockerBackend } from "../../../sandbox/src/docker";
 import { DockerClient } from "../../../sandbox/src/docker/client";
+import { SANDBOX_DOCKER_CONTEXT } from "../../../sandbox/src/docker/identity";
 import { filesystemStorage } from "../../../sandbox/src/filesystem";
 import { io } from "../../../sandbox/src/operations";
 import { startSandbox } from "../../../sandbox/src/server";
-import { DOCKER_CONTEXT } from "../stack/constants";
 import { config, profile, runtime, sandboxState } from "./config";
 import { CONCURRENCY } from "./plan";
 import { receiptAuthority, requireFreshDurableRoot } from "./receipt/selection";
@@ -20,7 +20,7 @@ const providerConfig = decodeBoundary(sandboxConfigSchema)({
   worktree: runtime,
   stateRoot: sandboxState,
   token: settings.sandboxToken,
-  dockerContext: DOCKER_CONTEXT,
+  dockerContext: SANDBOX_DOCKER_CONTEXT,
   image: profile.image,
   port: profile.sandboxPort,
 });

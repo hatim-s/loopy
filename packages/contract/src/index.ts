@@ -108,12 +108,6 @@ export * from "./graph";
 
 export { parseModuleOutput } from "./module-output";
 
-export * from "./sandbox";
-
-export * from "./sandbox-journal";
-
-export * from "./sandbox-journal-rpc";
-
 export {
   MAX_SOURCE_BYTES,
   MAX_SOURCE_FILES,

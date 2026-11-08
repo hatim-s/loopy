@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
+import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import type { AttemptDependencies } from "../../../apps/sandbox/src/attempt/dependencies";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
 import { stateLayout } from "../../../apps/sandbox/src/state-root";
-import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import {
   artifactReader,
   authorityFixture,
@@ -51,7 +51,7 @@ class UnavailableAfterAdmit extends FilesystemAuthority {
       return yield* Effect.fail(failure("fixture", new Error("Committed admission reply lost")));
     });
   }
-  override read(id: string) {
+  override read(input: AuthorityInput<"read">) {
     const baseread = super.read.bind(this);
 
     return Effect.gen({ self: this }, function* () {
@@ -61,7 +61,7 @@ class UnavailableAfterAdmit extends FilesystemAuthority {
         return yield* Effect.fail(failure("fixture", new Error("Authority remains unavailable")));
       }
 
-      return yield* baseread(id);
+      return yield* baseread(input);
     });
   }
 }

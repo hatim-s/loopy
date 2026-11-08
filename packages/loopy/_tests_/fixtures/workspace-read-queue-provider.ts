@@ -1,10 +1,5 @@
-import {
-  decodeBoundary,
-  type Json,
-  receiptSchema,
-  sandboxAttemptIdentitySchema,
-  sandboxAttemptRequestSchema,
-} from "@loopy/contract";
+import { decodeBoundary, type Json, receiptSchema } from "@loopy/contract";
+import { sandboxAttemptIdentitySchema, sandboxAttemptRequestSchema } from "@loopy/contract/sandbox";
 
 export type QueueProofDetails = Record<string, Json | undefined>;
 

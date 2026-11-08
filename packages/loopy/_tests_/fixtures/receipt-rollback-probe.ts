@@ -1,5 +1,6 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
-import { authorityOperations, decodeBoundary } from "@loopy/contract";
+import { decodeBoundary } from "@loopy/contract";
+import { authorityOperations } from "@loopy/contract/sandbox";
 import { Schema } from "effect";
 import { ReceiptAuthority } from "../../../../apps/cloud/src/receipts/authority";
 import { ReceiptSql } from "../../../../apps/cloud/src/receipts/sql";
@@ -22,7 +23,7 @@ export class ReceiptRollbackProbe {
 
     try {
       this.ctx.storage.transactionSync(() => {
-        authority.admit(input);
+        authority.admit(input, true);
         this.ctx.storage.sql
           .exec("INSERT INTO receipt_attempts SELECT * FROM receipt_attempts")
           .toArray();

@@ -6,10 +6,9 @@ import {
   positiveInt,
   struct,
 } from "@loopy/core";
-import { Schema } from "effect";
-import { boundedToken } from "./codec";
+import { Record as EffectRecord, Schema } from "effect";
+import { boundedToken } from "../codec";
 import {
-  type AuthoritySession,
   attemptRecordSchema,
   authorityFailureSchema,
   authoritySessionSchema,
@@ -18,7 +17,7 @@ import {
   finishedAttemptRecordSchema,
   resultRefSchema,
   startedAttemptRecordSchema,
-} from "./sandbox-journal";
+} from "./journal";
 
 const rejected = struct({ kind: Schema.Literal("rejected"), code: authorityFailureSchema });
 
@@ -26,7 +25,8 @@ const session = { session: authoritySessionSchema };
 
 export const authorityOperations = {
   status: {
-    input: struct({}),
+    // An empty Struct accepts any object fields; status takes none.
+    input: Schema.Record(Schema.String, Schema.Never),
     output: struct({ epoch: counter }),
   },
   openSession: {
@@ -83,7 +83,10 @@ export const authorityOperations = {
   },
   recoverable: {
     input: struct({
-      after: Schema.NullOr(Schema.String),
+      // Cursors name an attempt id (`a:`) or an export token (`e:`).
+      after: Schema.NullOr(
+        Schema.String.check(Schema.isPattern(/^[ae]:/)).check(Schema.isMaxLength(258)),
+      ),
       limit: positiveInt.check(Schema.isLessThanOrEqualTo(PAGE_LIMIT)),
     }),
     output: struct({
@@ -102,18 +105,6 @@ export type AuthorityOutput<K extends keyof typeof authorityOperations> = Schema
   (typeof authorityOperations)[K]["output"]
 >;
 
-export interface SandboxAttemptAuthority {
-  status(): Promise<AuthorityOutput<"status">>;
-  openSession(input: AuthorityInput<"openSession">): Promise<AuthoritySession>;
-  read(id: string): Promise<AuthorityOutput<"read">>;
-  admit(input: AuthorityInput<"admit">): Promise<AuthorityOutput<"admit">>;
-  complete(input: AuthorityInput<"complete">): Promise<AuthorityOutput<"complete">>;
-  beginExport(input: AuthorityInput<"beginExport">): Promise<AuthorityOutput<"beginExport">>;
-  endExport(input: AuthorityInput<"endExport">): Promise<void>;
-  exportGuards(input: AuthorityInput<"exportGuards">): Promise<AuthorityOutput<"exportGuards">>;
-  recoverable(input: AuthorityInput<"recoverable">): Promise<AuthorityOutput<"recoverable">>;
-}
-
 export const resultOperations = {
   resultPut: {
     input: struct({
@@ -128,32 +119,42 @@ export const resultOperations = {
   },
 };
 
-export const authorityCommandSchema = Schema.Union([
-  struct({ operation: Schema.Literal("status"), input: authorityOperations.status.input }),
-  struct({
-    operation: Schema.Literal("openSession"),
-    input: authorityOperations.openSession.input,
-  }),
-  struct({ operation: Schema.Literal("read"), input: authorityOperations.read.input }),
-  struct({ operation: Schema.Literal("admit"), input: authorityOperations.admit.input }),
-  struct({ operation: Schema.Literal("complete"), input: authorityOperations.complete.input }),
-  struct({
-    operation: Schema.Literal("beginExport"),
-    input: authorityOperations.beginExport.input,
-  }),
-  struct({ operation: Schema.Literal("endExport"), input: authorityOperations.endExport.input }),
-  struct({
-    operation: Schema.Literal("exportGuards"),
-    input: authorityOperations.exportGuards.input,
-  }),
-  struct({
-    operation: Schema.Literal("recoverable"),
-    input: authorityOperations.recoverable.input,
-  }),
-  struct({ operation: Schema.Literal("resultPut"), input: resultOperations.resultPut.input }),
-  struct({ operation: Schema.Literal("resultGet"), input: resultOperations.resultGet.input }),
-]);
+const operations = { ...authorityOperations, ...resultOperations };
+
+export type OperationName = keyof typeof operations;
+
+export type OperationInput<K extends OperationName> = Schema.Schema.Type<
+  (typeof operations)[K]["input"]
+>;
+
+export type OperationOutput<K extends OperationName> = Schema.Schema.Type<
+  (typeof operations)[K]["output"]
+>;
+
+export function operationOutput<K extends OperationName>(
+  operation: K,
+): (typeof operations)[K]["output"] {
+  return operations[operation].output;
+}
+
+type CommandSchema<K extends OperationName> = Schema.Struct<{
+  operation: Schema.Literal<K>;
+  input: (typeof operations)[K]["input"];
+}>;
+
+const commandSchema = <K extends OperationName>(operation: K): CommandSchema<K> =>
+  Schema.Struct({ operation: Schema.Literal(operation), input: operations[operation].input });
+
+export const authorityCommandSchema = Schema.Union(
+  // SAFETY: commandSchema pairs each operation literal with that operation's own input schema.
+  EffectRecord.keys(operations).map(commandSchema) as {
+    [K in OperationName]: CommandSchema<K>;
+  }[OperationName][],
+);
+
+/** Correlates each operation with its input so one handler table can serve every command. */
+export type AuthorityCommand<K extends OperationName = OperationName> = {
+  [P in K]: { readonly operation: P; readonly input: OperationInput<P> };
+}[K];
 
 export const authorityErrorSchema = struct({ error: authorityFailureSchema });
-
-export type AuthorityCommand = Schema.Schema.Type<typeof authorityCommandSchema>;

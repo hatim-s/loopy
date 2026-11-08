@@ -1,9 +1,11 @@
-import { decodeBoundary, sandboxAttemptRequestSchema } from "@loopy/contract";
+import { decodeBoundary } from "@loopy/contract";
+import { sandboxAttemptRequestSchema } from "@loopy/contract/sandbox";
 import { Cause, Effect, Exit } from "effect";
 import { DockerArtifacts } from "../../../sandbox/src/artifacts";
 import { Attempts } from "../../../sandbox/src/attempt";
 import { DockerBackend } from "../../../sandbox/src/docker";
 import { DockerClient } from "../../../sandbox/src/docker/client";
+import { ownerOf } from "../../../sandbox/src/docker/identity";
 import { filesystemStorage } from "../../../sandbox/src/filesystem";
 import { assert, equal } from "../shared/assert";
 import { sha256Hex } from "../shared/hash";
@@ -17,7 +19,6 @@ import {
   marker,
   oneReceipt,
   ownedContainer,
-  ownerOf,
   receipts,
   until,
 } from "./resources";
@@ -225,7 +226,7 @@ function prove(config: Config, mode: FaultMode, faults: TransportFaults) {
     return {
       mode,
       stateRoot: config.stateRoot,
-      owner: ownerOf(config),
+      owner: ownerOf(config.stateRoot),
       receiptId: original.id,
       container: original.container,
       dockerContainerId: before.Id,

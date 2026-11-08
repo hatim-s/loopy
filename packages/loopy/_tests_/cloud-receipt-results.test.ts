@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { decodeBoundary } from "@loopy/contract";
 import {
   type AuthorityCommand,
-  decodeBoundary,
+  AuthorityError,
   resultOperations,
   SANDBOX_MAX_CAPTURE_BYTES,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
+import { sha256Hex } from "@loopy/core";
 import { Effect } from "effect";
-import { receiptHash } from "../../../apps/cloud/src/receipts/identity";
 import {
   bridgeToken,
   namespace,
@@ -49,7 +50,7 @@ test("actual R2 request counts are one PUT on fresh publication and one GET for 
   }
 
   const session = { epoch: 1, nonce: "counts" };
-  const plan = harness.plan("counts");
+  const plan = await harness.plan("counts");
   await command({ operation: "openSession", input: { expectedEpoch: 0, nonce: session.nonce } });
   await command({ operation: "admit", input: { session, plan } });
   const value = { kind: "succeeded" as const, output: "counted", logs: [] };
@@ -84,9 +85,7 @@ test("R2 computes canonical hashes server-side, conditional-creates results and 
   }
 
   expect(object?.size).toBe(ref.size);
-  expect(await Effect.runPromise(receiptHash(new Uint8Array(await object.arrayBuffer())))).toBe(
-    ref.sha256,
-  );
+  expect(await sha256Hex(new Uint8Array(await object.arrayBuffer()))).toBe(ref.sha256);
 
   const collision = await bucket.put(key(ref.sha256), "replacement", {
     onlyIf: { etagDoesNotMatch: "*" },
@@ -104,12 +103,12 @@ test("SQL never publishes an unverified result pointer; orphan bytes leave the r
 
   const session = await Effect.runPromise(
     authority.openSession({
-      expectedEpoch: (await Effect.runPromise(authority.status())).epoch,
+      expectedEpoch: (await Effect.runPromise(authority.status({}))).epoch,
       nonce: "publication",
     }),
   );
 
-  const plan = harness.plan("publication");
+  const plan = await harness.plan("publication");
   await Effect.runPromise(authority.admit({ session, plan }));
   const missing = { sha256: "f".repeat(64), size: 20 };
   await expect(
@@ -117,7 +116,9 @@ test("SQL never publishes an unverified result pointer; orphan bytes leave the r
       authority.complete({ session, id: plan.id, requestHash: plan.requestHash, result: missing }),
     ),
   ).rejects.toThrow("HTTP 500");
-  expect(await Effect.runPromise(authority.read(plan.id))).toMatchObject({ kind: "started" });
+  expect(await Effect.runPromise(authority.read({ id: plan.id }))).toMatchObject({
+    kind: "started",
+  });
 
   const ref = await Effect.runPromise(
     authority
@@ -125,7 +126,9 @@ test("SQL never publishes an unverified result pointer; orphan bytes leave the r
       .put({ kind: "succeeded", output: "orphan-until-complete", logs: [] }),
   );
 
-  expect(await Effect.runPromise(authority.read(plan.id))).toMatchObject({ kind: "started" });
+  expect(await Effect.runPromise(authority.read({ id: plan.id }))).toMatchObject({
+    kind: "started",
+  });
   expect(
     await Effect.runPromise(
       authority.complete({ session, id: plan.id, requestHash: plan.requestHash, result: ref }),
@@ -151,11 +154,12 @@ test("SQL never publishes an unverified result pointer; orphan bytes leave the r
     kind: "existing",
     record: { kind: "finished" },
   });
-  await expect(
-    Effect.runPromise(
+  // A replayed completion matches the published pointer and does not reread its bytes.
+  expect(
+    await Effect.runPromise(
       authority.complete({ session, id: plan.id, requestHash: plan.requestHash, result: ref }),
     ),
-  ).rejects.toThrow("HTTP 500");
+  ).toMatchObject({ kind: "finished" });
 });
 
 test("missing, mismatched, malformed and oversized R2 results fail closed", async () => {
@@ -184,7 +188,7 @@ test("missing, mismatched, malformed and oversized R2 results fail closed", asyn
   const malformed = new TextEncoder().encode("{}");
 
   const badRef = {
-    sha256: await Effect.runPromise(receiptHash(malformed)),
+    sha256: await sha256Hex(malformed),
     size: malformed.byteLength,
   };
 
@@ -195,22 +199,12 @@ test("missing, mismatched, malformed and oversized R2 results fail closed", asyn
   ).rejects.toThrow("HTTP 400");
 });
 
-test("oversized canonical results become a bounded output_limit failure before publication", async () => {
+test("oversized canonical results are rejected as invalid_state before publication", async () => {
   const results = harness.authority.resultsFor("alpha");
 
-  const ref = await Effect.runPromise(
-    results.put({
-      kind: "succeeded",
-      output: "x".repeat(SANDBOX_MAX_CAPTURE_BYTES),
-      logs: [],
-    }),
-  );
-
-  expect(ref.size).toBeLessThan(256);
-  expect(await Effect.runPromise(results.get(ref))).toEqual({
-    kind: "failed",
-    error: { code: "output_limit", message: "Serialized attempt result exceeds 2 MiB." },
-    exitCode: null,
-    logs: [],
-  });
+  await expect(
+    Effect.runPromise(
+      results.put({ kind: "succeeded", output: "x".repeat(SANDBOX_MAX_CAPTURE_BYTES), logs: [] }),
+    ),
+  ).rejects.toEqual(new AuthorityError("invalid_state"));
 });

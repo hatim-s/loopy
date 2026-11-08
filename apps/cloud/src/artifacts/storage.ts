@@ -14,26 +14,28 @@ export const ARTIFACT_LIMITS = {
   metadataRowBytes: 2 * 1024 * 1024 - 1024,
 } as const;
 
-export class ArtifactStorage {
-  private readonly prefix: string;
+/** One key scheme for every immutable object this Worker stores in R2. */
+export const r2Key = {
+  workspace: (workspace: string) => `workspaces/${encodeURIComponent(workspace)}/`,
+  graph: (hash: string) => `graphs/${hash}.json`,
+  bundle: (hash: string) => `bundles/${hash}.js`,
+  source: (slug: string, hash: string) => `sources/${slug}/${hash}.json`,
+  results: (namespace: string, workspace: string) =>
+    `receipts/${encodeURIComponent(namespace)}/workspaces/${encodeURIComponent(workspace)}/results/`,
+};
 
+/** Write-once objects under one key prefix, read back within a byte limit. */
+export class ImmutableBucket {
   constructor(
     private readonly bucket: Pick<R2Bucket, "get" | "put">,
-    workspace: string,
-  ) {
-    if (workspace.length === 0 || workspace.length > 512) {
-      throw new Error("Workspace identity must contain between 1 and 512 characters.");
-    }
+    private readonly prefix: string,
+  ) {}
 
-    this.prefix = `workspaces/${encodeURIComponent(workspace)}/`;
-  }
-
+  /** Resolves false when the key already held an object, which callers may need to verify. */
   put(key: string, bytes: string | Uint8Array) {
-    return Effect.gen({ self: this }, function* () {
-      yield* platform("publish immutable bytes", () =>
-        this.bucket.put(this.prefix + key, bytes, { onlyIf: { etagDoesNotMatch: "*" } }),
-      );
-    });
+    return platform("publish immutable bytes", () =>
+      this.bucket.put(this.prefix + key, bytes, { onlyIf: { etagDoesNotMatch: "*" } }),
+    ).pipe(Effect.map((created) => created !== null));
   }
 
   read(key: string, limit: number) {
@@ -50,40 +52,19 @@ export class ArtifactStorage {
       }
 
       if (object.size > limit) {
-        yield* platform("cancel artifact read", () => object.body.cancel());
+        yield* platform("cancel immutable read", () => object.body.cancel());
 
         return yield* Effect.fail(
           new CloudError({
-            operation: "read artifact",
-            cause: `Artifact exceeds its ${limit} byte limit.`,
+            operation: "read immutable bytes",
+            cause: `Object exceeds its ${limit} byte limit.`,
           }),
         );
       }
 
-      const bytes = new Uint8Array(
-        yield* platform("read artifact bytes", () => object.arrayBuffer()),
-      );
-
-      if (bytes.byteLength > limit) {
-        return yield* Effect.fail(
-          new CloudError({
-            operation: "read artifact",
-            cause: `Artifact exceeds its ${limit} byte limit.`,
-          }),
-        );
-      }
-
-      return bytes;
+      return new Uint8Array(yield* platform("read immutable bytes", () => object.arrayBuffer()));
     });
   }
-}
-
-export function hashKey(hash: string): string {
-  if (!/^[a-f0-9]{64}$/.test(hash)) {
-    throw new Error("Invalid artifact hash. Save the loopy again.");
-  }
-
-  return hash;
 }
 
 export function bytesToBase64(bytes: Uint8Array): string {

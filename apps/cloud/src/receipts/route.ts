@@ -1,4 +1,5 @@
-import { decodeBoundary, SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract";
+import { decodeBoundary } from "@loopy/contract";
+import { SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract/sandbox";
 import { Effect, Schema } from "effect";
 import type { Environment } from "../environment";
 import { principals } from "../environment";

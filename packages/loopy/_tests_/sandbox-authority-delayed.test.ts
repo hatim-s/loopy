@@ -1,9 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import type { ExecutionResult } from "@loopy/contract";
+import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
-import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
 import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
 import { run } from "./fixtures/sandbox-run";

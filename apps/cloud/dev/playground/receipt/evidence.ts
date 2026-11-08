@@ -1,8 +1,12 @@
-import type { SandboxAttemptIdentity } from "@loopy/contract";
+import {
+  attemptId,
+  resultBytes,
+  resultRef,
+  type SandboxAttemptIdentity,
+  sameRef,
+} from "@loopy/contract/sandbox";
 import { Effect } from "effect";
-import { attemptHash } from "../../../../sandbox/src/admission";
-import { resultReference } from "../../../../sandbox/src/filesystem/results";
-import type { ResultsFor, SandboxAttemptAuthority } from "../../../../sandbox/src/operations";
+import type { ResultsFor, SandboxAttemptAuthority } from "../../../../sandbox/src/authority";
 
 export function receiptEvidence(options: {
   root: string;
@@ -11,18 +15,13 @@ export function receiptEvidence(options: {
   resultsFor: ResultsFor;
 }) {
   return Effect.gen(function* () {
-    const id = attemptHash({ root: options.root, ...options.identity });
-    const record = yield* options.authority.read(id);
+    const id = yield* Effect.promise(() => attemptId(options.root, options.identity));
+    const record = yield* options.authority.read({ id });
 
     if (
       !record ||
       record.plan.id !== id ||
-      attemptHash({
-        root: options.root,
-        workspace: record.plan.workspace,
-        executionKey: record.plan.executionKey,
-        attempt: record.plan.attempt,
-      }) !== id
+      (yield* Effect.promise(() => attemptId(options.root, record.plan))) !== id
     ) {
       return yield* Effect.fail(
         new Error("Authority evidence does not match the requested execution identity."),
@@ -36,9 +35,10 @@ export function receiptEvidence(options: {
     }
 
     const result = yield* options.resultsFor(options.identity.workspace).get(record.result.ref);
-    const observed = resultReference(result);
+    const bytes = resultBytes(result);
+    const observed = bytes && (yield* Effect.promise(() => resultRef(bytes)));
 
-    if (observed.sha256 !== record.result.ref.sha256 || observed.size !== record.result.ref.size) {
+    if (!observed || !sameRef(observed, record.result.ref)) {
       return yield* Effect.fail(
         new Error("Resolved terminal bytes do not match the authoritative result reference."),
       );
