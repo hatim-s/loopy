@@ -2,30 +2,27 @@ import { COMMANDS, example } from "./commands";
 import { clamp, EASE, eo, reducedMotion, ss } from "./motion";
 
 // The "how it works" stage: a terminal on the left, a canvas on the right, on
-// an 18 second clock. Capture 0 to 3.6, extract 3.6 to 7.9, run 7.9 to 17.5,
+// an 18 second clock. Source lines 0 to 3.6, graph 3.6 to 7.9, run 7.9 to 17.5,
 // then the stage fades and the cycle restarts. The three step rails above it
 // follow the same clock.
 
 const NS = "http://www.w3.org/2000/svg";
 
-type TraceRow = readonly [time: string, kind: string, body: string, nodeIndex?: number];
+type SourceRow = readonly [line: string, call: string, args: string, nodeIndex?: number];
 
-const TRACE: readonly TraceRow[] = [
-  ["09:12:03", "start", "codex session in ~/work/api"],
-  ["09:12:04", "user", '"patch the critical CVEs in our deps"'],
-  ["09:12:06", "exec", "bun audit --json", 0],
-  ["09:12:09", "read", "package.json"],
-  ["09:12:11", "think", "1 critical: lodash 4.17.20"],
-  ["09:12:12", "exec", "npm view lodash versions", 1],
-  ["09:12:15", "note", "4.17.21 fixes CVE-2021-23337"],
-  ["09:12:18", "edit", "package.json  lodash ^4.17.21", 2],
-  ["09:12:19", "exec", "bun install"],
-  ["09:12:31", "exec", "bun run check", 3],
-  ["09:12:58", "out", "412 passed, 0 failed"],
-  ["09:13:02", "user", '"diff looks right, push it"', 4],
-  ["09:13:04", "exec", "git push -u origin fix/lodash"],
-  ["09:13:07", "exec", "gh pr create --fill", 5],
-  ["09:13:09", "end", "session saved"],
+// The builder calls in cve-patch.loopy.ts. A row with a node index becomes that card.
+const SOURCE: readonly SourceRow[] = [
+  ["01", "loopy", '"cve-patch", { run }'],
+  ["02", "sh", '["bun", "audit", "--json"]', 0],
+  ["03", "code", '"pick", { in: { audit } }'],
+  ["04", "branch", "pick.patched = true", 1],
+  ["05", "sh", '["codex", "exec", pick.prompt]', 2],
+  ["06", "sh", '["bun", "install"]'],
+  ["07", "sh", '["bun", "run", "check"], { retry }', 3],
+  ["08", "wait", '"approve", { payload }', 4],
+  ["09", "sh", '["git", "push", "-u", "origin"]'],
+  ["10", "sh", '["gh", "pr", "create", "--fill"]', 5],
+  ["11", "return", "{ pr }"],
 ];
 
 type Kind = "agent" | "shell" | "route" | "verify" | "approval";
@@ -201,12 +198,12 @@ type Rect = Pt & { w: number; h: number };
 
 const rectOf = (p: Pt, w: number, h: number): Rect => ({ x: p.x, y: p.y, w, h });
 
-const captureK = (t: number, i: number) => eo(0, 0.35, t - (T.line0 + i * T.lineStep));
+const lineK = (t: number, i: number) => eo(0, 0.35, t - (T.line0 + i * T.lineStep));
 
 const quietFade = (t: number) => ss(T.fade0, T.fade1, t);
 
-function traceLog(parent: Element, x: number, y: number, lh: number) {
-  return TRACE.map((r, i) => {
+function sourceLines(parent: Element, x: number, y: number, lh: number) {
+  return SOURCE.map((r, i) => {
     const ly = y + i * lh;
 
     const g = el(
@@ -276,7 +273,7 @@ function makeCard(parent: Element, node: Node, w: number, h: number) {
 
 type Card = ReturnType<typeof makeCard>;
 
-// an edge draws itself (extract), lights up with the brand gradient (run) and can place the token along its length
+// an edge draws itself (graph), lights up with the brand gradient (run) and can place the token along its length
 function makeEdge(
   parent: Element,
   d: string,
@@ -361,7 +358,7 @@ const drawEdges = (edges: Edge[], t: number) => {
   });
 };
 
-// drift entrance: the card fades in with a small lift while its trace line fades out in place
+// drift entrance: the card fades in with a small lift while its source line fades out in place
 const entM = (t: number, i: number) => EASE(clamp((t - (T.E0 + i * T.STEP)) / T.DUR));
 
 function placeCard(i: number, t: number, to: Pt, card: Card, dim = 1) {
@@ -494,18 +491,18 @@ function terminal(parent: Element, x0: number, y0: number) {
 
   const TL: TermRow[] = [
     { t0: 0.2, kind: "cmd", text: example(COMMANDS.save), dur: 0.8 },
-    { t0: 1.1, kind: "out", text: "Compiling cve-patch.ts" },
-    { t0: 3.2, kind: "out", text: "Pinned revision 7f2c" },
-    { t0: 3.4, kind: "out", text: "Saved loopy cve-patch" },
+    { t0: 1.1, kind: "out", text: '"slug": "cve-patch",' },
+    { t0: 3.2, kind: "out", text: '"revision": "7f2c9e41…",' },
+    { t0: 3.4, kind: "out", text: '"source": "cve-patch.loopy.ts"' },
     { t0: 3.7, kind: "cmd", text: example(COMMANDS.graph), dur: 0.6 },
-    { t0: 6.6, kind: "out", text: "6 nodes, 5 edges" },
-    { t0: 6.8, kind: "out", text: "Every node points at its events" },
-    { t0: 7.0, kind: "out", text: "Ready to run" },
+    { t0: 6.6, kind: "out", text: "1:audit command [next -> 2:pick]" },
+    { t0: 6.8, kind: "out", text: "3:patched branch" },
+    { t0: 7.0, kind: "out", text: "8:approve wait [next -> 9:push]" },
     { t0: 7.2, kind: "cmd", text: example(COMMANDS.run), dur: 0.6 },
     ...R.ev.flatMap((e): TermRow[] =>
       e.log ? [{ t0: RUN0 + e.t, kind: "log", log: e.log, status: e.s }] : [],
     ),
-    { t0: RUN0 + R.total + 0.15, kind: "out", text: "Run #41 succeeded" },
+    { t0: RUN0 + R.total + 0.15, kind: "out", text: '"status": "succeeded"' },
   ];
 
   const lh = 22;
@@ -652,7 +649,7 @@ function layout(svg: SVGSVGElement, compact: boolean) {
   const gCd = el("g", {}, svg);
   const gRun = el("g", {}, svg);
 
-  const heads = ["Trace imp_7f2c", "Graph cve-patch", "Run #41"].map((s) => {
+  const heads = ["cve-patch.loopy.ts", "Graph cve-patch", "Run cve-patch"].map((s) => {
     const h = txt(svg, LX, 62, s, "tag");
     h.style.fontSize = "13px";
     h.style.fill = "var(--muted)";
@@ -661,7 +658,7 @@ function layout(svg: SVGSVGElement, compact: boolean) {
     return h;
   });
 
-  const lines = traceLog(gLn, LX, 106, 24);
+  const lines = sourceLines(gLn, LX, 106, 24);
   const cards = NODES.map((n) => makeCard(gCd, n, cw, ch));
   const edges = snakeEdges(gEd, pos, cw, ch);
   const run = makeRun(gRun, cards, edges, holds);
@@ -683,7 +680,7 @@ function layout(svg: SVGSVGElement, compact: boolean) {
     const { hold, focus } = holdOf(u);
     gEd.style.opacity = String(1 - 0.35 * hold);
     lines.forEach((l, i) => {
-      const k = captureK(t, i);
+      const k = lineK(t, i);
 
       if (l.ev == null) {
         l.g.style.opacity = String(k * (1 - quietFade(t)));
