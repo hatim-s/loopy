@@ -9,7 +9,7 @@ docker --context colima-loopy-cloud-phase1 build \
   --file apps/sandbox/Dockerfile --tag loopy-sandbox:bun-1.4.0 .
 ```
 
-The image uses the official `oven/bun:1.4.0` image for its build and runtime stages. It includes Bun and the base image's commands. Build a derived image when a workflow needs other executables, then pass its tag through `--image`.
+The image uses the official `oven/bun:1.4.0` image for its build and runtime stages. Its build stage installs from the repository `bun.lock` with `--frozen-lockfile`, and `Dockerfile.dockerignore` limits the context to package manifests, the lockfile and package sources. The runtime stage includes Bun, the base image's commands and the two bundled workers. In-container paths are defined in `src/container-layout.ts`. Build a derived image when a workflow needs other executables, then pass its tag through `--image`.
 
 Start the service with an existing private token of at least 32 characters in `LOOPY_SANDBOX_TOKEN`. From the real checkout directory, use its absolute path in both path flags:
 
