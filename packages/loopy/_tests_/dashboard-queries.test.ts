@@ -8,7 +8,7 @@ import { executionKeyString, type LogRecord, type NodeRun } from "@loopy/core";
 import { makeLocalService } from "@loopy/runtime/local";
 import { Effect } from "effect";
 import { newRun } from "./fixture";
-import { fixtureSqlite } from "./fixtures/service-runtime";
+import { fixtureStore } from "./fixtures/service-runtime";
 import { legacyDatabase } from "./fixtures/sqlite/legacy";
 import { memoryStore } from "./store-fixture";
 
@@ -20,15 +20,11 @@ afterEach(async () => {
   }
 });
 
-async function fixture(memory = false) {
+function fixture() {
   const root = mkdtempSync(join(tmpdir(), "loopy-query-"));
   mkdirSync(join(root, ".loopy", "loopies"), { recursive: true });
-  const sqlite = memory ? null : await fixtureSqlite(join(root, "runs.sqlite"));
-  const store = sqlite ?? memoryStore();
-  cleanups.push(async () => {
-    sqlite?.close();
-    rmSync(root, { recursive: true, force: true });
-  });
+  const store = memoryStore();
+  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
 
   const service = makeLocalService({
     store,
@@ -58,105 +54,104 @@ function node(attempt = 1): NodeRun {
   };
 }
 
-for (const memory of [false, true]) {
-  test(`${memory ? "portable" : "local"} keyset ties, filtered counts and zero-filled fractional windows`, async () => {
-    const { store } = await fixture(memory);
+test("keyset ties, filtered counts and zero-filled fractional windows", async () => {
+  const { store } = fixture();
 
-    for (const id of ["c", "a", "b"]) {
-      await Effect.runPromise(
-        store.createRun({ ...newRun(), id, status: "succeeded", output: null }),
-      );
-    }
-
-    const first = await Effect.runPromise(store.queryRuns({ now: newRun().createdAt, limit: 2 }));
-    expect(first.map((run) => run.id)).toEqual(["c", "b"]);
-
-    const second = await Effect.runPromise(
-      store.queryRuns({
-        now: newRun().createdAt,
-        limit: 2,
-        before: `${first[1]?.createdAt}|${first[1]?.id}`,
-      }),
-    );
-
-    expect(second.map((run) => run.id)).toEqual(["a"]);
-
-    const query = {
-      from: "2026-10-15T23:59:59.500Z",
-      to: "2026-10-16T00:02:59.500Z",
-      bucketSeconds: 60,
-    };
-
-    const summary = await Effect.runPromise(store.overview(query));
-    expect(summary.counts.succeeded).toBe(3);
-    expect(summary.buckets.map((bucket) => bucket.counts.succeeded)).toEqual([3, 0, 0]);
-    expect(
-      (await Effect.runPromise(store.overview({ ...query, slug: "absent" }))).counts.succeeded,
-    ).toBe(0);
-  });
-  test(`${memory ? "portable" : "local"} input and attempts persist, bulk reads omit input and selected detail keeps it`, async () => {
-    const { store, service } = await fixture(memory);
-    await Effect.runPromise(store.createRun(newRun()));
-    await Effect.runPromise(store.claim("run", "owner"));
+  for (const id of ["c", "a", "b"]) {
     await Effect.runPromise(
-      store.apply({
-        runId: "run",
-        token: "owner",
-        effects: [
-          { kind: "write_node_run", nodeRun: node(1) },
-          { kind: "write_node_run", nodeRun: node(2) },
-        ],
-      }),
+      store.createRun({ ...newRun(), id, status: "succeeded", output: null }),
     );
-    expect((await Effect.runPromise(store.getNodeRuns("run")))[0]?.inputView).toEqual({
-      state: "available",
-      value: { name: "attempt-2" },
-    });
+  }
 
-    const page = await Effect.runPromise(
-      store.nodePage("run", { scope: JSON.stringify(node().key.scope), limit: 1 }),
-    );
+  const first = await Effect.runPromise(store.queryRuns({ now: newRun().createdAt, limit: 2 }));
+  expect(first.map((run) => run.id)).toEqual(["c", "b"]);
 
-    expect(page.items[0]).not.toHaveProperty("inputView");
-    expect(page.items[0]).toMatchObject({ output: null });
-    expect(page.truncatedOutputs[executionKeyString(node().key)]).toBe(20002);
-    const detail = await Effect.runPromise(store.execution("run", executionKeyString(node().key)));
-    expect(detail?.node.inputView).toEqual({ state: "available", value: { name: "attempt-2" } });
-    expect(detail?.attempts.map((attempt) => attempt.inputView)).toEqual([
-      { state: "available", value: { name: "attempt-1" } },
-      { state: "available", value: { name: "attempt-2" } },
-    ]);
-    expect(detail?.truncatedAttempts).toEqual({ "1": 20002, "2": 20002 });
+  const second = await Effect.runPromise(
+    store.queryRuns({
+      now: newRun().createdAt,
+      limit: 2,
+      before: `${first[1]?.createdAt}|${first[1]?.id}`,
+    }),
+  );
 
-    const snapshot = decodeBoundary(routes.run.response)(
-      await Effect.runPromise(service.runSnapshot("run")),
-    );
+  expect(second.map((run) => run.id)).toEqual(["a"]);
 
-    expect(snapshot.nodeRuns).toEqual([]);
-    expect(snapshot.logs).toEqual([]);
-    expect(snapshot.scopes).toMatchObject([
-      { total: 1, totalKind: "materialized", counts: { succeeded: 1 } },
-    ]);
+  const query = {
+    from: "2026-10-15T23:59:59.500Z",
+    to: "2026-10-16T00:02:59.500Z",
+    bucketSeconds: 60,
+  };
 
-    const events = await Effect.runPromise(
-      service.events(await Effect.runPromise(store.events(0, 20))),
-    );
+  const summary = await Effect.runPromise(store.overview(query));
+  expect(summary.counts.succeeded).toBe(3);
+  expect(summary.buckets.map((bucket) => bucket.counts.succeeded)).toEqual([3, 0, 0]);
+  expect(
+    (await Effect.runPromise(store.overview({ ...query, slug: "absent" }))).counts.succeeded,
+  ).toBe(0);
+});
 
-    expect(
-      events
-        .filter((event) => event.entity === "node")
-        .every((event) => !("inputView" in event.record)),
-    ).toBe(true);
-    const nodeEvent = events.find((event) => event.entity === "node");
-    expect(nodeEvent).toMatchObject({ truncatedOutputBytes: 20002, record: { output: null } });
-    const lazy = await Effect.runPromise(service.event(nodeEvent?.sequence ?? 0));
-    expect(lazy.record).not.toHaveProperty("inputView");
-    expect(lazy.record).toMatchObject({ output: "x".repeat(20000) });
+test("input and attempts persist, bulk reads omit input and selected detail keeps it", async () => {
+  const { store, service } = fixture();
+  await Effect.runPromise(store.createRun(newRun()));
+  await Effect.runPromise(store.claim("run", "owner"));
+  await Effect.runPromise(
+    store.apply({
+      runId: "run",
+      token: "owner",
+      effects: [
+        { kind: "write_node_run", nodeRun: node(1) },
+        { kind: "write_node_run", nodeRun: node(2) },
+      ],
+    }),
+  );
+  expect((await Effect.runPromise(store.getNodeRuns("run")))[0]?.inputView).toEqual({
+    state: "available",
+    value: { name: "attempt-2" },
   });
-}
+
+  const page = await Effect.runPromise(
+    store.nodePage("run", { scope: JSON.stringify(node().key.scope), limit: 1 }),
+  );
+
+  expect(page.items[0]).not.toHaveProperty("inputView");
+  expect(page.items[0]).toMatchObject({ output: null });
+  expect(page.truncatedOutputs[executionKeyString(node().key)]).toBe(20002);
+  const detail = await Effect.runPromise(store.execution("run", executionKeyString(node().key)));
+  expect(detail?.node.inputView).toEqual({ state: "available", value: { name: "attempt-2" } });
+  expect(detail?.attempts.map((attempt) => attempt.inputView)).toEqual([
+    { state: "available", value: { name: "attempt-1" } },
+    { state: "available", value: { name: "attempt-2" } },
+  ]);
+  expect(detail?.truncatedAttempts).toEqual({ "1": 20002, "2": 20002 });
+
+  const snapshot = decodeBoundary(routes.run.response)(
+    await Effect.runPromise(service.runSnapshot("run")),
+  );
+
+  expect(snapshot.nodeRuns).toEqual([]);
+  expect(snapshot.logs).toEqual([]);
+  expect(snapshot.scopes).toMatchObject([
+    { total: 1, totalKind: "materialized", counts: { succeeded: 1 } },
+  ]);
+
+  const events = await Effect.runPromise(
+    service.events(await Effect.runPromise(store.events(0, 20))),
+  );
+
+  expect(
+    events
+      .filter((event) => event.entity === "node")
+      .every((event) => !("inputView" in event.record)),
+  ).toBe(true);
+  const nodeEvent = events.find((event) => event.entity === "node");
+  expect(nodeEvent).toMatchObject({ truncatedOutputBytes: 20002, record: { output: null } });
+  const lazy = await Effect.runPromise(service.event(nodeEvent?.sequence ?? 0));
+  expect(lazy.record).not.toHaveProperty("inputView");
+  expect(lazy.record).toMatchObject({ output: "x".repeat(20000) });
+});
 
 test("SQLite bounded scans continue through no-match pages and full log text search stays lazy", async () => {
-  const { store, service } = await fixture();
+  const { store, service } = fixture();
   await Effect.runPromise(store.createRun(newRun()));
   await Effect.runPromise(store.claim("run", "owner"));
 
@@ -247,7 +242,7 @@ test("schema 14 upgrade preserves epoch, outbox, log identity, output and exact 
     "INSERT INTO events(at,txn,entity,kind,run_id,record) VALUES (?,'retained-txn','node','succeeded','run',?)",
   ).run(record.startedAt, JSON.stringify(record));
   db.close();
-  const store = await fixtureSqlite(file);
+  const store = await fixtureStore(root);
   cleanups.push(() => Effect.runPromise(store.close()));
   expect(await Effect.runPromise(store.epoch())).toBe("retained");
   expect((await Effect.runPromise(store.logDetail(1)))?.log).toEqual(log);
@@ -275,7 +270,7 @@ test("schema 14 upgrade preserves epoch, outbox, log identity, output and exact 
 });
 
 test("run lists and streamed run records preview large payloads with explicit byte counts", async () => {
-  const { store, service } = await fixture();
+  const { store, service } = fixture();
   const large = "x".repeat(100000);
   await Effect.runPromise(
     store.createRun({ ...newRun(), input: { large }, status: "succeeded", output: { large } }),
@@ -305,7 +300,7 @@ test("run lists and streamed run records preview large payloads with explicit by
 });
 
 test("failed transactional batches roll back retained attempts and log usage with their outbox", async () => {
-  const { root, store } = await fixture();
+  const { store } = fixture();
   await Effect.runPromise(store.createRun(newRun()));
   await Effect.runPromise(store.claim("run", "owner"));
   await Effect.runPromise(
@@ -315,8 +310,7 @@ test("failed transactional batches roll back retained attempts and log usage wit
       effects: [{ kind: "write_node_run", nodeRun: node(1) }],
     }),
   );
-  const db = new Database(join(root, "runs.sqlite"));
-  db.exec(
+  store.driver.exec(
     "CREATE TRIGGER reject_finished BEFORE INSERT ON events WHEN NEW.entity='run' AND NEW.kind='finished' BEGIN SELECT RAISE(ABORT,'blocked finish'); END",
   );
   await expect(
@@ -348,8 +342,7 @@ test("failed transactional batches roll back retained attempts and log usage wit
     ),
   ).toEqual([1]);
   expect(await Effect.runPromise(store.getLogs("run"))).toEqual([]);
-  db.exec("DROP TRIGGER reject_finished");
-  db.close();
+  store.driver.exec("DROP TRIGGER reject_finished");
   await Effect.runPromise(
     store.apply({
       runId: "run",
@@ -381,7 +374,7 @@ test("a rejected schema migration preserves the old records, epoch and version",
     "INSERT INTO events(at,txn,entity,kind,record) VALUES (?,'txn','node','succeeded','{broken')",
   ).run(newRun().createdAt);
   db.close();
-  await expect(fixtureSqlite(file)).rejects.toThrow("malformed JSON");
+  await expect(fixtureStore(root)).rejects.toThrow("malformed JSON");
   const unchanged = new Database(file, { readonly: true });
   expect(unchanged.query("PRAGMA user_version").get()).toEqual({ user_version: 14 });
   expect(unchanged.query("SELECT value FROM meta WHERE key='epoch'").get()).toEqual({
@@ -440,7 +433,7 @@ for (const version of [13, 14] as const) {
       JSON.stringify({ ...log, position: { ...log.position, executionKey: "missing" } }),
     );
     db.close();
-    const store = await fixtureSqlite(file);
+    const store = await fixtureStore(root);
     cleanups.push(() => Effect.runPromise(store.close()));
     expect(await Effect.runPromise(store.epoch())).toBe("retained-epoch");
     const migrated = await Effect.runPromise(store.eventPage({ nodeId: "work", limit: 50 }));

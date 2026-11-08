@@ -1,7 +1,7 @@
+import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { type SqlOwnerPolicy, SqlRunStore } from "@loopy/runtime/store/portable";
 import { Clock, Effect, Exit, Scope } from "effect";
 import { BunSqlDriver } from "../../runtime/src/store/sqlite/bun-driver";
-import { makeSqliteRunStore, type SqliteRunStore } from "../../runtime/src/store/sqlite/store";
 
 // No owner is alive, so a lease expires on time alone, as it does for cloud owners.
 export const NEVER_ALIVE: SqlOwnerPolicy = {
@@ -11,8 +11,13 @@ export const NEVER_ALIVE: SqlOwnerPolicy = {
 
 /** A private in-memory SQLite store. Subclass it to observe or fail one store method. */
 export class MemorySqlStore extends SqlRunStore {
+  /** Seeds rows that would take too long to commit one write at a time. */
+  readonly driver: BunSqlDriver;
+
   constructor(options: { leaseMs?: number } = {}) {
-    super(new BunSqlDriver(":memory:"), { owner: NEVER_ALIVE, ...options });
+    const driver = new BunSqlDriver(":memory:");
+    super(driver, { owner: NEVER_ALIVE, ...options });
+    this.driver = driver;
   }
 }
 
@@ -42,10 +47,14 @@ export function runAt(now: () => number) {
     Effect.runPromise(effect.pipe(Effect.provideService(Clock.Clock, clock)));
 }
 
+/**
+ * Local stores as the daemon opens them. Bun evaluates a shared module once per process, so each
+ * test file calls this itself and registers closeTestStores in its own afterEach.
+ */
 export function createTestStores() {
-  const scopes = new Map<SqliteRunStore, Scope.Closeable>();
+  const scopes = new Map<SqlRunStore, Scope.Closeable>();
 
-  const closeTestStore = (store: SqliteRunStore) => {
+  const closeTestStore = (store: SqlRunStore) => {
     const scope = scopes.get(store);
 
     if (scope) {

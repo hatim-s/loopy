@@ -88,175 +88,173 @@ async function prepare(store: Store) {
   );
 }
 
-for (const kind of ["portable", "local"] as const) {
-  test(`${kind} signal validates payload, resolves once, and commits node/hook/wake together`, async () => {
-    const store = kind === "portable" ? memoryStore() : (await sqlite()).store;
+test("signal validates payload, resolves once, and commits node/hook/wake together", async () => {
+  const store = memoryStore();
 
-    await prepare(store);
-    const wait = (await run(store.getWaits("run")))[0];
+  await prepare(store);
+  const wait = (await run(store.getWaits("run")))[0];
 
-    if (!wait) {
-      throw new Error("Missing wait.");
-    }
+  if (!wait) {
+    throw new Error("Missing wait.");
+  }
 
-    const cursor = await run(store.eventCursor());
-    expect(
-      await run(store.resolveWait({ token: wait.token, payload: { approved: "yes" }, at })),
-    ).toMatchObject({ kind: "rejected", code: "bad_request" });
-    expect(await run(store.eventCursor())).toEqual(cursor);
-    expect(
-      await run(
-        store.resolveWait({
-          token: wait.token,
-          payload: { approved: true, oversized: "x".repeat(1024 * 1024) },
-          at,
-        }),
-      ),
-    ).toMatchObject({
-      kind: "rejected",
-      code: "bad_request",
-      message: "Wait payload exceeds the 1 MiB inline limit.",
-    });
-    expect(await run(store.eventCursor())).toEqual(cursor);
-
-    const results = await Promise.all([
-      run(store.resolveWait({ token: wait.token, payload: { approved: true }, at })),
-      run(store.resolveWait({ token: wait.token, payload: { approved: false }, at })),
-    ]);
-
-    expect(results.map((result) => result.kind)).toEqual(["resolved", "rejected"]);
-    await run(store.release("run", "owner"));
-    expect(await run(store.getRun("run"))).toMatchObject({
-      status: "suspended",
-      wakeAt: at,
-    });
-    expect((await run(store.getRun("run")))?.owner).toBeUndefined();
-    expect(await run(store.dueRuns(at))).toHaveLength(1);
-    expect(await run(store.getNodeRuns("run"))).toMatchObject([
-      { status: "succeeded", output: { approved: true } },
-    ]);
-    expect(await run(store.getWaits("run"))).toMatchObject([
-      { resolvedAt: at, payload: { approved: true } },
-    ]);
-    const events = await run(store.events(cursor.cursor, 20));
-    const resolved = events.find((event) => event.entity === "hook" && event.kind === "resolved");
-    expect(
-      events.filter((event) => event.txn === resolved?.txn).map((event) => event.entity),
-    ).toEqual(["hook", "node", "run"]);
-  });
-  test(`${kind} deadline wins at equality, timeout expires hook, and cancellation rejects signals`, async () => {
-    const store = kind === "portable" ? memoryStore() : (await sqlite()).store;
-
-    await prepare(store);
-    const wait = (await run(store.getWaits("run")))[0];
-
-    if (!wait) {
-      throw new Error("Missing wait.");
-    }
-
-    expect(
-      await run(
-        store.resolveWait({ token: wait.token, payload: { approved: true }, at: deadline }),
-      ),
-    ).toMatchObject({ kind: "rejected", code: "unknown_hook" });
-    await run(store.release("run", "owner"));
-    await run(store.claim("run", "timeout"));
+  const cursor = await run(store.eventCursor());
+  expect(
+    await run(store.resolveWait({ token: wait.token, payload: { approved: "yes" }, at })),
+  ).toMatchObject({ kind: "rejected", code: "bad_request" });
+  expect(await run(store.eventCursor())).toEqual(cursor);
+  expect(
     await run(
-      store.apply({
-        runId: "run",
-        token: "timeout",
-        effects: [
-          {
-            kind: "write_node_run",
-            nodeRun: {
-              key: waiting().key,
-              attempt: 1,
-              maxAttempts: 1,
-              receipt: "none",
-              startedAt: at,
-              status: "failed",
-              endedAt: deadline,
-              error: { code: "execution", message: "Wait timed out." },
-            },
+      store.resolveWait({
+        token: wait.token,
+        payload: { approved: true, oversized: "x".repeat(1024 * 1024) },
+        at,
+      }),
+    ),
+  ).toMatchObject({
+    kind: "rejected",
+    code: "bad_request",
+    message: "Wait payload exceeds the 1 MiB inline limit.",
+  });
+  expect(await run(store.eventCursor())).toEqual(cursor);
+
+  const results = await Promise.all([
+    run(store.resolveWait({ token: wait.token, payload: { approved: true }, at })),
+    run(store.resolveWait({ token: wait.token, payload: { approved: false }, at })),
+  ]);
+
+  expect(results.map((result) => result.kind)).toEqual(["resolved", "rejected"]);
+  await run(store.release("run", "owner"));
+  expect(await run(store.getRun("run"))).toMatchObject({
+    status: "suspended",
+    wakeAt: at,
+  });
+  expect((await run(store.getRun("run")))?.owner).toBeUndefined();
+  expect(await run(store.dueRuns(at))).toHaveLength(1);
+  expect(await run(store.getNodeRuns("run"))).toMatchObject([
+    { status: "succeeded", output: { approved: true } },
+  ]);
+  expect(await run(store.getWaits("run"))).toMatchObject([
+    { resolvedAt: at, payload: { approved: true } },
+  ]);
+  const events = await run(store.events(cursor.cursor, 20));
+  const resolved = events.find((event) => event.entity === "hook" && event.kind === "resolved");
+  expect(
+    events.filter((event) => event.txn === resolved?.txn).map((event) => event.entity),
+  ).toEqual(["hook", "node", "run"]);
+});
+
+test("deadline wins at equality, timeout expires hook, and cancellation rejects signals", async () => {
+  const store = memoryStore();
+
+  await prepare(store);
+  const wait = (await run(store.getWaits("run")))[0];
+
+  if (!wait) {
+    throw new Error("Missing wait.");
+  }
+
+  expect(
+    await run(store.resolveWait({ token: wait.token, payload: { approved: true }, at: deadline })),
+  ).toMatchObject({ kind: "rejected", code: "unknown_hook" });
+  await run(store.release("run", "owner"));
+  await run(store.claim("run", "timeout"));
+  await run(
+    store.apply({
+      runId: "run",
+      token: "timeout",
+      effects: [
+        {
+          kind: "write_node_run",
+          nodeRun: {
+            key: waiting().key,
+            attempt: 1,
+            maxAttempts: 1,
+            receipt: "none",
+            startedAt: at,
+            status: "failed",
+            endedAt: deadline,
+            error: { code: "execution", message: "Wait timed out." },
           },
-        ],
-      }),
-    );
-    expect(await run(store.getWaits("run"))).toMatchObject([{ expiredAt: deadline }]);
-    await run(
-      store.apply({
-        runId: "run",
-        token: "timeout",
-        effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at }],
-      }),
-    );
-    expect(
-      await run(store.resolveWait({ token: wait.token, payload: { approved: true }, at })),
-    ).toMatchObject({ kind: "rejected", code: "unknown_hook" });
-  });
-  test(`${kind} wait registration is idempotent and scoped, and failed batches roll back`, async () => {
-    const store = kind === "portable" ? memoryStore() : (await sqlite()).store;
+        },
+      ],
+    }),
+  );
+  expect(await run(store.getWaits("run"))).toMatchObject([{ expiredAt: deadline }]);
+  await run(
+    store.apply({
+      runId: "run",
+      token: "timeout",
+      effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at }],
+    }),
+  );
+  expect(
+    await run(store.resolveWait({ token: wait.token, payload: { approved: true }, at })),
+  ).toMatchObject({ kind: "rejected", code: "unknown_hook" });
+});
 
-    await prepare(store);
-    await run(store.release("run", "owner"));
-    await run(store.claim("run", "owner2"));
+test("wait registration is idempotent and scoped, and failed batches roll back", async () => {
+  const store = memoryStore();
 
-    const register = {
-      kind: "register_wait",
-      executionKey: waiting().key,
-      name: "approve",
-      payload: { kind: "value", type: "boolean" },
-      at,
-    } as const;
+  await prepare(store);
+  await run(store.release("run", "owner"));
+  await run(store.claim("run", "owner2"));
 
-    await run(store.apply({ runId: "run", token: "owner2", effects: [register] }));
-    expect(await run(store.getWaits("run"))).toHaveLength(1);
+  const register = {
+    kind: "register_wait",
+    executionKey: waiting().key,
+    name: "approve",
+    payload: { kind: "value", type: "boolean" },
+    at,
+  } as const;
 
-    const rejected = await Effect.runPromiseExit(
-      store.apply({
-        runId: "run",
-        token: "owner2",
-        effects: [
-          { kind: "write_node_run", nodeRun: waiting(1) },
-          { ...register, executionKey: waiting(1).key },
-          { ...register, executionKey: { ...waiting().key, runId: "other" } },
-        ],
-      }),
-    );
+  await run(store.apply({ runId: "run", token: "owner2", effects: [register] }));
+  expect(await run(store.getWaits("run"))).toHaveLength(1);
 
-    expect(Exit.isFailure(rejected)).toBe(true);
+  const rejected = await Effect.runPromiseExit(
+    store.apply({
+      runId: "run",
+      token: "owner2",
+      effects: [
+        { kind: "write_node_run", nodeRun: waiting(1) },
+        { ...register, executionKey: waiting(1).key },
+        { ...register, executionKey: { ...waiting().key, runId: "other" } },
+      ],
+    }),
+  );
 
-    if (!Exit.isFailure(rejected)) {
-      throw new Error("Expected a rejected cross-run wait batch.");
-    }
+  expect(Exit.isFailure(rejected)).toBe(true);
 
-    expect(Cause.hasDies(rejected.cause)).toBe(true);
-    expect(Cause.squash(rejected.cause)).toMatchObject({ message: "Wait belongs to another run." });
-    expect(await run(store.getWaits("run"))).toHaveLength(1);
-    expect(await run(store.getNodeRuns("run"))).toHaveLength(1);
-    await run(
-      store.apply({
-        runId: "run",
-        token: "owner2",
-        effects: [
-          { kind: "write_node_run", nodeRun: waiting(1) },
-          { ...register, executionKey: waiting(1).key },
-        ],
-      }),
-    );
-    const waits = await run(store.getWaits("run"));
-    expect(waits).toHaveLength(2);
-    expect(waits[0]?.token).not.toEqual(waits[1]?.token);
-    await run(
-      store.apply({
-        runId: "run",
-        token: "owner2",
-        effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at }],
-      }),
-    );
-    expect((await run(store.getWaits("run"))).every((wait) => wait.expiredAt === at)).toBe(true);
-  });
-}
+  if (!Exit.isFailure(rejected)) {
+    throw new Error("Expected a rejected cross-run wait batch.");
+  }
+
+  expect(Cause.hasDies(rejected.cause)).toBe(true);
+  expect(Cause.squash(rejected.cause)).toMatchObject({ message: "Wait belongs to another run." });
+  expect(await run(store.getWaits("run"))).toHaveLength(1);
+  expect(await run(store.getNodeRuns("run"))).toHaveLength(1);
+  await run(
+    store.apply({
+      runId: "run",
+      token: "owner2",
+      effects: [
+        { kind: "write_node_run", nodeRun: waiting(1) },
+        { ...register, executionKey: waiting(1).key },
+      ],
+    }),
+  );
+  const waits = await run(store.getWaits("run"));
+  expect(waits).toHaveLength(2);
+  expect(waits[0]?.token).not.toEqual(waits[1]?.token);
+  await run(
+    store.apply({
+      runId: "run",
+      token: "owner2",
+      effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at }],
+    }),
+  );
+  expect((await run(store.getWaits("run"))).every((wait) => wait.expiredAt === at)).toBe(true);
+});
 
 test("sqlite reopen retains accepted payload and wake without a second resolution", async () => {
   const { store, file } = await sqlite();
