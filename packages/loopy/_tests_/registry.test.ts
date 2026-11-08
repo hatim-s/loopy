@@ -111,7 +111,7 @@ test("stale registry entries are ignored and replaced without preserving the old
   const file = join(registry.projectDirectory, "saved.json");
   writeFileSync(file, JSON.stringify({ slug: "saved", source: "different", bundleHash: "old" }));
   expect(Effect.runSync(registry.list())).toEqual([]);
-  expect(() => Effect.runSync(registry.get("saved"))).toThrow("No saved loopy");
+  expect(Effect.runSync(registry.get("saved"))).toBeNull();
   Effect.runSync(registry.save(await compiledBody("saved", f.source)));
   expect(Effect.runSync(registry.get("saved"))).toMatchObject({
     version: 3,
