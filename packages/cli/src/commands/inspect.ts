@@ -12,6 +12,6 @@ export const inspect = defineCommand({
   run: (cli) =>
     Effect.gen(function* () {
       const [id] = cli.args;
-      printJson(yield* request(cli, `/runs/${encodeURIComponent(id)}`, routes.run.response));
+      printJson(yield* request(cli, routes.run, { params: { id } }));
     }),
 });

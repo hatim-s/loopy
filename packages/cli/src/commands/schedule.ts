@@ -35,33 +35,25 @@ export const schedule = defineCommand({
         });
       }
 
-      const path = `/loopies/${encodeURIComponent(slug)}/schedule`;
-      const workspace = `?workspace=${encodeURIComponent(cli.cwd)}`;
+      const target = { params: { slug }, query: { workspace: cli.cwd } };
 
       if (off) {
-        printJson(
-          yield* request(cli, `${path}${workspace}`, routes.deleteSchedule.response, {
-            method: "DELETE",
-          }),
-        );
+        printJson(yield* request(cli, routes.deleteSchedule, target));
 
         return;
       }
 
       if (enable || disable) {
         printJson(
-          yield* request(cli, `${path}/enabled${workspace}`, routes.setScheduleEnabled.response, {
-            method: "POST",
-            body: { enabled: enable },
-          }),
+          yield* request(cli, routes.setScheduleEnabled, { ...target, body: { enabled: enable } }),
         );
 
         return;
       }
 
       printJson(
-        yield* request(cli, `${path}${workspace}`, routes.putSchedule.response, {
-          method: "PUT",
+        yield* request(cli, routes.putSchedule, {
+          ...target,
           body: { cron, tz, input: yield* jsonInput(cli) },
         }),
       );

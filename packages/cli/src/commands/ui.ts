@@ -1,4 +1,5 @@
-import { DEFAULT_PORT, daemonUrl, readDaemonFile } from "@loopy/runtime/local";
+import { DEFAULT_PORT } from "@loopy/contract";
+import { daemonUrl, readDaemonFile } from "@loopy/runtime/local";
 import { Effect } from "effect";
 import { defineCommand } from "../command";
 import { CliError, cliSync } from "../errors";

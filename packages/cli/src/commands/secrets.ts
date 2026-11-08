@@ -1,6 +1,5 @@
-import { routes } from "@loopy/contract";
+import { decodeBoundary, routes, secretValueSchema } from "@loopy/contract";
 import { validateSecretName } from "@loopy/core";
-import { validateSecretValue } from "@loopy/runtime/local";
 import { Effect } from "effect";
 import { request } from "../client";
 import { defineCommand } from "../command";
@@ -23,13 +22,8 @@ export const secretsSet = defineCommand({
       // Reject a bad name before asking for a hidden value.
       yield* cliSync(() => validateSecretName(name));
       const value = yield* readSecret(cli.values.stdin);
-      yield* cliSync(() => validateSecretValue(value));
-      printJson(
-        yield* request(cli, `/secrets/${encodeURIComponent(name)}`, routes.putSecret.response, {
-          method: "PUT",
-          body: { value },
-        }),
-      );
+      yield* cliSync(() => decodeBoundary(secretValueSchema)(value));
+      printJson(yield* request(cli, routes.putSecret, { params: { name }, body: { value } }));
     }),
 });
 
@@ -40,7 +34,7 @@ export const secretsList = defineCommand({
   positionals: [],
   run: (cli) =>
     Effect.gen(function* () {
-      printJson(yield* request(cli, "/secrets", routes.secrets.response));
+      printJson(yield* request(cli, routes.secrets, {}));
     }),
 });
 
@@ -52,10 +46,6 @@ export const secretsRemove = defineCommand({
   run: (cli) =>
     Effect.gen(function* () {
       const [name] = cli.args;
-      printJson(
-        yield* request(cli, `/secrets/${encodeURIComponent(name)}`, routes.deleteSecret.response, {
-          method: "DELETE",
-        }),
-      );
+      printJson(yield* request(cli, routes.deleteSecret, { params: { name } }));
     }),
 });
