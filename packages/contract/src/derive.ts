@@ -3,12 +3,11 @@ import {
   type Json,
   MAX_PREVIEW_BYTES,
   outputBytes,
-  type PendingHook,
   type RunRecord,
   type RuntimeEvent,
   type Schedule,
 } from "@loopy/core";
-import type { RunPreview, StatusCounts } from "./dashboard-reader";
+import type { PendingHook, RunPreview, StatusCounts } from "./dashboard-reader";
 import type { GraphView } from "./graph";
 import type { LoopyView, RunView, ServerEvent } from "./views";
 

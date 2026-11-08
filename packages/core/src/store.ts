@@ -6,9 +6,6 @@ import type { Json } from "./json";
 import type { LogRecord, RunRecord, RuntimeEvent, Schedule, WaitRecord } from "./model";
 import type { RateLimitResult } from "./rate-limit";
 
-// Every page and snapshot list shares this cap, so a full list can be told from a truncated one.
-export const PAGE_LIMIT = 200;
-
 export class StorageError extends Data.TaggedError("StorageError")<{
   readonly operation: string;
   readonly reason: "unavailable" | "corrupt" | "rejected";

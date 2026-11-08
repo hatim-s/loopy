@@ -1,12 +1,13 @@
 import {
   decodeRunCursor,
   type OverviewQuery,
+  type PendingHook,
   type RunDefinitionCount,
   type RunPageQuery,
   type RunPreview,
   type StatusCounts,
 } from "@loopy/contract";
-import { MAX_PREVIEW_BYTES, type PendingHook, type RunRecord, waitRecordSchema } from "@loopy/core";
+import { MAX_PREVIEW_BYTES, type RunRecord, waitRecordSchema } from "@loopy/core";
 import { Schema } from "effect";
 import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";

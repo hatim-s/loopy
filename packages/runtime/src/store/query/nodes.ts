@@ -1,11 +1,12 @@
 import {
   executionKeySchema,
   type NodePageQuery,
+  PAGE_LIMIT,
   type ScopeCountsView,
   type ScopeItemsPage,
   type ScopeItemsQuery,
 } from "@loopy/contract";
-import { MAX_PREVIEW_BYTES, type NodeRunStatus, PAGE_LIMIT } from "@loopy/core";
+import { MAX_PREVIEW_BYTES, type NodeRunStatus } from "@loopy/core";
 import type { SqlContext } from "../context";
 import type { SqlValue } from "../driver";
 import { readEventCursor } from "../events";

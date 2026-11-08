@@ -1,3 +1,4 @@
+import { PAGE_LIMIT } from "@loopy/contract";
 import {
   exceedsInlineLimit,
   executionKeyString,
@@ -6,7 +7,6 @@ import {
   type NodeRun,
   outputBytes,
   outSchemaMessage,
-  PAGE_LIMIT,
   type StoreEffect,
 } from "@loopy/core";
 import type { SqlContext, SqlWrite } from "./context";

@@ -11,11 +11,11 @@ const leaseMs = 60_000;
 
 const loopy = { slug: "test", description: null };
 
-function view(run: core.RunRecord, hook?: core.PendingHook) {
+function view(run: core.RunRecord, hook?: contract.PendingHook) {
   return contract.runView({ run, loopy, hook, now, leaseMs });
 }
 
-const hook: core.PendingHook = {
+const hook: contract.PendingHook = {
   token: "hook",
   runId: "run",
   seq: 2,

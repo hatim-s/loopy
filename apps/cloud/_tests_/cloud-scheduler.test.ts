@@ -1,11 +1,10 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test";
-import type { SavedLoopy } from "@loopy/contract";
+import { PAGE_LIMIT, type SavedLoopy } from "@loopy/contract";
 import {
   type ExecutionKey,
   executionKeyString,
   type Graph,
   type Json,
-  PAGE_LIMIT,
   type Receipt,
   revision,
   StorageError,

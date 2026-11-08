@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { type DashboardReader, nodeIdSchema } from "@loopy/contract";
-import { type NodeRun, PAGE_LIMIT, type Store, type StoreEffect } from "@loopy/core";
+import { type DashboardReader, nodeIdSchema, PAGE_LIMIT } from "@loopy/contract";
+import type { NodeRun, Store, StoreEffect } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { newRun, runIn } from "./fixture";
 
