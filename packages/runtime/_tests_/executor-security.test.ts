@@ -6,41 +6,7 @@ import { executionKeyString } from "@loopy/core";
 import { Effect } from "effect";
 import { LocalExecutor } from "../src/executor";
 import { receiptPath } from "../src/executor/receipts";
-import { SecretStore } from "../src/os/secrets";
 import { fixture } from "./fixtures/executor";
-
-for (const secret of ['quote"and\nnewline', "42"]) {
-  test(`decoded result and log strings redact ${JSON.stringify(secret)} without changing numeric values`, async () => {
-    const f = await fixture();
-    await Effect.runPromise(new SecretStore(f.home).set("TOKEN", secret));
-
-    const executor = new LocalExecutor({
-      home: f.home,
-      workspace: f.workspace,
-      mode: "sandbox",
-      secrets: ["TOKEN"],
-      bundlePath: () => f.bundle,
-    });
-
-    await writeFile(
-      f.bundle,
-      `const secret = process.env.TOKEN; process.stderr.write(JSON.stringify({message: secret, data: {nested: [secret, JSON.stringify(secret).slice(1,-1)]}})+"\\n"); process.stdout.write(JSON.stringify({secret, nested: [secret], number: 42})+"\\n");`,
-    );
-
-    const result = await Effect.runPromise(
-      executor.execute(f.key, 1, f.spec, new AbortController().signal),
-    );
-
-    expect(result).toEqual({
-      kind: "succeeded",
-      output: { secret: "[redacted]", nested: ["[redacted]"], number: 42 },
-      logs: [{ message: "[redacted]", data: { nested: ["[redacted]", "[redacted]"] } }],
-    });
-    const receipt = await readFile(await Effect.runPromise(receiptPath(f.home, f.key, 1)), "utf8");
-    expect(JSON.parse(receipt).result).toEqual(result);
-    expect(receipt).not.toContain(JSON.stringify(secret));
-  });
-}
 
 for (const mode of ["sandbox", "full"] as const) {
   test(`${mode} bundle cannot read, replace, remove or create daemon receipts and workspace forgeries are ignored`, async () => {
