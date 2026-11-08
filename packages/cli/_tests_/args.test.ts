@@ -119,3 +119,15 @@ test("the service argv the CLI installs parses back to daemon run with the same 
     "lease-ms": 5000,
   });
 });
+
+test("CLI argument failures report their message", async () => {
+  const { main } = await import("../src");
+
+  for (const [argv, message] of [
+    [["unknown-command"], "Unknown command 'unknown-command'."],
+    [["types", "bun"], "--out is required."],
+    [["secrets", "remove"], "Secret name is required. Run loopy secrets remove --help for usage."],
+  ] as const) {
+    expect((await Effect.runPromise(Effect.flip(main([...argv])))).message).toStartWith(message);
+  }
+});
