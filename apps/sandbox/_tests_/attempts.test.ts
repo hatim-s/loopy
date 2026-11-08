@@ -423,7 +423,6 @@ test("Docker create enforces isolation and recovery reads the original bounded r
       return {
         exitCode: 0,
         stderr: "",
-        durationMs: 0,
         stdout:
           operation === "container"
             ? dockerState(config, saved, false)
@@ -478,7 +477,7 @@ test("Docker timeout kills only the owned worker and missing or killed workers s
             new CommandExecutionError({
               reason: "timeout",
               message: "Process timed out.",
-              output: { stdout: "", stderr: "", exitCode: -1, durationMs: 0 },
+              output: { stdout: "", stderr: "", exitCode: -1 },
               cause: undefined,
             }),
           );
@@ -486,7 +485,7 @@ test("Docker timeout kills only the owned worker and missing or killed workers s
 
         if (op === "container" && argv[4] === "inspect") {
           if (scenario === "missing") {
-            return { stdout: "", stderr: "", exitCode: 1, durationMs: 0 };
+            return { stdout: "", stderr: "", exitCode: 1 };
           }
 
           return {
@@ -498,11 +497,10 @@ test("Docker timeout kills only the owned worker and missing or killed workers s
             ),
             stderr: "",
             exitCode: 0,
-            durationMs: 0,
           };
         }
 
-        return { stdout: "", stderr: "", exitCode: 0, durationMs: 0 };
+        return { stdout: "", stderr: "", exitCode: 0 };
       });
 
     const backend = dockerBackend(config, runner);
@@ -569,7 +567,7 @@ test("lost Docker start acknowledgement and wait transport failure retain starte
           running = false;
         }
 
-        return { stdout, stderr: "", exitCode, durationMs: 0 };
+        return { stdout, stderr: "", exitCode };
       });
 
     const backend: AttemptBackend = {

@@ -1,11 +1,11 @@
-import type { CommandResult } from "@loopy/core";
+import type { ParserInput } from "@loopy/core";
 import { Data } from "effect";
 
 /** A process boundary failure. Only timeout and output_limit are author evaluation limits. */
 export class CommandExecutionError extends Data.TaggedError("CommandExecutionError")<{
   reason: "rejected" | "unstarted" | "timeout" | "output_limit" | "aborted" | "process";
   message: string;
-  output: CommandResult;
+  output: ParserInput;
   cause?: unknown;
 }> {}
 

@@ -41,7 +41,7 @@ for (const primary of ["timeout", "interrupt", "defect"] as const) {
             new CommandExecutionError({
               reason: "timeout",
               message: "fixture timeout",
-              output: { stdout: "captured", stderr: "", exitCode: -1, durationMs: 1 },
+              output: { stdout: "captured", stderr: "", exitCode: -1 },
             }),
           );
         }),

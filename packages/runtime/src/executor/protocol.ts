@@ -2,7 +2,6 @@ import { decodeJson, jsonSchema } from "@loopy/contract";
 import {
   type AttemptLog,
   attemptLogSchema,
-  type CommandResult,
   type CommandSpec,
   type ExecutionResult,
   isString,
@@ -66,7 +65,7 @@ function exitMessage(exitCode: number, stderr: string) {
 }
 
 /** Both the local executor and the sandbox worker interpret a command exit here. */
-export function commandResult(spec: CommandSpec, raw: CommandResult, redact: Redact): CommandStep {
+export function commandResult(spec: CommandSpec, raw: ParserInput, redact: Redact): CommandStep {
   const stdout = redact(raw.stdout);
   const stderr = redact(raw.stderr);
 
@@ -175,7 +174,7 @@ function parseOutput(line: string) {
 }
 
 export function bundleResult(
-  raw: CommandResult,
+  raw: ParserInput,
   redact: Redact,
   failure?: { code: FailureCode; message: string },
 ): ExecutionResult {

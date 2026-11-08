@@ -148,7 +148,7 @@ export class DockerBackend implements AttemptBackend {
               new CommandExecutionError({
                 reason: "timeout",
                 message: "Process timed out.",
-                output: { stdout: "", stderr: "", exitCode: -1, durationMs: 0 },
+                output: { stdout: "", stderr: "", exitCode: -1 },
                 cause: undefined,
               }),
             )

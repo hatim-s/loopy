@@ -79,7 +79,6 @@ test("injected Docker absence yields uncertain result without reissuing work", (
           return {
             stdout: "",
             stderr: "",
-            durationMs: 0,
             exitCode: argv.includes("inspect") ? 1 : 0,
           };
         }),

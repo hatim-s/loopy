@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import type { CommandResult } from "@loopy/core";
+import type { ParserInput } from "@loopy/core";
 import { errnoCode, errorMessage } from "@loopy/core";
 import { Data, Effect, Exit } from "effect";
 import type { CommandExecutionError } from "../command-error";
@@ -21,7 +21,7 @@ export const filesystem = <A>(body: () => PromiseLike<A>) =>
 export const absentPath = (error: ProcessFilesystemError) =>
   ["ENOENT", "ENOTDIR", "EACCES"].includes(errnoCode(error.cause) ?? "");
 
-type ScratchOutcome = Exit.Exit<CommandResult, CommandExecutionError | ProcessFilesystemError>;
+type ScratchOutcome = Exit.Exit<ParserInput, CommandExecutionError | ProcessFilesystemError>;
 
 export class ScratchCleanupError extends Data.TaggedError("ScratchCleanupError")<{
   cause: ProcessFilesystemError;

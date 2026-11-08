@@ -49,7 +49,7 @@ test("helper cleanup checks exact name and labels, then verifies absence after r
         return yield* Effect.die(new Error("Unexpected Docker call"));
       }
 
-      return { stdout, stderr: "", exitCode: 0, durationMs: 0 };
+      return { stdout, stderr: "", exitCode: 0 };
     });
 
   try {

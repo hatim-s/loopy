@@ -165,7 +165,6 @@ test("bundle results redact once, so a secret inside the marker leaves it intact
       stdout: `${JSON.stringify("a cat")}\n`,
       stderr: `${JSON.stringify({ message: "pet", data: "a cat" })}\n`,
       exitCode: 0,
-      durationMs: 0,
     },
     secretRedactor(["a"]),
   );
@@ -186,7 +185,6 @@ for (const secret of ['quote"and\nnewline', "42"]) {
         stdout: `${JSON.stringify({ secret, nested: [secret], number: 42 })}\n`,
         stderr: `${JSON.stringify({ message: secret, data: { nested: [secret, escaped] } })}\n`,
         exitCode: 0,
-        durationMs: 0,
       },
       secretRedactor([secret]),
     );
@@ -210,7 +208,7 @@ test("escaped and doubly nested secrets are masked in complete records and at ev
   ]) {
     for (let end = record.indexOf("alpha") + 5; end <= record.length; end++) {
       const result = bundleResult(
-        { stdout: "", stderr: record.slice(0, end), exitCode: 1, durationMs: 0 },
+        { stdout: "", stderr: record.slice(0, end), exitCode: 1 },
         secretRedactor([secret]),
         { code: "output_limit", message: "Capture limit" },
       );
@@ -223,7 +221,6 @@ test("escaped and doubly nested secrets are masked in complete records and at ev
         stdout: `${JSON.stringify({ escaped })}\n`,
         stderr: `${record}\n`,
         exitCode: 0,
-        durationMs: 0,
       },
       secretRedactor([secret]),
     );
@@ -242,7 +239,6 @@ test("complete log records keep keys and values that end in a secret prefix", ()
         stdout: JSON.stringify({ ok: true }),
         stderr: `${JSON.stringify(record)}\n`,
         exitCode: 0,
-        durationMs: 0,
       },
       secretRedactor(["supersecret"]),
       failure,
