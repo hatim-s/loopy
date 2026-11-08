@@ -1,4 +1,4 @@
-import { executionKeyString, type NodeRunView } from "@loopy/contract";
+import { executionKeyString, type NodeRun } from "@loopy/contract";
 import { type ReactNode, useId, useState } from "react";
 import { clockTime, elapsed, timestamp } from "../../lib/format";
 import { useExecution, useLogPages } from "../../lib/ui-data";
@@ -55,7 +55,7 @@ function OutputTab({ runId, row }: { runId: string; row: ExecutionRow }) {
   );
 }
 
-function InputTab({ runId, execution }: { runId: string; execution: NodeRunView }) {
+function InputTab({ runId, execution }: { runId: string; execution: NodeRun }) {
   const detail = useExecution(runId, executionKeyString(execution.key));
 
   return (
@@ -86,7 +86,7 @@ function InputTab({ runId, execution }: { runId: string; execution: NodeRunView 
   );
 }
 
-function AttemptsTab({ runId, execution }: { runId: string; execution: NodeRunView }) {
+function AttemptsTab({ runId, execution }: { runId: string; execution: NodeRun }) {
   const detail = useExecution(runId, executionKeyString(execution.key));
 
   return (
@@ -168,7 +168,7 @@ function LogLine({ log, attempt }: { log: LogRow; attempt: number }) {
  * The execution's lines, 50 a page, oldest first within the page. A selective filter scans a
  * bounded window, so an empty page with older pages is a search still in progress, not silence.
  */
-function LogsTab({ runId, execution }: { runId: string; execution: NodeRunView }) {
+function LogsTab({ runId, execution }: { runId: string; execution: NodeRun }) {
   const pager = useLogPages({
     runId,
     executionKey: executionKeyString(execution.key),

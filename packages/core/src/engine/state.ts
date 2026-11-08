@@ -1,12 +1,8 @@
-import type {
-  AttemptLog,
-  ExecutionError,
-  ExecutionKey,
-  ExecutionResult,
-  Json,
-  NodeRun,
-  RunOutcome,
-} from "..";
+import type { AttemptLog, ExecutionError, ExecutionResult } from "../executor";
+import type { ExecutionKey } from "../graph/key";
+import type { NodeRun } from "../graph/node-run";
+import type { Json } from "../json";
+import type { RunOutcome } from "../model";
 
 export type EngineState = {
   runId: string;
@@ -15,9 +11,11 @@ export type EngineState = {
   phase: { kind: "active" } | { kind: "finished"; outcome: RunOutcome };
 };
 
+export type Sample = { valueKind: "uuid"; value: string } | { valueKind: "random"; value: number };
+
 export type EngineEvent = { at: string } & (
   | { kind: "run_started" }
-  | { kind: "value_sampled"; executionKey: ExecutionKey; value: Json }
+  | { kind: "value_sampled"; executionKey: ExecutionKey; sample: Sample }
   | {
       kind: "execution_completed";
       executionKey: ExecutionKey;

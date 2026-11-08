@@ -7,10 +7,6 @@ export type ResolveType = (ref: { ref: string; path: string[] }) => string | nul
 
 type PredicateIssue = { code: DiagnosticCode; message: string };
 
-function issue(code: DiagnosticCode, message: string): PredicateIssue {
-  return { code, message };
-}
-
 export function operandType(value: ComparisonOperand, resolveType: ResolveType): string | null {
   if (isRef(value)) {
     return "size" in value ? "number" : resolveType(value);
@@ -65,7 +61,12 @@ function comparisonErrors(
   });
 
   if (invalidSize) {
-    return [issue("invalid_size", "Size requires a string or array reference in a comparison.")];
+    return [
+      {
+        code: "invalid_size",
+        message: "Size requires a string or array reference in a comparison.",
+      },
+    ];
   }
 
   const ordering = ["lt", "lte", "gt", "gte"].includes(predicate.op);
@@ -87,7 +88,7 @@ function comparisonErrors(
       members.some((member) => operandType(member, resolveType) !== left));
 
   return mismatch || badMember
-    ? [issue("predicate_type", "Predicate operands must have matching declared types.")]
+    ? [{ code: "predicate_type", message: "Predicate operands must have matching declared types." }]
     : [];
 }
 
@@ -101,7 +102,7 @@ export function checkPredicate(predicate: Predicate, resolveType: ResolveType): 
     case "exists":
     case "isNull":
       return hasSize(predicate.value)
-        ? [issue("invalid_size", "Size is allowed only in comparisons.")]
+        ? [{ code: "invalid_size", message: "Size is allowed only in comparisons." }]
         : [];
     default:
       return comparisonErrors(resolveType, predicate);

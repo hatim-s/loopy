@@ -1,12 +1,11 @@
-import {
-  type ExecutionError,
-  errorMessage,
-  type Graph,
-  type Json,
-  type Node,
-  type NodeId,
-} from "..";
-import { controls } from "./control";
+import { errorMessage } from "../errors";
+import type { ExecutionError } from "../executor";
+import { continuation, type Context as GraphContext } from "../graph/context";
+import type { NodeRun } from "../graph/node-run";
+import type { Node } from "../graph/nodes";
+import type { NodeId } from "../graph/values";
+import type { Json } from "../json";
+import { control } from "./control";
 import { failNode } from "./failure";
 import { immediate } from "./immediate";
 import { invoke } from "./invoke";
@@ -20,15 +19,15 @@ export type TraversalResult =
   | { kind: "cancelled" };
 
 export type Traversal = {
-  graph: Graph;
+  graph: GraphContext;
   transition: Transition;
   at: string;
   rehydrate: boolean;
   cancelling: boolean;
 };
 
-export function nodeAt(graph: Graph, id: NodeId): Node {
-  const node = graph.nodes.find((node) => node.id === id);
+function nodeAt(graph: GraphContext, id: NodeId): Node {
+  const node = graph.nodes.get(id);
 
   if (!node) {
     throw new Error(`Graph node '${id}' is missing.`);
@@ -37,28 +36,22 @@ export function nodeAt(graph: Graph, id: NodeId): Node {
   return node;
 }
 
-function within(graph: Graph, id: NodeId, owner: NodeId): boolean {
-  let parent: NodeId | null = id;
-
-  while (parent !== null) {
-    if (parent === owner) {
-      return true;
-    }
-
-    parent = nodeAt(graph, parent).scope;
+function run(
+  traversal: Traversal,
+  node: Node,
+  options: { previous: NodeRun | undefined; context: ResolutionContext },
+): TraversalResult {
+  switch (node.kind) {
+    case "branch":
+    case "switch":
+    case "map":
+    case "parallel":
+    case "finally":
+    case "rescue":
+      return control(traversal, node, options.context);
+    default:
+      return invoke(traversal, node, options);
   }
-
-  return false;
-}
-
-function next(graph: Graph, node: Node): NodeId | undefined {
-  // A control's arm tails point to its continuation in the parent's lexical scope.
-  return graph.edges.find(
-    (edge) =>
-      (edge.kind === "next" || edge.kind === "join") &&
-      nodeAt(graph, edge.to).scope === node.scope &&
-      (edge.from === node.id || within(graph, edge.from, node.id)),
-  )?.to;
 }
 
 export function evaluate(
@@ -83,33 +76,30 @@ export function evaluate(
   }
 
   try {
-    const result =
-      controls(traversal, node, context) ?? invoke(traversal, node, { previous, context });
+    const result = run(traversal, node, { previous, context });
 
-    if (result.kind === "failed") {
-      failNode(transition, node, { error: result.error, at, scope: context.scope });
-    } else if (result.kind === "succeeded") {
-      immediate(transition, node, { output: result.output, at, context });
-      const stored = transition.state.nodeRuns.find((run) => sameExecution(run.key, key));
+    switch (result.kind) {
+      case "failed":
+        failNode(transition, node, { error: result.error, at, scope: context.scope });
 
-      if (stored?.status === "failed") {
-        return { kind: "failed", error: stored.error };
-      }
+        return result;
+      case "succeeded":
+        return immediate(transition, node, { output: result.output, at, context });
+      case "cancelled":
+        write(transition, {
+          key,
+          attempt: previous?.attempt ?? 1,
+          maxAttempts: previous?.maxAttempts ?? 1,
+          startedAt: previous?.startedAt ?? at,
+          endedAt: at,
+          status: "cancelled",
+          receipt: previous?.receipt ?? "none",
+        });
+
+        return result;
+      case "pending":
+        return result;
     }
-
-    if (result.kind === "cancelled") {
-      write(transition, {
-        key,
-        attempt: previous?.attempt ?? 1,
-        maxAttempts: previous?.maxAttempts ?? 1,
-        startedAt: previous?.startedAt ?? at,
-        endedAt: at,
-        status: "cancelled",
-        receipt: previous?.receipt ?? "none",
-      });
-    }
-
-    return result;
   } catch (cause) {
     const error: ExecutionError = { code: "validation", message: errorMessage(cause) };
     failNode(transition, node, { error, at, scope: context.scope });
@@ -147,7 +137,7 @@ export function sequence(
     }
 
     output = result.output;
-    id = next(traversal.graph, node);
+    id = continuation(traversal.graph, node);
   }
 
   return { kind: "succeeded", output };

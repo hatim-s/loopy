@@ -1,8 +1,15 @@
-import { LOG_LEVELS, NODE_RUN_STATUSES } from "@loopy/core";
+import {
+  executionKeySchema,
+  LOG_LEVELS,
+  logRecordSchema,
+  NODE_RUN_STATUSES,
+  nodeRunSchema,
+  RUNTIME_EVENT_ENTITIES,
+  runStatusSchema,
+  struct,
+} from "@loopy/core";
 import { Effect, Schema, SchemaGetter, SchemaIssue } from "effect";
-import { decodeBoundary, isoDateTime, queryNumber, struct } from "./codec";
-import { executionKeySchema, nodeRunViewSchema } from "./graph";
-import { logRecordSchema, runStatusSchema } from "./records";
+import { decodeBoundary, isoDateTime, queryNumber } from "./codec";
 
 const iso = isoDateTime;
 
@@ -73,7 +80,7 @@ export const executionDetailQuerySchema = struct({
 });
 
 export const executionPageSchema = struct({
-  items: Schema.Array(nodeRunViewSchema).pipe(Schema.mutable),
+  items: Schema.Array(nodeRunSchema).pipe(Schema.mutable),
   next: Schema.NullOr(Schema.String),
   truncatedOutputs: Schema.Record(
     Schema.String,
@@ -82,8 +89,8 @@ export const executionPageSchema = struct({
 });
 
 export const executionDetailSchema = struct({
-  node: nodeRunViewSchema,
-  attempts: Schema.Array(nodeRunViewSchema).pipe(Schema.mutable),
+  node: nodeRunSchema,
+  attempts: Schema.Array(nodeRunSchema).pipe(Schema.mutable),
   attemptsNext: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   truncatedAttempts: Schema.optional(
     Schema.Record(
@@ -156,7 +163,7 @@ export const globalLogsQuerySchema = struct({
 
 export const eventHistoryQuerySchema = struct({
   ...feedFilterFields,
-  entity: Schema.optional(Schema.Literals(["run", "node", "step", "log", "hook", "schedule"])),
+  entity: Schema.optional(Schema.Literals(RUNTIME_EVENT_ENTITIES)),
   kind: Schema.optional(Schema.String),
   txn: Schema.optional(Schema.String),
 }).check(
@@ -186,7 +193,7 @@ export const eventSummarySchema = struct({
   runId: Schema.NullOr(Schema.String),
   slug: Schema.NullOr(Schema.String),
   nodeId: Schema.NullOr(Schema.String),
-  entity: Schema.Literals(["run", "node", "step", "log", "hook", "schedule"]),
+  entity: Schema.Literals(RUNTIME_EVENT_ENTITIES),
   kind: Schema.String,
 });
 

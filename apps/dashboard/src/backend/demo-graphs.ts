@@ -33,7 +33,7 @@ export const TRIAGE_V1 = decodeBoundary(graphRevisionViewSchema)({
         flags: {},
         options: { cwd: null, env: {}, stdin: null },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         okExitCodes: [0],
         parse: null,
       },
@@ -46,7 +46,7 @@ export const TRIAGE_V1 = decodeBoundary(graphRevisionViewSchema)({
         out: { kind: "record", fields: { needsReply: "number", spam: "number" } },
         module: { name: "classify.ts" },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         timeout: null,
       },
       {
@@ -58,7 +58,7 @@ export const TRIAGE_V1 = decodeBoundary(graphRevisionViewSchema)({
         out: { kind: "record", fields: { sent: "number" } },
         module: { name: "reply.ts" },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         timeout: null,
       },
       {
@@ -117,7 +117,7 @@ export const TRIAGE_V2 = decodeBoundary(graphRevisionViewSchema)({
         flags: {},
         options: { cwd: null, env: {}, stdin: null },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         okExitCodes: [0],
         parse: null,
       },
@@ -130,7 +130,7 @@ export const TRIAGE_V2 = decodeBoundary(graphRevisionViewSchema)({
         out: { kind: "record", fields: { needsReply: "number", spam: "number" } },
         module: { name: "classify.ts" },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         timeout: null,
       },
       {
@@ -150,7 +150,7 @@ export const TRIAGE_V2 = decodeBoundary(graphRevisionViewSchema)({
         out: { kind: "record", fields: { sent: "number" } },
         module: { name: "reply.ts" },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         timeout: null,
       },
       {
@@ -216,7 +216,7 @@ export const REVIEW = decodeBoundary(graphRevisionViewSchema)({
         },
         options: { cwd: null, env: {}, stdin: null },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         okExitCodes: [0],
         parse: null,
       },
@@ -275,7 +275,7 @@ export const REVIEW = decodeBoundary(graphRevisionViewSchema)({
         },
         options: { cwd: null, env: {}, stdin: null },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         okExitCodes: [0],
         parse: null,
       },
@@ -291,7 +291,7 @@ export const REVIEW = decodeBoundary(graphRevisionViewSchema)({
         out: { kind: "record", fields: { prompt: "string" } },
         module: { name: "prompt.ts" },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         timeout: null,
       },
       {
@@ -305,7 +305,7 @@ export const REVIEW = decodeBoundary(graphRevisionViewSchema)({
         flags: {},
         options: { cwd: null, env: {}, stdin: { ref: "5:prompt", path: ["prompt"] } },
         rateLimit: null,
-        retry: { attempts: 3, backoff: "exponential", retryOnExit: false },
+        retry: { attempts: 3, retryOnExit: false },
         okExitCodes: [0],
         parse: null,
       },
@@ -406,7 +406,6 @@ export const HELLO = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         timeout: null,
@@ -550,7 +549,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],
@@ -593,7 +591,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         timeout: null,
@@ -692,7 +689,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],
@@ -735,7 +731,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],
@@ -778,7 +773,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],
@@ -858,7 +852,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],
@@ -892,7 +885,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         timeout: null,
@@ -939,7 +931,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],
@@ -1013,7 +1004,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         timeout: null,
@@ -1105,7 +1095,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         timeout: null,
@@ -1226,7 +1215,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],
@@ -1289,7 +1277,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],
@@ -1369,7 +1356,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         timeout: null,
@@ -1404,7 +1390,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         timeout: null,
@@ -1446,7 +1431,6 @@ export const RELEASE = decodeBoundary(graphRevisionViewSchema)({
         rateLimit: null,
         retry: {
           attempts: 3,
-          backoff: "exponential",
           retryOnExit: false,
         },
         okExitCodes: [0],

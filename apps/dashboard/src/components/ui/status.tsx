@@ -1,4 +1,4 @@
-import type { LogRecord, NodeRunView, RunStatus, RunView } from "@loopy/contract";
+import type { LogRecord, NodeRun, RunStatus, RunView } from "@loopy/contract";
 import type { ReactNode } from "react";
 
 /**
@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
  */
 export type Status =
   | Exclude<RunStatus, "suspended">
-  | NodeRunView["status"]
+  | NodeRun["status"]
   | "awaiting"
   | "suspended"
   | "active"

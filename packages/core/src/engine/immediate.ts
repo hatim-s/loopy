@@ -1,23 +1,25 @@
-import { type Json, limitLogs, MAX_OUTPUT_BYTES, type Node, outputBytes } from "..";
-import { failNode } from "./failure";
+import type { Node } from "../graph/nodes";
+import type { Json } from "../json";
+import { limitLogs } from "../logs";
+import { exceedsInlineLimit } from "../record-spec";
+import { failNode, outputError } from "./failure";
 import { type Transition, write } from "./node-run";
 import { type ResolutionContext, resolve, sameExecution } from "./resolve";
+import type { TraversalResult } from "./traversal";
 
+/** Records an inline node's output; the result reports a node that failed the inline cap. */
 export function immediate(
   transition: Transition,
   node: Node,
   options: { output: Json; at: string; context: ResolutionContext },
-) {
+): Extract<TraversalResult, { kind: "succeeded" | "failed" }> {
   const { output, at, context } = options;
 
-  if (outputBytes(output) > MAX_OUTPUT_BYTES) {
-    failNode(transition, node, {
-      error: { code: "output_limit", message: "Node output exceeds the 1 MiB inline limit." },
-      at,
-      scope: context.scope,
-    });
+  if (exceedsInlineLimit(output)) {
+    const error = outputError("output_limit");
+    failNode(transition, node, { error, at, scope: context.scope });
 
-    return;
+    return { kind: "failed", error };
   }
 
   const [log] =
@@ -47,4 +49,6 @@ export function immediate(
   if (log) {
     transition.effects.push({ kind: "write_log", executionKey: key, attempt: 1, log, at });
   }
+
+  return { kind: "succeeded", output };
 }

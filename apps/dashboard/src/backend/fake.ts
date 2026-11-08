@@ -8,7 +8,7 @@ import {
   isTerminalRun,
   type LogRecord,
   type LoopyView,
-  type NodeRunView,
+  type NodeRun,
   type PutScheduleBody,
   type RunSnapshotView,
   type RunStatus,
@@ -222,7 +222,7 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     );
   }
 
-  function nodes(id: string): NodeRunView[] {
+  function nodes(id: string): NodeRun[] {
     const records = new Map(
       script.runs
         .find((item) => item.run.id === id)
@@ -534,11 +534,11 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     },
     scopes: async (id, input) => {
       const query = decodeBoundary(routes.scopes.query)(input);
-      const parent: NodeRunView["key"]["scope"] = JSON.parse(query.parentScope);
+      const parent: NodeRun["key"]["scope"] = JSON.parse(query.parentScope);
 
       const groups = new Map<
         string,
-        { indices: Set<number>; counts: Partial<Record<NodeRunView["status"], number>> }
+        { indices: Set<number>; counts: Partial<Record<NodeRun["status"], number>> }
       >();
 
       for (const node of nodes(id)) {
@@ -598,11 +598,11 @@ export function fakeBackend(script: FakeScript): LoopyBackend {
     },
     scopeItems: async (id, input) => {
       const query = decodeBoundary(routes.scopeItems.query)(input);
-      const parent: NodeRunView["key"]["scope"] = JSON.parse(query.parentScope);
+      const parent: NodeRun["key"]["scope"] = JSON.parse(query.parentScope);
 
       const items = new Map<
         number,
-        { index: number; counts: Partial<Record<NodeRunView["status"], number>> }
+        { index: number; counts: Partial<Record<NodeRun["status"], number>> }
       >();
 
       for (const node of nodes(id)) {

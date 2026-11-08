@@ -1,5 +1,5 @@
-import { parseInputValidation } from "../input";
-import type { Diagnostic, Graph, Node, Ref } from ".";
+import { inputValidationIssue } from "../input";
+import { type Diagnostic, type Graph, INPUT_REF, type Node, type Ref } from ".";
 import { ancestors, binding, bodyEntries, refs, sameBody, scopeReaches, values } from "./context";
 import { isReservedGraphName, nodeNames } from "./names";
 import { checkPredicate, hasSize } from "./predicate";
@@ -47,8 +47,7 @@ function refError(context: Context, ref: Ref, consumer: Node | null): Diagnostic
     ];
   }
 
-  // The compiler reserves 'input' as the graph's external-input binding.
-  if (ref.ref === "input") {
+  if (ref.ref === INPUT_REF) {
     return [];
   }
 
@@ -122,13 +121,13 @@ function formats(context: Context): Diagnostic[] {
       (value) =>
         isRef(value) && !["string", "number", "boolean"].includes(context.resolveType(value) ?? ""),
     )
-      ? [diagnostic("predicate_type", node.id, "Format operands must have a declared scalar type.")]
+      ? [diagnostic("format_type", node.id, "Format operands must have a declared scalar type.")]
       : [],
   );
 }
 
 function bindings({ graph }: Context): Diagnostic[] {
-  const seen = new Set<string>(["input", ...graph.nodes.map((node) => node.id)]);
+  const seen = new Set<string>([INPUT_REF, ...graph.nodes.map((node) => node.id)]);
 
   return graph.nodes.flatMap((node) => {
     const ids =
@@ -163,26 +162,31 @@ function reservedNames({ graph }: Context): Diagnostic[] {
   );
 }
 
-export function validateGraph(graph: Graph): Diagnostic[] {
-  try {
-    if (graph.inputValidation !== undefined) {
-      if (graph.input === "schema") {
-        throw new Error("Input validation requires record fields.");
-      }
-
-      parseInputValidation(graph.inputValidation, graph.input);
-    }
-  } catch (cause) {
-    return [
-      diagnostic("predicate_type", null, cause instanceof Error ? cause.message : String(cause)),
-    ];
+function inputValidation({ graph }: Context): Diagnostic[] {
+  if (graph.inputValidation === undefined) {
+    return [];
   }
 
+  const issue =
+    graph.input === "schema"
+      ? "Input validation requires record fields."
+      : inputValidationIssue(graph.inputValidation, graph.input);
+
+  return issue === null ? [] : [diagnostic("input_validation", null, issue)];
+}
+
+export function validateGraph(graph: Graph): Diagnostic[] {
   const context: Context = {
     graph,
     nodes: new Map(graph.nodes.map((node) => [node.id, node])),
     resolveType: graphTypeResolver(graph),
   };
+
+  const issues = inputValidation(context);
+
+  if (issues.length > 0) {
+    return issues;
+  }
 
   return [...structureRules, reservedNames, bindings, references, predicates, formats].flatMap(
     (rule) => rule(context),

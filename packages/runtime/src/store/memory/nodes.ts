@@ -141,7 +141,6 @@ export class MemoryNodes extends MemoryRuns {
       return structuredClone({
         run,
         nodeRuns: [...(this.nodes.get(id)?.values() ?? [])],
-        steps: [],
         hooks: this.readHooks(id),
         logs: [...(this.logs.get(id)?.values() ?? [])].sort((left, right) => left.seq - right.seq),
         cursor: this.sequence,

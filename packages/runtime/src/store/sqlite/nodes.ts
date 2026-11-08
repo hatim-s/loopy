@@ -226,7 +226,6 @@ export class SqliteNodes extends SqliteRuns {
         return {
           run: rowToRun(row),
           nodeRuns: this.readNodes(id),
-          steps: [],
           logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
           hooks: this.readHooks(id),
           ...this.readEventCursor(),

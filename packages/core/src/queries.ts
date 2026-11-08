@@ -187,7 +187,3 @@ export interface DashboardReader {
   eventPage(query: EventPageQuery): Effect.Effect<FeedPage<EventSummary>, StorageError>;
   eventDetail(sequence: number): Effect.Effect<RuntimeEvent | undefined, StorageError>;
 }
-
-export function emptyRunCounts(): StatusCounts {
-  return { queued: 0, running: 0, suspended: 0, succeeded: 0, failed: 0, cancelled: 0 };
-}

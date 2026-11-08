@@ -10,15 +10,23 @@ type CronSchedule = {
 
 const MONTHS = "jan feb mar apr may jun jul aug sep oct nov dec".split(" ");
 
-const WEEKDAYS = "sun mon tue wed thu fri sat".split(" ");
+export const CRON_WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
-const ALIASES = new Map([
-  ["@hourly", "0 * * * *"],
-  ["@daily", "0 0 * * *"],
-  ["@weekly", "0 0 * * 0"],
-  ["@monthly", "0 0 1 * *"],
-  ["@yearly", "0 0 1 1 *"],
-]);
+export const CRON_ALIASES = {
+  "@hourly": "0 * * * *",
+  "@daily": "0 0 * * *",
+  "@weekly": "0 0 * * 0",
+  "@monthly": "0 0 1 * *",
+  "@yearly": "0 0 1 1 *",
+} as const;
+
+export type CronAlias = keyof typeof CRON_ALIASES;
+
+export function cronAlias(expression: string): CronAlias | undefined {
+  const name = expression.trim().toLowerCase();
+
+  return Object.keys(CRON_ALIASES).find((alias): alias is CronAlias => alias === name);
+}
 
 const MINUTE_MS = 60_000;
 
@@ -94,7 +102,8 @@ function parseField(text: string, spec: FieldSpec): CronField {
 }
 
 export function parseCron(expression: string): CronSchedule {
-  const expanded = ALIASES.get(expression.trim().toLowerCase()) ?? expression;
+  const alias = cronAlias(expression);
+  const expanded = alias === undefined ? expression : CRON_ALIASES[alias];
   const fields = expanded.trim().split(/\s+/u);
   const [minute, hour, dayOfMonth, month, dayOfWeek] = fields;
 
@@ -109,7 +118,12 @@ export function parseCron(expression: string): CronSchedule {
     hour: parseField(hour, { name: "hour", min: 0, max: 23, names: [] }),
     dayOfMonth: parseField(dayOfMonth, { name: "day-of-month", min: 1, max: 31, names: [] }),
     month: parseField(month, { name: "month", min: 1, max: 12, names: MONTHS }),
-    dayOfWeek: parseField(dayOfWeek, { name: "day-of-week", min: 0, max: 7, names: WEEKDAYS }),
+    dayOfWeek: parseField(dayOfWeek, {
+      name: "day-of-week",
+      min: 0,
+      max: 7,
+      names: CRON_WEEKDAYS,
+    }),
   };
 }
 

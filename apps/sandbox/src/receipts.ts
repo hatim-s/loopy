@@ -2,12 +2,8 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { open, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  decodeBoundary,
-  dockerAttemptPlanSchema,
-  sandboxExecutionResultSchema,
-} from "@loopy/contract";
-import { struct } from "@loopy/contract/codec";
+import { decodeBoundary, dockerAttemptPlanSchema, executionResultSchema } from "@loopy/contract";
+import { struct } from "@loopy/core";
 import { Schema } from "effect";
 
 export const storedReceiptSchema = Schema.Union([
@@ -15,7 +11,7 @@ export const storedReceiptSchema = Schema.Union([
   struct({
     ...dockerAttemptPlanSchema.fields,
     kind: Schema.Literal("finished"),
-    result: sandboxExecutionResultSchema,
+    result: executionResultSchema,
   }),
 ]);
 

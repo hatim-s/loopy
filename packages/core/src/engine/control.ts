@@ -1,4 +1,7 @@
-import { isBoolean, isNumber, isString, type Json, type Node, setOwnProperty } from "..";
+import { scopeHasPrefix } from "../graph/key";
+import type { Node } from "../graph/nodes";
+import type { Json } from "../json";
+import { isBoolean, isNumber, isString, setOwnProperty } from "../validation";
 import { predicate } from "./predicate";
 import { type ResolutionContext, resolve } from "./resolve";
 import { sequence, type Traversal, type TraversalResult } from "./traversal";
@@ -21,13 +24,7 @@ function mapped(
     indices.flatMap((index) => {
       const scope = [...context.scope, { nodeId: node.id, index }];
 
-      return traversal.transition.state.nodeRuns.some((run) =>
-        scope.every(
-          (part, depth) =>
-            run.key.scope[depth]?.nodeId === part.nodeId &&
-            run.key.scope[depth]?.index === part.index,
-        ),
-      )
+      return traversal.transition.state.nodeRuns.some((run) => scopeHasPrefix(run.key.scope, scope))
         ? [index]
         : [];
     }),
@@ -123,11 +120,16 @@ function parallel(
   return failure ?? { kind: "succeeded", output };
 }
 
-export function controls(
+export type ControlNode = Extract<
+  Node,
+  { kind: "branch" | "switch" | "map" | "parallel" | "finally" | "rescue" }
+>;
+
+export function control(
   traversal: Traversal,
-  node: Node,
+  node: ControlNode,
   context: ResolutionContext,
-): TraversalResult | null {
+): TraversalResult {
   const { state } = traversal.transition;
 
   switch (node.kind) {
@@ -185,8 +187,5 @@ export function controls(
         bindings: new Map([...context.bindings, [node.error, { ...body.error, data: null }]]),
       });
     }
-
-    default:
-      return null;
   }
 }

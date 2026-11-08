@@ -1,6 +1,8 @@
 import type { ExecutionSpec } from "@loopy/core";
 import { renderArgv } from "@loopy/sdk/host";
 
+export { CommandExecutionError, type ResolvedCommand } from "./command-error";
+
 export { executeLocalCommand } from "./process";
 
 export { withBundleSandbox } from "./sandbox/bundle";

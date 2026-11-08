@@ -1,8 +1,8 @@
 import type { ExecutionResult } from "@loopy/core";
-import type { Effect, EngineEvent } from "@loopy/core/engine";
+import type { EngineEffect, EngineEvent } from "@loopy/core/engine";
 
 export function completionEvent(
-  dispatch: Extract<Effect, { kind: "dispatch" }>,
+  dispatch: Extract<EngineEffect, { kind: "dispatch" }>,
   result: ExecutionResult,
   at: string,
 ): EngineEvent {

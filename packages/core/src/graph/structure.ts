@@ -1,9 +1,9 @@
-import type { Diagnostic, Edge, Node, NodeId } from ".";
-import { ancestors, reaches, sameBody, successors, targets } from "./context";
+import { type Diagnostic, type Edge, INPUT_REF, type Node, type NodeId } from ".";
+import { ancestors, isBodyTail, reaches, sameBody, successors, targets } from "./context";
 import { type ValidationContext as Context, diagnostic } from "./validation";
 
 function identity({ graph, nodes }: Context): Diagnostic[] {
-  const seen = new Set<string>(["input"]);
+  const seen = new Set<string>([INPUT_REF]);
   const errors: Diagnostic[] = [];
 
   for (const node of graph.nodes) {
@@ -127,7 +127,7 @@ function scopeEdges(context: Context): Diagnostic[] {
 
     const local = from.scope === to.scope && sameBody(context, from, to);
     const entry = targets(from).includes(to.id) && to.scope === from.id;
-    const last = !context.graph.edges.some((next) => next.from === from.id && next.kind === "next");
+    const last = isBodyTail(context, from.id);
     const owner = from.scope === null ? undefined : context.nodes.get(from.scope);
 
     const join =

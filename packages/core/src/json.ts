@@ -1,5 +1,9 @@
-import type { Json } from "./model";
+import { Schema } from "effect";
 import { isBoolean, isNumber, isString } from "./validation";
+
+export const jsonSchema = Schema.MutableJson;
+
+export type Json = Schema.Schema.Type<typeof jsonSchema>;
 
 const MAX_DEPTH = 32;
 

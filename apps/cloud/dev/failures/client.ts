@@ -3,14 +3,14 @@ import { resolve } from "node:path";
 import { compile } from "@loopy/compiler";
 import {
   decodeBoundary,
+  executionSpecSchema,
   type Json,
   putLoopyBodySchema,
   type RunSnapshotView,
+  receiptSchema,
   routes,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
-  sandboxExecutionSpecSchema,
-  sandboxReceiptSchema,
 } from "@loopy/contract";
 import type { Schema } from "effect";
 import { Effect } from "effect";
@@ -183,7 +183,7 @@ export class FailureJourney {
       "effect_not_observed",
     );
 
-    const spec = decodeBoundary(sandboxExecutionSpecSchema)(
+    const spec = decodeBoundary(executionSpecSchema)(
       JSON.parse(
         await docker([
           "exec",
@@ -241,8 +241,8 @@ export class FailureJourney {
 
   async duplicate(request: SandboxAttemptRequest, kind: "started" | "finished") {
     const responses = await Promise.all([
-      this.provider(sandboxReceiptSchema, "/attempts", request),
-      this.provider(sandboxReceiptSchema, "/attempts", request),
+      this.provider(receiptSchema, "/attempts", request),
+      this.provider(receiptSchema, "/attempts", request),
     ]);
 
     assert(

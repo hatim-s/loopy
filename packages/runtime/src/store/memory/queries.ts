@@ -153,7 +153,6 @@ export class MemoryQueries extends MemoryQueryRuns {
         nodeRunsNext: page.next,
         truncatedOutputs: page.truncatedOutputs,
         scopes: this.readScopeCounts(id),
-        steps: [],
         logs: [],
         hooks: hooks.slice(0, 200),
         hooksTruncated: hooks.length > 200,

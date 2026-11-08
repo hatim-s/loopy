@@ -1,4 +1,4 @@
-import type { SandboxExecutionResult } from "@loopy/contract";
+import type { ExecutionResult } from "@loopy/contract";
 import { type AttemptRecord, AuthorityError, type AuthoritySession } from "@loopy/contract";
 import { Effect, FiberMap, Result } from "effect";
 import type { AttemptBackend } from "../docker";
@@ -22,7 +22,7 @@ export class AttemptMonitors {
   }
   launch(
     record: Extract<AttemptRecord, { kind: "started" }>,
-    perform: () => Effect.Effect<SandboxExecutionResult, SandboxFailure>,
+    perform: () => Effect.Effect<ExecutionResult, SandboxFailure>,
   ) {
     return Effect.gen({ self: this }, function* () {
       if (this.has(record.plan.id) || this.options.stopping.stopped) {
@@ -37,13 +37,13 @@ export class AttemptMonitors {
   }
   private monitor(
     record: Extract<AttemptRecord, { kind: "started" }>,
-    perform: () => Effect.Effect<SandboxExecutionResult, SandboxFailure>,
+    perform: () => Effect.Effect<ExecutionResult, SandboxFailure>,
   ) {
     return Effect.gen({ self: this }, function* () {
       const { authority, backend, resultsFor, stopping, session } = this.options;
       const signal = stopping.signal;
       const receipt = { ...record.plan, kind: "started" } as const;
-      let observed: SandboxExecutionResult | null = null;
+      let observed: ExecutionResult | null = null;
       let reconcile = perform;
       let backoff = 100;
 

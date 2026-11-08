@@ -1,8 +1,8 @@
 import type { RunOutcome, StoreEffect } from "@loopy/core";
-import type { Effect, step } from "@loopy/core/engine";
+import type { EngineEffect, step } from "@loopy/core/engine";
 
 export type ActivationWorkEffect = Extract<
-  Effect,
+  EngineEffect,
   { kind: "dispatch" | "sample" | "schedule_retry" }
 >;
 

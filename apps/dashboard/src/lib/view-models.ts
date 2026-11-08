@@ -4,7 +4,7 @@ import type {
   Json,
   LogRecord,
   LoopyView,
-  NodeRunView,
+  NodeRun,
   RunStatus,
   RunView,
   ScopeCountsView,
@@ -70,7 +70,7 @@ export type RunListFilters = {
   period?: Period;
 };
 
-export type ScopeTuple = NodeRunView["key"]["scope"];
+export type ScopeTuple = NodeRun["key"]["scope"];
 
 /** Grouped counts for one map node inside one parent scope, from the slim run snapshot. */
 export type ScopeSummary = ScopeCountsView;
@@ -80,12 +80,12 @@ export type ScopeItemRow = ScopeItemsPage["items"][number];
 export type ScopeItemQuery = {
   nodeId: string;
   parentScope: ScopeTuple;
-  status?: NodeRunView["status"];
+  status?: NodeRun["status"];
 };
 
 /** An execution row. A large output arrives as null with its size; open the detail for it. */
 export type ExecutionRow = {
-  execution: NodeRunView;
+  execution: NodeRun;
   truncatedOutputBytes: number | null;
 };
 
@@ -93,7 +93,7 @@ export type ExecutionQuery = { scope: ScopeTuple; nodeId?: string };
 
 export type AttemptRow = {
   attempt: number;
-  status: NodeRunView["status"];
+  status: NodeRun["status"];
   startedAt: string;
   endedAt: string | null;
   error: { code: string; message: string } | null;
@@ -103,11 +103,11 @@ export type AttemptRow = {
 export type RecordedInput =
   | { state: "recorded"; value: Json }
   | { state: "not_recorded" }
-  | Extract<NodeRunView["inputView"], { state: "truncated" }>;
+  | Extract<NodeRun["inputView"], { state: "truncated" }>;
 
 /** One execution opened in full, from GET /runs/:id/execution. */
 export type ExecutionDetail = {
-  execution: NodeRunView;
+  execution: NodeRun;
   input: RecordedInput;
   attempts: AttemptRow[];
   /** Earlier attempts exist beyond the cap or before attempts were stored. */

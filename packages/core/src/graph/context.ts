@@ -1,5 +1,5 @@
 import { isRecord } from "../validation";
-import type { ComparisonOperand, Graph, Node, NodeId, Predicate, Ref, Value } from ".";
+import type { ComparisonOperand, Edge, Graph, Node, NodeId, Predicate, Ref, Value } from ".";
 import { isRef } from "./ref";
 
 export type Context = {
@@ -104,16 +104,16 @@ export function scopeReaches(context: Context, from: NodeId, to: NodeId): boolea
   return visit(from);
 }
 
-export function isScopeJoin(context: Context, from: NodeId, to: NodeId, kind: string): boolean {
-  const source = context.nodes.get(from);
-  const owner = context.nodes.get(to);
+// A map body's join edge returns to the map for the next item; it never continues the graph.
+function isScopeJoin(context: Context, edge: Edge): boolean {
+  const source = context.nodes.get(edge.from);
+  const owner = context.nodes.get(edge.to);
 
   return (
-    kind === "join" &&
-    owner !== undefined &&
-    owner.kind === "map" &&
+    edge.kind === "join" &&
+    owner?.kind === "map" &&
     source?.kind === "join" &&
-    source.scope === to
+    source.scope === edge.to
   );
 }
 
@@ -122,10 +122,29 @@ export function successors(context: Context, id: NodeId): NodeId[] {
 
   return [
     ...context.graph.edges
-      .filter((edge) => edge.from === id && !isScopeJoin(context, edge.from, edge.to, edge.kind))
+      .filter((edge) => edge.from === id && !isScopeJoin(context, edge))
       .map((edge) => edge.to),
     ...(node ? targets(node) : []),
   ];
+}
+
+export function isBodyTail(context: Context, id: NodeId): boolean {
+  return !context.graph.edges.some((edge) => edge.from === id && edge.kind === "next");
+}
+
+/** The node that runs after `node` in its own scope; a control's arm tails lead there too. */
+export function continuation(context: Context, node: Node): NodeId | undefined {
+  return context.graph.edges.find((edge) => {
+    const from = context.nodes.get(edge.from);
+
+    return (
+      (edge.kind === "next" || edge.kind === "join") &&
+      !isScopeJoin(context, edge) &&
+      context.nodes.get(edge.to)?.scope === node.scope &&
+      from !== undefined &&
+      (from.id === node.id || ancestors(from, context.nodes).some(({ id }) => id === node.id))
+    );
+  })?.to;
 }
 
 export function refs(value: Value): Ref[] {
@@ -144,7 +163,7 @@ export function refs(value: Value): Ref[] {
   return [];
 }
 
-export function predicateValues(predicate: Predicate): ComparisonOperand[] {
+function predicateValues(predicate: Predicate): ComparisonOperand[] {
   switch (predicate.op) {
     case "and":
     case "or":

@@ -1,14 +1,14 @@
-import { SANDBOX_MAX_CAPTURE_BYTES, type SandboxExecutionResult } from "@loopy/contract";
+import { type ExecutionResult, SANDBOX_MAX_CAPTURE_BYTES } from "@loopy/contract";
 import { limitLogs, MAX_OUTPUT_BYTES, outputBytes } from "@loopy/core";
 
 export function failed(
-  code: Extract<SandboxExecutionResult, { kind: "failed" }>["error"]["code"],
+  code: Extract<ExecutionResult, { kind: "failed" }>["error"]["code"],
   message: string,
-): SandboxExecutionResult {
+): ExecutionResult {
   return { kind: "failed", error: { code, message }, exitCode: null, logs: [] };
 }
 
-export function boundedResult(result: SandboxExecutionResult): SandboxExecutionResult {
+export function boundedResult(result: ExecutionResult): ExecutionResult {
   if (result.kind === "succeeded" && outputBytes(result.output) > MAX_OUTPUT_BYTES) {
     return failed("output_limit", `Attempt output exceeds ${MAX_OUTPUT_BYTES} bytes.`);
   }

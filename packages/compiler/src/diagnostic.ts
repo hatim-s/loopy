@@ -1,5 +1,4 @@
-import type { CompilerDiagnosticCode } from "@loopy/core";
-import type { CompilerDiagnostic } from "./types";
+import type { CompilerDiagnostic, CompilerDiagnosticCode } from "./types";
 
 export function diagnostic(
   file: string,

@@ -1,10 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import {
   decodeBoundary,
+  type Receipt,
   SANDBOX_MAX_REQUEST_BYTES,
   type SandboxArtifact,
   type SandboxError,
-  type SandboxReceipt,
   sandboxArtifactRequestSchema,
   sandboxAttemptIdentitySchema,
   sandboxAttemptRequestSchema,
@@ -120,7 +120,7 @@ function httpFailure(cause: Cause.Cause<SandboxFailure>) {
   return Effect.logError(cause).pipe(Effect.as(response));
 }
 
-function responseJson(value: SandboxReceipt | SandboxArtifact | Response, status = 200) {
+function responseJson(value: Receipt | SandboxArtifact | Response, status = 200) {
   return value instanceof Response ? value : Response.json(value, { status });
 }
 

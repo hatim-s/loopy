@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
-import type { CommandExecutionError } from "@loopy/core";
 import { Effect } from "effect";
+import type { CommandExecutionError } from "../command-error";
 import type { BundleSandboxOptions } from "./bundle";
 import type { ProcessFilesystemError } from "./io";
 import { absentPath, filesystem } from "./io";

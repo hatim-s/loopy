@@ -1,7 +1,7 @@
 import {
   executionKeySchema,
   type GraphRevisionView,
-  type NodeRunView,
+  type NodeRun,
   type RunSnapshotView,
 } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
@@ -62,7 +62,7 @@ const FIXED_HEIGHT = "h-[clamp(400px,calc(100dvh-var(--head-h)-240px),640px)]";
 
 const SIDE_HEIGHT = "max-h-[70vh] lg:max-h-[clamp(400px,calc(100dvh-var(--head-h)-240px),640px)]";
 
-const SETTLED = new Set<NodeRunView["status"]>(["succeeded", "failed", "cancelled", "skipped"]);
+const SETTLED = new Set<NodeRun["status"]>(["succeeded", "failed", "cancelled", "skipped"]);
 
 function sameScope(a: ScopeTuple, b: ScopeTuple): boolean {
   return JSON.stringify(a) === JSON.stringify(b);

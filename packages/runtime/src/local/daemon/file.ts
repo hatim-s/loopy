@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { decodeJson } from "@loopy/contract";
 import { Schema } from "effect";
 import { errnoCode, writeFileAtomically } from "../fs";
 
@@ -19,7 +20,7 @@ export function readDaemonFile(home: string): DaemonFile | undefined {
     return undefined;
   }
 
-  const record = Schema.decodeUnknownSync(daemonFileSchema)(JSON.parse(readFileSync(file, "utf8")));
+  const record = decodeJson(daemonFileSchema)(readFileSync(file, "utf8"));
 
   try {
     process.kill(record.pid, 0);

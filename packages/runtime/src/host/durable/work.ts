@@ -1,5 +1,5 @@
 import { executionKeyString, type Graph, type Store } from "@loopy/core";
-import type { Effect as EngineEffect } from "@loopy/core/engine";
+import type { EngineEffect } from "@loopy/core/engine";
 import { Effect } from "effect";
 import { completionEvent } from "../completion-event";
 import { acquireDispatch } from "../rate-limit";
@@ -27,7 +27,10 @@ export function reconcileDurableWork(options: {
       return {
         kind: "value_sampled" as const,
         executionKey: work.executionKey,
-        value: work.valueKind === "uuid" ? crypto.randomUUID() : Math.random(),
+        sample:
+          work.valueKind === "uuid"
+            ? { valueKind: "uuid" as const, value: crypto.randomUUID() }
+            : { valueKind: "random" as const, value: Math.random() },
         at,
       };
     }

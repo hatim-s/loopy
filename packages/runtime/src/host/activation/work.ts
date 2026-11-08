@@ -62,7 +62,10 @@ function perform(options: ActivationOptions, work: ActivationWorkEffect) {
     return {
       kind: "value_sampled",
       executionKey: work.executionKey,
-      value: work.valueKind === "uuid" ? crypto.randomUUID() : Math.random(),
+      sample:
+        work.valueKind === "uuid"
+          ? { valueKind: "uuid", value: crypto.randomUUID() }
+          : { valueKind: "random", value: Math.random() },
       at: yield* timestamp,
     } satisfies EngineEvent;
   });

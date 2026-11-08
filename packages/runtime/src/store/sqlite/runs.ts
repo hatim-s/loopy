@@ -1,7 +1,8 @@
 import type { RunOutcome, RunRecord, RunStatus, RuntimeEvent } from "@loopy/core";
-import { acquireWindow, isTerminalRun, OwnershipError, type RateLimitWindow } from "@loopy/core";
+import { isTerminalRun, OwnershipError } from "@loopy/core";
 import { type EventTransaction } from "../event-outbox";
 import { ownedStorageOperation, StoreRejectedError, storageOperation } from "../operation";
+import { acquireWindow, type RateLimitWindow } from "../rate-limit-window";
 import { normalizeRun, utc } from "../timestamps";
 import { rowToRun, SQL } from "./store-rows";
 import { type RunRow } from "./store-schema";

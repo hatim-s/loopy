@@ -4,7 +4,7 @@ import {
   type Json,
   type LogRecord,
   type LoopyView,
-  type NodeRunView,
+  type NodeRun,
   type RunSnapshotView,
   type RunView,
 } from "@loopy/contract";
@@ -55,13 +55,13 @@ function recorder(view: GraphRevisionView, runId: string) {
 
   return {
     key,
-    running: (nodeId: string, at: Attempt): NodeRunView => ({
+    running: (nodeId: string, at: Attempt): NodeRun => ({
       key: key(nodeId),
       ...at,
       receipt: "started",
       status: "running",
     }),
-    succeeded: (nodeId: string, at: Attempt, output: Json): NodeRunView => ({
+    succeeded: (nodeId: string, at: Attempt, output: Json): NodeRun => ({
       key: key(nodeId),
       ...at,
       // The engine settles log and join nodes inline, so only executed work has receipts.
@@ -73,7 +73,7 @@ function recorder(view: GraphRevisionView, runId: string) {
   };
 }
 
-function nodeLog(run: NodeRunView, seq: number, message: string, data?: Json): LogRecord {
+function nodeLog(run: NodeRun, seq: number, message: string, data?: Json): LogRecord {
   return {
     runId: run.key.runId,
     seq,
@@ -112,7 +112,6 @@ function pinnedRun(): RunSnapshotView {
       succeeded("2:reply", once, { sent: 2 }),
       succeeded("3:join", immediate, { sent: 2, spam: 4 }),
     ],
-    steps: [],
     logs: [nodeLog(fetch, 1, "Fetched 11 unread messages")],
     hooks: [],
     cursor: 0,
@@ -142,7 +141,6 @@ function reviewRun(): RunSnapshotView {
         error: { code: "validation", message },
       },
     ],
-    steps: [],
     logs: [],
     hooks: [],
     cursor: 0,
@@ -169,7 +167,6 @@ function helloRun(): RunSnapshotView {
       succeeded("1:log", immediate, null),
       succeeded("2:join", immediate, { greeting: "Hello, Ada!" }),
     ],
-    steps: [],
     logs: [nodeLog(greet, 1, "Hello, Ada!")],
     hooks: [],
     cursor: 0,
@@ -185,11 +182,11 @@ type Step = [nodeId: string, mark: Mark, item?: number];
 const PACKAGES = ["core", "cli", "dashboard"];
 
 /** Node records for the release train, written as one line per execution. */
-function releaseRecords(runId: string, steps: Step[], startedAt: string): NodeRunView[] {
+function releaseRecords(runId: string, steps: Step[], startedAt: string): NodeRun[] {
   const { key } = recorder(RELEASE, runId);
   const at = { attempt: 1, maxAttempts: 3, startedAt };
 
-  return steps.map(([nodeId, mark, item]): NodeRunView => {
+  return steps.map(([nodeId, mark, item]): NodeRun => {
     const base = {
       ...at,
       key: {
@@ -318,7 +315,6 @@ function releaseLive(): RunSnapshotView {
       status: "running",
     },
     nodeRuns,
-    steps: [],
     logs: nodeRuns
       .filter((record) => record.status === "failed" || record.key.nodeId === "22:publish/log")
       .map((record, index) =>
@@ -363,7 +359,6 @@ function releaseWaiting(): RunSnapshotView {
       wakeAt: minutes(232),
     },
     nodeRuns,
-    steps: [],
     logs: [],
     hooks: [],
     cursor: 0,
@@ -375,7 +370,7 @@ const LIVE_ID = "run_01JDEMO7TRIAGE";
 
 const queued = runView(LIVE_ID, "triage-inbox", minutes(-1));
 
-function node(record: NodeRunView): EventDraft {
+function node(record: NodeRun): EventDraft {
   return { entity: "node", kind: record.status, runId: LIVE_ID, record };
 }
 
@@ -517,7 +512,7 @@ export function demoScript(): FakeScript {
       [signOff.run.id]: RELEASE.revision,
     },
     runs: [
-      { run: queued, nodeRuns: [], steps: [], logs: [], hooks: [], cursor: 0, epoch: "demo" },
+      { run: queued, nodeRuns: [], logs: [], hooks: [], cursor: 0, epoch: "demo" },
       pinned,
       stopped,
       greeted,

@@ -1,5 +1,5 @@
 import { durationMs, type ExecutionKey, type Graph, type Receipt, type Store } from "@loopy/core";
-import type { Effect as EngineEffect } from "@loopy/core/engine";
+import type { EngineEffect } from "@loopy/core/engine";
 import { Effect } from "effect";
 
 type AdmissionOptions<E> = {

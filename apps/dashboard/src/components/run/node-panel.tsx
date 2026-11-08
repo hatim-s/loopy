@@ -1,4 +1,4 @@
-import type { NodeRunView } from "@loopy/contract";
+import type { NodeRun } from "@loopy/contract";
 import { type ReactNode, useState } from "react";
 import type { GraphNodeModel } from "../../lib/graph";
 import { nodeFacts } from "../../lib/node-facts";
@@ -42,7 +42,7 @@ const FILTER_STATUS = {
   running: "running",
   retrying: "retrying",
   succeeded: "succeeded",
-} satisfies Record<ItemFilter, NodeRunView["status"] | undefined>;
+} satisfies Record<ItemFilter, NodeRun["status"] | undefined>;
 
 const ITEM_PAGE = 50;
 
@@ -83,10 +83,10 @@ const WORST_FIRST = [
   "cancelled",
   "succeeded",
   "skipped",
-] as const satisfies NodeRunView["status"][];
+] as const satisfies NodeRun["status"][];
 
 /** The worst status among an item's executions, so a failed item reads as failed. */
-function itemStatus(counts: ScopeSummary["counts"]): NodeRunView["status"] | null {
+function itemStatus(counts: ScopeSummary["counts"]): NodeRun["status"] | null {
   return WORST_FIRST.find((status) => (counts[status] ?? 0) > 0) ?? null;
 }
 
@@ -348,7 +348,7 @@ function Header({
   onClose,
 }: {
   node: GraphNodeModel;
-  status: NodeRunView["status"] | null;
+  status: NodeRun["status"] | null;
   onClose: () => void;
 }) {
   return (

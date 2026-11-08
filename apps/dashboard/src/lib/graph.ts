@@ -3,7 +3,7 @@ import {
   type GraphView,
   isTerminalRun,
   type LogRecord,
-  type NodeRunView,
+  type NodeRun,
   type RunStatus,
 } from "@loopy/contract";
 import { kindDetail } from "./graph-text";
@@ -13,7 +13,7 @@ type GraphNode = GraphView["nodes"][number];
 
 type GraphEdge = GraphView["edges"][number];
 
-export type NodeRunStatus = NodeRunView["status"];
+export type NodeRunStatus = NodeRun["status"];
 
 /**
  * What the graph knows about one node. `definition` has no run to compare against. An idle
@@ -57,7 +57,7 @@ export type GraphNodeModel = {
   role: NodeRole;
   title: string;
   detail: string | null;
-  executions: NodeRunView[];
+  executions: NodeRun[];
   state: NodeState;
 };
 
@@ -78,7 +78,7 @@ export type GraphModel = {
   nodes: GraphNodeModel[];
   edges: GraphEdgeModel[];
   /** Records whose node is absent from the graph, which means the graph is not the pinned one. */
-  orphans: NodeRunView[];
+  orphans: NodeRun[];
 };
 
 // The lowest rank wins, so a node with many executions shows its most urgent one.
@@ -95,7 +95,7 @@ const URGENCY = {
   skipped: 9,
 } satisfies Record<NodeRunStatus, number>;
 
-function nodeState(executions: NodeRunView[], run: RunStatus | null, complete: boolean): NodeState {
+function nodeState(executions: NodeRun[], run: RunStatus | null, complete: boolean): NodeState {
   if (run === null) {
     return { kind: "definition" };
   }
@@ -121,7 +121,7 @@ function nodeState(executions: NodeRunView[], run: RunStatus | null, complete: b
   return { kind: "ran", status, counts };
 }
 
-function scopeId(execution: NodeRunView): string {
+function scopeId(execution: NodeRun): string {
   return JSON.stringify(execution.key.scope);
 }
 
@@ -131,7 +131,7 @@ function scopeId(execution: NodeRunView): string {
  * only `next` edges, which makes that exact for it. Control edges stay unmarked until branch,
  * switch and scope nodes record the arm they chose.
  */
-function tookNext(edge: GraphEdge, byNode: Map<string, NodeRunView[]>): boolean {
+function tookNext(edge: GraphEdge, byNode: Map<string, NodeRun[]>): boolean {
   if (edge.kind !== "next") {
     return false;
   }
@@ -173,9 +173,9 @@ export function graphModel(
   graph: GraphView,
   run: {
     status: RunStatus;
-    nodeRuns: NodeRunView[];
+    nodeRuns: NodeRun[];
     coverage: ExecutionCoverage[];
-    selectedExecutions?: NodeRunView[];
+    selectedExecutions?: NodeRun[];
   } | null,
 ): GraphModel {
   const records = new Map(
@@ -186,7 +186,7 @@ export function graphModel(
     records.set(executionKeyString(execution.key), execution);
   }
 
-  const byNode = new Map<string, NodeRunView[]>();
+  const byNode = new Map<string, NodeRun[]>();
 
   for (const execution of records.values()) {
     byNode.set(execution.key.nodeId, [...(byNode.get(execution.key.nodeId) ?? []), execution]);
@@ -284,7 +284,7 @@ export function focusNodes(model: GraphModel, entry: string): string[] {
 }
 
 /** Where an execution sits inside maps and other scopes, or `null` at the top level. */
-export function scopeText(execution: NodeRunView): string | null {
+export function scopeText(execution: NodeRun): string | null {
   return execution.key.scope.length === 0
     ? null
     : execution.key.scope.map(({ nodeId, index }) => `${nodeId}[${index}]`).join(" / ");
@@ -296,7 +296,7 @@ export type AttemptLogs = { attempt: number; logs: LogRecord[] };
  * Logs written by one execution, grouped by the attempt that wrote them in write order. The
  * store keeps one record per execution key, so earlier attempts survive only in their logs.
  */
-export function executionLogs(logs: LogRecord[], execution: NodeRunView): AttemptLogs[] {
+export function executionLogs(logs: LogRecord[], execution: NodeRun): AttemptLogs[] {
   const key = executionKeyString(execution.key);
   const groups: AttemptLogs[] = [];
 

@@ -2,12 +2,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   decodeBoundary,
+  type ExecutionResult,
+  executionResultSchema,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptRequest,
-  type SandboxExecutionResult,
-  sandboxExecutionResultSchema,
 } from "@loopy/contract";
-import { CommandExecutionError } from "@loopy/core";
+import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Result, Schema } from "effect";
 import type { SandboxConfig } from "../config";
 import type { SandboxOperationError } from "../operations";
@@ -35,11 +35,11 @@ export interface AttemptBackend {
     receipt: StartedReceipt,
     request: SandboxAttemptRequest,
     signal?: AbortSignal,
-  ): Effect.Effect<SandboxExecutionResult, SandboxOperationError | CommandExecutionError>;
+  ): Effect.Effect<ExecutionResult, SandboxOperationError | CommandExecutionError>;
   recover(
     receipt: StartedReceipt,
     signal?: AbortSignal,
-  ): Effect.Effect<SandboxExecutionResult, SandboxOperationError | CommandExecutionError>;
+  ): Effect.Effect<ExecutionResult, SandboxOperationError | CommandExecutionError>;
 }
 
 export class DockerBackend implements AttemptBackend {
@@ -239,7 +239,7 @@ export class DockerBackend implements AttemptBackend {
         });
 
         return yield* checked("worker result", () =>
-          boundedResult(decodeBoundary(sandboxExecutionResultSchema)(JSON.parse(output.stdout))),
+          boundedResult(decodeBoundary(executionResultSchema)(JSON.parse(output.stdout))),
         );
       }).pipe(Effect.result);
 

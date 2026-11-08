@@ -1,12 +1,7 @@
-import {
-  type ComparisonOperand,
-  isNumber,
-  isRecord,
-  isRef,
-  isString,
-  type Json,
-  type Predicate,
-} from "..";
+import { isRef } from "../graph/ref";
+import type { ComparisonOperand, Predicate } from "../graph/values";
+import type { Json } from "../json";
+import { isNumber, isRecord, isString } from "../validation";
 import { type ResolutionContext, reference, resolve } from "./resolve";
 import type { EngineState } from "./state";
 
@@ -36,14 +31,7 @@ function equal(left: Json, right: Json): boolean {
     );
   }
 
-  if (
-    left &&
-    right &&
-    isRecord(left) &&
-    isRecord(right) &&
-    !Array.isArray(left) &&
-    !Array.isArray(right)
-  ) {
+  if (isRecord(left) && isRecord(right)) {
     return (
       Object.keys(left).length === Object.keys(right).length &&
       Object.entries(left).every(

@@ -175,7 +175,6 @@ export class SqliteQueryNodes extends SqliteQueryRuns {
           nodeRunsNext: nodes.next,
           truncatedOutputs: nodes.truncatedOutputs,
           scopes: this.readScopeCounts(id),
-          steps: [],
           logs: [],
           hooks: hooks.slice(0, 200).map((row) => publicHook(decodeWaitRecord(row.record))),
           hooksTruncated: hooks.length > 200,

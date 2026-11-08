@@ -1,7 +1,8 @@
 import type { LogRecord, RunRecord, RuntimeEvent, RuntimeEventChange, Schedule } from "@loopy/core";
-import { type NodeRun, type RateLimitWindow, type WaitRecord } from "@loopy/core";
+import { type NodeRun, type WaitRecord } from "@loopy/core";
 import { EVENT_RETENTION, EventListeners, type EventTransaction } from "../event-outbox";
 import { storageOperation } from "../operation";
+import type { RateLimitWindow } from "../rate-limit-window";
 import { utc } from "../timestamps";
 
 export class MemoryEvents {

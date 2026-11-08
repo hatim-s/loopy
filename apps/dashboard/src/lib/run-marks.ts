@@ -1,4 +1,4 @@
-import type { GraphView, NodeRunView } from "@loopy/contract";
+import type { GraphView, NodeRun } from "@loopy/contract";
 import type { NodeMark } from "../components/code/code-view";
 import { elapsed } from "./format";
 import type { GraphModel, GraphNodeModel } from "./graph";
@@ -67,7 +67,7 @@ export function firstInside(graph: GraphView, mapId: string): GraphNode["id"] | 
   return null;
 }
 
-const SETTLED = new Set<NodeRunView["status"]>(["succeeded", "failed", "cancelled", "skipped"]);
+const SETTLED = new Set<NodeRun["status"]>(["succeeded", "failed", "cancelled", "skipped"]);
 
 /**
  * A map's read-out. The daemon counts items once they have an execution, so the number is what
@@ -108,7 +108,7 @@ function note(node: GraphNodeModel, now: number): string | null {
     : elapsed(now - Date.parse(only.startedAt));
 }
 
-function firstError(executions: NodeRunView[]): string | null {
+function firstError(executions: NodeRun[]): string | null {
   const failed = executions.find(
     (execution) => execution.status === "failed" || execution.status === "retrying",
   );

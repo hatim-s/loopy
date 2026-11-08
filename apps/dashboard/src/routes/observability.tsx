@@ -17,7 +17,7 @@ import {
   type Period,
 } from "../lib/view-models";
 
-const ENTITIES = ["run", "node", "step", "log", "hook", "schedule"] as const;
+const ENTITIES = ["run", "node", "log", "hook", "schedule"] as const;
 
 const RUN_STATUSES = runStatusSchema.literals;
 

@@ -1,7 +1,6 @@
-import type { RunView } from "@loopy/contract";
+import { describeCron, type RunView } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { describeCron } from "../../lib/cron";
 import { elapsed, shortId, span } from "../../lib/format";
 import { useResolveHook } from "../../lib/mutations";
 import { useLoopyRows, useRunPages, useScheduleOverview } from "../../lib/ui-data";

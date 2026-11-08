@@ -2,9 +2,9 @@ import type { Effect } from "effect";
 import { Context, Data } from "effect";
 import type { StoreEffect } from "./effects";
 import type { ExecutionKey, NodeRun, OutSchema } from "./graph";
+import type { Json } from "./json";
 import type {
   HookRecord,
-  Json,
   LogRecord,
   RunOutcome,
   RunRecord,

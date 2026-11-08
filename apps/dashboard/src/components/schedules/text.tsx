@@ -1,4 +1,4 @@
-import { describeCron } from "../../lib/cron";
+import { describeCron } from "@loopy/contract";
 import { span, timestamp } from "../../lib/format";
 
 /** The cron in words over the cron itself. Unsupported expressions keep only the cron. */

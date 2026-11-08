@@ -1,10 +1,10 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
 import {
   decodeBoundary,
+  type ExecutionResult,
+  executionResultSchema,
   type ResultRef,
   SANDBOX_MAX_CAPTURE_BYTES,
-  type SandboxExecutionResult,
-  sandboxExecutionResultSchema,
 } from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
 import { Effect } from "effect";
@@ -22,7 +22,7 @@ export class R2ImmutableResults {
     this.prefix = `receipts/${encodeURIComponent(namespace)}/workspaces/${encodeURIComponent(workspace)}/results/`;
   }
 
-  put(result: SandboxExecutionResult) {
+  put(result: ExecutionResult) {
     return Effect.gen({ self: this }, function* () {
       let bytes = new TextEncoder().encode(canonicalJson(result));
 
@@ -96,7 +96,7 @@ export class R2ImmutableResults {
       }
 
       return yield* cloudSync("decode immutable result", () =>
-        decodeBoundary(sandboxExecutionResultSchema)(
+        decodeBoundary(executionResultSchema)(
           JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
         ),
       );

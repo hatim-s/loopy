@@ -1,7 +1,8 @@
 import type { RunOutcome, RunRecord, RunStatus } from "@loopy/core";
-import { acquireWindow, isTerminalRun, OwnershipError } from "@loopy/core";
+import { isTerminalRun, OwnershipError } from "@loopy/core";
 import { type EventTransaction } from "../event-outbox";
 import { ownedStorageOperation, StoreRejectedError, storageOperation } from "../operation";
+import { acquireWindow } from "../rate-limit-window";
 import { normalizeRun, utc } from "../timestamps";
 import { publicHook } from "../wait";
 import { MemoryEvents } from "./events";

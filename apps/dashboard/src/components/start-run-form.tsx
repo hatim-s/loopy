@@ -1,12 +1,10 @@
-import type { Json, LoopyView } from "@loopy/contract";
+import { type Json, type LoopyView, type RecordField, recordFields } from "@loopy/contract";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   coerceInput,
   type FieldIssue,
-  type InputField,
   initialValues,
-  inputFields,
   parseJsonInput,
   type RecordSpec,
 } from "../lib/input-form";
@@ -22,7 +20,7 @@ function FieldControl({
   invalid,
   onChange,
 }: {
-  field: InputField;
+  field: RecordField;
   value: string;
   invalid: boolean;
   onChange: (value: string) => void;
@@ -52,7 +50,7 @@ function FieldControl({
 
 /** One control per spec key. Issues show only after a submit attempt. */
 function RecordFields({ spec, onSubmit }: { spec: RecordSpec; onSubmit: (input: Json) => void }) {
-  const fields = inputFields(spec);
+  const fields = recordFields(spec);
   const [values, setValues] = useState(() => initialValues(fields));
   const [issues, setIssues] = useState<FieldIssue[]>([]);
 

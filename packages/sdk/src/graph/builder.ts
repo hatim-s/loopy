@@ -195,7 +195,7 @@ export class GraphBuilder {
   }
 
   retry(retry?: Partial<GraphRetry>): GraphRetry {
-    return { attempts: 3, backoff: "exponential", retryOnExit: false, ...retry };
+    return { attempts: 3, retryOnExit: false, ...retry };
   }
 
   edge(from: NodeId, to: NodeId, kind: Exclude<Edge["kind"], "case">) {

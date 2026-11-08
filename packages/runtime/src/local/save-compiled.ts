@@ -1,6 +1,11 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { definitionSummary, type PutLoopyBody, validateCompiled } from "@loopy/contract";
+import {
+  definitionSummary,
+  type PutLoopyBody,
+  unavailableSource,
+  validateCompiled,
+} from "@loopy/contract";
 import { canonicalJson } from "@loopy/core";
 import { Effect } from "effect";
 import { type ArtifactRegistry, ArtifactValidationError, RegistryError } from "../service";
@@ -29,12 +34,7 @@ export const saveCompiled = Effect.fn(function* (registry: Registry, body: PutLo
     ));
 
   const sourceArtifact = historical
-    ? ({
-        version: 1,
-        status: "unavailable",
-        revision: body.revision,
-        reason: "not_captured",
-      } as const)
+    ? unavailableSource(body.revision, "not_captured")
     : yield* redactSourceArtifact(registry.home, artifact).pipe(
         Effect.mapError((cause) => new RegistryError({ operation: "redact source", cause })),
       );

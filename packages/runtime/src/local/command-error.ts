@@ -1,5 +1,5 @@
+import type { CommandResult } from "@loopy/core";
 import { Data } from "effect";
-import type { CommandResult } from "./model";
 
 /** A process boundary failure. Only timeout and output_limit are author evaluation limits. */
 export class CommandExecutionError extends Data.TaggedError("CommandExecutionError")<{

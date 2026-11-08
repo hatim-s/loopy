@@ -1,15 +1,59 @@
+// The dashboard reaches core domain schemas and helpers only through this browser-safe entry.
 export {
+  DEFAULT_TIME_ZONE,
+  type Diagnostic,
+  describeCron,
+  diagnosticSchema,
+  type Edge,
+  type ExecutionKey,
+  type ExecutionResult,
+  type ExecutionSpec,
+  edgeSchema,
+  executionKeySchema,
   executionKeyString,
-  isFieldValue,
+  executionResultSchema,
+  executionSpecSchema,
+  type Graph,
+  graphSchema,
+  type HookRecord,
+  hookRecordSchema,
   isRecord,
   isRef,
   isTerminalRun,
+  type Json,
+  jsonSchema,
+  type LogPosition,
+  type LogRecord,
+  logRecordSchema,
+  MAX_PREVIEW_BYTES,
+  type Node,
+  type NodeRun,
+  nodeIdSchema,
+  nodeRunSchema,
+  nodeSchema,
+  type OutSchema,
+  outputSchema,
+  parseFieldText,
+  predicateSchema,
+  type Receipt,
+  type RecordField,
+  type Ref,
+  type RunOutcome,
+  type RunStatus,
+  receiptSchema,
+  recordFields,
+  refIdSchema,
+  refSchema,
+  runStatusSchema,
+  type Schedule,
+  scheduleSchema,
+  type Value,
+  valueSchema,
 } from "@loopy/core";
 
 export {
   DEFAULT_ERROR_MESSAGES,
   decodeRunCursor,
-  ERROR_CODES,
   type ErrorBody,
   type ErrorCode,
   encodeRunCursor,
@@ -21,7 +65,7 @@ export {
   scheduleEnabledBodySchema,
 } from "./api";
 
-export { boundaryOptions, decodeBoundary, encodeBoundary } from "./codec";
+export { boundaryOptions, decodeBoundary, decodeJson, encodeBoundary } from "./codec";
 
 export {
   type PutLoopyBody,
@@ -49,24 +93,7 @@ export { graphView, loopyView, runView, serverEvent } from "./derive";
 
 export * from "./graph";
 
-export { type Json, jsonSchema } from "./json";
-
 export { parseModuleOutput } from "./module-output";
-
-export {
-  type HookRecord,
-  hookRecordSchema,
-  type LogPosition,
-  type LogRecord,
-  logRecordSchema,
-  type RunOutcome,
-  type RunStatus,
-  runStatusSchema,
-  type Schedule,
-  type StepRecord,
-  scheduleSchema,
-  stepRecordSchema,
-} from "./records";
 
 export * from "./sandbox";
 
@@ -80,6 +107,7 @@ export {
   MAX_SOURCE_RANGES,
   type SourceArtifact,
   sourceArtifactSchema,
+  unavailableSource,
 } from "./source-artifact";
 
 export {
