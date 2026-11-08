@@ -1,13 +1,9 @@
 import { mkdir, open } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  decodeRouteResponse,
-  type Route,
-  type RouteInput,
-  type RouteResult,
-  routeRequest,
-} from "@loopy/contract";
+import type { Route, RouteInput, RouteResult } from "@loopy/contract";
 import { readDaemonFile } from "@loopy/runtime/local";
+import { JourneyFailure } from "../shared/assert";
+import { ApiClient } from "../shared/fixture-client";
 import { requireFreePorts } from "../stack/ports";
 import { cli, environment, home, port, source, state } from "./config";
 import { DAEMON } from "./plan";
@@ -117,37 +113,27 @@ export class OwnedDaemon {
     return { exitCode, rejected: exitCode !== 0, reason: stderr.trim() };
   }
 
-  async call<R extends Route>(route: R, input: RouteInput<R>): Promise<RouteResult<R>> {
-    const record = readDaemonFile(home);
+  // Each request re-reads discovery, so a replaced daemon never receives this runner's calls.
+  private readonly client = new ApiClient({
+    origin: `http://127.0.0.1:${port}`,
+    token: null,
+    timeoutMs: 10_000,
+    transport: (url, init) => {
+      const record = readDaemonFile(home);
 
-    if (!this.child || record?.pid !== this.child.pid || record.port !== port) {
-      throw new Error("Daemon discovery does not match the process this runner owns.");
-    }
-
-    const { method, url, headers, body } = routeRequest(route, input);
-
-    const response = await fetch(`http://127.0.0.1:${port}${url}`, {
-      method,
-      headers: { ...headers, Authorization: `Bearer ${record.token}` },
-      body,
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    const outcome = decodeRouteResponse(route, response.status, await response.text());
-
-    switch (outcome.kind) {
-      case "ok": {
-        return outcome.value;
+      if (!this.child || record?.pid !== this.child.pid || record.port !== port) {
+        throw new JourneyFailure({ failure: "daemon_discovery_not_owned" });
       }
 
-      case "error": {
-        throw new Error(`${response.status}: ${outcome.error.code}`);
-      }
+      const headers = new Headers(init.headers);
+      headers.set("Authorization", `Bearer ${record.token}`);
 
-      case "malformed": {
-        throw new Error(`${response.status}: the daemon answered ${route.path} off contract.`);
-      }
-    }
+      return fetch(url, { ...init, headers });
+    },
+  });
+
+  call<R extends Route>(route: R, input: RouteInput<R>): Promise<RouteResult<R>> {
+    return this.client.call(route, input);
   }
 
   async stop(signal: "SIGTERM" | "SIGKILL" = "SIGTERM") {

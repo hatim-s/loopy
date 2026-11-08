@@ -31,16 +31,11 @@ const startedAt = new Date().toISOString();
 
 let previousStart = 0;
 
-const direct = createMeasure(
-  (path, signal) =>
-    fetch(`${client.settings.api}${path}`, {
-      headers: { Authorization: `Bearer ${client.settings.token}` },
-      signal,
-    }),
-  samples,
-);
+const unslotted = client.direct();
 
-const shared = createMeasure((path, signal) => client.request(path, signal), samples);
+const direct = createMeasure((path, signal) => unslotted.request(path, { signal }), samples);
+
+const shared = createMeasure((path, signal) => client.request(path, { signal }), samples);
 
 async function probe(route: "runs" | "loopies" | "events", mode: "direct" | "shared") {
   await Bun.sleep(Math.max(0, 1000 - (performance.now() - previousStart)));
