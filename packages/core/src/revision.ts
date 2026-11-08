@@ -13,12 +13,22 @@ export function carriesBundle(node: Node): node is BundledNode {
   return node.kind === "code" || (node.kind === "command" && node.parse !== null);
 }
 
-/** Bundles a graph carries, listed in node order. */
+/** Only a compiled graph carries bundle hashes; an authored one still has null placeholders. */
+export function bundleHash(node: BundledNode): string {
+  const hash = node.kind === "code" ? node.module.bundleHash : node.parse.bundleHash;
+
+  if (hash === null) {
+    throw new Error(`Node '${node.id}' has no compiled bundle. Save the loopy again.`);
+  }
+
+  return hash;
+}
+
+/** Bundles a compiled graph carries, listed in node order. */
 export function graphBundles(graph: Pick<Graph, "nodes">) {
-  return graph.nodes.filter(carriesBundle).map((node) => ({
-    nodeId: node.id,
-    bundleHash: node.kind === "code" ? node.module.bundleHash : node.parse.bundleHash,
-  }));
+  return graph.nodes
+    .filter(carriesBundle)
+    .map((node) => ({ nodeId: node.id, bundleHash: bundleHash(node) }));
 }
 
 /** Bundles one attempt needs. The engine copies them from the node's bundle fields. */
