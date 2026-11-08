@@ -49,7 +49,7 @@ export function normalizeNode(node: NodeRun): NodeRun {
 export function normalizeRun(run: RunRecord): RunRecord {
   const record = { ...run, createdAt: utc(run.createdAt), updatedAt: utc(run.updatedAt) };
 
-  if (record.wakeAt !== undefined) {
+  if (record.status === "suspended" && record.wakeAt !== null) {
     record.wakeAt = utc(record.wakeAt);
   }
 

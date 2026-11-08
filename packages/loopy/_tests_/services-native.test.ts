@@ -200,7 +200,7 @@ test("hook resolution is atomic and SSE refuses a cursor inside a commit", async
           payload: { kind: "record", fields: { ok: "boolean" } },
           at,
         },
-        { kind: "suspend_run", wakeAt: null, at },
+        { kind: "suspend_run", wakeAt: null },
       ],
     }),
   );

@@ -1,22 +1,15 @@
 import {
-  hookRecordSchema,
   jsonSchema,
   logRecordSchema,
   nodeRunSchema,
-  runStatusSchema,
-  scheduleSchema,
-} from "@loopy/contract";
-import {
-  HOOK_EVENT_KINDS,
-  NODE_RUN_STATUSES,
-  RUN_EVENT_KINDS,
   type RunRecord,
-  SCHEDULE_EVENT_KINDS,
+  runtimeEventSchema,
   type Schedule,
+  waitRecordSchema,
 } from "@loopy/core";
 import { Schema } from "effect";
+import { StoredDataError } from "../operation";
 import { storedDecoder, storedValueDecoder } from "../row-codec";
-import { waitRecordSchema } from "../wait-schema";
 
 export type RunRow = {
   id: string;
@@ -67,6 +60,35 @@ export const decodeNodeRun = storedDecoder(nodeRunSchema, "node_runs/node_attemp
 
 export const decodeWait = storedDecoder(waitRecordSchema, "waits");
 
+function outcome(row: RunRow) {
+  switch (row.status) {
+    case "succeeded": {
+      if (row.output_json === null) {
+        throw new StoredDataError(
+          `Run '${row.id}' succeeded without output. Restore valid storage.`,
+        );
+      }
+
+      return { status: row.status, output: decodeJson(row.output_json) };
+    }
+
+    case "failed": {
+      if (row.error === null) {
+        throw new StoredDataError(
+          `Run '${row.id}' failed without an error. Restore valid storage.`,
+        );
+      }
+
+      return { status: row.status, error: row.error };
+    }
+
+    case "suspended":
+      return { status: row.status, wakeAt: row.wake_at };
+    default:
+      return { status: row.status };
+  }
+}
+
 export function rowToRun(row: RunRow): RunRecord {
   const run: RunRecord = {
     id: row.id,
@@ -74,25 +96,13 @@ export function rowToRun(row: RunRow): RunRecord {
     revision: row.revision,
     workspace: row.workspace,
     input: decodeJson(row.input_json),
-    status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ...outcome(row),
   };
-
-  if (row.output_json !== null) {
-    run.output = decodeJson(row.output_json);
-  }
-
-  if (row.error !== null) {
-    run.error = row.error;
-  }
 
   if (row.next_retry_at !== null) {
     run.nextRetryAt = row.next_retry_at;
-  }
-
-  if (row.wake_at !== null) {
-    run.wakeAt = row.wake_at;
   }
 
   if (row.owner_token !== null && row.owner_host !== null && row.heartbeat_at !== null) {
@@ -126,72 +136,18 @@ export function rowToSchedule(row: ScheduleRow): Schedule {
   return schedule;
 }
 
-const runSchema = Schema.Struct({
-  id: Schema.String,
-  slug: Schema.String,
-  revision: Schema.String,
-  workspace: Schema.String,
-  input: jsonSchema,
-  status: runStatusSchema,
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
-  output: Schema.optional(jsonSchema),
-  error: Schema.optional(Schema.String),
-  wakeAt: Schema.optional(Schema.String),
-  nextRetryAt: Schema.optional(Schema.String),
-  owner: Schema.optional(
-    Schema.Struct({
-      token: Schema.String,
-      pid: Schema.NullOr(Schema.Int),
-      host: Schema.String,
-      heartbeatAt: Schema.String,
-    }),
-  ),
-});
-
-const eventSchema = Schema.Union([
-  Schema.Struct({
-    entity: Schema.Literal("hook"),
-    kind: Schema.Literals(HOOK_EVENT_KINDS),
-    record: hookRecordSchema,
-  }),
-  Schema.Struct({
-    entity: Schema.Literal("run"),
-    kind: Schema.Literals(RUN_EVENT_KINDS),
-    record: runSchema,
-  }),
-  Schema.Struct({
-    entity: Schema.Literal("node"),
-    kind: Schema.Literals(NODE_RUN_STATUSES),
-    record: nodeRunSchema,
-  }),
-  Schema.Struct({
-    entity: Schema.Literal("log"),
-    kind: Schema.Literal("written"),
-    record: logRecordSchema,
-  }),
-  Schema.Struct({
-    entity: Schema.Literal("schedule"),
-    kind: Schema.Literals(SCHEDULE_EVENT_KINDS),
-    record: scheduleSchema,
-  }),
-  Schema.Struct({
-    entity: Schema.Literal("schedule"),
-    kind: Schema.Literal("deleted"),
-    record: Schema.Struct({ workspace: Schema.String, slug: Schema.String }),
-  }),
-]);
-
-const decodeEvent = storedValueDecoder(eventSchema, "events");
+const decodeEvent = storedValueDecoder(runtimeEventSchema, "events");
 
 const decodeEventRecord = storedDecoder(Schema.Unknown, "events");
 
 export function rowToEvent(row: EventRow) {
-  const change = decodeEvent({
+  return decodeEvent({
     entity: row.entity,
     kind: row.kind,
     record: decodeEventRecord(row.record),
+    sequence: row.sequence,
+    at: row.at,
+    txn: row.txn,
+    runId: row.run_id,
   });
-
-  return { ...change, sequence: row.sequence, at: row.at, txn: row.txn, runId: row.run_id };
 }

@@ -291,11 +291,7 @@ test("sleep and wait persist deadlines, scoped identity, and resume without dupl
   });
 
   const first = start(graph, { items: ["a", "b"] });
-  expect(first.effects).toContainEqual({
-    kind: "suspend_run",
-    wakeAt: "2026-10-20T00:00:01.000Z",
-    at,
-  });
+  expect(first.effects).toContainEqual({ kind: "suspend_run", wakeAt: "2026-10-20T00:00:01.000Z" });
 
   const second = step(graph, initialState("run", { items: ["a", "b"] }, first.state.nodeRuns), {
     kind: "run_started",

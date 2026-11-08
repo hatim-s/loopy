@@ -1,11 +1,9 @@
-import { Schema } from "effect";
+import { Schema, Tuple } from "effect";
 import { counter, struct } from "./codec";
-import type { NodeRun } from "./graph/node-run";
+import { executionKeySchema } from "./graph/key";
+import { NODE_RUN_STATUSES, nodeRunSchema } from "./graph/node-run";
+import { outputSchema } from "./graph/values";
 import { jsonSchema } from "./json";
-
-export const EXECUTION_MODES = ["sandbox", "full"] as const;
-
-export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
 export type CommandResult = {
   stdout: string;
@@ -39,16 +37,12 @@ export const runOutcomeSchema = Schema.Union([
 
 export type RunOutcome = Schema.Schema.Type<typeof runOutcomeSchema>;
 
-export const runRecordSchema = struct({
+const runBaseSchema = struct({
   id: Schema.String,
   slug: Schema.String,
   revision: Schema.String,
   workspace: Schema.String,
   input: jsonSchema,
-  status: runStatusSchema,
-  output: Schema.optional(jsonSchema),
-  error: Schema.optional(Schema.String),
-  wakeAt: Schema.optional(Schema.String),
   nextRetryAt: Schema.optional(Schema.String),
   createdAt: Schema.String,
   updatedAt: Schema.String,
@@ -60,16 +54,23 @@ export const runRecordSchema = struct({
       heartbeatAt: Schema.String,
     }),
   ),
-  truncatedFields: Schema.optional(
-    struct({ input: Schema.optional(counter), output: Schema.optional(counter) }),
-  ),
 });
+
+// A finished run carries its outcome; a suspended run carries the time it next wakes, if any.
+export const runRecordSchema = Schema.Union([
+  struct({ ...runBaseSchema.fields, status: Schema.Literal("queued") }),
+  struct({ ...runBaseSchema.fields, status: Schema.Literal("running") }),
+  struct({
+    ...runBaseSchema.fields,
+    status: Schema.Literal("suspended"),
+    wakeAt: Schema.NullOr(Schema.String),
+  }),
+  ...runOutcomeSchema.mapMembers(Tuple.map(Schema.fieldsAssign(runBaseSchema.fields))).members,
+]);
 
 export type RunRecord = Schema.Schema.Type<typeof runRecordSchema>;
 
 export const LOG_LEVELS = ["info", "warn", "error"] as const;
-
-export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export const logPositionSchema = struct({
   kind: Schema.Literal("node"),
@@ -105,6 +106,15 @@ export const hookRecordSchema = struct({
 
 export type HookRecord = Schema.Schema.Type<typeof hookRecordSchema>;
 
+// A hook plus the execution it resumes and the payload schema it accepts.
+export const waitRecordSchema = struct({
+  ...hookRecordSchema.fields,
+  executionKey: executionKeySchema,
+  schema: outputSchema,
+});
+
+export type WaitRecord = Schema.Schema.Type<typeof waitRecordSchema>;
+
 export type PendingHook = HookRecord & { expiresAt: string | null };
 
 export const scheduleSchema = struct({
@@ -121,15 +131,6 @@ export const scheduleSchema = struct({
 
 export type Schedule = Schema.Schema.Type<typeof scheduleSchema>;
 
-export type RunSnapshot = {
-  run: RunRecord;
-  nodeRuns: NodeRun[];
-  logs: LogRecord[];
-  hooks: HookRecord[];
-  cursor: number;
-  epoch: string;
-};
-
 const TERMINAL_RUN_STATUSES = [
   "succeeded",
   "failed",
@@ -140,37 +141,61 @@ export function isTerminalRun(status: RunStatus): boolean {
   return TERMINAL_RUN_STATUSES.some((terminal) => terminal === status);
 }
 
-export const RUN_EVENT_KINDS = [
-  "created",
-  "claimed",
-  "heartbeat",
-  "suspended",
-  "woken",
-  "released",
-  "finished",
-] as const;
-
-export const HOOK_EVENT_KINDS = ["created", "resolved", "expired"] as const;
-
-export const SCHEDULE_EVENT_KINDS = ["saved", "fired"] as const;
-
-type Event<E extends string, K extends string, R> = {
-  sequence: number;
-  at: string;
-  txn: string;
-  entity: E;
-  kind: K;
-  runId: string | null;
-  record: R;
+const eventFields = {
+  sequence: counter,
+  at: Schema.String,
+  txn: Schema.String,
+  runId: Schema.NullOr(Schema.String),
 };
 
-export type RuntimeEvent =
-  | Event<"run", (typeof RUN_EVENT_KINDS)[number], RunRecord>
-  | Event<"node", NodeRun["status"], NodeRun>
-  | Event<"log", "written", LogRecord>
-  | Event<"hook", (typeof HOOK_EVENT_KINDS)[number], HookRecord>
-  | Event<"schedule", (typeof SCHEDULE_EVENT_KINDS)[number], Schedule>
-  | Event<"schedule", "deleted", { workspace: string; slug: string }>;
+export const runtimeEventSchema = Schema.Union([
+  struct({
+    ...eventFields,
+    entity: Schema.Literal("run"),
+    kind: Schema.Literals([
+      "created",
+      "claimed",
+      "heartbeat",
+      "suspended",
+      "woken",
+      "released",
+      "finished",
+    ]),
+    record: runRecordSchema,
+  }),
+  struct({
+    ...eventFields,
+    entity: Schema.Literal("node"),
+    kind: Schema.Literals(NODE_RUN_STATUSES),
+    record: nodeRunSchema,
+  }),
+  struct({
+    ...eventFields,
+    entity: Schema.Literal("log"),
+    kind: Schema.Literal("written"),
+    record: logRecordSchema,
+  }),
+  struct({
+    ...eventFields,
+    entity: Schema.Literal("hook"),
+    kind: Schema.Literals(["created", "resolved", "expired"]),
+    record: hookRecordSchema,
+  }),
+  struct({
+    ...eventFields,
+    entity: Schema.Literal("schedule"),
+    kind: Schema.Literals(["saved", "fired"]),
+    record: scheduleSchema,
+  }),
+  struct({
+    ...eventFields,
+    entity: Schema.Literal("schedule"),
+    kind: Schema.Literal("deleted"),
+    record: struct({ workspace: Schema.String, slug: Schema.String }),
+  }),
+]);
+
+export type RuntimeEvent = Schema.Schema.Type<typeof runtimeEventSchema>;
 
 export const RUNTIME_EVENT_ENTITIES = [
   "run",

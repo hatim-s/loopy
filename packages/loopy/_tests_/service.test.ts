@@ -11,7 +11,7 @@ import { loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
 import { makeArtifactRegistry } from "../../runtime/src/local/save-compiled";
 import { compiledBody } from "./compiled-fixture";
-import { FakeExecutor } from "./fixture";
+import { FakeExecutor, runIn } from "./fixture";
 import { fixtureDaemon, fixtureStore, waitUntil } from "./fixtures/service-runtime";
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -104,16 +104,15 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
     "failed",
     "cancelled",
   ] as const) {
-    const run: RunRecord = {
+    const run = runIn(status, {
       id: status,
       slug: "service",
       workspace: root,
       revision: "a".repeat(64),
       input: {},
-      status,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    };
+    });
 
     if (status === "running") {
       run.owner = {

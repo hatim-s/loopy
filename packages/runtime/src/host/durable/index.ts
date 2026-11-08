@@ -38,10 +38,10 @@ function finished(run: RunRecord): DurableActivationResult | undefined {
 
   switch (run.status) {
     case "succeeded":
-      outcome = { status: "succeeded", output: run.output ?? null };
+      outcome = { status: "succeeded", output: run.output };
       break;
     case "failed":
-      outcome = { status: "failed", error: run.error ?? "Run failed." };
+      outcome = { status: "failed", error: run.error };
       break;
     case "cancelled":
       outcome = { status: "cancelled" };
@@ -154,7 +154,7 @@ export function activateDurable(options: DurableActivationOptions) {
       return (
         outcome ?? {
           status: "suspended" as const,
-          nextWakeAt: current.wakeAt ?? null,
+          nextWakeAt: current.status === "suspended" ? current.wakeAt : null,
           cursor: null,
         }
       );

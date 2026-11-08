@@ -18,7 +18,7 @@ export type StoreEffect =
       payload: OutSchema;
       at: string;
     }
-  | { kind: "suspend_run"; wakeAt: string | null; at: string };
+  | { kind: "suspend_run"; wakeAt: string | null };
 
 export const MAX_OUTPUT_BYTES = 1024 * 1024;
 

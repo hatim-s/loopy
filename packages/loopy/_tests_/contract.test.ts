@@ -65,7 +65,7 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
 });
 
 test("waitingOn names the run's pending hook and is null without one", () => {
-  const run = { ...newRun(), status: "suspended" } satisfies core.RunRecord;
+  const run = { ...newRun(), status: "suspended", wakeAt: null } satisfies core.RunRecord;
 
   expect(view(run, hook).waitingOn).toEqual({
     hook: "approve",

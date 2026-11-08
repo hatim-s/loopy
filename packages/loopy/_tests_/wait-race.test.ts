@@ -105,7 +105,7 @@ for (const wakeAt of [null, future]) {
             kind: "write_node_run",
             nodeRun: { ...sibling, status: "succeeded", output: null, endedAt: at },
           },
-          { kind: "suspend_run", wakeAt, at },
+          { kind: "suspend_run", wakeAt },
         ],
       }),
     );
@@ -138,7 +138,7 @@ test(`stale suspension keeps an earlier deadline instead of postponing it`, asyn
       token: "owner",
       effects: [
         { kind: "schedule_activation", at: future },
-        { kind: "suspend_run", wakeAt: at, at },
+        { kind: "suspend_run", wakeAt: at },
       ],
     }),
   );

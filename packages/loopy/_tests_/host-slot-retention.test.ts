@@ -126,7 +126,9 @@ test("retry beside sleep keeps activation until both persisted deadlines settle"
       yield* TestClock.adjust(1000);
       const result = yield* Fiber.join(running);
       expect(result).toEqual({ status: "suspended" });
-      expect((yield* store.getRun("run"))?.wakeAt).toBe(new Date(base + 2000).toISOString());
+      expect(yield* store.getRun("run")).toMatchObject({
+        wakeAt: new Date(base + 2000).toISOString(),
+      });
       yield* TestClock.adjust(1000);
       expect(yield* activate({ store, executor, graph, runId: "run" })).toMatchObject({
         status: "succeeded",

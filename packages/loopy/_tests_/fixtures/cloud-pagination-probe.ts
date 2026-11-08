@@ -1,11 +1,11 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
-import type { RunRecord } from "@loopy/core";
 import { apiRoutes, dispatch, makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect } from "effect";
 import { R2ArtifactRegistry } from "../../../../apps/cloud/src/artifacts";
 import { DurableSqlDriver } from "../../../../apps/cloud/src/sql-driver";
+import { runIn } from "../fixture";
 
 const at = "2026-10-22T00:00:00.000Z";
 
@@ -17,20 +17,15 @@ async function seed(store: SqlRunStore) {
   for (let index = 0; index < 205; index++) {
     const id = `page-${String(index).padStart(3, "0")}`;
 
-    const record: RunRecord = {
+    const record = runIn(index === 204 ? "succeeded" : "queued", {
       id,
       slug: "pagination",
       revision: "a".repeat(64),
       workspace: "pagination",
       input: {},
-      status: index === 204 ? "succeeded" : "queued",
       createdAt: at,
       updatedAt: at,
-    };
-
-    if (index === 204) {
-      record.output = null;
-    }
+    });
 
     await Effect.runPromise(store.createRun(record));
 
@@ -67,7 +62,7 @@ async function seed(store: SqlRunStore) {
           },
           index === 201
             ? { kind: "finish_run", outcome: { status: "succeeded", output: null }, at }
-            : { kind: "suspend_run", wakeAt, at },
+            : { kind: "suspend_run", wakeAt },
         ],
       }),
     );

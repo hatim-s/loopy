@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 import { counter, positiveInt, struct } from "../codec";
-import { EXECUTION_MODES } from "../model";
 import { nodeSchema } from "./nodes";
 import { graphRecord, nodeIdSchema, recordSpecSchema, refSchema } from "./values";
 
@@ -50,6 +49,10 @@ export const diagnosticSchema = struct({
 });
 
 export type Diagnostic = Schema.Schema.Type<typeof diagnosticSchema>;
+
+export const EXECUTION_MODES = ["sandbox", "full"] as const;
+
+export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
 export const LOOPY_SCOPES = ["project", "global"] as const;
 

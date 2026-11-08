@@ -60,7 +60,6 @@ export function expireWaits(write: SqlWrite, runId: string, at: string): void {
   }
 }
 
-// A node that leaves the waiting state closes the hook that was waiting on it.
 export function expireNodeWait(write: SqlWrite, node: NodeRun): void {
   const key = executionKeyString(node.key);
 
@@ -76,10 +75,6 @@ export function insertWait(
   runId: string,
   effect: Extract<StoreEffect, { kind: "register_wait" }>,
 ): void {
-  if (effect.executionKey.runId !== runId) {
-    throw new StoreInvariantError("Wait belongs to another run.");
-  }
-
   const key = executionKeyString(effect.executionKey);
   const wait = registerWait(effect, readNode(write, runId, key), readWaits(write, runId));
 

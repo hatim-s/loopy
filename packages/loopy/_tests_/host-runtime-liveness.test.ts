@@ -153,7 +153,7 @@ test("preparation cleanup deadline unblocks stop and retains the original failur
         expect(diagnostic).toBeInstanceOf(LeaseReleaseUnknown);
         expect(diagnostic?.primary._tag).toBe("Success");
         expect(reported).toContain(preparation);
-        expect((yield* store.getRun("run"))?.error).toBe("Missing revision");
+        expect(yield* store.getRun("run")).toMatchObject({ error: "Missing revision" });
       }),
     ).pipe(Effect.provide(TestClock.layer())),
   );

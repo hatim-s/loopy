@@ -255,7 +255,7 @@ export class CloudWorkerProbe {
               payload: { kind: "record", fields: { approved: "boolean" } },
               at,
             },
-            { kind: "suspend_run", wakeAt: "2026-10-22T01:00:00.000Z", at },
+            { kind: "suspend_run", wakeAt: "2026-10-22T01:00:00.000Z" },
           ],
         }),
       );

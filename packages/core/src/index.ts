@@ -44,6 +44,7 @@ export * from "./rate-limit";
 
 export {
   checkOutSchema,
+  exceedsInlineLimit,
   type FieldText,
   fieldKey,
   matchesRecordSpec,

@@ -90,9 +90,9 @@ export function insertRun(write: SqlWrite, input: RunRecord): void {
       run.workspace,
       JSON.stringify(run.input),
       run.status,
-      run.output === undefined ? null : JSON.stringify(run.output),
-      run.error ?? null,
-      run.wakeAt ?? null,
+      run.status === "succeeded" ? JSON.stringify(run.output) : null,
+      run.status === "failed" ? run.error : null,
+      run.status === "suspended" ? run.wakeAt : null,
       run.nextRetryAt ?? null,
       run.createdAt,
       run.updatedAt,
@@ -104,16 +104,21 @@ export function insertRun(write: SqlWrite, input: RunRecord): void {
   emitRun(write, run.id, "created");
 }
 
-function recoverRun(write: SqlWrite, previous: RunRow, at: string): void {
-  write.db.query(RELEASE).run(at, at, previous.id, previous.owner_token);
+// Releasing a running owner suspends the run, due now, whether the owner left or went stale.
+function releaseOwner(write: SqlWrite, previous: RunRow): void {
+  write.db.query(RELEASE).run(write.at, write.at, previous.id, previous.owner_token);
   emitRun(write, previous.id, "released");
+
+  if (previous.status === "running") {
+    emitRun(write, previous.id, "suspended");
+  }
 }
 
 export function claimRun(write: SqlWrite, runId: string, token: string): RunRecord {
   const previous = requireRun(write, runId);
 
   if (isStale(write, previous, write.now)) {
-    recoverRun(write, previous, write.at);
+    releaseOwner(write, previous);
   }
 
   const claimed = write.db
@@ -151,20 +156,19 @@ export function wakeRun(write: SqlWrite, runId: string, at: string): WakeError |
       return "owned_elsewhere";
     }
 
-    recoverRun(write, row, at);
+    releaseOwner(write, row);
   }
 
   if (isTerminalRun(row.status)) {
     return "not_claimable";
   }
 
-  write.db.query(WAKE).run(utc(at), utc(at), runId);
-  emitRun(write, runId, "woken");
+  markWoken(write, runId, at);
 }
 
 // A resolved hook wakes its run whether or not an activation owns it.
 export function markWoken(write: SqlWrite, runId: string, at: string): void {
-  write.db.query(WAKE).run(utc(at), utc(at), runId);
+  write.db.query(WAKE).run(utc(at), write.at, runId);
   emitRun(write, runId, "woken");
 }
 
@@ -190,12 +194,7 @@ export function releaseRun(write: SqlWrite, runId: string, token: string): void 
     throw new OwnershipError(runId);
   }
 
-  write.db.query(RELEASE).run(write.at, write.at, runId, token);
-  emitRun(write, runId, "released");
-
-  if (previous.status === "running") {
-    emitRun(write, runId, "suspended");
-  }
+  releaseOwner(write, previous);
 }
 
 export function suspendRun(
@@ -203,13 +202,12 @@ export function suspendRun(
   runId: string,
   token: string,
   wakeAt: string | null,
-  at: string,
 ): void {
   write.db
     .query(
       "UPDATE runs SET status='suspended',wake_at=?,updated_at=? WHERE id=? AND owner_token=? AND status='running'",
     )
-    .run(wakeAt, utc(at), runId, token);
+    .run(wakeAt, write.at, runId, token);
   emitRun(write, runId, "suspended");
 }
 
@@ -218,7 +216,6 @@ export function finishRun(
   runId: string,
   token: string,
   outcome: RunOutcome,
-  at: string,
 ): void {
   write.db
     .query(
@@ -228,7 +225,7 @@ export function finishRun(
       outcome.status,
       outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
       outcome.status === "failed" ? outcome.error : null,
-      utc(at),
+      write.at,
       runId,
       token,
     );

@@ -18,7 +18,10 @@ import type {
   scopeItemsQuerySchema,
   statusCountsSchema,
 } from "./dashboard";
-import type { RunSnapshotView } from "./views";
+import type { RunSnapshotView, RunView } from "./views";
+
+// A page row whose oversized input or output the store replaced with null, with the real sizes.
+export type RunPreview = RunRecord & Pick<RunView, "truncatedFields">;
 
 export type StatusCounts = Schema.Schema.Type<typeof statusCountsSchema>;
 
@@ -44,7 +47,7 @@ export type RunDefinitionCount = {
 export type DashboardSnapshot = Omit<RunSnapshotView, "run"> &
   Required<
     Pick<RunSnapshotView, "scopes" | "nodeRunsNext" | "truncatedOutputs" | "hooksTruncated">
-  > & { run: RunRecord };
+  > & { run: RunPreview };
 
 export interface DashboardReader {
   scheduleOverview(): Effect.Effect<ScheduleOverviewView, StorageError>;
@@ -56,7 +59,7 @@ export interface DashboardReader {
     StorageError
   >;
   runningCount(): Effect.Effect<number, StorageError>;
-  queryRuns(query: RunPageQuery): Effect.Effect<RunRecord[], StorageError>;
+  queryRuns(query: RunPageQuery): Effect.Effect<RunPreview[], StorageError>;
   runCountsByDefinition(): Effect.Effect<RunDefinitionCount[], StorageError>;
   runWorkspaces(): Effect.Effect<string[], StorageError>;
   pendingHooks(ids: string[], now: string): Effect.Effect<Map<string, PendingHook>, StorageError>;

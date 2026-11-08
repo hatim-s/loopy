@@ -218,8 +218,9 @@ export async function manyRunsFixture() {
         workspace: root,
         revision: compiled.revision,
         input: {},
-        status: index % 10 === 0 ? "failed" : "succeeded",
-        ...(index % 10 === 0 ? { error: "Synthetic failure" } : { output: null }),
+        ...(index % 10 === 0
+          ? { status: "failed", error: "Synthetic failure" }
+          : { status: "succeeded", output: null }),
         createdAt: at,
         updatedAt: at,
       }),

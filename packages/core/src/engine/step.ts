@@ -126,7 +126,7 @@ function isPaused(run: NodeRun): run is Extract<NodeRun, { status: "waiting" | "
 }
 
 // A retrying or rate-limited node keeps the run leased until its retry is due.
-function suspend(transition: Transition, at: string) {
+function suspend(transition: Transition) {
   if (transition.effects.some((effect) => effect.kind === "dispatch" || effect.kind === "sample")) {
     return;
   }
@@ -149,7 +149,7 @@ function suspend(transition: Transition, at: string) {
   const wakeAt =
     pending.flatMap((run) => (run.wakeAt === null ? [] : [run.wakeAt])).sort()[0] ?? null;
 
-  transition.effects.push({ kind: "suspend_run", wakeAt, at });
+  transition.effects.push({ kind: "suspend_run", wakeAt });
 }
 
 export function step(graph: Graph, state: EngineState, event: EngineEvent): Transition {
@@ -213,7 +213,7 @@ export function step(graph: Graph, state: EngineState, event: EngineEvent): Tran
         finish(transition, { status: "cancelled" }, event.at);
         break;
       case "pending":
-        suspend(transition, event.at);
+        suspend(transition);
         break;
     }
   } catch (cause) {

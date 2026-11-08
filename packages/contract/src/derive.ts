@@ -9,11 +9,12 @@ import {
   type RuntimeEvent,
   type Schedule,
 } from "@loopy/core";
+import type { RunPreview } from "./dashboard-reader";
 import type { GraphView } from "./graph";
 import type { LoopyView, RunView, ServerEvent } from "./views";
 
 type RunViewOptions = {
-  run: RunRecord;
+  run: RunPreview;
   loopy: RunView["loopy"];
   hook: PendingHook | undefined;
   now: string;
@@ -22,24 +23,12 @@ type RunViewOptions = {
 
 function outcome(run: RunRecord) {
   switch (run.status) {
-    case "succeeded": {
-      if (run.output === undefined) {
-        throw new Error("Succeeded run has no output. Repair the stored run.");
-      }
-
+    case "succeeded":
       return { status: run.status, output: run.output };
-    }
-
-    case "failed": {
-      if (run.error === undefined) {
-        throw new Error("Failed run has no error. Repair the stored run.");
-      }
-
+    case "failed":
       return { status: run.status, error: run.error };
-    }
-
     case "suspended":
-      return { status: run.status, wakeAt: run.wakeAt ?? null };
+      return { status: run.status, wakeAt: run.wakeAt };
     default:
       return { status: run.status };
   }
@@ -62,7 +51,7 @@ export function runView(options: RunViewOptions): RunView {
   const result = outcome(run);
   const output = result.status === "succeeded" ? previewPayload(result.output) : null;
 
-  const truncatedFields: NonNullable<RunRecord["truncatedFields"]> = { ...run.truncatedFields };
+  const truncatedFields: NonNullable<RunView["truncatedFields"]> = { ...run.truncatedFields };
 
   if (input.bytes !== null) {
     truncatedFields.input = input.bytes;
