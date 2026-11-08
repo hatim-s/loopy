@@ -5,7 +5,7 @@ import { builtinParser } from "@loopy/sdk/graph-host";
 import { Effect } from "effect";
 import { AuthorDiagnostics, authorFailure, compilerIO } from "./errors";
 import { checkImports } from "./module-imports";
-import { sourcePaths, typescriptPaths } from "./source-paths";
+import { moduleFile, sourcePaths, typescriptPaths } from "./source-paths";
 import type { Bundle, CompilerDiagnostic } from "./types";
 
 type ModuleExport = { file: string; exportName: string };
@@ -41,7 +41,7 @@ function buildModule(module: ModuleExport, kind: "code" | "parser") {
 
 const buildNode = Effect.fn(function* (node: BundledNode, entry: string) {
   if (node.kind === "code") {
-    const module = { file: node.module.path, exportName: "default" };
+    const module = { file: moduleFile(entry, node.module.path), exportName: "default" };
 
     return { file: module.file, result: yield* buildModule(module, "code") };
   }
@@ -49,7 +49,7 @@ const buildNode = Effect.fn(function* (node: BundledNode, entry: string) {
   const parser =
     node.parse.module === null
       ? builtinParser(node.key)
-      : { file: node.parse.module, exportName: "default" };
+      : { file: moduleFile(entry, node.parse.module), exportName: "default" };
 
   if (!parser) {
     return yield* authorFailure(

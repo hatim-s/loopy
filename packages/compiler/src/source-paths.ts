@@ -1,4 +1,4 @@
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type ParserOptions, parseSync, Visitor } from "oxc-parser";
 
@@ -93,6 +93,16 @@ export const sourcePaths: Bun.BunPlugin = {
     });
   },
 };
+
+// Graphs name code and parser modules relative to the entry's directory, so moving a
+// checkout keeps its revisions. The bundler resolves them back against the same root.
+export function graphModulePath(entry: string, file: string) {
+  return relative(dirname(entry), file);
+}
+
+export function moduleFile(entry: string, path: string) {
+  return resolve(dirname(entry), path);
+}
 
 /** Author TypeScript may import a sibling `.ts` module by its emitted `.js` name. */
 export function typescriptSibling(path: string) {

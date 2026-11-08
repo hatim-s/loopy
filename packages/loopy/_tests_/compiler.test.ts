@@ -132,8 +132,32 @@ test("subgraphs expand in each author module's directory", async () => {
 
   expect(result.graph.nodes[0]).toMatchObject({
     kind: "code",
-    module: { path: join(root, "child/value.ts") },
+    module: { path: "child/value.ts" },
   });
+});
+
+test("the same loopy compiled from two checkout locations has one revision", async () => {
+  const compileCopy = async () => {
+    const { root, file } = await project(
+      'import {loopy,defineCommand,code} from "__SDK__"; const echo=defineCommand({key:"custom.echo",program:"echo",parse:"./parse.ts"},{kind:"value",type:"string"}); export default loopy("moved", {input:{},run:()=>code("value",{in:{word:echo({args:["hi"]})},out:{kind:"value",type:"string"},module:"./lib/value.ts"})});',
+    );
+
+    await writeFile(join(root, "parse.ts"), "export default (result)=>result.stdout.trim();");
+    await Bun.write(join(root, "lib/value.ts"), "export default (input)=>input.word;");
+    const compiled = await compile(file);
+
+    if (!compiled.ok) {
+      throw new Error(JSON.stringify(compiled.diagnostics));
+    }
+
+    return compiled;
+  };
+
+  const [first, second] = [await compileCopy(), await compileCopy()];
+  expect(first.revision).toBe(second.revision);
+  expect(
+    first.graph.nodes.flatMap((node) => (node.kind === "code" ? [node.module.path] : [])),
+  ).toEqual(["lib/value.ts"]);
 });
 
 for (const effect of ["network", "write"]) {
