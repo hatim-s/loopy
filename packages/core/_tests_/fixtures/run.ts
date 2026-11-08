@@ -3,7 +3,6 @@ import {
   type ExecutionResult,
   type ExecutionSpec,
   type Executor,
-  ExecutorError,
   type RunRecord,
   type RunStatus,
 } from "../../src";
@@ -11,7 +10,6 @@ import {
 export class FakeExecutor implements Executor {
   calls: ExecutionSpec[] = [];
   result: ExecutionResult = { kind: "succeeded", output: null, logs: [] };
-  failure: Error | null = null;
   lookup() {
     return Effect.succeed({ kind: "none" as const });
   }
@@ -20,10 +18,6 @@ export class FakeExecutor implements Executor {
 
     return Effect.suspend(() => {
       this.calls.push(spec);
-
-      if (this.failure) {
-        return Effect.fail(new ExecutorError({ operation: "execute", cause: this.failure }));
-      }
 
       return Effect.succeed(this.result);
     });
