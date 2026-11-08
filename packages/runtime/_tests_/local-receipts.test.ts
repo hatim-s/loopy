@@ -245,7 +245,7 @@ test("a live trusted child retains completion authority, a killed child becomes 
 });
 
 for (const competing of [false, true]) {
-  test(`a paused claim write stays invisible and publishes exclusively, competitor ${competing}`, async () => {
+  test(`a paused claim stays invisible and publishes exclusively, competitor ${competing}`, async () => {
     const f = await fixture();
     const ready = join(f.root, "claim-ready");
     const release = join(f.root, "claim-release");

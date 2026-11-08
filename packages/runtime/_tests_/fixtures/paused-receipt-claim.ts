@@ -1,7 +1,7 @@
-import { mock } from "bun:test";
-import * as filesystem from "node:fs";
 import { executionKeySchema } from "@loopy/contract";
 import { Effect, Schema } from "effect";
+import { FilesystemReceipts, type LocalReceipt } from "../../src/executor/receipts";
+import { waitForFile } from "./wait";
 
 const request = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -12,30 +12,16 @@ const request = Schema.decodeUnknownSync(
   }),
 )(await Bun.stdin.json());
 
-const originalWrite = filesystem.writeFileSync;
+// Holds the claim before it publishes until the test releases it, so a competitor can go first.
+class PausedReceipts extends FilesystemReceipts {
+  protected override publishStarted(path: string, started: LocalReceipt) {
+    return Effect.promise(async () => {
+      await Bun.write(request.ready, "claim paused");
+      await waitForFile(request.release);
+    }).pipe(Effect.andThen(super.publishStarted(path, started)));
+  }
+}
 
-// The claim is the only write in this process, so pause it until the test releases it.
-mock.module("node:fs", () => ({
-  ...filesystem,
-  writeFileSync: (...args: Parameters<typeof originalWrite>) => {
-    originalWrite(request.ready, "write paused");
-
-    for (let index = 0; index < 1000; index++) {
-      if (filesystem.existsSync(request.release)) {
-        return originalWrite(...args);
-      }
-
-      Bun.sleepSync(10);
-    }
-
-    throw new Error("Receipt fixture was not released.");
-  },
-}));
-
-const { FilesystemReceipts } = await import("../../src/executor/receipts");
-
-const result = await Effect.runPromise(
-  new FilesystemReceipts(request.home).claim(request.identity),
-);
+const result = await Effect.runPromise(new PausedReceipts(request.home).claim(request.identity));
 
 console.log(JSON.stringify(result));

@@ -159,9 +159,8 @@ export class FilesystemReceipts {
     identity: AttemptIdentity,
   ) {
     const path = yield* receiptPath(this.home, identity.executionKey, identity.attempt);
-    const started: LocalReceipt = { ...identity, kind: "started", pid: process.pid };
 
-    if (yield* sync(() => publishExclusive(path, JSON.stringify(started), 0o600))) {
+    if (yield* this.publishStarted(path, { ...identity, kind: "started", pid: process.pid })) {
       return { kind: "created" as const };
     }
 
@@ -175,6 +174,11 @@ export class FilesystemReceipts {
 
     return { kind: "existing" as const, receipt };
   });
+
+  /** True when this claim published the started receipt, false when another claim already had. */
+  protected publishStarted(path: string, started: LocalReceipt) {
+    return sync(() => publishExclusive(path, JSON.stringify(started), 0o600));
+  }
 
   private observeClaim = Effect.fn(function* (
     this: FilesystemReceipts,
