@@ -26,7 +26,7 @@
     "fmt:check": "biome format .",
     "lint": "biome check . && eslint . && node tools/anti-slop/_tests_/run.mjs",
     "cloud:start": "bun --no-env-file apps/cloud/dev/dev.ts",
-    "cloud:build-sandbox": "docker --context colima-loopy-cloud-phase1 build -f apps/sandbox/Dockerfile -t loopy-sandbox:bun-1.4.0 .",
+    "cloud:build-sandbox": "bun --no-env-file apps/cloud/dev/stack/build-sandbox.ts",
     "acceptance:local": "bun --no-env-file packages/loopy/_tests_/acceptance/run.ts",
     "acceptance:package": "bun run build && bun --no-env-file packages/loopy/_tests_/acceptance/package.ts"
   },

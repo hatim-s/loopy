@@ -1,4 +1,5 @@
-import { DOCKER_CONTEXT, root } from "../stack/constants";
+import { SANDBOX_DOCKER_CONTEXT } from "../../../sandbox/src/docker/identity";
+import { root } from "../stack/constants";
 import { assert } from "./assert";
 
 type CommandOptions = { env: Record<string, string | undefined>; timeoutMs?: number };
@@ -25,5 +26,5 @@ export async function command(argv: string[], options: CommandOptions) {
 }
 
 export function docker(args: string[], options: CommandOptions) {
-  return command(["docker", "--context", DOCKER_CONTEXT, ...args], options);
+  return command(["docker", "--context", SANDBOX_DOCKER_CONTEXT, ...args], options);
 }

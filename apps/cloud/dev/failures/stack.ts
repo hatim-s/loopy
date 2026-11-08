@@ -1,7 +1,8 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { SANDBOX_IMAGE, SANDBOX_LABELS } from "../../../sandbox/src/docker/identity";
 import { assert } from "../shared/assert";
-import { root, SANDBOX_IMAGE } from "../stack/constants";
+import { root } from "../stack/constants";
 import {
   type Child,
   launch,
@@ -157,7 +158,7 @@ export class FailureStack {
       "ps",
       "-a",
       "--filter",
-      `label=loopy.sandbox.owner=${owner}`,
+      `label=${SANDBOX_LABELS.owner}=${owner}`,
       "--format",
       "{{.Names}}",
     ]);

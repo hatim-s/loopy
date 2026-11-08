@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
 import { routes } from "@loopy/contract";
-import { canonicalJson, type ExecutionKey } from "@loopy/core";
+import { attemptId } from "@loopy/contract/sandbox";
+import type { ExecutionKey } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { filesystemReceipt } from "../filesystem-receipt";
 import { assert, equal } from "../shared/assert";
-import { sha256Hex } from "../shared/hash";
 import { docker as runDocker } from "../shared/process";
 import { localState } from "../stack/credentials";
 import type { Journey } from "./client";
@@ -12,9 +12,7 @@ import type { Journey } from "./client";
 const stateRoot = resolve(localState, "sandbox");
 
 async function receipt(key: ExecutionKey, attempt: number) {
-  const id = sha256Hex(
-    canonicalJson({ root: stateRoot, workspace: "fixtures", executionKey: key, attempt }),
-  );
+  const id = await attemptId(stateRoot, { workspace: "fixtures", executionKey: key, attempt });
 
   const saved = await Effect.runPromise(filesystemReceipt(stateRoot, id));
   assert(

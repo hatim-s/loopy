@@ -1,7 +1,7 @@
 import { mkdir, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Schema } from "effect";
-import { DOCKER_CONTEXT } from "../stack/constants";
+import { SANDBOX_DOCKER_CONTEXT } from "../../../sandbox/src/docker/identity";
 import {
   type Child,
   dashboardArgv,
@@ -125,7 +125,7 @@ export async function serve(input: Parameters<typeof parseServeIdentity>[0]) {
       dashboard,
       state,
       sandboxState,
-      dockerContext: DOCKER_CONTEXT,
+      dockerContext: SANDBOX_DOCKER_CONTEXT,
       createdAt: new Date().toISOString(),
       stopCommand: profile.stopCommand,
       children: children.map((child) => ({ name: child.name, pid: child.process.pid })),

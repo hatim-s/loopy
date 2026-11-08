@@ -1,15 +1,22 @@
 import { access, mkdir, mkdtemp, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
+import { artifactHelperName, inputHelperName } from "@loopy/contract/sandbox";
 import { errnoCode } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { sandboxConfigSchema } from "../../../sandbox/src/config";
+import {
+  ownerOf,
+  SANDBOX_DOCKER_CONTEXT,
+  SANDBOX_IMAGE,
+  SANDBOX_LABELS,
+} from "../../../sandbox/src/docker/identity";
 import { runCommand } from "../../../sandbox/src/process";
+import { stateLayout } from "../../../sandbox/src/state-root";
 import { filesystemReceipt } from "../filesystem-receipt";
 import { assert, equal } from "../shared/assert";
-import { sha256Hex } from "../shared/hash";
 import { untilEffect } from "../shared/poll";
-import { DOCKER_CONTEXT, root, SANDBOX_IMAGE } from "../stack/constants";
+import { root } from "../stack/constants";
 import { FixtureError, fixtureIO } from "./fixture-effect";
 
 const environment = {
@@ -26,7 +33,7 @@ export function command(argv: [string, ...string[]]) {
 
 export function docker(args: string[]) {
   return Effect.gen(function* () {
-    const output = yield* command(["docker", "--context", DOCKER_CONTEXT, ...args]);
+    const output = yield* command(["docker", "--context", SANDBOX_DOCKER_CONTEXT, ...args]);
     assert(output.exitCode === 0, "docker_command_failed", { operation: args[0] ?? "" });
 
     return output.stdout;
@@ -45,7 +52,7 @@ export function fixture(maxTimeoutMs: number) {
       worktree,
       stateRoot: resolve(worktree, ".loopy/cloud/sandbox"),
       token: "transport-test-fixture-token-32-characters",
-      dockerContext: DOCKER_CONTEXT,
+      dockerContext: SANDBOX_DOCKER_CONTEXT,
       image: SANDBOX_IMAGE,
       port: 0,
       maxTimeoutMs,
@@ -55,11 +62,9 @@ export function fixture(maxTimeoutMs: number) {
 
 export type Config = Effect.Success<ReturnType<typeof fixture>>;
 
-export const ownerOf = (config: Config) => sha256Hex(config.stateRoot);
-
 export function receipts(config: Config) {
   return Effect.gen(function* () {
-    const directory = resolve(config.stateRoot, "receipts");
+    const directory = stateLayout(config.stateRoot).receipts;
 
     const files = (yield* fixtureIO("filesystem", () => readdir(directory))).filter((name) =>
       /^[a-f0-9]{64}\.json$/.test(name),
@@ -104,12 +109,12 @@ export function ownedContainer(config: Config, receipt: StoredReceipt, name = re
   return Effect.gen(function* () {
     const [row] = decodeContainer(JSON.parse(yield* docker(["container", "inspect", name])));
     equal(row.Name, `/${name}`, "container_name_mismatch");
-    equal(row.Config.Labels["loopy.sandbox.owner"], ownerOf(config), "container_owner_mismatch");
     equal(
-      row.Config.Labels["loopy.sandbox.request"],
-      receipt.requestHash,
-      "request_owner_mismatch",
+      row.Config.Labels[SANDBOX_LABELS.owner],
+      ownerOf(config.stateRoot),
+      "container_owner_mismatch",
     );
+    equal(row.Config.Labels[SANDBOX_LABELS.request], receipt.requestHash, "request_owner_mismatch");
 
     return row;
   });
@@ -133,7 +138,7 @@ export function marker(receipt: StoredReceipt) {
     const output = yield* command([
       "docker",
       "--context",
-      DOCKER_CONTEXT,
+      SANDBOX_DOCKER_CONTEXT,
       "exec",
       receipt.container,
       "cat",
@@ -156,8 +161,8 @@ export function cleanup(config: Config) {
 
       for (const name of [
         receipt.container,
-        `${receipt.container}-input`,
-        `loopy-artifact-${receipt.id}`,
+        inputHelperName(receipt),
+        artifactHelperName(receipt.id),
       ]) {
         const listed = (yield* docker([
           "container",
@@ -226,7 +231,7 @@ export function cleanup(config: Config) {
         "ls",
         "--all",
         "--filter",
-        `label=loopy.sandbox.owner=${ownerOf(config)}`,
+        `label=${SANDBOX_LABELS.owner}=${ownerOf(config.stateRoot)}`,
         "--format",
         "{{.Names}}",
       ])).trim(),
@@ -234,9 +239,11 @@ export function cleanup(config: Config) {
       "owned_container_remains",
     );
 
-    for (const name of ["service.lock", "service-start.lock"]) {
+    const layout = stateLayout(config.stateRoot);
+
+    for (const path of [layout.lock, layout.startGuard]) {
       const exists = yield* fixtureIO("filesystem", () =>
-        access(resolve(config.stateRoot, name)).then(
+        access(path).then(
           () => true,
           (cause: unknown) => {
             if (errnoCode(cause) !== "ENOENT") {
