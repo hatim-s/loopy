@@ -1,4 +1,4 @@
-import { graphSchema } from "../../src";
+import { type Graph, graphSchema } from "../../src";
 import { decode } from "./decode";
 
 // This boundary fixture fixes the builder's call-order ids and explicit scope joins for H2.
@@ -100,3 +100,79 @@ export const approveDemoGraph = decode(graphSchema)({
     { from: "8:join", to: "9:join", kind: "next" },
   ],
 });
+
+const meta = { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" };
+
+/** The graph the builder emits for `run: () => sh(argv, options)`. */
+export function commandGraph(
+  argv: string[],
+  options: { env?: Record<string, string>; stdin?: string; retryOnExit?: boolean } = {},
+) {
+  return decode(graphSchema)({
+    version: 1,
+    meta,
+    name: "command",
+    input: {},
+    entry: "0:sh.exec",
+    outputs: { ref: "1:join", path: [] },
+    nodes: [
+      {
+        id: "0:sh.exec",
+        kind: "command",
+        label: null,
+        scope: null,
+        key: "sh.exec",
+        out: { kind: "record", fields: { stdout: "string", stderr: "string", exitCode: "number" } },
+        argv,
+        flags: {},
+        flagSpec: null,
+        variants: {},
+        options: {
+          cwd: null,
+          env: options.env ?? {},
+          stdin: options.stdin ?? null,
+          timeout: null,
+          maxOutputBytes: null,
+        },
+        rateLimit: null,
+        retry: { attempts: 3, retryOnExit: options.retryOnExit ?? false },
+        okExitCodes: [0],
+        parse: null,
+      },
+      {
+        id: "1:join",
+        kind: "join",
+        label: null,
+        scope: null,
+        result: { kind: "value", value: { ref: "0:sh.exec", path: [] } },
+      },
+    ],
+    edges: [{ from: "0:sh.exec", to: "1:join", kind: "next" }],
+  });
+}
+
+/** The graph the builder emits for `run: ({ input }) => input`. */
+export function inputGraph(
+  input: Graph["input"],
+  inputValidation: NonNullable<Graph["inputValidation"]>,
+) {
+  return decode(graphSchema)({
+    version: 1,
+    meta,
+    name: "input",
+    input,
+    inputValidation,
+    entry: "0:join",
+    outputs: { ref: "0:join", path: [] },
+    nodes: [
+      {
+        id: "0:join",
+        kind: "join",
+        label: null,
+        scope: null,
+        result: { kind: "value", value: { ref: "input", path: [] } },
+      },
+    ],
+    edges: [],
+  });
+}

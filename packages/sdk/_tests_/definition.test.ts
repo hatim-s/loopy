@@ -29,6 +29,13 @@ test("graph definitions validate names, modes, scopes, schedules, secrets and in
   expect(() => loopy("test", { input: { count: "integer" }, run: () => null })).toThrow(
     '  at ["input"]["count"]',
   );
+  expect(() =>
+    loopy("test", {
+      input: {},
+      inputValidation: { minItems: { missing: 1 }, unknownKeys: "reject" },
+      run: () => null,
+    }),
+  ).toThrow("requires an array field");
 });
 
 test("normalized graph metadata and schema do not retain caller-owned arrays or records", () => {

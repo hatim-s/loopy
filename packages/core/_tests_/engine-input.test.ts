@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
-import { code, loopy, map, sh } from "@loopy/sdk/graph";
-import { type Graph, type Json, nodeRunSchema, outputBytes } from "../src";
+import { type Graph, graphSchema, type Json, nodeRunSchema, outputBytes } from "../src";
 import { type EngineState, initialState, step } from "../src/engine";
 import { decode } from "./fixtures/decode";
 import { at, dispatches, failed, start } from "./fixtures/engine-control";
-import { approveDemoGraph } from "./fixtures/graphs";
+import { approveDemoGraph, commandGraph } from "./fixtures/graphs";
 
 function codeGraph(): Graph {
   const graph = structuredClone(approveDemoGraph);
@@ -67,26 +66,60 @@ test("code records resolved inputs before dispatch and keeps its own snapshot", 
 });
 
 test("map iterations capture their own resolved item and index", () => {
-  const graph = loopy("iteration-input", {
+  // The builder's graph for map(input.items, (item, index) => code("item", { in: { item, index } })).
+  const graph = decode(graphSchema)({
+    version: 1,
+    meta: approveDemoGraph.meta,
+    name: "iteration-input",
     input: { items: "string[]" },
-    run: ({ input }) =>
-      map(
-        input.get("items"),
-        (item, index) =>
-          code("item", {
-            in: { item, index },
-            out: { kind: "value", type: "string" },
-            module: "./item.ts",
-          }),
-        { concurrency: 2, onError: "fail" },
-      ),
+    entry: "0:map",
+    outputs: { ref: "3:join", path: [] },
+    nodes: [
+      {
+        id: "0:map",
+        kind: "map",
+        label: null,
+        scope: null,
+        over: { ref: "input", path: ["items"] },
+        body: "1:item",
+        item: "0:map:item",
+        index: "0:map:index",
+        concurrency: 2,
+        onError: "fail",
+      },
+      {
+        id: "1:item",
+        kind: "code",
+        label: "item",
+        scope: "0:map",
+        in: { item: { ref: "0:map:item", path: [] }, index: { ref: "0:map:index", path: [] } },
+        out: { kind: "value", type: "string" },
+        module: { path: "./item.ts", bundleHash: "a".repeat(64) },
+        rateLimit: null,
+        retry: { attempts: 3, retryOnExit: false },
+        timeout: null,
+      },
+      {
+        id: "2:join",
+        kind: "join",
+        label: null,
+        scope: "0:map",
+        result: { kind: "value", value: { ref: "1:item", path: [] } },
+      },
+      {
+        id: "3:join",
+        kind: "join",
+        label: null,
+        scope: null,
+        result: { kind: "value", value: { ref: "0:map", path: [] } },
+      },
+    ],
+    edges: [
+      { from: "0:map", to: "3:join", kind: "next" },
+      { from: "1:item", to: "2:join", kind: "next" },
+      { from: "2:join", to: "0:map", kind: "join" },
+    ],
   });
-
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
 
   const result = start(graph, { items: ["first", "second"] });
   expect(dispatches(result.effects).map((dispatch) => dispatch.spec)).toMatchObject([
@@ -256,10 +289,7 @@ test("cancel and pre-dispatch validation failures retain the previous attempt in
 test("capture excludes command environment and runtime-declared secrets", () => {
   const secret = "synthetic-secret-marker";
 
-  const graph = loopy("command-input", {
-    input: {},
-    run: () => sh(["echo", secret], { env: { PRIVATE_TOKEN: secret }, stdin: secret }),
-  });
+  const graph = commandGraph(["echo", secret], { env: { PRIVATE_TOKEN: secret }, stdin: secret });
 
   graph.meta.secrets = ["PRIVATE_TOKEN"];
   const command = start(graph);
