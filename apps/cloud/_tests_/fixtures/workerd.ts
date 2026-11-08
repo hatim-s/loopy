@@ -1,3 +1,5 @@
+import { rmSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { Miniflare, type MiniflareOptions, type WorkerOptions } from "miniflare";
@@ -63,6 +65,33 @@ export function cloudWorker(bundle: string, bindings: Record<string, string>) {
   });
 }
 
+let workerBundle: Promise<string> | undefined;
+
+/**
+ * The production Worker and the receipt probes, bundled once per test process. Bun runs every test
+ * file in one process, so later files reuse the first build. A file scope would close after the
+ * first file, so the directory is removed when the process exits instead.
+ */
+export function cloudWorkerBundle() {
+  workerBundle ??= (async () => {
+    const directory = qualityTestRoot("cloud-worker-bundle", { scope: Scope.makeUnsafe() });
+    process.once("exit", () => rmSync(directory, { recursive: true, force: true }));
+    await writeFile(resolve(directory, "package.json"), JSON.stringify({ private: true }));
+    await bundleForBrowser(
+      [
+        resolve(import.meta.dir, "../../src/worker.ts"),
+        resolve(import.meta.dir, "receipt-rollback-probe.ts"),
+        resolve(import.meta.dir, "receipt-count-probe.ts"),
+      ],
+      directory,
+    );
+
+    return directory;
+  })();
+
+  return workerBundle;
+}
+
 /** Starts workerd on an ephemeral loopback port and disposes it when startup fails. */
 export async function startWorkerd(options: MiniflareOptions) {
   const runtime = new Miniflare({ host: "127.0.0.1", port: 0, ...options });
@@ -82,7 +111,8 @@ interface ProbeOptions {
   entry: string;
   name: string;
   className: string;
-  r2?: "BUCKET";
+  /** An R2 binding name; workerd names its bucket the same. */
+  r2?: string;
 }
 
 /** Bundles one probe entry and serves its Durable Object class under the PROBES binding. */
