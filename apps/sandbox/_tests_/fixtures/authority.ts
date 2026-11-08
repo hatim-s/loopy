@@ -13,6 +13,7 @@ import { qualityTestRoot } from "../../../../packages/runtime/_tests_/fixtures/q
 import type { ArtifactReader } from "../../src/artifacts";
 import { sandboxConfig, sandboxConfigSchema } from "../../src/config";
 import type { AttemptBackend } from "../../src/docker";
+import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../src/docker/identity";
 import { FilesystemAuthority } from "../../src/filesystem/authority";
 import { FilesystemResults } from "../../src/filesystem/results";
 import { validateStateRoot } from "../../src/state-root";
@@ -48,21 +49,31 @@ export const artifactReader: ArtifactReader = {
     }),
 };
 
-export async function authorityFixture() {
-  const root = qualityTestRoot("authority");
+export const FIXTURE_TOKEN = "sandbox-fixture-token-32-characters";
+
+/** A validated sandbox config on its own repository-local worktree. */
+export async function sandboxFixtureConfig(name: string) {
+  const root = qualityTestRoot(name);
   await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
 
   const config = sandboxConfig(
     decodeBoundary(sandboxConfigSchema)({
       worktree: root,
-      token: "sandbox-authority-test-token-32-characters",
-      dockerContext: "fixture",
-      image: "fixture",
+      token: FIXTURE_TOKEN,
+      dockerContext: SANDBOX_DOCKER_CONTEXT,
+      image: SANDBOX_IMAGE,
       port: 0,
     }),
   );
 
   await validateStateRoot(config);
+
+  return config;
+}
+
+export async function authorityFixture() {
+  const config = await sandboxFixtureConfig("authority");
+  const root = config.worktree;
   const authority = new FilesystemAuthority(config.stateRoot);
   const resultsFor = (workspace: string) => new FilesystemResults(config.stateRoot, workspace);
   const bytes = Buffer.from("export default () => 1;");
