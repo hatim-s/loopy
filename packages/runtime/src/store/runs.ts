@@ -9,6 +9,7 @@ import {
 import type { SqlContext, SqlWrite } from "./context";
 import { emit } from "./events";
 import { StoreRejectedError } from "./operation";
+import { leaseExpiresAt } from "./owner-policy";
 import { type RunRow, rowToRun } from "./rows";
 import { normalizeRun, utc } from "./timestamps";
 
@@ -60,7 +61,7 @@ export function isStale(ctx: SqlContext, row: RunRow, now: number): boolean {
     return false;
   }
 
-  return now - Date.parse(row.heartbeat_at) > ctx.leaseMs;
+  return now >= leaseExpiresAt(row.heartbeat_at, ctx.leaseMs);
 }
 
 export function emitRun(

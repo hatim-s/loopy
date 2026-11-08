@@ -82,6 +82,7 @@ export {
 } from "./client";
 
 export {
+  base64Encode,
   boundaryOptions,
   decodeBoundary,
   decodeJson,

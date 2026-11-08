@@ -1,5 +1,6 @@
 import type { DurableObjectStorage, R2Bucket } from "@cloudflare/workers-types";
 import {
+  base64Encode,
   type DefinitionSummary,
   decodeBoundary,
   decodeJson,
@@ -22,7 +23,7 @@ import {
 } from "@loopy/runtime/service";
 import { Effect, Result } from "effect";
 import { ArtifactDefinitions, artifactEntry, type Publication } from "./definitions";
-import { ARTIFACT_LIMITS, bytesToBase64, ImmutableBucket, r2Key } from "./storage";
+import { ARTIFACT_LIMITS, ImmutableBucket, r2Key } from "./storage";
 import { checkArtifactLimits } from "./validation";
 
 export { ARTIFACT_LIMITS } from "./storage";
@@ -240,7 +241,7 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
         );
       }
 
-      return bytesToBase64(bytes);
+      return base64Encode(bytes);
     });
   }
   save(body: PutLoopyBody) {

@@ -60,6 +60,17 @@ export const base64Length = (maxBytes: number) => Math.ceil(maxBytes / 3) * 4;
 export const base64Decode = (text: string) =>
   Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
 
+/** Chunked, because spreading a multi-megabyte bundle into one call overflows the stack. */
+export function base64Encode(bytes: Uint8Array): string {
+  let binary = "";
+
+  for (let offset = 0; offset < bytes.length; offset += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+  }
+
+  return btoa(binary);
+}
+
 /** Base64 text whose decoded size stays within maxBytes. */
 export const boundedBase64 = (maxBytes: number) =>
   base64Text.check(Schema.isMaxLength(base64Length(maxBytes)));
@@ -74,8 +85,6 @@ const bufferBytes = Schema.declare(
 export const base64Bytes = base64Text.pipe(
   Schema.decodeTo(bufferBytes, {
     decode: SchemaGetter.transform(base64Decode),
-    encode: SchemaGetter.transform((bytes) =>
-      btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join("")),
-    ),
+    encode: SchemaGetter.transform(base64Encode),
   }),
 );
