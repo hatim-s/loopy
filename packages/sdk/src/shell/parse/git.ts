@@ -543,9 +543,7 @@ export function parseRemote({ stdout }: CommandResult): Remote[] {
   return [...remotes.values()];
 }
 
-type RevParse = string;
-
-export function parseRevParse({ stdout }: CommandResult): RevParse {
+export function parseRevParse({ stdout }: CommandResult): string {
   const value = stdout.trim();
 
   if (!value || /[\n\r\0]/.test(value)) {
@@ -555,8 +553,6 @@ export function parseRevParse({ stdout }: CommandResult): RevParse {
   return value;
 }
 
-type LsFiles = string[];
-
-export function parseLsFiles({ stdout }: CommandResult): LsFiles {
+export function parseLsFiles({ stdout }: CommandResult): string[] {
   return nulFields(stdout, "git ls-files").map((path) => required(path, "git ls-files", stdout));
 }

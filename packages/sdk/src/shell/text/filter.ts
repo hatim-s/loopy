@@ -1,5 +1,5 @@
 import type { Prepare } from "../../descriptor";
-import { builtin } from "../builtin";
+import { builtin, PATHS } from "../builtin";
 import { parseGrep, parseGrepCount, parseUniqCount } from "../parse/text";
 
 const GREP_FLAGS = {
@@ -31,6 +31,13 @@ const grepInput: Prepare = (input) => {
   return paths > 1 ? { ...input, flags: { ...input.flags, H: true } } : input;
 };
 
+const UNIQ_FLAGS = {
+  count: { cli: "-c", kind: "boolean" },
+  repeated: { cli: "-d", kind: "boolean" },
+  unique: { cli: "-u", kind: "boolean" },
+  ignoreCase: { cli: "-i", kind: "boolean" },
+} as const;
+
 export const filter = {
   grep: builtin(
     {
@@ -39,7 +46,7 @@ export const filter = {
       exclude: ["c", "l", "L", "o", "q", "H", "h", "A", "B", "C"],
       program: "grep",
       flags: GREP_FLAGS,
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       positionalSeparator: true,
     },
     {
@@ -73,7 +80,7 @@ export const filter = {
       file: { cli: "-f", kind: "string" },
       inPlace: { cli: "-i", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     variants: {
       linux: {
         flags: {
@@ -97,7 +104,7 @@ export const filter = {
       },
       file: { cli: "-f", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   cut: builtin({
     program: "cut",
@@ -107,7 +114,7 @@ export const filter = {
       characters: { cli: "-c", kind: "string" },
       bytes: { cli: "-b", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   sort: builtin({
     program: "sort",
@@ -118,29 +125,19 @@ export const filter = {
       key: { cli: "-k", kind: "string" },
       separator: { cli: "-t", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   uniq: builtin({
     program: "uniq",
-    flags: {
-      count: { cli: "-c", kind: "boolean" },
-      repeated: { cli: "-d", kind: "boolean" },
-      unique: { cli: "-u", kind: "boolean" },
-      ignoreCase: { cli: "-i", kind: "boolean" },
-    },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    flags: UNIQ_FLAGS,
+    positionals: PATHS,
   }),
   uniqCount: builtin(
     {
       preset: { flags: { count: true } },
       program: "uniq",
-      flags: {
-        count: { cli: "-c", kind: "boolean" },
-        repeated: { cli: "-d", kind: "boolean" },
-        unique: { cli: "-u", kind: "boolean" },
-        ignoreCase: { cli: "-i", kind: "boolean" },
-      },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      flags: UNIQ_FLAGS,
+      positionals: PATHS,
     },
     { parse: parseUniqCount, out: { kind: "value", type: "json[]" } },
   ),
@@ -150,7 +147,7 @@ export const filter = {
       lines: { cli: "-n", kind: "number" },
       bytes: { cli: "-c", kind: "number" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   tail: builtin({
     program: "tail",
@@ -159,6 +156,6 @@ export const filter = {
       bytes: { cli: "-c", kind: "number" },
       follow: { cli: "-f", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
 };

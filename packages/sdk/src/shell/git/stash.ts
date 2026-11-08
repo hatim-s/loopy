@@ -1,4 +1,4 @@
-import { builtin } from "../builtin";
+import { builtin, PATHS } from "../builtin";
 import { parseStashList } from "../parse/git";
 
 export const stash = {
@@ -10,7 +10,7 @@ export const stash = {
       all: { cli: "--all", kind: "boolean" },
       message: { cli: "-m", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   pop: builtin({
@@ -19,7 +19,7 @@ export const stash = {
     flags: {
       index: { cli: "--index", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   list: builtin(
     {

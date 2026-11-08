@@ -1,25 +1,5 @@
-import { builtin } from "../builtin";
+import { builtin, PATHS } from "../builtin";
 import { parseJq, parseSha256, parseWc } from "../parse/text";
-
-const base64Descriptor = {
-  program: "base64",
-  flags: {
-    decode: { cli: "-d", kind: "boolean" },
-    input: { cli: "-i", kind: "string" },
-  },
-  positionals: [],
-  variants: {
-    linux: {
-      flags: { input: { cli: "", kind: "string", style: "positional", position: "after" } },
-    },
-    darwin: {
-      flags: {
-        decode: { cli: "-D", kind: "boolean" },
-        input: { cli: "-i", kind: "string" },
-      },
-    },
-  },
-} as const;
 
 export const format = {
   wc: builtin(
@@ -32,7 +12,7 @@ export const format = {
         bytes: { cli: "-c", kind: "boolean" },
         characters: { cli: "-m", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseWc, out: { kind: "value", type: "json[]" } },
   ),
@@ -43,7 +23,7 @@ export const format = {
       squeeze: { cli: "-s", kind: "boolean" },
       complement: { cli: "-c", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   diff: builtin({
     program: "diff",
@@ -53,7 +33,7 @@ export const format = {
       brief: { cli: "-q", kind: "boolean" },
       ignoreSpace: { cli: "-w", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   jq: builtin(
     {
@@ -71,7 +51,7 @@ export const format = {
         nullInput: { cli: "-n", kind: "boolean" },
         exitStatus: { cli: "-e", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseJq, out: { kind: "value", type: "json" } },
   ),
@@ -82,9 +62,27 @@ export const format = {
       compactOutput: { cli: "-c", kind: "boolean" },
       exitStatus: { cli: "-e", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
-  base64: builtin(base64Descriptor),
+  base64: builtin({
+    program: "base64",
+    flags: {
+      decode: { cli: "-d", kind: "boolean" },
+      input: { cli: "-i", kind: "string" },
+    },
+    positionals: [],
+    variants: {
+      linux: {
+        flags: { input: { cli: "", kind: "string", style: "positional", position: "after" } },
+      },
+      darwin: {
+        flags: {
+          decode: { cli: "-D", kind: "boolean" },
+          input: { cli: "-i", kind: "string" },
+        },
+      },
+    },
+  }),
   sha256sum: builtin(
     {
       exclude: ["check"],
@@ -93,7 +91,7 @@ export const format = {
         check: { cli: "-c", kind: "boolean" },
         binary: { cli: "-b", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       variants: {
         darwin: {
           program: "shasum",

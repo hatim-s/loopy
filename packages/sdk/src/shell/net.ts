@@ -1,5 +1,5 @@
 import type { Prepare } from "../descriptor";
-import { builtin, namespace } from "./builtin";
+import { builtin, namespace, PATHS } from "./builtin";
 import { CURL_WRITE_OUT, parseCurl } from "./parse/net";
 
 const curlInput: Prepare = (input) => {
@@ -41,7 +41,7 @@ export const net = namespace("net", {
         maxTime: { cli: "--max-time", kind: "number" },
         writeOut: { cli: "-w", kind: "string" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     {
       parse: parseCurl,

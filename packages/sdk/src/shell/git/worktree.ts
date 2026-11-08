@@ -1,4 +1,4 @@
-import { builtin } from "../builtin";
+import { builtin, PATHS } from "../builtin";
 import { parseWorktreeList } from "../parse/git";
 
 export const worktree = {
@@ -10,7 +10,7 @@ export const worktree = {
       force: { cli: "--force", kind: "boolean" },
       b: { cli: "-b", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   list: builtin(
     {
@@ -30,6 +30,6 @@ export const worktree = {
     flags: {
       force: { cli: "--force", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
 };

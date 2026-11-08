@@ -1,5 +1,5 @@
 import type { Prepare } from "../../descriptor";
-import { builtin } from "../builtin";
+import { builtin, PATHS } from "../builtin";
 import { parseLs } from "../parse/fs";
 
 export const currentDirectory: Prepare = (input) => ({
@@ -21,7 +21,7 @@ const rawLs = {
     one: { cli: "-1", kind: "boolean" },
     F: { cli: "-F", kind: "boolean" },
   },
-  positionals: [{ name: "paths", optional: true, variadic: true }],
+  positionals: PATHS,
   positionalSeparator: true,
 } as const;
 
@@ -51,7 +51,7 @@ export const files = {
       b: { cli: "-b", kind: "boolean" },
       s: { cli: "-s", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   cp: builtin({
@@ -81,7 +81,7 @@ export const files = {
       interactive: { cli: "-i", kind: "boolean" },
       verbose: { cli: "-v", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   rm: builtin({
@@ -92,7 +92,7 @@ export const files = {
       interactive: { cli: "-i", kind: "boolean" },
       verbose: { cli: "-v", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   mkdir: builtin({
@@ -102,7 +102,7 @@ export const files = {
       mode: { cli: "-m", kind: "string" },
       verbose: { cli: "-v", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   touch: builtin({
@@ -114,6 +114,6 @@ export const files = {
       reference: { cli: "-r", kind: "string" },
       time: { cli: "-t", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
 };

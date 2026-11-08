@@ -11,6 +11,9 @@ import type { Infer } from "../graph/types";
 /** Built-in parsers receive the prepared operands; only wc reads them. */
 export type Parser<R> = (result: CommandResult, input: { args?: readonly Json[] }) => R;
 
+/** Most built-ins take any number of file operands. */
+export const PATHS = [{ name: "paths", optional: true, variadic: true }] as const;
+
 /** A symbol key keeps host metadata off the author call surface the compiler enumerates. */
 export const BUILTIN = Symbol("loopy.command.builtin");
 

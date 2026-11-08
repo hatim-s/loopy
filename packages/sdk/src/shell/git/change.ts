@@ -1,4 +1,4 @@
-import { builtin } from "../builtin";
+import { builtin, PATHS } from "../builtin";
 import { parseBranch, parseRemote, parseTag } from "../parse/git";
 
 export const change = {
@@ -11,7 +11,7 @@ export const change = {
       force: { cli: "--force", kind: "boolean" },
       update: { cli: "--update", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   commit: builtin({
@@ -27,7 +27,7 @@ export const change = {
       signoff: { cli: "--signoff", kind: "boolean" },
       file: { cli: "-F", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   push: builtin({
@@ -43,7 +43,7 @@ export const change = {
       tags: { cli: "--tags", kind: "boolean" },
       delete: { cli: "--delete", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   pull: builtin({
     program: "git",
@@ -53,7 +53,7 @@ export const change = {
       ffOnly: { cli: "--ff-only", kind: "boolean" },
       noRebase: { cli: "--no-rebase", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   fetch: builtin({
     program: "git",
@@ -65,7 +65,7 @@ export const change = {
       depth: { cli: "--depth", kind: "number" },
     },
     style: "equals",
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   checkout: builtin({
     program: "git",
@@ -76,7 +76,7 @@ export const change = {
       force: { cli: "--force", kind: "boolean" },
       detach: { cli: "--detach", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   switch: builtin({
     program: "git",
@@ -86,7 +86,7 @@ export const change = {
       forceCreate: { cli: "-C", kind: "string" },
       detach: { cli: "--detach", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   branch: builtin(
     {
@@ -108,7 +108,7 @@ export const change = {
         showCurrent: { cli: "--show-current", kind: "boolean" },
       },
       style: "equals",
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseBranch, out: { kind: "value", type: "json[]" } },
   ),
@@ -120,7 +120,7 @@ export const change = {
       flags: {
         verbose: { cli: "-v", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseRemote, out: { kind: "value", type: "json[]" } },
   ),
@@ -137,7 +137,7 @@ export const change = {
         message: { cli: "-m", kind: "string" },
         format: { cli: "--format", kind: "string" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseTag, out: { kind: "value", type: "json[]" } },
   ),

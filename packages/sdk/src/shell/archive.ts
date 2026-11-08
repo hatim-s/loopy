@@ -1,4 +1,4 @@
-import { builtin, namespace } from "./builtin";
+import { builtin, namespace, PATHS } from "./builtin";
 
 export const archive = namespace("archive", {
   tar: builtin({
@@ -13,7 +13,7 @@ export const archive = namespace("archive", {
       file: { cli: "-f", kind: "string" },
       directory: { cli: "-C", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   gzip: builtin({
     program: "gzip",
@@ -24,7 +24,7 @@ export const archive = namespace("archive", {
       force: { cli: "-f", kind: "boolean" },
       recursive: { cli: "-r", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   zip: builtin({
     program: "zip",
@@ -34,7 +34,7 @@ export const archive = namespace("archive", {
       update: { cli: "-u", kind: "boolean" },
       exclude: { cli: "-x", kind: "string", position: "after" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   unzip: builtin({
     program: "unzip",
@@ -45,6 +45,6 @@ export const archive = namespace("archive", {
       quiet: { cli: "-q", kind: "boolean" },
       directory: { cli: "-d", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
 });

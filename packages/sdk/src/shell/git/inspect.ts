@@ -1,4 +1,4 @@
-import { builtin } from "../builtin";
+import { builtin, PATHS } from "../builtin";
 import {
   LOG_FORMAT,
   parseDiff,
@@ -46,7 +46,7 @@ export const inspect = {
         },
       },
       style: "equals",
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       positionalSeparator: true,
     },
     {
@@ -123,7 +123,7 @@ export const inspect = {
         showToplevel: { cli: "--show-toplevel", kind: "boolean" },
         abbrevRef: { cli: "--abbrev-ref", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseRevParse, out: { kind: "value", type: "string" } },
   ),
@@ -139,7 +139,7 @@ export const inspect = {
         others: { cli: "--others", kind: "boolean" },
         excludeStandard: { cli: "--exclude-standard", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       positionalSeparator: true,
     },
     { parse: parseLsFiles, out: { kind: "value", type: "string[]" } },

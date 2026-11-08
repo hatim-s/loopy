@@ -1,4 +1,4 @@
-import { builtin } from "../builtin";
+import { builtin, PATHS } from "../builtin";
 import {
   parseDf,
   parseDu,
@@ -39,7 +39,7 @@ export const metadata = {
         delete: { cli: "-delete", kind: "boolean", order: 10 },
         printf: { cli: "-printf", kind: "string", order: 10 },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       flagsAfterPositionals: true,
       variants: {
         darwin: {
@@ -73,7 +73,7 @@ export const metadata = {
         level: { cli: "-L", kind: "number" },
         pattern: { cli: "-P", kind: "string" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseTree, out: { kind: "value", type: "json[]" } },
   ),
@@ -85,7 +85,7 @@ export const metadata = {
         format: { cli: "-f", kind: "string" },
         follow: { cli: "-L", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       variants: {
         linux: {
           preset: { flags: { format: STAT_LINUX_FORMAT } },
@@ -121,7 +121,7 @@ export const metadata = {
       noDereference: { cli: "-n", kind: "boolean" },
       verbose: { cli: "-v", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   realpath: builtin(
@@ -131,7 +131,7 @@ export const metadata = {
       flags: {
         quiet: { cli: "-q", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseRealpath, out: { kind: "value", type: "string" } },
   ),
@@ -170,7 +170,7 @@ export const metadata = {
         summary: { cli: "-s", kind: "boolean" },
         depth: { cli: "-d", kind: "number" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseDu, out: { kind: "value", type: "json[]" } },
   ),
@@ -184,7 +184,7 @@ export const metadata = {
         kilobytes: { cli: "-k", kind: "boolean" },
         portable: { cli: "-P", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseDf, out: { kind: "value", type: "json[]" } },
   ),

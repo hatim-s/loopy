@@ -9,11 +9,7 @@ type GrepMatch = { file: string | null; line: number; text: string };
 
 type Grep = { matches: GrepMatch[]; binaryMatches: string[] };
 
-type GrepCount = number;
-
 type Sha256 = { hash: string; file: string };
-
-type Jq = Json;
 
 export function parseWc({ stdout }: CommandResult, input: { args?: readonly Json[] } = {}): Wc[] {
   const rows = lines(stdout);
@@ -94,7 +90,7 @@ export function parseGrep({ stdout, exitCode }: CommandResult): Grep {
   return result;
 }
 
-export function parseGrepCount({ stdout }: CommandResult): GrepCount {
+export function parseGrepCount({ stdout }: CommandResult): number {
   const value = stdout.trim();
 
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
@@ -143,7 +139,7 @@ export function parseSha256({ stdout }: CommandResult): Sha256[] {
   });
 }
 
-export function parseJq({ stdout }: CommandResult): Jq {
+export function parseJq({ stdout }: CommandResult): Json {
   const values = lines(stdout).map((line) => jsonValue(line, "jq"));
 
   return values.length === 1 ? (values[0] ?? null) : values;
