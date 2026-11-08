@@ -9,7 +9,7 @@ import type {
 } from "@loopy/contract";
 import type { SecretError, Store } from "@loopy/core";
 import { errorMessage } from "@loopy/core";
-import { Data, type Effect, type Schema } from "effect";
+import { Data, Effect, type Schema } from "effect";
 import type { ServiceError } from "./error";
 
 export class RegistryError extends Data.TaggedError("RegistryError")<{
@@ -20,6 +20,10 @@ export class RegistryError extends Data.TaggedError("RegistryError")<{
     return `Could not ${this.operation}. ${errorMessage(this.cause)}`;
   }
 }
+
+/** Runs a synchronous registry step, naming the operation when it throws. */
+export const registrySync = <A>(operation: string, run: () => A) =>
+  Effect.try({ try: run, catch: (cause) => new RegistryError({ operation, cause }) });
 
 export class RegistryConflictError extends Data.TaggedError("RegistryConflictError")<{
   slug: string;

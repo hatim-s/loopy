@@ -23,7 +23,7 @@ async function fixture(options: { concurrency?: number } = {}) {
   const store = await runScoped(makeSqliteRunStore(join(home, "runs.sqlite")));
 
   const body = await compiledBody("workflow", source);
-  await Effect.runPromise(registry.save(body));
+  await Effect.runPromise(registry.publish(body));
 
   const service = makeLocalService({ store, home });
   const { request, causes } = serveHttp({ service, store, cwd: root, ...options });

@@ -24,7 +24,7 @@ async function setup() {
 
   const registry = await Effect.runPromise(Registry.make(f.home, f.workspace));
   await Effect.runPromise(
-    registry.save({
+    registry.publish({
       graph,
       revision: await revision(graph),
       bundles: [],

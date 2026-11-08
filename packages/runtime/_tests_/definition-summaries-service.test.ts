@@ -138,7 +138,7 @@ test("native adapter distinguishes absence from corrupt existing files", async (
   writeFileSync(join(f.a, ".loopy", "loopies", "obsolete.json"), JSON.stringify({ version: 1 }));
   await expect(Effect.runPromise(service.startRun("obsolete", {}, f.a))).rejects.toMatchObject({
     _tag: "RegistryError",
-    message: expect.stringContaining("uses an old format"),
+    message: expect.stringContaining("uses an old or invalid format"),
   });
   await expect(
     Effect.runPromise(service.putSchedule("obsolete", { cron: "* * * * *" }, f.a)),

@@ -4,16 +4,12 @@ import { Effect } from "effect";
 import { canonicalPath, SecretStore } from "../os";
 import { GenerationError, makeService, WorkspaceError } from "../service";
 import { Registry } from "./registry";
-import { makeArtifactRegistry } from "./save-compiled";
 import { generateCommand } from "./typegen/generate";
-
-export { ServiceError } from "../service";
 
 export function makeLocalService(options: { home: string; store: Store & DashboardReader }) {
   return makeService({
     store: options.store,
-    registry: (workspace) =>
-      Registry.make(options.home, workspace).pipe(Effect.map(makeArtifactRegistry)),
+    registry: (workspace) => Registry.make(options.home, workspace),
     canonicalWorkspace: (workspace) =>
       Effect.try({
         try: () => canonicalPath(workspace),

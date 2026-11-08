@@ -22,7 +22,7 @@ test("registry lookup uses the nearest project root and falls back to global ent
   const registry = Effect.runSync(Registry.make(f.home, f.project));
   const definition = await compiledBody("saved", f.source);
   Effect.runSync(
-    registry.save({
+    registry.publish({
       ...definition,
       revision: "a".repeat(64),
       graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
@@ -32,7 +32,7 @@ test("registry lookup uses the nearest project root and falls back to global ent
   const projectSource = join(f.project, "local.ts");
   writeFileSync(projectSource, "");
   Effect.runSync(
-    registry.save({
+    registry.publish({
       ...definition,
       revision: "b".repeat(64),
       source: { ...definition.source, path: projectSource },
@@ -55,7 +55,7 @@ test("changing scope removes only the other entry owned by the same source", asy
   const registry = Effect.runSync(Registry.make(f.home, f.project));
   const definition = await compiledBody("saved", f.source);
   Effect.runSync(
-    registry.save({
+    registry.publish({
       ...definition,
       revision: "a".repeat(64),
       graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
@@ -63,7 +63,7 @@ test("changing scope removes only the other entry owned by the same source", asy
     }),
   );
   Effect.runSync(
-    registry.save({
+    registry.publish({
       ...definition,
       revision: "b".repeat(64),
       source: { ...definition.source, path: f.source },
@@ -71,7 +71,7 @@ test("changing scope removes only the other entry owned by the same source", asy
   );
   expect(existsSync(join(f.home, "loopies", "saved.json"))).toBe(false);
   Effect.runSync(
-    registry.save({
+    registry.publish({
       ...definition,
       revision: "c".repeat(64),
       graph: { ...definition.graph, meta: { ...definition.graph.meta, scope: "global" } },
@@ -82,7 +82,7 @@ test("changing scope removes only the other entry owned by the same source", asy
   const other = join(f.project, "other.ts");
   writeFileSync(other, "");
   Effect.runSync(
-    registry.save({
+    registry.publish({
       ...definition,
       revision: "d".repeat(64),
       source: { ...definition.source, path: other },
@@ -102,12 +102,12 @@ test("an old-format registry entry fails loudly until it is deleted and saved ag
   writeFileSync(file, JSON.stringify({ slug: "saved", source: "different", bundleHash: "old" }));
   const body = await compiledBody("saved", f.source);
 
-  expect(() => Effect.runSync(registry.list())).toThrow("uses an old format");
-  expect(() => Effect.runSync(registry.get("saved"))).toThrow("uses an old format");
-  expect(() => Effect.runSync(registry.save(body))).toThrow("uses an old format");
+  expect(() => Effect.runSync(registry.list())).toThrow("uses an old or invalid format");
+  expect(() => Effect.runSync(registry.get("saved"))).toThrow("uses an old or invalid format");
+  expect(() => Effect.runSync(registry.publish(body))).toThrow("uses an old or invalid format");
 
   rmSync(file);
-  Effect.runSync(registry.save(body));
+  Effect.runSync(registry.publish(body));
   expect(Effect.runSync(registry.get("saved"))).toMatchObject({
     version: 3,
     graph: { name: "saved" },
@@ -122,7 +122,7 @@ test("marked temporary projects isolate saves and global fallback from an ancest
 
   mkdirSync(project);
   const ancestor = Effect.runSync(Registry.make(home, root));
-  Effect.runSync(ancestor.save(await compiledBody("sentinel", join(root, "sentinel.ts"))));
+  Effect.runSync(ancestor.publish(await compiledBody("sentinel", join(root, "sentinel.ts"))));
   const sentinel = join(ancestor.projectDirectory, "sentinel.json");
   const before = readFileSync(sentinel, "utf8");
 
@@ -139,9 +139,9 @@ test("marked temporary projects isolate saves and global fallback from an ancest
   const registry = Effect.runSync(Registry.make(home, project));
   expect(registry.project).toBe(project);
   expect(Effect.runSync(registry.list())).toEqual([]);
-  Effect.runSync(registry.save(await compiledBody("local", join(project, "local.ts"))));
+  Effect.runSync(registry.publish(await compiledBody("local", join(project, "local.ts"))));
   Effect.runSync(
-    registry.save(await compiledBody("global", join(project, "global.ts"), { scope: "global" })),
+    registry.publish(await compiledBody("global", join(project, "global.ts"), { scope: "global" })),
   );
 
   const nested = join(project, "nested");
