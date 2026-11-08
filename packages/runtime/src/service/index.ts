@@ -2,7 +2,7 @@ export { requireDefinition } from "./definition";
 
 export { ServiceError } from "./error";
 
-export { type EventReader, eventStream } from "./events";
+export { eventStream } from "./events";
 
 export {
   type ArtifactRegistry,
@@ -11,7 +11,6 @@ export {
   RegistryConflictError,
   RegistryError,
   registrySync,
-  type ServiceOptions,
   WorkspaceError,
 } from "./registry";
 

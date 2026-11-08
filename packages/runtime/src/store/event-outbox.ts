@@ -1,8 +1,10 @@
 import type { RuntimeEvent } from "@loopy/core";
+import { Effect } from "effect";
 
 type Listener = (events: RuntimeEvent[]) => void;
 
-// Delivery runs after commit. A listener failure must not turn a committed write into a storage error.
+// Delivery runs after commit. A listener failure must not turn a committed write into a storage
+// error, so a throwing listener is logged and unsubscribed instead of being called again.
 export class EventListeners {
   private readonly listeners = new Set<Listener>();
 
@@ -25,8 +27,11 @@ export class EventListeners {
     for (const listener of this.listeners) {
       try {
         listener(delivered);
-      } catch {
-        continue;
+      } catch (cause) {
+        this.listeners.delete(listener);
+        Effect.runSync(
+          Effect.logError("A store event listener threw and was unsubscribed.", cause),
+        );
       }
     }
   }

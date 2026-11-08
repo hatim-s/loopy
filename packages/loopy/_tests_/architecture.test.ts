@@ -311,6 +311,7 @@ function inside(directory: string, file: string) {
  */
 function loadedFiles(roots: string[]) {
   const loaded = new Set<string>();
+
   const pending = roots.flatMap((root) =>
     existsSync(root)
       ? sourceFiles(root).filter((file) => !relative(root, file).split("/").includes("fixtures"))

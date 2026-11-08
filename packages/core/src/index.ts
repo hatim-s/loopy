@@ -36,7 +36,6 @@ export {
   decodeJsonText,
   type Json,
   jsonSchema,
-  jsonTextSchema,
   MAX_LOG_BYTES,
   MAX_OUTPUT_BYTES,
   MAX_PREVIEW_BYTES,
@@ -51,6 +50,7 @@ export * from "./model";
 
 export {
   MAX_SECRET_VALUE_BYTES,
+  secretNameSchema,
   secretValueSchema,
   validateSecretName,
   validateSlug,
@@ -61,9 +61,7 @@ export * from "./rate-limit";
 export {
   checkOutSchema,
   exceedsInlineLimit,
-  type FieldText,
   fieldKey,
-  type OutSchemaIssue,
   outSchemaMessage,
   parseFieldText,
   type RecordField,
@@ -88,7 +86,6 @@ export {
   isNumber,
   isRecord,
   isString,
-  isStringArray,
   setOwnProperty,
 } from "./validation";
 

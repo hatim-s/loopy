@@ -50,10 +50,12 @@ test("API returns run records, step traces and cursor logs", async () => {
       run: () => {
         log("first");
         log("second");
+
         return 2;
       },
     }),
   );
+
   await save(f);
   const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
@@ -103,6 +105,7 @@ test("the daemon server requires its token and origin, serves pinned assets and 
   const own = await fetch(`${url.origin}/api/runs`, {
     headers: { ...headers, Origin: url.origin },
   });
+
   expect(own.status).toBe(200);
   expect(own.headers.has("access-control-allow-origin")).toBe(false);
 
@@ -144,10 +147,12 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
       input: {},
       run: () => {
         log("hello");
+
         return 1;
       },
     }),
   );
+
   await save(f);
   const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });

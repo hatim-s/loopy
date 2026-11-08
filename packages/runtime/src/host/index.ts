@@ -1,9 +1,4 @@
-export {
-  type ActivationError,
-  type ActivationOptions,
-  type ActivationResult,
-  activate,
-} from "./activation";
+export { activate } from "./activation";
 
 export { ActivationWorkCleanupFailed } from "./activation/work";
 
@@ -24,7 +19,5 @@ export { DriverCleanupFailed } from "./heartbeat";
 export {
   fireDueSchedules,
   SCHEDULE_POLICY,
-  type ScheduleDefinition,
   ScheduleDefinitionError,
-  type ScheduleFiringOptions,
 } from "./schedules";

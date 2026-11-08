@@ -8,20 +8,21 @@ import {
   ExecutorError,
   errnoCode,
   executionKeyString,
+  positiveInt,
 } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { processAlive, publishExclusive, writeFileAtomically } from "../os";
 
 const identity = {
   executionKey: executionKeySchema,
-  attempt: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  attempt: positiveInt,
 };
 
 export const receiptSchema = Schema.Union([
   Schema.Struct({
     ...identity,
     kind: Schema.Literal("started"),
-    pid: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+    pid: positiveInt,
   }),
   Schema.Struct({
     ...identity,

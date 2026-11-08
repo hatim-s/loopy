@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { graphSchema } from "@loopy/contract";
 import { Effect, Schema } from "effect";
 import { approveDemoGraph } from "../../core/_tests_/fixtures/graphs";

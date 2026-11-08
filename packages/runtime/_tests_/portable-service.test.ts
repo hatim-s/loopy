@@ -104,9 +104,11 @@ function fixture(isAlive = () => false) {
 
 test("portable service validates input and pins graph/source revisions through async artifacts", async () => {
   const { service, store } = fixture();
+
   const first = await compiledBody("portable", "/virtual/portable.ts", {
     input: { name: "string" },
   });
+
   first.sourceArtifact = {
     version: 1,
     status: "available",
@@ -136,6 +138,7 @@ test("portable service validates input and pins graph/source revisions through a
   const second = await compiledBody("portable", "/virtual/portable.ts", {
     description: "Updated definition",
   });
+
   second.sourceArtifact = {
     version: 1,
     status: "available",

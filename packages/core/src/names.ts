@@ -10,11 +10,16 @@ export function validateSlug(slug: string): void {
   }
 }
 
+const SECRET_NAME_MESSAGE =
+  "Secret names must contain 1-80 letters, numbers, dots, underscores, or hyphens, starting with a letter or number.";
+
+export const secretNameSchema = Schema.String.check(
+  Schema.isPattern(SECRET_NAME_PATTERN, { message: SECRET_NAME_MESSAGE }),
+);
+
 export function validateSecretName(name: string): void {
   if (!SECRET_NAME_PATTERN.test(name)) {
-    throw new Error(
-      "Secret names must contain 1-80 letters, numbers, dots, underscores, or hyphens, starting with a letter or number.",
-    );
+    throw new Error(SECRET_NAME_MESSAGE);
   }
 }
 

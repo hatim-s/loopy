@@ -18,6 +18,7 @@ export async function largeMapFixture(root: string, scope: Scope.Scope) {
   const home = join(root, "home");
   mkdirSync(home, { recursive: true });
   const source = join(root, "reindex-docs.loopy.ts");
+
   const compiled = await builtBody(
     loopy("reindex-docs", {
       description: "Synthetic completed 10,000-item fixture. No engine or provider calls.",
@@ -167,6 +168,7 @@ export async function manyRunsFixture(root: string, scope: Scope.Scope) {
     path: join(root, "queue-drain.loopy.ts"),
     workspace: root,
   });
+
   await Effect.runPromise(service.putLoopy("queue-drain", compiled));
   const started = performance.now();
 
