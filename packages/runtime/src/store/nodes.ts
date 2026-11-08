@@ -174,9 +174,7 @@ export function writeLog(write: SqlWrite, effect: Extract<StoreEffect, { kind: "
       record.at,
       record.level,
       record.message,
-      record.data === undefined
-        ? 0
-        : new TextEncoder().encode(JSON.stringify(record.data)).byteLength,
+      record.data === undefined ? 0 : outputBytes(record.data),
     );
   emitLog(write, record, effect.executionKey.nodeId);
 }

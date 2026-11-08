@@ -41,6 +41,10 @@ const NEXT_TURN = `SELECT MIN(COALESCE(t.next_at,r.heartbeat_at,r.created_at)) A
   WHERE r.owner_token IS NULL AND (r.status='queued' OR r.status='suspended')
   AND (${RUNNING_COUNT})<?`;
 
+export function readRunningCount(ctx: SqlContext): number {
+  return ctx.db.query<{ count: number }, []>(RUNNING_COUNT).get()?.count ?? 0;
+}
+
 function toTurn(row: TurnRow): DurableTurn {
   return {
     runId: row.id,
@@ -58,7 +62,7 @@ export function readDueTurns(ctx: SqlContext, now: string, concurrency: number):
   const at = utc(now);
   const running = ctx.db.query<TurnRow, [string, number]>(RUNNING_TURNS).all(at, concurrency);
 
-  const count = ctx.db.query<{ count: number }, []>(RUNNING_COUNT).get()?.count ?? 0;
+  const count = readRunningCount(ctx);
 
   const ready = ctx.db
     .query<TurnRow, [string, string, number]>(READY_TURNS)

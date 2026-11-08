@@ -4,13 +4,13 @@ import type { Cause } from "effect";
 import { Clock, Data, Effect } from "effect";
 import { LocalExecutor } from "../../executor";
 import { makeDaemon, PreparationError, ScheduleDefinitionError } from "../../host";
-import { withLockDirectory } from "../../os";
+import { tryPidLock } from "../../os";
 import { requireDefinition } from "../../service";
 import type { SqlRunStore } from "../../store";
 import { Registry } from "../registry";
 import { startServer } from "../server/start-server";
 import { makeLocalService } from "../service";
-import { readDaemonFile, removeDaemonFile, writeDaemonFile } from "./file";
+import { removeDaemonFile, writeDaemonFile } from "./file";
 
 export class LocalDaemonError extends Data.TaggedError("LocalDaemonError")<{
   operation: "start" | "stop";
@@ -75,6 +75,7 @@ export const localDaemon = (options: DaemonOptions) =>
     const startedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
     const token = crypto.randomUUID();
     let server: ReturnType<typeof startServer> | undefined;
+    let releaseLock: (() => void) | undefined;
     let stopped = false;
 
     const start = Effect.suspend(() => {
@@ -85,44 +86,42 @@ export const localDaemon = (options: DaemonOptions) =>
       let created = false;
 
       return Effect.try({
-        try: () =>
-          withLockDirectory(join(options.home, "daemon-start.lock"), "daemon startup", () => {
-            if (stopped) {
-              throw new Error("This daemon has stopped. Create a new daemon scope.");
-            }
+        try: () => {
+          if (stopped) {
+            throw new Error("This daemon has stopped. Create a new daemon scope.");
+          }
 
-            if (server) {
-              return server.url;
-            }
+          // The lock outlives a crashed owner, so a dead daemon never blocks the next one.
+          const lock = tryPidLock(join(options.home, "daemon.lock"));
 
-            if (readDaemonFile(options.home)) {
-              throw new Error(
-                "A daemon is already running for this home. Use loopy ui to open it.",
-              );
-            }
+          if (lock.kind === "held") {
+            throw new Error(
+              `A daemon is already running for this home (PID ${lock.pid}). Use loopy ui to open it.`,
+            );
+          }
 
-            // Validate discovery before binding a port, so a second daemon never holds a listener.
-            server = startServer({
-              ...options,
-              service,
-              token,
-              daemon: { pid: process.pid, startedAt, concurrency: options.concurrency },
-            });
-            created = true;
-            writeDaemonFile(options.home, {
-              pid: process.pid,
-              port: server.port,
-              token,
-              startedAt,
-            });
+          if (lock.kind === "starting") {
+            throw new Error("Another daemon is starting for this home. Use loopy ui to open it.");
+          }
 
-            return server.url;
-          }),
+          releaseLock = lock.release;
+          // Discovery is published after the listener binds, so it always names a live port.
+          server = startServer({
+            ...options,
+            service,
+            token,
+            daemon: { pid: process.pid, startedAt, concurrency: options.concurrency },
+          });
+          created = true;
+          writeDaemonFile(options.home, { pid: process.pid, port: server.port, token, startedAt });
+
+          return server.url;
+        },
         catch: (cause) => new LocalDaemonError({ operation: "start", reason: "failed", cause }),
       }).pipe(
         Effect.catchTag("LocalDaemonError", (error) => {
           if (!created) {
-            return Effect.fail(error);
+            return Effect.andThen(Effect.orDie(unlock), Effect.fail(error));
           }
 
           stopped = true;
@@ -130,7 +129,7 @@ export const localDaemon = (options: DaemonOptions) =>
           return Effect.acquireUseRelease(
             Effect.void,
             () => Effect.fail(error),
-            () => closeListener,
+            () => Effect.andThen(closeListener, unlock).pipe(Effect.orDie),
           );
         }),
       );
@@ -160,6 +159,15 @@ export const localDaemon = (options: DaemonOptions) =>
       catch: (cause) => new LocalDaemonError({ operation: "stop", reason: "failed", cause }),
     });
 
+    const unlock = Effect.try({
+      try: () => {
+        const release = releaseLock;
+        releaseLock = undefined;
+        release?.();
+      },
+      catch: (cause) => new LocalDaemonError({ operation: "stop", reason: "failed", cause }),
+    });
+
     const stop = yield* Effect.cached(
       Effect.uninterruptible(
         Effect.gen(function* () {
@@ -171,6 +179,7 @@ export const localDaemon = (options: DaemonOptions) =>
             () => daemon.stop,
           );
           yield* removeDiscovery;
+          yield* unlock;
         }),
       ),
     );

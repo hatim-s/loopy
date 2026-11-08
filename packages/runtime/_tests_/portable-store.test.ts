@@ -4,7 +4,7 @@ import type { StoreEffect } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { BunSqlDriver } from "../src/store/bun-driver";
-import { EVENT_RETENTION } from "../src/store/event-outbox";
+import { EVENT_RETENTION } from "../src/store/events";
 import {
   type SqlDriver,
   SqlRunStore,

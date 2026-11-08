@@ -114,14 +114,6 @@ export function queryRuns(ctx: SqlContext, query: RunPageQuery): RunPreview[] {
     .map(previewRun);
 }
 
-export function readRunningCount(ctx: SqlContext): number {
-  return (
-    ctx.db
-      .query<{ count: number }, []>("SELECT count(*) AS count FROM runs WHERE status='running'")
-      .get()?.count ?? 0
-  );
-}
-
 export function readRunCountsByDefinition(ctx: SqlContext) {
   return ctx.db
     .query<RunDefinitionCount, []>(

@@ -1,8 +1,9 @@
-import type { LogRecord, RuntimeEventChange } from "@loopy/core";
+import type { LogRecord, RuntimeEvent, RuntimeEventChange } from "@loopy/core";
 import type { SqlContext, SqlWrite } from "./context";
-import { EVENT_RETENTION } from "./event-outbox";
 import { StoredDataError } from "./operation";
 import { type EventRow, rowToEvent } from "./rows";
+
+export const EVENT_RETENTION = { maxAgeMs: 86_400_000, maxRows: 100_000 } as const;
 
 type EventParams = [
   string,
@@ -20,8 +21,8 @@ function append(write: SqlWrite, change: RuntimeEventChange, nodeId: string | nu
   const scoped = change.entity === "run" || change.entity === "schedule";
 
   const row = write.db
-    .query<EventRow, EventParams>(
-      "INSERT INTO events(at,txn,entity,kind,run_id,record,node_id,slug,workspace) VALUES (?,?,?,?,?,?,?,?,?) RETURNING *",
+    .query<Pick<EventRow, "sequence">, EventParams>(
+      "INSERT INTO events(at,txn,entity,kind,run_id,record,node_id,slug,workspace) VALUES (?,?,?,?,?,?,?,?,?) RETURNING sequence",
     )
     .get(
       write.at,
@@ -39,7 +40,15 @@ function append(write: SqlWrite, change: RuntimeEventChange, nodeId: string | nu
     throw new Error("Event was not appended. Restore storage.");
   }
 
-  write.events.push(rowToEvent(row));
+  // The clone keeps a published event apart from records the writer keeps updating in place.
+  const event: RuntimeEvent = {
+    ...structuredClone(change),
+    sequence: row.sequence,
+    at: write.at,
+    txn: write.txn,
+  };
+
+  write.events.push(event);
 }
 
 export function emit(

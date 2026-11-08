@@ -1,7 +1,5 @@
 import type { RuntimeEvent } from "@loopy/core";
 
-export const EVENT_RETENTION = { maxAgeMs: 86_400_000, maxRows: 100_000 } as const;
-
 type Listener = (events: RuntimeEvent[]) => void;
 
 // Delivery runs after commit. A listener failure must not turn a committed write into a storage error.
