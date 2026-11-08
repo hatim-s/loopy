@@ -187,7 +187,7 @@ export function storeRecordContract(
     expect((await Effect.runPromise(store.getRun("earlier")))?.createdAt).toBe(at);
   });
 
-  test("run, node, log and retry timestamp writes normalize UTC and due comparisons accept offsets", async () => {
+  test("run, node and log timestamp writes normalize UTC and due comparisons accept offsets", async () => {
     const store = await makeStore();
     const offset = "2026-10-16T05:00:00+05:00";
     await Effect.runPromise(
@@ -197,7 +197,6 @@ export function storeRecordContract(
         updatedAt: offset,
         status: "suspended",
         wakeAt: offset,
-        nextRetryAt: offset,
         owner: { token: "owner", host: "test", pid: 1, heartbeatAt: offset },
       }),
     );
@@ -205,7 +204,6 @@ export function storeRecordContract(
       createdAt: at,
       updatedAt: at,
       wakeAt: at,
-      nextRetryAt: at,
       owner: { heartbeatAt: at },
     });
     await Effect.runPromise(store.release("run", "owner"));
@@ -237,7 +235,6 @@ export function storeRecordContract(
             log: { message: "hello", data: null },
             at: offset,
           },
-          { kind: "schedule_activation", at: offset },
         ],
       }),
     );
@@ -245,7 +242,6 @@ export function storeRecordContract(
       { startedAt: at, endedAt: at, nextRetryAt: at },
     ]);
     expect(await Effect.runPromise(store.getLogs("run"))).toMatchObject([{ at }]);
-    expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({ nextRetryAt: at });
     await Effect.runPromise(
       store.apply({
         runId: "run",

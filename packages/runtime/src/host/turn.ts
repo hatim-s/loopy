@@ -8,7 +8,13 @@ import {
   type Store,
   type StoreEffect,
 } from "@loopy/core";
-import { type EngineEffect, type EngineEvent, initialState, step } from "@loopy/core/engine";
+import {
+  type EngineEffect,
+  type EngineEvent,
+  initialState,
+  nextDeadline,
+  step,
+} from "@loopy/core/engine";
 import { Effect } from "effect";
 
 export type Dispatch = Extract<EngineEffect, { kind: "dispatch" }>;
@@ -28,7 +34,6 @@ export type TurnOptions = {
   input: Json;
 };
 
-/** Rebuilds state from persisted node runs, steps once and commits every store effect before any work starts. */
 export function commitTurn(options: TurnOptions, event: EngineEvent) {
   return Effect.gen(function* () {
     const { store, graph, runId, token, input } = options;
@@ -41,18 +46,12 @@ export function commitTurn(options: TurnOptions, event: EngineEvent) {
 
     const effects: StoreEffect[] = [];
     const work: HostWork[] = [];
-    let retryAt: string | null = null;
 
     for (const effect of transition.effects) {
       if (effect.kind === "dispatch" || effect.kind === "sample") {
         work.push(effect);
-        continue;
-      }
-
-      effects.push(effect);
-
-      if (effect.kind === "schedule_activation" && (retryAt === null || effect.at < retryAt)) {
-        retryAt = effect.at;
+      } else {
+        effects.push(effect);
       }
     }
 
@@ -65,7 +64,7 @@ export function commitTurn(options: TurnOptions, event: EngineEvent) {
           ? { kind: "suspended" }
           : { kind: "active" };
 
-    return { disposition, work, retryAt };
+    return { disposition, work, deadline: nextDeadline(transition.state.nodeRuns) };
   });
 }
 

@@ -43,7 +43,6 @@ const runBaseSchema = struct({
   revision: Schema.String,
   workspace: Schema.String,
   input: jsonSchema,
-  nextRetryAt: Schema.optional(Schema.String),
   createdAt: Schema.String,
   updatedAt: Schema.String,
   owner: Schema.optional(

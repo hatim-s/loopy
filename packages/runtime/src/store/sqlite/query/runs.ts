@@ -49,7 +49,7 @@ function runWhere(filter: RunFilter) {
   return { clauses, values };
 }
 
-export const RUN_PREVIEW_COLUMNS = `r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.next_retry_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,
+export const RUN_PREVIEW_COLUMNS = `r.id,r.slug,r.revision,r.workspace,r.status,r.error,r.wake_at,r.created_at,r.updated_at,r.owner_token,r.owner_pid,r.owner_host,r.heartbeat_at,
  CASE WHEN length(CAST(r.input_json AS BLOB))>${MAX_PREVIEW_BYTES} THEN 'null' ELSE r.input_json END AS input_json,
  CASE WHEN length(CAST(r.output_json AS BLOB))>${MAX_PREVIEW_BYTES} THEN 'null' ELSE r.output_json END AS output_json,
  length(CAST(r.input_json AS BLOB)) AS input_bytes,length(CAST(r.output_json AS BLOB)) AS output_bytes`;

@@ -1,6 +1,6 @@
 import type { ExecutionKey, StoreEffect } from "@loopy/core";
 import { StoreInvariantError } from "../operation";
-import { earliestWakeAt, utc } from "../timestamps";
+import { earliestWakeAt } from "../timestamps";
 import type { SqlWrite } from "./context";
 import { writeLog, writeNodeRun } from "./nodes";
 import { finishRun, requireRunning, suspendRun } from "./runs";
@@ -39,14 +39,6 @@ function applyEffect(write: SqlWrite, runId: string, token: string, effect: Stor
     case "finish_run": {
       finishRun(write, runId, token, effect.outcome);
       expireWaits(write, runId, effect.at);
-
-      return;
-    }
-
-    case "schedule_activation": {
-      write.db
-        .query("UPDATE runs SET next_retry_at=?,wake_at=?,updated_at=? WHERE id=?")
-        .run(utc(effect.at), utc(effect.at), write.at, runId);
 
       return;
     }

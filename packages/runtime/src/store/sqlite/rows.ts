@@ -21,7 +21,6 @@ export type RunRow = {
   output_json: string | null;
   error: string | null;
   wake_at: string | null;
-  next_retry_at: string | null;
   created_at: string;
   updated_at: string;
   owner_token: string | null;
@@ -100,10 +99,6 @@ export function rowToRun(row: RunRow): RunRecord {
     updatedAt: row.updated_at,
     ...outcome(row),
   };
-
-  if (row.next_retry_at !== null) {
-    run.nextRetryAt = row.next_retry_at;
-  }
 
   if (row.owner_token !== null && row.owner_host !== null && row.heartbeat_at !== null) {
     run.owner = {

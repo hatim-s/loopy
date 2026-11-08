@@ -33,7 +33,7 @@ export function writeNodeRun(write: SqlWrite, runId: string, nodeRun: NodeRun): 
   checkNodeWrite(node);
 
   if (node.status === "running") {
-    write.db.query("UPDATE runs SET next_retry_at=NULL,wake_at=NULL WHERE id=?").run(runId);
+    write.db.query("UPDATE runs SET wake_at=NULL WHERE id=?").run(runId);
   }
 
   write.db

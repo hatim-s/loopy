@@ -84,10 +84,6 @@ function pause(
       : { kind: "failed", error: { code: "execution", message: "Wait timed out." } };
   }
 
-  if (wakeAt !== null) {
-    transition.effects.push({ kind: "schedule_activation", at: wakeAt });
-  }
-
   if (!previous) {
     const base = runBase(execution, at);
 
@@ -151,8 +147,6 @@ export function invoke(
     (previous?.status === "retrying" || previous?.status === "rate_limited") &&
     previous.nextRetryAt > at
   ) {
-    transition.effects.push({ kind: "schedule_activation", at: previous.nextRetryAt });
-
     return { kind: "pending" };
   }
 

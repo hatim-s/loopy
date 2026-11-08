@@ -1,4 +1,5 @@
 import { executionKeyString, type NodeRun } from "@loopy/core";
+import { nextDeadline } from "@loopy/core/engine";
 import { leaseRenewalMs } from "../heartbeat";
 import type { HostWork } from "../turn";
 
@@ -21,15 +22,7 @@ export function durableWakeAt(options: {
     );
   });
 
-  const deadlines = nodes.flatMap((node) => {
-    if (node.status === "retrying" || node.status === "rate_limited") {
-      return [node.nextRetryAt];
-    }
-
-    return (node.status === "waiting" || node.status === "sleeping") && node.wakeAt !== null
-      ? [node.wakeAt]
-      : [];
-  });
+  const deadline = nextDeadline(nodes);
 
   const heartbeatAt = now + leaseRenewalMs(leaseMs);
   const checkAt = nodes.some((node) => node.status === "running") ? now + pollMs : heartbeatAt;
@@ -38,7 +31,7 @@ export function durableWakeAt(options: {
     Math.min(
       ready ? now : checkAt,
       heartbeatAt,
-      ...deadlines.map((deadline) => Date.parse(deadline)),
+      deadline === null ? Number.POSITIVE_INFINITY : Date.parse(deadline),
     ),
   ).toISOString();
 }
