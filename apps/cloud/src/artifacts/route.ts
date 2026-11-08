@@ -1,9 +1,24 @@
-import { decodeBoundary, sandboxArtifactRequestSchema } from "@loopy/contract";
-import type { Store } from "@loopy/core";
+import { decodeBoundary, type ErrorCode, isTerminalRun } from "@loopy/contract";
+import { type SandboxErrorCode, sandboxArtifactRequestSchema } from "@loopy/contract/sandbox";
+import { type Store, struct } from "@loopy/core";
 import { errorResponse, json } from "@loopy/runtime/service";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { cloudSync } from "../operation";
 import type { SandboxProvider } from "../provider";
+
+const artifactQuerySchema = struct({
+  ...sandboxArtifactRequestSchema.fields,
+  executionKey: Schema.fromJsonString(sandboxArtifactRequestSchema.fields.executionKey),
+});
+
+const serviceCode = {
+  invalid_request: "bad_request",
+  output_limit: "bad_request",
+  not_found: "not_found",
+  conflict: "conflict",
+  unauthorized: "internal",
+  internal: "internal",
+} as const satisfies Record<SandboxErrorCode, ErrorCode>;
 
 export function artifactResponse(options: {
   url: URL;
@@ -13,19 +28,12 @@ export function artifactResponse(options: {
 }) {
   return Effect.gen(function* () {
     const { url, workspace, store, provider } = options;
-    let key: unknown;
-
-    try {
-      key = JSON.parse(url.searchParams.get("key") ?? "null");
-    } catch {
-      return errorResponse("bad_request", "Supply a JSON execution key.");
-    }
 
     const parsed = yield* Effect.result(
       cloudSync("decode artifact request", () =>
-        decodeBoundary(sandboxArtifactRequestSchema)({
+        decodeBoundary(artifactQuerySchema)({
           workspace,
-          executionKey: key,
+          executionKey: url.searchParams.get("key"),
           attempt: Number(url.searchParams.get("attempt")),
           path: url.searchParams.get("path"),
         }),
@@ -35,7 +43,7 @@ export function artifactResponse(options: {
     if (Result.isFailure(parsed)) {
       return errorResponse(
         "bad_request",
-        "Supply an execution key, positive attempt and relative file path.",
+        "Supply a JSON execution key, positive attempt and relative file path.",
       );
     }
 
@@ -45,7 +53,7 @@ export function artifactResponse(options: {
       return errorResponse("not_found");
     }
 
-    if (!["succeeded", "failed", "cancelled"].includes(run.status)) {
+    if (!isTerminalRun(run.status)) {
       return errorResponse(
         "conflict",
         "Wait for the run to finish before reading its workspace files.",
@@ -55,14 +63,7 @@ export function artifactResponse(options: {
     const result = yield* provider.artifact(parsed.success);
 
     if (result.kind === "error") {
-      const code =
-        result.error.code === "not_found"
-          ? "not_found"
-          : result.error.code === "conflict"
-            ? "conflict"
-            : "bad_request";
-
-      return errorResponse(code, result.error.message);
+      return errorResponse(serviceCode[result.error.code], result.error.message);
     }
 
     return json(result.artifact);
