@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { counter, positiveInt, struct } from "../codec";
+import { counter, struct } from "../codec";
 import { nodeSchema } from "./nodes";
 import { graphRecord, nodeIdSchema, recordSpecSchema, refSchema } from "./values";
 

@@ -15,7 +15,6 @@ const queued: RunView = {
   id: "run-a",
   slug: "triage",
   workspace: "/work",
-  loopy: { slug: "triage", description: null },
   input: null,
   createdAt: "2026-10-17T10:00:00.000Z",
   updatedAt: "2026-10-17T10:00:00.000Z",
@@ -38,7 +37,7 @@ function page(runs: RunView[]): RunPage {
 }
 
 function snapshot(run: RunView): RunSnapshotView {
-  return { run, nodeRuns: [], logs: [], hooks: [], cursor: 10, epoch: "e1" };
+  return { run, nodeRuns: [], hooks: [], cursor: 10, epoch: "e1" };
 }
 
 function event(record: RunView, sequence: number, kind: "claimed" | "heartbeat"): ServerEvent {

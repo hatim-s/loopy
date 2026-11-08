@@ -39,26 +39,14 @@ export function makeRunViews(context: ServiceContext) {
     return (yield* resolve([run]))(run);
   });
 
-  const resolve = Effect.fn("run-views.resolve")(function* (
-    runs: RunRecord[],
-    catalog: DefinitionCatalog = makeDefinitionCatalog(context.registry),
-  ) {
-    const descriptions = new Map<RunRecord, string | null>();
-
-    for (const run of runs) {
-      const summary = yield* catalog.summary(run.workspace, run.slug);
-      // Runs outlive deleted definitions.
-      descriptions.set(run, summary?.description ?? null);
-    }
-
-    const ids = runs.map((run) => run.id);
+  const resolve = Effect.fn("run-views.resolve")(function* (runs: RunRecord[]) {
     const now = context.now();
+    const ids = runs.map((run) => run.id);
     const hooks = yield* context.store.pendingHooks(ids, now);
 
     return (run: RunRecord): RunView =>
       runView({
         run,
-        loopy: { slug: run.slug, description: descriptions.get(run) ?? null },
         hook: hooks.get(run.id),
         now,
         leaseMs: context.store.leaseMs,
@@ -115,7 +103,7 @@ export function makeRunViews(context: ServiceContext) {
         }
 
         const recent = yield* context.store.queryRuns({ ...filter, limit: 10, now: context.now() });
-        const resolved = yield* resolve(recent, catalog);
+        const resolved = yield* resolve(recent);
 
         const selectedCounts =
           saved.scope === "global"

@@ -51,9 +51,9 @@ export type RunDefinitionCount = {
 };
 
 export type DashboardSnapshot = Omit<RunSnapshotView, "run"> &
-  Required<
-    Pick<RunSnapshotView, "scopes" | "nodeRunsNext" | "truncatedOutputs" | "hooksTruncated">
-  > & { run: RunPreview };
+  Required<Pick<RunSnapshotView, "nodeRunsNext" | "truncatedOutputs" | "hooksTruncated">> & {
+    run: RunPreview;
+  };
 
 export interface DashboardReader {
   scheduleOverview(): Effect.Effect<ScheduleOverviewView, StorageError>;

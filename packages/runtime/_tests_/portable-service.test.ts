@@ -58,12 +58,6 @@ function fixture() {
   const registry: ArtifactRegistry = {
     workspace: () => Effect.succeed("cloud-workspace"),
     listSummaries: () => Effect.sync(() => [...entries.values()].map(definitionSummary)),
-    summary: (slug) =>
-      Effect.sync(() => {
-        const saved = entries.get(slug);
-
-        return saved ? definitionSummary(saved) : null;
-      }),
     get: (slug) => Effect.sync(() => entries.get(slug) ?? null),
     revisionGraph: (hash) =>
       Effect.suspend(() => {

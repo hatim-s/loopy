@@ -117,7 +117,6 @@ test("HTTP dashboard reads pin source and page diagnostic payloads outside the s
 
   try {
     const snapshot = decodeBoundary(routes.run.response)(await get(`/runs/${run.id}`));
-    expect(snapshot.logs).toEqual([]);
 
     const firstLogs = decodeBoundary(routes.logs.response)(
       await get(`/runs/${run.id}/logs?limit=1`),

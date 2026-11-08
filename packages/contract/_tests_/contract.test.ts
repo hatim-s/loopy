@@ -9,10 +9,8 @@ const now = newRun().createdAt;
 
 const leaseMs = 60_000;
 
-const loopy = { slug: "test", description: null };
-
 function view(run: core.RunRecord, hook?: contract.PendingHook) {
-  return contract.runView({ run, loopy, hook, now, leaseMs });
+  return contract.runView({ run, hook, now, leaseMs });
 }
 
 const hook: contract.PendingHook = {
@@ -42,12 +40,10 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
       )({ ...derived, owner: run.owner }),
     ),
   ).toBe(false);
-  expect(derived.loopy).toEqual({ slug: "test", description: null });
   expect(derived.ownerStale).toBe(false);
   expect(
     contract.runView({
       run,
-      loopy,
       hook: undefined,
       now: new Date(Date.parse(now) + leaseMs).toISOString(),
       leaseMs,
@@ -56,7 +52,6 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
   expect(
     contract.runView({
       run,
-      loopy,
       hook: undefined,
       now: new Date(Date.parse(now) + leaseMs + 1).toISOString(),
       leaseMs,
@@ -178,7 +173,6 @@ test("serialized loopy and snapshot views exclude private registry and owner key
   const snapshot: contract.RunSnapshotView = {
     nodeRuns: [],
     run,
-    logs: [],
     hooks: [],
     cursor: 0,
     epoch: "epoch",
@@ -209,16 +203,6 @@ test("strict edges reject misspelled request keys and injected view tokens", () 
       )({ ...view(newRun()), token: "private" }),
     ),
   ).toBe(false);
-
-  const described = contract.runView({
-    run: newRun(),
-    loopy: { slug: "test", description: "Review approvals" },
-    hook: undefined,
-    now,
-    leaseMs,
-  });
-
-  expect(described.loopy).toEqual({ slug: "test", description: "Review approvals" });
 });
 
 test("run cursors preserve timestamp ties and reject timestamp-only paging", () => {

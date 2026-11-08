@@ -39,14 +39,16 @@ export function runPageQuery(backend: LoopyBackend, query: RunsQuery & { limit: 
   });
 }
 
-/** The event stream keeps a loaded snapshot current, so it never goes stale by time. */
+/**
+ * The event stream patches every snapshot field in place, so it never goes stale by time.
+ * Scoped node events change only the scope counts, which scopesQuery owns.
+ */
 export function runQuery(backend: LoopyBackend, id: string) {
   return queryOptions({
     queryKey: keys.run(id),
     queryFn: ({ signal }) => backend.call("run", { params: { id } }, signal),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: QUERY_GC_TIME,
-    meta: { refresh: { on: "scope", runId: id } },
   });
 }
 

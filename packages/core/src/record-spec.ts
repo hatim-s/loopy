@@ -1,6 +1,6 @@
 import { Result, Schema } from "effect";
 import type { FieldType, OutSchema, RecordSpec } from "./graph/values";
-import { type Json, jsonSchema, jsonTextSchema, MAX_OUTPUT_BYTES, outputBytes } from "./json";
+import { type Json, jsonTextSchema, MAX_OUTPUT_BYTES, outputBytes } from "./json";
 import { isBoolean, isNumber, isRecord, isString } from "./validation";
 
 // A trailing "?" marks an optional record field; values use the key without it.

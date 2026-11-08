@@ -99,7 +99,7 @@ export function RunTable(props: {
                 </td>
                 {withLoopy && (
                   <td className="max-w-56">
-                    <span className="cell-main">{run.loopy.slug}</span>
+                    <span className="cell-main">{run.slug}</span>
                   </td>
                 )}
                 <td>
@@ -107,7 +107,7 @@ export function RunTable(props: {
                     to="/runs/$runId"
                     params={{ runId: run.id }}
                     className="row-link font-mono text-xs"
-                    aria-label={`Run ${run.id} of ${run.loopy.slug}`}
+                    aria-label={`Run ${run.id} of ${run.slug}`}
                   >
                     <span className="inline-block max-w-[14ch] truncate align-bottom">
                       {shortId(run.id)}

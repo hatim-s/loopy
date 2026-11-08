@@ -35,7 +35,6 @@ export async function summaryServiceFixture() {
 
   const calls = {
     lists: new Map<string, number>(),
-    summaries: new Map<string, number>(),
     graphs,
   };
 
@@ -65,11 +64,6 @@ export async function summaryServiceFixture() {
         Effect.sync(() => {
           calls.lists.set(native.project, (calls.lists.get(native.project) ?? 0) + 1);
         }).pipe(Effect.andThen(base.listSummaries())),
-      summary: (slug) =>
-        Effect.sync(() => {
-          const key = JSON.stringify([native.project, slug]);
-          calls.summaries.set(key, (calls.summaries.get(key) ?? 0) + 1);
-        }).pipe(Effect.andThen(base.summary(slug))),
       get: (slug) =>
         Effect.suspend(() => {
           calls.graphs.push(slug);

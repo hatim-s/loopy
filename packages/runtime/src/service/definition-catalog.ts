@@ -2,10 +2,9 @@ import type { DefinitionSummary } from "@loopy/contract";
 import { Effect } from "effect";
 import type { ArtifactRegistry, ServiceOptions } from "./registry";
 
-/** One request caches absence and aliases by the registry's canonical workspace. */
+/** One request caches registries and listings by the registry's canonical workspace. */
 export function makeDefinitionCatalog(selectRegistry: ServiceOptions["registry"]) {
   const registries = new Map<string, ArtifactRegistry>();
-  const workspaceSummaries = new Map<string, Map<string, DefinitionSummary | null>>();
   const lists = new Map<string, DefinitionSummary[]>();
 
   const resolve = Effect.fn("definition-catalog.resolve")(function* (workspace: string) {
@@ -24,27 +23,6 @@ export function makeDefinitionCatalog(selectRegistry: ServiceOptions["registry"]
     return { registry: resolved, identity };
   });
 
-  const summary = Effect.fn("definition-catalog.summary")(function* (
-    workspace: string,
-    slug: string,
-  ) {
-    const { registry, identity } = yield* resolve(workspace);
-
-    const summaries =
-      workspaceSummaries.get(identity) ?? new Map<string, DefinitionSummary | null>();
-
-    workspaceSummaries.set(identity, summaries);
-
-    if (summaries.has(slug)) {
-      return summaries.get(slug) ?? null;
-    }
-
-    const summary = lists.has(identity) ? null : yield* registry.summary(slug);
-    summaries.set(slug, summary);
-
-    return summary;
-  });
-
   const list = Effect.fn("definition-catalog.list")(function* (workspace: string) {
     const { registry, identity } = yield* resolve(workspace);
     const cached = lists.get(identity);
@@ -54,13 +32,12 @@ export function makeDefinitionCatalog(selectRegistry: ServiceOptions["registry"]
     }
 
     const entries = yield* registry.listSummaries();
-    workspaceSummaries.set(identity, new Map(entries.map((entry) => [entry.slug, entry])));
     lists.set(identity, entries);
 
     return entries;
   });
 
-  return { resolve, summary, list };
+  return { resolve, list };
 }
 
 export type DefinitionCatalog = ReturnType<typeof makeDefinitionCatalog>;

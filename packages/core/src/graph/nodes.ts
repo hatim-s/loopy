@@ -60,11 +60,13 @@ const commandVariantSchema = struct({
 
 export type CommandVariant = Schema.Schema.Type<typeof commandVariantSchema>;
 
+const platformVariant = Schema.optional(commandVariantSchema);
+
 // The executing host picks its variant, so a graph saved on one platform runs on another.
 export const commandVariantsSchema = struct({
-  darwin: Schema.optional(commandVariantSchema),
-  linux: Schema.optional(commandVariantSchema),
-} satisfies Record<CommandPlatform, unknown>);
+  darwin: platformVariant,
+  linux: platformVariant,
+} satisfies Record<CommandPlatform, typeof platformVariant>);
 
 export type CommandVariants = Schema.Schema.Type<typeof commandVariantsSchema>;
 

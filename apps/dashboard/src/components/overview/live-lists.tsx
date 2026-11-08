@@ -41,7 +41,7 @@ function AwaitingRow({ run, now }: { run: WaitingRun; now: number }) {
           params={{ runId: run.id }}
           className="font-medium text-ink hover:text-active"
         >
-          {run.loopy.slug}
+          {run.slug}
         </Link>
         <span className="text-xs text-muted">
           on <code>{run.waitingOn.hook}</code> for {span(now - Date.parse(run.waitingOn.since))}
@@ -109,7 +109,7 @@ export function RunningNow({ now }: { now: number }) {
                     params={{ runId: run.id }}
                     className="row-link min-w-0 truncate font-medium"
                   >
-                    {run.loopy.slug}{" "}
+                    {run.slug}{" "}
                     <span className="font-mono text-xs font-normal text-muted">
                       {shortId(run.id)}
                     </span>

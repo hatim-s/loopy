@@ -4,7 +4,6 @@ import {
   hookRecordSchema,
   jsonSchema,
   LOOPY_SCOPES,
-  logRecordSchema,
   nodeRunSchema,
   positiveInt,
   recordSpecSchema,
@@ -15,13 +14,11 @@ import {
   struct,
 } from "@loopy/core";
 import { Schema, Struct, Tuple } from "effect";
-import { scopeCountsSchema } from "./dashboard";
 
 const runBaseSchema = struct({
   id: Schema.String,
   slug: Schema.String,
   workspace: Schema.String,
-  loopy: struct({ slug: Schema.String, description: Schema.NullOr(Schema.String) }),
   input: jsonSchema,
   truncatedFields: Schema.optional(
     struct({ input: Schema.optional(counter), output: Schema.optional(counter) }),
@@ -96,11 +93,9 @@ export type LoopyView = Schema.Schema.Type<typeof loopyViewSchema>;
 export const runSnapshotViewSchema = struct({
   run: runViewSchema,
   nodeRuns: Schema.Array(nodeRunSchema).pipe(Schema.mutable),
-  scopes: Schema.optional(Schema.Array(scopeCountsSchema).pipe(Schema.mutable)),
   nodeRunsNext: Schema.optional(Schema.NullOr(Schema.String)),
   truncatedOutputs: Schema.optional(Schema.Record(Schema.String, Schema.mutableKey(Schema.Finite))),
   hooksTruncated: Schema.optional(Schema.Boolean),
-  logs: Schema.Array(logRecordSchema).pipe(Schema.mutable),
   hooks: Schema.Array(hookRecordSchema).pipe(Schema.mutable),
   cursor: counter,
   epoch: Schema.String,

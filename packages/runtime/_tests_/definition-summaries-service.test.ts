@@ -78,32 +78,21 @@ test("one grouped counts read lists a global once and each project definition in
       [f.b, 1],
     ]),
   );
-  expect(f.calls.summaries.size).toBe(0);
   expect(f.calls.graphs).toEqual([]);
 });
 
-test("run metadata fetches each selected slug once per canonical workspace and caches missing definitions", async () => {
+test("run views read no registry, including runs of deleted definitions", async () => {
   const f = await fixture();
-  const saved = await f.save(f.a, "chosen");
-  await f.save(f.a, "unrelated");
+  await f.save(f.a, "chosen");
   await f.run("canonical", f.a, "chosen", "queued");
   await f.run("alias", "alias", "chosen", "queued");
-  await f.run("missing-a", f.a, "removed", "queued");
-  await f.run("missing-alias", "alias", "removed", "queued");
+  await f.run("missing", f.a, "removed", "queued");
   const runs = await Effect.runPromise(f.service.listRuns({ limit: 200 }));
-  expect(runs.filter((run) => run.slug === "chosen").map((run) => run.loopy.description)).toEqual([
-    saved.graph.meta.description,
-    saved.graph.meta.description,
+  expect(runs.map((run) => [run.id, run.slug]).sort()).toEqual([
+    ["alias", "chosen"],
+    ["canonical", "chosen"],
+    ["missing", "removed"],
   ]);
-  expect(
-    runs.filter((run) => run.slug === "removed").every((run) => run.loopy.description === null),
-  ).toBe(true);
-  expect(f.calls.summaries).toEqual(
-    new Map([
-      [JSON.stringify([f.a, "chosen"]), 1],
-      [JSON.stringify([f.a, "removed"]), 1],
-    ]),
-  );
   expect(f.calls.lists.size).toBe(0);
   expect(f.calls.graphs).toEqual([]);
 });
