@@ -75,13 +75,18 @@ export const loopyViewSchema = struct({
   scope: Schema.Literals(LOOPY_SCOPES),
   mode: Schema.Literals(EXECUTION_MODES),
   input: Schema.Union([recordSpecSchema, Schema.Literal("schema")]),
+  // A definition may declare a schedule that was never saved, so it has no state to fire from.
   schedule: Schema.NullOr(
-    struct({
-      cron: Schema.String,
-      tz: Schema.String,
-      enabled: Schema.Boolean,
-      nextFireAt: Schema.NullOr(Schema.String),
-    }),
+    Schema.Union([
+      struct({ state: Schema.Literal("declared"), cron: Schema.String, tz: Schema.String }),
+      struct({
+        state: Schema.Literal("saved"),
+        cron: Schema.String,
+        tz: Schema.String,
+        enabled: Schema.Boolean,
+        nextFireAt: Schema.String,
+      }),
+    ]),
   ),
   lastRun: Schema.NullOr(runViewSchema),
   counts: Schema.Record(runStatusSchema, Schema.mutableKey(counter)),

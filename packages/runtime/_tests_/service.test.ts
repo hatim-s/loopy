@@ -352,10 +352,9 @@ test("definition defaults apply and workspace schedule mutations stay isolated",
   });
 
   expect((await onClock(service.listLoopies(root)))[0]?.schedule).toEqual({
+    state: "declared",
     cron: "*/5 * * * *",
     tz: "Asia/Kolkata",
-    enabled: false,
-    nextFireAt: null,
   });
 
   const saved = await onClock(service.putSchedule("service", { input: { name: "default" } }, root));

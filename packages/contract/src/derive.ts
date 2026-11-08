@@ -101,10 +101,11 @@ function loopySchedule(
   declared: SavedLoopyInput["schedule"],
 ): LoopyView["schedule"] {
   if (schedule === null) {
-    return declared ? { ...declared, enabled: false, nextFireAt: null } : null;
+    return declared && { state: "declared", cron: declared.cron, tz: declared.tz };
   }
 
   return {
+    state: "saved",
     cron: schedule.cron,
     tz: schedule.tz,
     enabled: schedule.enabled,

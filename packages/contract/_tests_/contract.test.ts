@@ -91,6 +91,7 @@ test("loopy views carry the store counts, newest run and persisted schedule", ()
 
   expect(result.lastRun).toEqual(newer);
   expect(result.schedule).toEqual({
+    state: "saved",
     cron: schedule.cron,
     tz: "UTC",
     enabled: true,
@@ -263,10 +264,9 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
 
   const empty = { counts: contract.emptyRunCounts(), latest: [] };
   expect(contract.loopyView(saved, null, empty).schedule).toEqual({
+    state: "declared",
     cron: "0 * * * *",
     tz: "UTC",
-    enabled: false,
-    nextFireAt: null,
   });
   expect(
     contract.loopyView(
@@ -283,7 +283,13 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
       },
       empty,
     ).schedule,
-  ).toEqual({ cron: "*/5 * * * *", tz: "Asia/Kolkata", enabled: true, nextFireAt: now });
+  ).toEqual({
+    state: "saved",
+    cron: "*/5 * * * *",
+    tz: "Asia/Kolkata",
+    enabled: true,
+    nextFireAt: now,
+  });
 });
 
 test("cursor route rejects invalid cursors and extra response fields", () => {
