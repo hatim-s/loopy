@@ -8,5 +8,5 @@ export {
   openRunStore,
   readDaemonFile,
   ServiceError,
-  type SqliteRunStore,
+  type SqlRunStore,
 } from "@loopy/runtime/local";

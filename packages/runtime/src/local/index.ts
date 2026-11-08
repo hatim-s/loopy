@@ -1,4 +1,4 @@
-export { makeSqliteRunStore, openRunStore, type SqliteRunStore } from "../store";
+export { makeSqliteRunStore, openRunStore, type SqlRunStore } from "../store";
 
 export { localDaemon } from "./daemon";
 

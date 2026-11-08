@@ -4,7 +4,7 @@ import type { Cause } from "effect";
 import { Clock, Data, Effect } from "effect";
 import { FilesystemReceipts, LocalExecutor } from "../../executor";
 import { makeDaemon, PreparationError, ScheduleRevisionError } from "../../host";
-import type { SqliteRunStore } from "../../store";
+import type { SqlRunStore } from "../../store";
 import { withLockDirectory } from "../fs";
 import { Registry } from "../registry";
 import { startServer } from "../server/start-server";
@@ -28,7 +28,7 @@ export class LocalDaemonError extends Data.TaggedError("LocalDaemonError")<{
 type DaemonOptions = {
   home: string;
   cwd: string;
-  store: SqliteRunStore;
+  store: SqlRunStore;
   concurrency: number;
   port?: number;
   assets?: string;

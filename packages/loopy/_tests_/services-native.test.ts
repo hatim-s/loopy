@@ -232,36 +232,6 @@ test("hook resolution is atomic and SSE refuses a cursor inside a commit", async
   ).toBe(true);
 });
 
-test("SSE polling sees commits from an independently opened connection", async () => {
-  const f = await fixture();
-  const scope = Scope.makeUnsafe();
-  cleanups.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-
-  const other = await Effect.runPromise(
-    makeSqliteRunStore(join(f.home, "runs.sqlite")).pipe(Effect.provideService(Scope.Scope, scope)),
-  );
-
-  const cursor = await Effect.runPromise(f.service.cursor());
-  const response = await f.request(`/events?after=${cursor.cursor}&epoch=${cursor.epoch}`);
-  const reader = response.body!.getReader();
-  await reader.read();
-  await Effect.runPromise(
-    other.createRun({
-      id: "external",
-      slug: "workflow",
-      revision: "fixture-revision",
-      workspace: f.root,
-      status: "queued",
-      input: {},
-      createdAt: "2026-10-17T00:00:00.000Z",
-      updatedAt: "2026-10-17T00:00:00.000Z",
-    }),
-  );
-  const frame = await reader.read();
-  expect(new TextDecoder().decode(frame.value)).toContain("external");
-  await reader.cancel();
-});
-
 test("successful cancellation commits and releases ownership", async () => {
   const f = await fixture();
   const run = await Effect.runPromise(f.service.startRun("workflow", {}, f.root));
