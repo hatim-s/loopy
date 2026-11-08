@@ -2,8 +2,9 @@ import { spawn } from "node:child_process";
 import { open } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, routes, routeUrl } from "@loopy/contract";
+import { root } from "../stack/constants";
 import { PlaygroundClient } from "./client";
-import { api, dashboard, initialize, profile, root, state } from "./config";
+import { api, dashboard, initialize, profile, state } from "./config";
 import { cleanEnvironment, manifestPath, requireFreeStackPorts } from "./stack-config";
 import {
   observeProcess,
@@ -11,8 +12,6 @@ import {
   supervisorArguments,
   supervisorManifestSchema,
 } from "./stack-identity";
-
-export { serve } from "./supervisor";
 
 const selection = { root, state, profile: profile.label };
 

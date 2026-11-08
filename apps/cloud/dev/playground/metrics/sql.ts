@@ -4,8 +4,10 @@ import { isDeepStrictEqual } from "node:util";
 import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
 import { sha256Hex } from "../../shared/hash";
+import { SQL_PROBE_SOURCES, sourceHashes } from "../../shared/sources";
 import { distribution } from "../../shared/stats";
-import { config, evidence, profile, root, state } from "../config";
+import { root } from "../../stack/constants";
+import { config, evidence, profile, state } from "../config";
 import { atomic } from "../files";
 import { decodePhaseName, postloadInventory, readArtifact } from "./artifacts";
 import { lifecycle } from "./lifecycle";
@@ -29,23 +31,9 @@ const beforeHash = await approvedDiagnostic({
   profile: profile.label,
 });
 
-// The probe records the store sources whose exported SQL it runs.
-const sources = [
-  "packages/runtime/src/store/query/runs.ts",
-  "packages/runtime/src/store/query/feeds.ts",
-  "packages/runtime/src/store/query/nodes.ts",
-  "packages/runtime/src/store/schema/fresh.ts",
-  "packages/runtime/src/store/turns.ts",
-  "apps/cloud/src/sql-driver.ts",
-  "apps/cloud/dev/playground/metrics/sql-queries.ts",
-];
+const hashSources = () => sourceHashes(root, SQL_PROBE_SOURCES);
 
-const hashSources = () =>
-  Promise.all(
-    sources.map(async (file) => ({ file, sha256: await fileSha256(resolve(root, file)) })),
-  );
-
-const sourceHashes = await hashSources();
+const beforeSources = await hashSources();
 
 const sidecarsBefore = await readdir(dirname(path));
 
@@ -114,7 +102,7 @@ try {
     at: new Date().toISOString(),
     path,
     beforeHash,
-    sourceHashes,
+    sourceHashes: beforeSources,
     integrity,
     inventory: { matched: true, ids: actual.length },
     sqlite: reader.db.query("SELECT sqlite_version() AS version").get(),
@@ -155,7 +143,7 @@ try {
     ...report,
     afterHash,
     sourceHashesAfter: afterSources,
-    sourceUnchangedDuringProbe: isDeepStrictEqual(afterSources, sourceHashes),
+    sourceUnchangedDuringProbe: isDeepStrictEqual(afterSources, beforeSources),
     sidecarsAfter: await readdir(dirname(path)),
   });
   process.stdout.write(`${JSON.stringify({ output, counts, results })}\n`);

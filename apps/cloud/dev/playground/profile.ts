@@ -2,27 +2,30 @@ import { resolve } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
 import { SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
+import { sandboxStateRoot } from "../../../sandbox/src/state-root";
+import { stackPorts } from "../stack/ports";
 
 const profileNameSchema = Schema.UndefinedOr(Schema.Literal("architecture"));
 
 function paths(root: string, suffix: string, apiPort: number) {
   const state = resolve(root, `.loopy/playground${suffix}`);
   const runtime = resolve(state, "runtime-root");
+  const ports = stackPorts(apiPort);
 
   return {
     root,
     state,
     runtime,
-    sandboxState: resolve(runtime, ".loopy/cloud/sandbox"),
+    sandboxState: sandboxStateRoot(runtime),
     repository: resolve(state, "loopies-playground"),
     batchPrefix: `playground${suffix}`,
     apiPort,
-    sandboxPort: apiPort + 1,
-    dashboardPort: apiPort + 2,
-    inspectorPort: apiPort + 3,
-    api: `http://127.0.0.1:${apiPort}`,
-    dashboard: `http://127.0.0.1:${apiPort + 2}`,
-    sandbox: `http://127.0.0.1:${apiPort + 1}`,
+    sandboxPort: ports.sandbox,
+    dashboardPort: ports.dashboard,
+    inspectorPort: ports.inspector,
+    api: ports.origin("api"),
+    dashboard: ports.origin("dashboard"),
+    sandbox: ports.origin("sandbox"),
   };
 }
 

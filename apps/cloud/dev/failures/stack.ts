@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { SANDBOX_IMAGE, SANDBOX_LABELS } from "../../../sandbox/src/docker/identity";
 import { assert } from "../shared/assert";
 import { root } from "../stack/constants";
+import { randomToken } from "../stack/credentials";
 import {
   type Child,
   launch,
@@ -23,8 +24,8 @@ const workerConfig = resolve(state, "wrangler.json");
 const devVars = resolve(state, "worker.dev.vars");
 
 export class FailureStack {
-  readonly token = crypto.randomUUID() + crypto.randomUUID();
-  readonly sandboxToken = crypto.randomUUID() + crypto.randomUUID();
+  readonly token = randomToken();
+  readonly sandboxToken = randomToken();
   private children: { worker: Child; provider: Child } | null = null;
   private generation = 0;
   private started = false;
@@ -54,7 +55,7 @@ export class FailureStack {
     const log = (name: string) => `${name}-${this.generation}`;
 
     const provider = launch({
-      argv: sandboxArgv({ worktree: runtime, stateRoot: sandboxState, port: ports.sandbox }),
+      argv: sandboxArgv({ worktree: runtime, port: ports.sandbox }),
       env: { ...environment, LOOPY_SANDBOX_TOKEN: this.sandboxToken },
       logs: state,
       log: log("sandbox"),

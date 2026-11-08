@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { Effect } from "effect";
 import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { assert, equal } from "../shared/assert";
-import { sourceHashes } from "../shared/hash";
+import { sourceHashes, TRANSPORT_FAILURE_SOURCES } from "../shared/sources";
 import { root } from "../stack/constants";
 import { fixtureIO } from "./fixture-effect";
 import { command, docker, fixture } from "./resources";
@@ -14,25 +14,15 @@ await Effect.runPromise(
 
     const evidencePath = resolve(root, ".notes/cloud/evidence/transport-failure.json");
 
-    const sourcePaths = [
-      ...(yield* fixtureIO("script evidence", () =>
-        Array.fromAsync(new Bun.Glob("**/*.ts").scan({ cwd: resolve(root, "apps/sandbox/src") })),
-      )).map((name) => `apps/sandbox/src/${name}`),
-      "packages/runtime/src/os/spawn.ts",
-      "packages/runtime/src/executor/protocol.ts",
-      "packages/contract/src/sandbox.ts",
-      ...["index.ts", "resources.ts", "faults.ts", "scenario.ts"].map(
-        (name) => `apps/cloud/dev/transport-failure/${name}`,
-      ),
-    ];
-
     const head = (yield* command(["git", "rev-parse", "HEAD"])).stdout.trim();
 
     const branch = (yield* command(["git", "branch", "--show-current"])).stdout.trim();
 
     equal(process.cwd(), root, "wrong_worktree_directory");
 
-    const before = yield* fixtureIO("script evidence", () => sourceHashes(root, sourcePaths));
+    const before = yield* fixtureIO("script evidence", () =>
+      sourceHashes(root, TRANSPORT_FAILURE_SOURCES),
+    );
 
     const imageId = (yield* docker([
       "image",
@@ -55,7 +45,9 @@ await Effect.runPromise(
       );
     }
 
-    const after = yield* fixtureIO("script evidence", () => sourceHashes(root, sourcePaths));
+    const after = yield* fixtureIO("script evidence", () =>
+      sourceHashes(root, TRANSPORT_FAILURE_SOURCES),
+    );
 
     equal(after, before, "source_changed_during_transport_proof");
 

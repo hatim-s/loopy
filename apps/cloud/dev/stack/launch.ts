@@ -19,15 +19,13 @@ export function launch(options: {
   });
 }
 
-export function sandboxArgv(options: { worktree: string; stateRoot: string; port: number }) {
+export function sandboxArgv(options: { worktree: string; port: number }) {
   return [
     process.execPath,
     "--no-env-file",
     resolve(root, "apps/sandbox/src/index.ts"),
     "--worktree",
     options.worktree,
-    "--state-root",
-    options.stateRoot,
     "--docker-context",
     SANDBOX_DOCKER_CONTEXT,
     "--image",

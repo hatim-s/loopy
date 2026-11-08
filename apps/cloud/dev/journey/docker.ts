@@ -1,15 +1,15 @@
-import { resolve } from "node:path";
 import { routes } from "@loopy/contract";
 import { attemptId } from "@loopy/contract/sandbox";
 import type { ExecutionKey } from "@loopy/core";
 import { Effect, Schema } from "effect";
+import { sandboxStateRoot } from "../../../sandbox/src/state-root";
 import { filesystemReceipt } from "../filesystem-receipt";
 import { assert, equal } from "../shared/assert";
 import { docker as runDocker } from "../shared/process";
-import { localState } from "../stack/credentials";
+import { root } from "../stack/constants";
 import type { Journey } from "./client";
 
-const stateRoot = resolve(localState, "sandbox");
+const stateRoot = sandboxStateRoot(root);
 
 async function receipt(key: ExecutionKey, attempt: number) {
   const id = await attemptId(stateRoot, { workspace: "fixtures", executionKey: key, attempt });

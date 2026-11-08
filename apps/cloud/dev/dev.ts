@@ -3,7 +3,7 @@ import { root } from "./stack/constants";
 import { ensureLocalCredentials, localState } from "./stack/credentials";
 import { toolEnvironment } from "./stack/environment";
 import { type Child, dashboardArgv, launch, sandboxArgv, wranglerArgv } from "./stack/launch";
-import { requireFreePorts } from "./stack/ports";
+import { LOCAL_STACK, requireFreePorts } from "./stack/ports";
 import { writeDevVars } from "./stack/worker-config";
 
 const credentials = await ensureLocalCredentials();
@@ -12,7 +12,7 @@ const envPath = resolve(localState, "worker.dev.vars");
 
 await writeDevVars(envPath, credentials);
 
-await requireFreePorts([14870, 14871, 14872, 14873]);
+await requireFreePorts(LOCAL_STACK.list);
 
 const environment = toolEnvironment(localState);
 
@@ -40,11 +40,9 @@ process.on("SIGTERM", stop);
 
 process.on("SIGINT", stop);
 
-start(
-  "sandbox",
-  sandboxArgv({ worktree: root, stateRoot: resolve(localState, "sandbox"), port: 14871 }),
-  { LOOPY_SANDBOX_TOKEN: credentials.sandboxToken },
-);
+start("sandbox", sandboxArgv({ worktree: root, port: LOCAL_STACK.sandbox }), {
+  LOOPY_SANDBOX_TOKEN: credentials.sandboxToken,
+});
 
 start(
   "worker",
@@ -55,7 +53,9 @@ start(
   }),
 );
 
-start("dashboard", dashboardArgv(14872), { LOOPY_API_ORIGIN: "http://127.0.0.1:14870" });
+start("dashboard", dashboardArgv(LOCAL_STACK.dashboard), {
+  LOOPY_API_ORIGIN: LOCAL_STACK.origin("api"),
+});
 
 await Bun.write(
   resolve(localState, "processes.json"),
@@ -63,7 +63,7 @@ await Bun.write(
 );
 
 console.log(
-  "Local cloud starting. API http://127.0.0.1:14870, dashboard http://127.0.0.1:14872. Credentials and logs: .loopy/cloud. Ctrl+C stops these processes.",
+  `Local cloud starting. API ${LOCAL_STACK.origin("api")}, dashboard ${LOCAL_STACK.origin("dashboard")}. Credentials and logs: .loopy/cloud. Ctrl+C stops these processes.`,
 );
 
 await Promise.race(children.map((child) => child.exited));

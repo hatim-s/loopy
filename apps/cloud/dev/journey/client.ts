@@ -18,8 +18,9 @@ import {
 } from "../shared/fixture-client";
 import { root } from "../stack/constants";
 import { principalToken, readLocalCredentials } from "../stack/credentials";
+import { LOCAL_STACK } from "../stack/ports";
 
-const api = "http://127.0.0.1:14870";
+const api = LOCAL_STACK.origin("api");
 
 type Principal = "fixtures" | "other" | "none" | "invalid";
 
