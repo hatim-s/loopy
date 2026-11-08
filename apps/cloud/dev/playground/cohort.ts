@@ -1,7 +1,8 @@
-import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, encodeBoundary } from "@loopy/contract";
-import { errnoCode, errorMessage } from "@loopy/core";
+import { errorMessage } from "@loopy/core";
+import { processAlive } from "@loopy/runtime/os";
 import { Schema } from "effect";
 import { PlaygroundClient } from "./client";
 import { evidence, state } from "./config";
@@ -12,6 +13,7 @@ import {
   gatePath,
   gateSchema,
   type Phase,
+  phases,
   readSummary,
   summaryPath,
   summarySchema,
@@ -51,7 +53,7 @@ export async function cohort(group: Group, phase: Phase = "primary") {
     }
   }
 
-  const claim = resolve(state, "cohorts", `${phase}-${group}.lock`);
+  const claim = claimPath(phase, group);
   await writeFile(claim, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }), {
     flag: "wx",
     mode: 0o600,
@@ -93,7 +95,7 @@ export async function cohort(group: Group, phase: Phase = "primary") {
 
   const outcomes = await Promise.allSettled(workers);
   await mkdir(evidence, { recursive: true });
-  await atomic(
+  atomic(
     summary,
     encodeBoundary(summarySchema)({
       status: failed ? "failed" : "passed",
@@ -117,41 +119,33 @@ export async function cohort(group: Group, phase: Phase = "primary") {
   }
 }
 
+// A claim outlives a failed cohort on purpose, so a rerun cannot overwrite that cohort's evidence.
+function claimPath(phase: Phase, group: Group) {
+  return resolve(state, "cohorts", `${phase}-${group}.lock`);
+}
+
 export async function recover(group: Group) {
-  const lock = resolve(state, "cohorts", `primary-${group}.lock`);
-  const owner = decodeOwner(await Bun.file(lock).json());
-  assertDead(owner.pid);
-  await rename(lock, `${lock}.recovered-${Date.now()}`);
-  const slots = resolve(state, "api-slots");
+  const claims: string[] = [];
 
-  for (const name of await readdir(slots)) {
-    const slot = resolve(slots, name);
-    const entry = decodeOwner(await Bun.file(resolve(slot, "owner.json")).json());
+  for (const phase of phases) {
+    const claim = Bun.file(claimPath(phase, group));
 
-    try {
-      assertDead(entry.pid);
-    } catch {
-      continue;
+    if (await claim.exists()) {
+      const owner = decodeOwner(await claim.json());
+
+      if (processAlive(owner.pid)) {
+        throw new Error(`Cohort owner ${owner.pid} is alive. Refusing to recover its claim.`);
+      }
+
+      claims.push(claimPath(phase, group));
     }
+  }
 
-    await rm(slot, { recursive: true });
+  for (const claim of claims) {
+    await rename(claim, `${claim}.recovered-${Date.now()}`);
   }
 
   console.log(
-    "Recovered dead cohort lock and dead API slots. ABORT remains set. Reconcile ambiguous admission and approval intents, then the parent may remove ABORT and rerun the same cohort.",
+    "Recovered dead cohort claims. API slots and the pressure lock reclaim dead owners on their own. ABORT remains set. Reconcile ambiguous admission and approval intents, then the parent may remove ABORT and rerun the same cohort.",
   );
-}
-
-function assertDead(pid: number) {
-  try {
-    process.kill(pid, 0);
-  } catch (cause) {
-    if (errnoCode(cause) === "ESRCH") {
-      return;
-    }
-
-    throw cause;
-  }
-
-  throw new Error(`Cohort owner ${pid} is alive. Refusing to recover its lock.`);
 }

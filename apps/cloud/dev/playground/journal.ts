@@ -175,7 +175,7 @@ export async function readAdmissions(journal: string, phase?: Phase) {
 }
 
 export async function recordAdmission(path: string, value: Admission) {
-  await atomic(path, encodeBoundary(admissionSchema)(value));
+  atomic(path, encodeBoundary(admissionSchema)(value));
 }
 
 export async function event(state: string, group: Group, value: EventInput) {

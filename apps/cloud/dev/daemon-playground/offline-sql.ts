@@ -98,7 +98,7 @@ if (beforeHash !== afterHash) {
 
 const output = resolve(evidence, "playground-performance-daemon-offline-sql.json");
 
-await atomic(output, { ...report, afterHash });
+atomic(output, { ...report, afterHash });
 
 process.stdout.write(
   `${JSON.stringify({ output, counts: report.counts, inventory: report.inventory, beforeHash, afterHash })}\n`,

@@ -151,7 +151,7 @@ try {
     throw new Error("SQL evidence exists. Choose a new phase.");
   }
 
-  await atomic(output, {
+  atomic(output, {
     ...report,
     afterHash,
     sourceHashesAfter: afterSources,

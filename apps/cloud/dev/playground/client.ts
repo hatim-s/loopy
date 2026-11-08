@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   decodeBoundary,
@@ -8,7 +8,7 @@ import {
   type RouteResult,
   routeRequest,
 } from "@loopy/contract";
-import { errnoCode } from "@loopy/core";
+import { tryPidLock } from "@loopy/runtime/os";
 import type { Schema } from "effect";
 import { type Config, config, state } from "./config";
 import { CONCURRENCY } from "./plan";
@@ -31,24 +31,13 @@ export class PlaygroundClient {
 
     while (Date.now() < deadline) {
       for (let index = 0; index < CONCURRENCY; index += 1) {
-        const slot = resolve(state, "api-slots", `${index}`);
+        const slot = tryPidLock(resolve(state, "api-slots", `${index}.lock`));
 
-        try {
-          await mkdir(slot);
-        } catch (cause) {
-          if (errnoCode(cause) === "EEXIST") {
-            continue;
-          }
-
-          throw cause;
+        if (slot.kind !== "acquired") {
+          continue;
         }
 
         try {
-          await writeFile(
-            resolve(slot, "owner.json"),
-            JSON.stringify({ pid: process.pid, at: Date.now() }),
-          );
-
           const response = await fetch(`${this.settings.api}${path}`, {
             ...init,
             headers: {
@@ -67,7 +56,7 @@ export class PlaygroundClient {
             headers: response.headers,
           });
         } finally {
-          await rm(slot, { recursive: true });
+          slot.release();
         }
       }
 
