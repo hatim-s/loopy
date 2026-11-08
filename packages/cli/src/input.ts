@@ -1,7 +1,6 @@
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
-  assertJson,
   type Json,
   parseFieldText,
   type RecordSpec,
@@ -10,7 +9,8 @@ import {
 } from "@loopy/core";
 import { Effect } from "effect";
 import type { CliContext } from "./context";
-import { CliError, cliIO, cliSync } from "./errors";
+import { CliError, cliIO } from "./errors";
+import { parseJsonText } from "./json";
 
 export const jsonInput = Effect.fn(function* (context: CliContext) {
   const text = context.values["input-json"];
@@ -21,12 +21,7 @@ export const jsonInput = Effect.fn(function* (context: CliContext) {
       ? (text ?? "{}")
       : yield* cliIO(() => Bun.file(resolve(context.cwd, file)).text());
 
-  return yield* cliSync(() => {
-    const value: unknown = JSON.parse(raw);
-    assertJson(value, file === undefined ? "JSON input" : "Input file");
-
-    return value;
-  });
+  return yield* parseJsonText(raw, file === undefined ? "JSON input" : "Input file");
 });
 
 function coerce(text: string, kind: RecordSpec[string], key: string) {

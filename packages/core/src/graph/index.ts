@@ -5,6 +5,8 @@ import { graphRecord, nodeIdSchema, recordSpecSchema, refSchema } from "./values
 
 export * from "./key";
 
+export * from "./node-id";
+
 export * from "./node-run";
 
 export * from "./nodes";

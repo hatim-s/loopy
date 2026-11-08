@@ -1427,3 +1427,11 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
     }
   }
 }
+
+test("node id readers recover the subgraph path and local name the builder wrote", () => {
+  expect(core.nodeIdParts(core.formatNodeId(7, ["deploy", "check"], "lint"))).toEqual({
+    local: "deploy/check/lint",
+    path: "deploy/check",
+  });
+  expect(core.nodeIdParts(core.formatNodeId(0, [], "draft"))).toEqual({ local: "draft", path: "" });
+});

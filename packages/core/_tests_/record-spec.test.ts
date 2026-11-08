@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { FIELD_TYPES, type FieldType, type Json, parseFieldText, recordFields } from "../src";
+import {
+  decodeJsonText,
+  FIELD_TYPES,
+  type FieldType,
+  type Json,
+  parseFieldText,
+  recordFields,
+} from "../src";
 
 const samples: [FieldType, Json][] = [
   ["string", "hello"],
@@ -46,4 +53,12 @@ test("a trailing ? marks a record field optional and drops from its key", () => 
     { key: "name", optional: false, kind: "string" },
     { key: "count", optional: true, kind: "number" },
   ]);
+});
+
+test("JSON text decodes with the HTTP body rule: any nesting, finite numbers only", () => {
+  const deep = `${"[".repeat(40)}1${"]".repeat(40)}`;
+
+  expect(JSON.stringify(decodeJsonText(deep))).toBe(deep);
+  expect(() => decodeJsonText("1e400")).toThrow();
+  expect(() => decodeJsonText("{")).toThrow();
 });

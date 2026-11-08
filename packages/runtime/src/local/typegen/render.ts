@@ -1,5 +1,5 @@
 import { isBoolean, isNumber, isString } from "@loopy/core";
-import type { CommandDescriptor } from "@loopy/sdk/host";
+import type { CommandDescriptor } from "@loopy/sdk";
 import { isTypeScriptIdentifier } from "./names";
 
 type Printable = string | number | boolean | readonly Field[] | { readonly [key: string]: Field };

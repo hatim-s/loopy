@@ -18,17 +18,13 @@ import type {
   scopeItemsQuerySchema,
   statusCountsSchema,
 } from "./dashboard";
-
-// Every page and snapshot list shares this cap, so a full list can be told from a truncated one.
-export const PAGE_LIMIT = 200;
+import type { RunSnapshotView, RunView } from "./views";
 
 export function emptyRunCounts(): Record<RunStatus, number> {
   return { queued: 0, running: 0, suspended: 0, succeeded: 0, failed: 0, cancelled: 0 };
 }
 
 export type PendingHook = HookRecord & { expiresAt: string | null };
-
-import type { RunSnapshotView, RunView } from "./views";
 
 // A page row whose oversized input or output the store replaced with null, with the real sizes.
 export type RunPreview = RunRecord & Pick<RunView, "truncatedFields">;

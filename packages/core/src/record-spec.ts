@@ -1,6 +1,6 @@
 import { Result, Schema } from "effect";
 import type { FieldType, OutSchema, RecordSpec } from "./graph/values";
-import { type Json, jsonSchema, MAX_OUTPUT_BYTES, outputBytes } from "./json";
+import { type Json, jsonSchema, jsonTextSchema, MAX_OUTPUT_BYTES, outputBytes } from "./json";
 import { isBoolean, isNumber, isRecord, isString } from "./validation";
 
 // A trailing "?" marks an optional record field; values use the key without it.
@@ -84,7 +84,7 @@ export function outSchemaMessage(subject: string, issue: OutSchemaIssue): string
   return `${subject} ${OUT_SCHEMA_MESSAGES[issue]}`;
 }
 
-const decodeJsonText = Schema.decodeUnknownResult(Schema.fromJsonString(jsonSchema));
+const decodeFieldJson = Schema.decodeUnknownResult(jsonTextSchema);
 
 export type FieldText = { ok: true; value: Json } | { ok: false; reason: "json" | "kind" };
 
@@ -102,8 +102,7 @@ export function parseFieldText(kind: FieldType, text: string): FieldText {
         ? { ok: true, value: text === "true" }
         : { ok: false, reason: "kind" };
     default: {
-      // JSON.parse accepts 1e400 as Infinity, which serializes as null; the schema rejects it.
-      const decoded = decodeJsonText(text);
+      const decoded = decodeFieldJson(text);
 
       if (Result.isFailure(decoded)) {
         return { ok: false, reason: "json" };

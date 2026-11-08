@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { type BundledNode, carriesBundle, type Graph, type Node } from "@loopy/core";
+import { type BundledNode, carriesBundle, type Graph, type Node, sha256Hex } from "@loopy/core";
 import { runnerSource } from "@loopy/runtime/executor/protocol";
 import { builtinParser } from "@loopy/sdk/graph-host";
 import { Effect } from "effect";
@@ -105,7 +104,7 @@ export const bundle = Effect.fn(function* (graph: Graph, entry: string) {
       yield* compilerIO("read bundle bytes", file, () => output.arrayBuffer()),
     );
 
-    const bundleHash = createHash("sha256").update(bytes).digest("hex");
+    const bundleHash = yield* compilerIO("hash bundle", file, () => sha256Hex(bytes));
     bundles.push({ nodeId: node.id, bundleHash, bytes });
 
     nodes.push(

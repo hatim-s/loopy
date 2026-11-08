@@ -33,9 +33,10 @@ export { graphTypeResolver } from "./graph/type";
 export { inputValidationIssue, validateGraphInput } from "./input";
 
 export {
-  assertJson,
+  decodeJsonText,
   type Json,
   jsonSchema,
+  jsonTextSchema,
   MAX_LOG_BYTES,
   MAX_OUTPUT_BYTES,
   MAX_PREVIEW_BYTES,

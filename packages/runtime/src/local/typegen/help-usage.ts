@@ -1,4 +1,4 @@
-import type { PositionalDefinition } from "@loopy/sdk/host";
+import type { PositionalDefinition } from "@loopy/sdk";
 
 export const USAGE_LINE = /^Usage:\s*\S/i;
 
