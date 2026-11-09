@@ -75,7 +75,10 @@ test("API returns run records, step traces and cursor logs", async () => {
   ]);
   expect((await request(`/runs/${run.id}/logs?after=-1`)).status).toBe(400);
   expect((await request("/runs/missing/logs")).status).toBe(404);
-  expect(await (await request("/runs")).json()).toMatchObject([{ id: run.id }]);
+  expect(await (await request("/runs")).json()).toMatchObject({
+    runs: [{ id: run.id }],
+    next: null,
+  });
 });
 
 test("the daemon server requires its token and origin, serves pinned assets and serves authenticated API reads", async () => {

@@ -326,7 +326,7 @@ test("service rejects invalid schedule semantics before writing", async () => {
     { body: { cron: "" }, code: "invalid_cron" },
     { body: { cron: "* * * * *", tz: "Invalid/Zone" }, code: "invalid_timezone" },
     { body: {}, code: "invalid_schedule" },
-    { body: { cron: "* * * * *", input: {} }, code: "bad_request" },
+    { body: { cron: "* * * * *", input: {} }, code: "invalid_schedule_input" },
   ];
 
   for (const { body, code } of cases) {
