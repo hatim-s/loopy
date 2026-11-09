@@ -1,26 +1,21 @@
-import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { isRecord } from "@loopy/core";
+import type { PutLoopyBody } from "@loopy/contract";
+import { type Graph, isRecord } from "@loopy/core";
 import { Effect } from "effect";
 import { LocalExecutor } from "../../src/executor";
 import { activate } from "../../src/host";
 import { makeLocalService, Registry } from "../../src/local";
 import { openRunStore } from "../../src/store";
-import { compileOrThrow } from "./compile";
+import { builtBody } from "./compiled";
 import { qualityTestRoot } from "./quality-test-root";
 
-/** A project directory holding one author definition and its Loopy home. */
-export function fixture(name: string, definition: string) {
-  const root = qualityTestRoot("project");
-  const home = join(root, "home");
-  const file = join(root, `${name}.loopy.ts`);
-  writeFileSync(
-    file,
-    `import { loopy, log, sh, code, sleep, wait } from "loopy";
-export default loopy(${JSON.stringify(name)}, { input: {}, ${definition} });`,
-  );
+type Project = { cwd: string; home: string };
 
-  return { cwd: root, home, file };
+/** A project directory with its own Loopy home, holding one graph built with the SDK. */
+export function fixture(graph: Graph) {
+  const root = qualityTestRoot("project");
+
+  return { cwd: root, home: join(root, "home"), file: join(root, `${graph.name}.loopy.ts`), graph };
 }
 
 export function object(text: string) {
@@ -34,34 +29,27 @@ export function object(text: string) {
 }
 
 export async function save(f: ReturnType<typeof fixture>) {
-  const result = await compileOrThrow(f.file);
+  return saveBody(f, await builtBody(f.graph, { path: f.file, workspace: f.cwd }));
+}
 
+/** Saves a body through the local service and returns the registry entry it published. */
+export function saveBody(f: Project, body: PutLoopyBody) {
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* openRunStore(f.home);
-
-        const service = makeLocalService({
-          store,
-          home: f.home,
-        });
-
-        yield* service.putLoopy(result.graph.name, {
-          ...result,
-          bundles: result.bundles,
-          source: { path: f.file, workspace: f.cwd },
-          replace: false,
-        });
+        const service = makeLocalService({ store, home: f.home });
+        yield* service.putLoopy(body.graph.name, body);
         const registry = yield* Registry.make(f.home, f.cwd);
 
-        return yield* registry.get(result.graph.name);
+        return yield* registry.get(body.graph.name);
       }),
     ),
   );
 }
 
 /** Starts the saved fixture loopy, activates it to completion and returns its record. */
-export async function runFixture(f: ReturnType<typeof fixture>) {
+export async function runFixture(f: Project) {
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -73,12 +61,7 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
         }
 
         const store = yield* openRunStore(f.home);
-
-        const service = makeLocalService({
-          store,
-          home: f.home,
-        });
-
+        const service = makeLocalService({ store, home: f.home });
         const run = yield* service.startRun(saved.slug, {}, f.cwd);
         yield* activate({
           store,

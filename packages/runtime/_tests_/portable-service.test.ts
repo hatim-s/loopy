@@ -1,6 +1,7 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   CLOUD_MAX_REQUEST_BYTES,
+  canResumeRun,
   decodeBoundary,
   definitionSummary,
   graphView,
@@ -9,8 +10,8 @@ import {
   type SavedLoopy,
   type SourceArtifact,
 } from "@loopy/contract";
-import { revision } from "@loopy/core";
 import { Effect, Schema } from "effect";
+import { newRun } from "../../core/_tests_/fixtures/run";
 import {
   type ArtifactRegistry,
   apiRoutes,
@@ -22,34 +23,22 @@ import {
 } from "../src/service";
 import { BunSqlDriver } from "../src/store/bun-driver";
 import { SqlRunStore } from "../src/store/portable";
+import { runAt } from "./fixtures/clock";
 import { compiledBody } from "./fixtures/compiled";
-
-const drivers: BunSqlDriver[] = [];
-
-const aborters: AbortController[] = [];
+import { onCleanup } from "./fixtures/test-scope";
 
 const now = Date.parse("2026-10-22T00:00:00.000Z");
-
-afterEach(() => {
-  for (const aborter of aborters.splice(0)) {
-    aborter.abort();
-  }
-
-  for (const driver of drivers.splice(0)) {
-    driver.close();
-  }
-});
 
 function unsupported() {
   return Effect.fail(new ServiceError("not_yet", "This operation is unavailable on this host."));
 }
 
-function fixture() {
+function fixture(isAlive = () => false) {
   const driver = new BunSqlDriver(":memory:");
-  drivers.push(driver);
+  onCleanup(() => driver.close());
 
   const store = new SqlRunStore(driver, {
-    owner: { identity: { pid: 0, host: "cloud" }, isAlive: () => false },
+    owner: { identity: { pid: 0, host: "cloud" }, isAlive },
   });
 
   const entries = new Map<string, SavedLoopy>();
@@ -115,9 +104,11 @@ function fixture() {
 
 test("portable service validates input and pins graph/source revisions through async artifacts", async () => {
   const { service, store } = fixture();
-  const first = await compiledBody("portable", "/virtual/portable.ts");
-  first.graph.input = { name: "string" };
-  first.revision = await revision(first.graph);
+
+  const first = await compiledBody("portable", "/virtual/portable.ts", {
+    input: { name: "string" },
+  });
+
   first.sourceArtifact = {
     version: 1,
     status: "available",
@@ -144,10 +135,10 @@ test("portable service validates input and pins graph/source revisions through a
     revision: first.revision,
   });
 
-  const second = structuredClone(first);
-  second.graph.meta.description = "Updated definition";
-  second.graph.input = {};
-  second.revision = await revision(second.graph);
+  const second = await compiledBody("portable", "/virtual/portable.ts", {
+    description: "Updated definition",
+  });
+
   second.sourceArtifact = {
     version: 1,
     status: "available",
@@ -241,6 +232,24 @@ test("portable routes use explicit daemon identity", async () => {
   expect(await Effect.runPromise(store.listSchedules())).toEqual([]);
 });
 
+test("run views call an owner stale only when the store would let a resume claim the run", async () => {
+  for (const alive of [true, false]) {
+    const { service, store } = fixture(() => alive);
+    let clock = now;
+    const at = runAt(() => clock);
+    await at(store.createRun({ ...newRun(), id: "owned" }));
+    await at(store.claim("owned", "first"));
+    clock += store.leaseMs + 1;
+    const view = (await at(service.runSnapshot("owned"))).run;
+
+    expect(view.ownerStale).toBe(!alive);
+    expect(canResumeRun(view)).toBe(!alive);
+    expect((await at(Effect.exit(store.claim("owned", "second"))))._tag).toBe(
+      alive ? "Failure" : "Success",
+    );
+  }
+});
+
 async function seededTransaction() {
   const f = fixture();
   const body = await compiledBody("portable", "/virtual/portable.ts");
@@ -272,7 +281,7 @@ async function seededTransaction() {
 test("portable SSE delivers whole SQL transactions and aborts without polling", async () => {
   const { service, store, before } = await seededTransaction();
   const aborter = new AbortController();
-  aborters.push(aborter);
+  onCleanup(() => aborter.abort());
 
   const response = await Effect.runPromise(
     eventStream(store, service, { after: before.cursor, epoch: before.epoch }, aborter.signal),

@@ -1,5 +1,4 @@
 import {
-  encodeRunCursor,
   type Route,
   type RouteInput,
   type RouteResult,
@@ -73,11 +72,10 @@ export async function sampleApi(
   const plan = [
     () =>
       measure("runs.latest", routes.runs, { query: page }, (value) => {
-        runs = value;
-        const last = value.at(-1);
-        before = last ? encodeRunCursor(last) : undefined;
+        runs = value.runs;
+        before = value.next ?? undefined;
 
-        return { items: value.length };
+        return { items: value.runs.length };
       }),
     () =>
       measure("loopies.counts", routes.loopies, {}, (value) => ({
@@ -89,11 +87,11 @@ export async function sampleApi(
       })),
     () =>
       measure("runs.waiting", routes.runs, { query: { ...page, waiting: true } }, (v) => ({
-        items: v.length,
+        items: v.runs.length,
       })),
     () =>
       measure("runs.failed", routes.runs, { query: { ...page, status: "failed" } }, (v) => ({
-        items: v.length,
+        items: v.runs.length,
       })),
     () =>
       measure(
@@ -121,12 +119,12 @@ export async function sampleApi(
       })),
     () =>
       measure("runs.page2", routes.runs, { query: { ...page, before } }, (v) => ({
-        items: v.length,
+        items: v.runs.length,
         cursorSupplied: before !== undefined,
       })),
     () =>
       measure("runs.slug", routes.runs, { query: { ...page, slug: runs[0]?.slug } }, (v) => ({
-        items: v.length,
+        items: v.runs.length,
         filterSupplied: runs[0] !== undefined,
       })),
     () =>

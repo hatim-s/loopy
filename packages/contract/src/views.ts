@@ -75,13 +75,18 @@ export const loopyViewSchema = struct({
   scope: Schema.Literals(LOOPY_SCOPES),
   mode: Schema.Literals(EXECUTION_MODES),
   input: Schema.Union([recordSpecSchema, Schema.Literal("schema")]),
+  // A definition may declare a schedule that was never saved, so it has no state to fire from.
   schedule: Schema.NullOr(
-    struct({
-      cron: Schema.String,
-      tz: Schema.String,
-      enabled: Schema.Boolean,
-      nextFireAt: Schema.NullOr(Schema.String),
-    }),
+    Schema.Union([
+      struct({ state: Schema.Literal("declared"), cron: Schema.String, tz: Schema.String }),
+      struct({
+        state: Schema.Literal("saved"),
+        cron: Schema.String,
+        tz: Schema.String,
+        enabled: Schema.Boolean,
+        nextFireAt: Schema.String,
+      }),
+    ]),
   ),
   lastRun: Schema.NullOr(runViewSchema),
   counts: Schema.Record(runStatusSchema, Schema.mutableKey(counter)),
@@ -113,23 +118,21 @@ export const daemonViewSchema = struct({
 
 export type DaemonView = Schema.Schema.Type<typeof daemonViewSchema>;
 
-// The wire swaps the stored run and schedule records for their views.
-export const serverEventSchema = runtimeEventSchema
-  .mapMembers(
-    Tuple.evolve([
-      (run) => run.mapFields(Struct.assign({ record: Schema.mutableKey(runViewSchema) })),
-      (node) => node,
-      (log) => log,
-      (hook) => hook,
-      (schedule) =>
-        schedule.mapFields(Struct.assign({ record: Schema.mutableKey(scheduleViewSchema) })),
-    ]),
-  )
-  .mapMembers(
-    Tuple.map(
-      Schema.fieldsAssign({ truncatedOutputBytes: Schema.optional(Schema.mutableKey(counter)) }),
-    ),
-  );
+// The wire swaps the stored run and schedule records for their views. A node event whose output
+// exceeds the preview cap drops it and reports its size instead.
+export const serverEventSchema = runtimeEventSchema.mapMembers(
+  Tuple.evolve([
+    (run) => run.mapFields(Struct.assign({ record: Schema.mutableKey(runViewSchema) })),
+    (node) =>
+      node.mapFields(
+        Struct.assign({ truncatedOutputBytes: Schema.optional(Schema.mutableKey(counter)) }),
+      ),
+    (log) => log,
+    (hook) => hook,
+    (schedule) =>
+      schedule.mapFields(Struct.assign({ record: Schema.mutableKey(scheduleViewSchema) })),
+  ]),
+);
 
 export type ServerEvent = Schema.Schema.Type<typeof serverEventSchema>;
 

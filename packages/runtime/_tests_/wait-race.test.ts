@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { NodeRun, Store } from "@loopy/core";
-import { loopy, wait } from "@loopy/sdk/graph";
+import { loopy, wait } from "@loopy/sdk";
 import { Effect, Schema, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Struct } from "effect";
 import { counter, positiveInt, struct } from "../codec";
 import { executionErrorSchema, receiptSchema } from "../executor";
 import { jsonSchema } from "../json";
@@ -60,3 +60,26 @@ export type NodeRunStatus = NodeRun["status"];
 export const NODE_RUN_STATUSES = nodeRunSchema.members.map(
   (member) => member.fields.status.schema.literal,
 );
+
+const BASE_FIELDS = Struct.keys(base.fields);
+
+/**
+ * The cancelled form of a node run that is pending, or null for one that is running or already
+ * finished. A running execution must settle first, and a finished one keeps its outcome.
+ */
+export function cancelledNodeRun(node: NodeRun, at: string): NodeRun | null {
+  switch (node.status) {
+    case "waiting":
+    case "sleeping":
+    case "retrying":
+    case "rate_limited":
+    case "queued":
+      return { ...Struct.pick(node, BASE_FIELDS), status: "cancelled", endedAt: at };
+    case "running":
+    case "succeeded":
+    case "failed":
+    case "cancelled":
+    case "skipped":
+      return null;
+  }
+}

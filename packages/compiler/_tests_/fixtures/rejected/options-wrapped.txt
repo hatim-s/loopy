@@ -1,2 +1,2 @@
-import {loopy,code,defineCommand,sh} from "__SDK__";
+import {loopy,code,defineCommand,sh} from "loopy";
 export default loopy("bad",{input:{},run:()=>code("x",({in:{},out:{kind:"value",type:"number"},module:"./not-function.ts"} as const))});

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ExecutionResult, Graph } from "@loopy/core";
-import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "@loopy/sdk/graph";
+import { code, loopy, parallel, random, sh, sleep, uuid, wait } from "@loopy/sdk";
 import { Effect } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { activateDurable, type DurableActivationOptions, DurableProviderError } from "../src/host";

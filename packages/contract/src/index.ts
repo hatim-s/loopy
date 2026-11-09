@@ -65,17 +65,18 @@ export {
   type PutScheduleBody,
   putScheduleBodySchema,
   type Route,
+  type RunPage,
   type RunsQuery,
   routes,
   scheduleEnabledBodySchema,
 } from "./api";
 
 export {
+  API_MOUNT,
   decodeRouteResponse,
   type RouteInput,
   type RouteName,
   type RouteOutcome,
-  type RouteRequest,
   type RouteResult,
   routeRequest,
   routeUrl,
@@ -112,7 +113,6 @@ export {
   graphView,
   loopyView,
   nodeDetailEvent,
-  previewPayload,
   runView,
   scheduleView,
   serverEvent,
@@ -122,7 +122,6 @@ export {
   DEFAULT_ERROR_MESSAGES,
   ERROR_CODES,
   ERROR_STATUS,
-  type ErrorBody,
   type ErrorCode,
   errorBodySchema,
 } from "./errors";
@@ -143,7 +142,6 @@ export {
   MAX_SOURCE_BYTES,
   MAX_SOURCE_FILES,
   MAX_SOURCE_JSON_BYTES,
-  MAX_SOURCE_RANGES,
   type SourceArtifact,
   sourceArtifactOrUnavailable,
   sourceArtifactSchema,

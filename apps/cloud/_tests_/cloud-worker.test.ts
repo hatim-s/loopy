@@ -2,7 +2,7 @@ import { beforeAll, expect, test } from "bun:test";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { cloudRoutes, WORKSPACE_HEADER } from "@loopy/contract/sandbox";
 import { revision } from "@loopy/core";
-import { log, loopy, wait } from "@loopy/sdk/graph";
+import { log, loopy, wait } from "@loopy/sdk";
 import type { Miniflare } from "miniflare";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
 import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
@@ -111,7 +111,7 @@ test("Worker rejects invalid save/run inputs without publishing or creating runs
     ).status,
   ).toBe(403);
   const runs = await api("/runs?slug=input-check");
-  expect(decodeBoundary(routes.runs.response)(await runs.json())).toEqual([]);
+  expect(decodeBoundary(routes.runs.response)(await runs.json()).runs).toEqual([]);
   expect(
     decodeBoundary(routes.loopies.response)(await (await api("/loopies")).json()).some(
       ({ slug }) => slug === "invalid",
@@ -309,7 +309,7 @@ test("Worker pins historical graph/source revisions and isolates tenant runs, ho
     410,
   );
   expect(
-    decodeBoundary(routes.runs.response)(await (await api("/runs", { token: tokenB })).json()),
+    decodeBoundary(routes.runs.response)(await (await api("/runs", { token: tokenB })).json()).runs,
   ).toEqual([]);
   const bravo = structuredClone(first);
   bravo.source.workspace = "bravo";

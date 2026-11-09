@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { nodeIdSchema } from "@loopy/contract";
 import type { ExecutionKey, NodeRun, Store } from "@loopy/core";
-import { code, loopy, parallel, sh, wait } from "@loopy/sdk/graph";
+import { code, loopy, parallel, sh, wait } from "@loopy/sdk";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { activateDurable } from "../src/host";

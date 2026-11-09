@@ -1,4 +1,5 @@
 import {
+  API_MOUNT,
   boundaryOptions,
   type DaemonView,
   type DashboardReader,
@@ -66,14 +67,20 @@ type Handler<P, Q, B, R, E> = (context: {
   query: Q;
   body: B;
   request: Request;
+  /** The workspace the query or body names, or the host's own when it names none. */
+  workspace: string;
 }) => Effect.Effect<R | Response, E>;
+
+const namesWorkspace = Schema.is(Schema.Struct({ workspace: Schema.String }));
 
 function makeEndpoint<P, Q, B, R, E>(
   route: Schemas<P, Q, B, R>,
   handle: Handler<P, Q, B, R, E>,
-  { onError, maxBodyBytes }: Pick<RouteDependencies, "onError" | "maxBodyBytes">,
+  { onError, maxBodyBytes, cwd }: Pick<RouteDependencies, "onError" | "maxBodyBytes" | "cwd">,
   search: Search,
 ) {
+  const workspace = (...values: unknown[]) => values.find(namesWorkspace)?.workspace ?? cwd;
+
   const encode = encodeBoundary(route.response);
 
   return {
@@ -81,7 +88,9 @@ function makeEndpoint<P, Q, B, R, E>(
     async handle(params: Record<string, string>, request: Request, url: URL) {
       const exit = await Effect.runPromiseExit(
         parseRequest(route, params, search(url, request), request, maxBodyBytes).pipe(
-          Effect.flatMap((parsed) => handle({ ...parsed, request })),
+          Effect.flatMap((parsed) =>
+            handle({ ...parsed, request, workspace: workspace(parsed.query, parsed.body) }),
+          ),
           Effect.map((result) => (result instanceof Response ? result : json(encode(result)))),
         ),
       );
@@ -162,7 +171,7 @@ export function apiRoutes({
     route: Schemas<P, Q, B, R>,
     handle: Handler<P, Q, B, R, E>,
     search = searchParams,
-  ) => makeEndpoint(route, handle, { onError, maxBodyBytes }, search);
+  ) => makeEndpoint(route, handle, { onError, maxBodyBytes, cwd }, search);
 
   return [
     endpoint(routes.scheduleOverview, () => service.scheduleOverview()),
@@ -174,12 +183,10 @@ export function apiRoutes({
       service.resolveNamedHook(params.id, params.name, body.payload),
     ),
     endpoint(routes.putLoopy, ({ params: { slug }, body }) => service.putLoopy(slug, body)),
-    endpoint(routes.graph, ({ params: { slug }, query }) =>
-      service.graph(slug, query.workspace ?? cwd),
-    ),
+    endpoint(routes.graph, ({ params: { slug }, workspace }) => service.graph(slug, workspace)),
     endpoint(routes.runGraph, ({ params: { id } }) => service.runGraph(id)),
-    endpoint(routes.source, ({ params: { slug }, query }) =>
-      service.loopySource(slug, query.workspace ?? cwd),
+    endpoint(routes.source, ({ params: { slug }, workspace }) =>
+      service.loopySource(slug, workspace),
     ),
     endpoint(routes.runSource, ({ params: { id } }) => service.runSource(id)),
     endpoint(routes.overview, ({ query }) => service.overview(query)),
@@ -192,22 +199,22 @@ export function apiRoutes({
     endpoint(routes.log, ({ params: { id } }) => service.log(id)),
     endpoint(routes.eventHistory, ({ query }) => service.eventHistory(query)),
     endpoint(routes.event, ({ params: { sequence } }) => service.event(sequence)),
-    endpoint(routes.schedules, ({ query }) => service.listSchedules(query.workspace ?? cwd)),
-    endpoint(routes.putSchedule, ({ params: { slug }, body, query }) =>
-      service.putSchedule(slug, body, query.workspace ?? cwd),
+    endpoint(routes.schedules, ({ workspace }) => service.listSchedules(workspace)),
+    endpoint(routes.putSchedule, ({ params: { slug }, body, workspace }) =>
+      service.putSchedule(slug, body, workspace),
     ),
-    endpoint(routes.setScheduleEnabled, ({ params: { slug }, body, query }) =>
-      service.setScheduleEnabled(slug, body.enabled, query.workspace ?? cwd),
+    endpoint(routes.setScheduleEnabled, ({ params: { slug }, body, workspace }) =>
+      service.setScheduleEnabled(slug, body.enabled, workspace),
     ),
-    endpoint(routes.deleteSchedule, ({ params: { slug }, query }) =>
-      service.deleteSchedule(slug, query.workspace ?? cwd),
+    endpoint(routes.deleteSchedule, ({ params: { slug }, workspace }) =>
+      service.deleteSchedule(slug, workspace),
     ),
-    endpoint(routes.loopies, ({ query }) => service.listLoopies(query.workspace ?? cwd)),
+    endpoint(routes.loopies, ({ workspace }) => service.listLoopies(workspace)),
     endpoint(routes.runs, ({ query }) => service.listRuns(query)),
     endpoint(routes.run, ({ params: { id } }) => service.runSnapshot(id)),
     endpoint(routes.logs, ({ params: { id }, query }) => service.logs(id, query)),
-    endpoint(routes.startRun, ({ params: { slug }, body }) =>
-      service.startRun(slug, body.input, body.workspace ?? cwd),
+    endpoint(routes.startRun, ({ params: { slug }, body, workspace }) =>
+      service.startRun(slug, body.input, workspace),
     ),
     endpoint(routes.resumeRun, ({ params: { id } }) => service.resumeRun(id)),
     endpoint(routes.cancelRun, ({ params: { id } }) => service.cancelRun(id)),
@@ -237,7 +244,7 @@ export function apiRoutes({
 
 function match(pattern: string, path: string): Record<string, string> | undefined {
   const expected = pattern.split("/");
-  const actual = path.slice("/api".length).split("/");
+  const actual = path.slice(API_MOUNT.length).split("/");
 
   if (expected.length !== actual.length) {
     return undefined;

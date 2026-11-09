@@ -53,19 +53,15 @@ test("dashboard queries bound payloads independently across 10k map rows and 10k
   expect(events.items[0]).not.toHaveProperty("record");
 
   const page = (await reads.runPage()).value;
-  expect(page).toHaveLength(50);
-  const last = page.at(-1);
-  expect(last).toBeDefined();
+  expect(page.runs).toHaveLength(50);
+  expect(page.next).not.toBeNull();
 
   const next = await Effect.runPromise(
-    runs.service.listRuns({
-      limit: 50,
-      before: last ? `${last.createdAt}|${last.id}` : undefined,
-    }),
+    runs.service.listRuns({ limit: 50, before: page.next ?? undefined }),
   );
 
-  expect(next).toHaveLength(50);
-  expect(new Set([...page, ...next].map((run) => run.id)).size).toBe(100);
+  expect(next.runs).toHaveLength(50);
+  expect(new Set([...page.runs, ...next.runs].map((run) => run.id)).size).toBe(100);
 
   const workspacePage = (await reads.workspaceRunPage()).value;
   expect(workspacePage).toHaveLength(50);

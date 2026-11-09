@@ -1,11 +1,12 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { decodeJson } from "@loopy/contract";
+import { positiveInt } from "@loopy/core";
 import { Schema } from "effect";
 import { processAlive, writeFileAtomically } from "../../os";
 
 const daemonFileSchema = Schema.Struct({
-  pid: Schema.Int.check(Schema.isGreaterThan(0)),
+  pid: positiveInt,
   port: Schema.Int,
   token: Schema.String,
   startedAt: Schema.String,

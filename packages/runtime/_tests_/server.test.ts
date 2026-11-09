@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -16,6 +16,7 @@ import {
   scheduleViewSchema,
   splitSseFrames,
 } from "@loopy/contract";
+import { log, loopy } from "@loopy/sdk";
 import { Effect, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { localDaemon, readDaemonFile, ServiceError } from "../src/local";
@@ -23,13 +24,7 @@ import { serveHttp } from "./fixtures/http-server";
 import { fixture, object, runFixture, save } from "./fixtures/project";
 import { daemonToken, serviceFixture } from "./fixtures/server";
 import { fixtureStore } from "./fixtures/service-runtime";
-import { fixtureScope } from "./fixtures/test-scope";
-
-const servers: Awaited<ReturnType<typeof startDaemon>>[] = [];
-
-afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => server.stop()));
-});
+import { fixtureScope, onCleanup } from "./fixtures/test-scope";
 
 async function startDaemon(options: { home: string; cwd: string; port: number; assets?: string }) {
   const store = await fixtureStore(options.home);
@@ -40,21 +35,30 @@ async function startDaemon(options: { home: string; cwd: string; port: number; a
     ),
   );
 
-  return {
-    url: await Effect.runPromise(daemon.start),
-    async stop() {
-      await Effect.runPromise(daemon.stop);
-      await Effect.runPromise(store.close());
-    },
-  };
+  onCleanup(async () => {
+    await Effect.runPromise(daemon.stop);
+    await Effect.runPromise(store.close());
+  });
+
+  return { url: await Effect.runPromise(daemon.start) };
 }
 
 test("API returns run records, step traces and cursor logs", async () => {
-  const f = fixture("api", `run: () => { log("first"); log("second"); return 2; }`);
+  const f = fixture(
+    loopy("api", {
+      input: {},
+      run: () => {
+        log("first");
+        log("second");
+
+        return 2;
+      },
+    }),
+  );
+
   await save(f);
   const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
   const url = new URL(server.url);
   const token = daemonToken(url);
   const headers = { Authorization: `Bearer ${token}` };
@@ -71,17 +75,19 @@ test("API returns run records, step traces and cursor logs", async () => {
   ]);
   expect((await request(`/runs/${run.id}/logs?after=-1`)).status).toBe(400);
   expect((await request("/runs/missing/logs")).status).toBe(404);
-  expect(await (await request("/runs")).json()).toMatchObject([{ id: run.id }]);
+  expect(await (await request("/runs")).json()).toMatchObject({
+    runs: [{ id: run.id }],
+    next: null,
+  });
 });
 
 test("the daemon server requires its token and origin, serves pinned assets and serves authenticated API reads", async () => {
-  const f = fixture("dashboard", "run: () => 1");
+  const f = fixture(loopy("dashboard", { input: {}, run: () => 1 }));
   await save(f);
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
   writeFileSync(join(assets, "index.html"), "original dashboard");
   const server = await startDaemon({ home: f.home, cwd: f.cwd, assets, port: 0 });
-  servers.push(server);
   const url = new URL(server.url);
   const token = daemonToken(url);
   const headers = { Authorization: `Bearer ${token}` };
@@ -99,6 +105,13 @@ test("the daemon server requires its token and origin, serves pinned assets and 
     expect(decodeBoundary(errorBodySchema)(await response.json()).error.code).toBe(code);
   }
 
+  const own = await fetch(`${url.origin}/api/runs`, {
+    headers: { ...headers, Origin: url.origin },
+  });
+
+  expect(own.status).toBe(200);
+  expect(own.headers.has("access-control-allow-origin")).toBe(false);
+
   expect(await (await fetch(`${url.origin}/api/loopies`, { headers })).json()).toMatchObject([
     { slug: "dashboard" },
   ]);
@@ -110,11 +123,10 @@ test("the daemon server requires its token and origin, serves pinned assets and 
 });
 
 test("API distinguishes invalid cursors from registry failures", async () => {
-  const f = fixture("server-errors", "run: () => 1");
+  const f = fixture(loopy("server-errors", { input: {}, run: () => 1 }));
   await save(f);
   const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
   const url = new URL(server.url);
   const token = daemonToken(url);
   const headers = { Authorization: `Bearer ${token}` };
@@ -133,11 +145,20 @@ test("API distinguishes invalid cursors from registry failures", async () => {
 });
 
 test("API returns the contract snapshot, rejects unknown query keys and keeps cursor log reads", async () => {
-  const f = fixture("summary", 'run: () => { log("hello"); return 1; }');
+  const f = fixture(
+    loopy("summary", {
+      input: {},
+      run: () => {
+        log("hello");
+
+        return 1;
+      },
+    }),
+  );
+
   await save(f);
   const run = await runFixture(f);
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
   const url = new URL(server.url);
   const token = daemonToken(url);
   const headers = { Authorization: `Bearer ${token}` };
@@ -152,7 +173,7 @@ test("API returns the contract snapshot, rejects unknown query keys and keeps cu
 });
 
 test("contract routes start, snapshot, resume and cancel without exposing owner tokens", async () => {
-  const f = fixture("contract", "run: () => null");
+  const f = fixture(loopy("contract", { input: {}, run: () => null }));
   await save(f);
   const initialStore = await fixtureStore(f.home);
   await Effect.runPromise(
@@ -161,7 +182,6 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
   await Effect.runPromise(initialStore.close());
   const initial = { id: "initial" };
   const server = await startDaemon({ ...f, port: 0 });
-  servers.push(server);
   const url = new URL(server.url);
 
   const headers = {
@@ -213,13 +233,12 @@ test("contract routes start, snapshot, resume and cancel without exposing owner 
 });
 
 test("SPA routes fall back to pinned index but missing files stay 404", async () => {
-  const f = fixture("spa", "run: () => 1");
+  const f = fixture(loopy("spa", { input: {}, run: () => 1 }));
   await save(f);
   const assets = join(f.cwd, "assets");
   mkdirSync(assets);
   writeFileSync(join(assets, "index.html"), "SPA");
   const server = await startDaemon({ ...f, port: 0, assets });
-  servers.push(server);
   const origin = new URL(server.url).origin;
   expect(await (await fetch(`${origin}/runs/some-run`)).text()).toBe("SPA");
   expect((await fetch(`${origin}/missing.js`)).status).toBe(404);
@@ -232,11 +251,10 @@ test("SPA routes fall back to pinned index but missing files stay 404", async ()
 });
 
 test("native definition routes return 404 for absence and 500 for corrupt saved data", async () => {
-  const f = fixture("corrupt-definition", "run: () => 1");
+  const f = fixture(loopy("corrupt-definition", { input: {}, run: () => 1 }));
   await save(f);
   writeFileSync(join(f.cwd, ".loopy", "loopies", "corrupt-definition.json"), "{invalid");
   const server = await startDaemon({ ...f, port: 0 });
-  servers.push(server);
   const origin = new URL(server.url).origin;
   const headers = { Authorization: `Bearer ${readDaemonFile(f.home)!.token}` };
 
@@ -379,9 +397,8 @@ test("schedule PUT publishes a saved SSE frame", async () => {
 });
 
 test("cursor endpoint bootstraps an empty dashboard and follows new events", async () => {
-  const f = fixture("cursor", "run: () => 1");
+  const f = fixture(loopy("cursor", { input: {}, run: () => 1 }));
   const server = await startDaemon({ home: f.home, cwd: f.cwd, port: 0 });
-  servers.push(server);
   const url = new URL(server.url);
   const token = daemonToken(url);
   const headers = { Authorization: `Bearer ${token}` };

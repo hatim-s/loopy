@@ -1,5 +1,6 @@
 import { cleanupRefusal, isTerminalRun, type Json, runningRefusal } from "@loopy/contract";
 import {
+  cancelledNodeRun,
   executionKeyString,
   isPendingWait,
   type RunRecord,
@@ -90,7 +91,7 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
     // An unstarted run has nothing to clean up, so its graph is never read.
     const refusal =
       runningRefusal(nodes) ??
-      (nodes.length === 0 ? null : cleanupRefusal(nodes, (yield* context.runGraph(id)).graph));
+      (nodes.length === 0 ? null : cleanupRefusal((yield* context.runGraph(id)).graph));
 
     if (refusal !== null) {
       return yield* Effect.fail(new ServiceError("not_claimable", refusal));
@@ -115,28 +116,11 @@ export function makeRunOperations(context: ServiceContext, { view }: RunViews) {
           const nodes = yield* cancellableNodes(id);
           const at = yield* now;
 
-          const effects: StoreEffect[] = nodes.flatMap((node) =>
-            node.status === "waiting" ||
-            node.status === "sleeping" ||
-            node.status === "retrying" ||
-            node.status === "rate_limited" ||
-            node.status === "queued"
-              ? [
-                  {
-                    kind: "write_node_run" as const,
-                    nodeRun: {
-                      key: node.key,
-                      attempt: node.attempt,
-                      maxAttempts: node.maxAttempts,
-                      startedAt: node.startedAt,
-                      receipt: node.receipt,
-                      status: "cancelled" as const,
-                      endedAt: at,
-                    },
-                  },
-                ]
-              : [],
-          );
+          const effects: StoreEffect[] = nodes.flatMap((node) => {
+            const nodeRun = cancelledNodeRun(node, at);
+
+            return nodeRun === null ? [] : [{ kind: "write_node_run", nodeRun }];
+          });
 
           effects.push({ kind: "finish_run", outcome: { status: "cancelled" }, at });
           yield* store.apply({ runId: id, token, effects });

@@ -94,8 +94,11 @@ export function makeScheduleOperations(context: ServiceContext) {
     }
   });
 
+  // A schedule's input is checked when it is saved, so the form can point at the input field.
   const scheduleInput = (saved: SavedLoopy, body: PutScheduleBody) =>
-    validateDefinitionInput(saved, body.input === undefined ? {} : body.input);
+    validateDefinitionInput(saved, body.input === undefined ? {} : body.input).pipe(
+      Effect.mapError((error) => new ServiceError("invalid_schedule_input", error.message)),
+    );
 
   const requireSchedule = Effect.fn("schedules.requireSchedule")(function* (
     slug: string,

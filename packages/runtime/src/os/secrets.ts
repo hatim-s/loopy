@@ -11,9 +11,9 @@ import {
 import { join, resolve } from "node:path";
 import {
   errnoCode,
-  isRecord,
   MAX_SECRET_VALUE_BYTES,
   SecretError,
+  secretNameSchema,
   secretValueSchema,
   setOwnProperty,
   validateSecretName,
@@ -35,26 +35,7 @@ function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
   }
 }
 
-// BOUNDARY: The secrets.json file is checked for an object with valid secret names and bounded string values.
-function parseSecrets(value: unknown) {
-  if (!isRecord(value)) {
-    throw new Error("The secret store must be an object.");
-  }
-
-  const secrets: Record<string, string> = {};
-
-  for (const [name, secret] of Object.entries(value)) {
-    validateSecretName(name);
-
-    if (!validSecretValue(secret)) {
-      throw invalidSecretValue(name);
-    }
-
-    setOwnProperty(secrets, name, secret);
-  }
-
-  return secrets;
-}
+const decodeSecrets = Schema.decodeUnknownSync(Schema.Record(secretNameSchema, secretValueSchema));
 
 /** Plaintext storage protected by user-only permissions. */
 export class SecretStore {
@@ -111,7 +92,7 @@ export class SecretStore {
     }
   }
 
-  private readSnapshot(): Record<string, string> {
+  private readSnapshot() {
     if (!this.directoryExists(false)) {
       return {};
     }
@@ -143,7 +124,7 @@ export class SecretStore {
       closeSync(fd);
     }
 
-    return parseSecrets(value);
+    return { ...decodeSecrets(value) };
   }
 
   snapshot() {

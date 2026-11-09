@@ -1,10 +1,11 @@
+import { loopy } from "@loopy/sdk";
 import { makeLocalService } from "../../src/local";
 import { fixture, save } from "./project";
 import { fixtureStore } from "./service-runtime";
 
 /** A saved one-node loopy with its store and a local service over them. */
 export async function serviceFixture(name: string) {
-  const f = fixture(name, "run: () => 1");
+  const f = fixture(loopy(name, { input: {}, run: () => 1 }));
   await save(f);
   const store = await fixtureStore(f.home);
 

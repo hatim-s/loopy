@@ -48,6 +48,17 @@ export function requireRunning(ctx: SqlContext, runId: string, token: string): R
   return row;
 }
 
+type HeldBy = { host: string | null; pid: number | null; heartbeatAt: string };
+
+// A live local owner keeps its lease however late its heartbeat; any other owner loses it on expiry.
+function ownerLost(ctx: SqlContext, owner: HeldBy, now: number): boolean {
+  if (owner.host !== null && ctx.owner.isAlive({ host: owner.host, pid: owner.pid })) {
+    return false;
+  }
+
+  return now >= leaseExpiresAt(owner.heartbeatAt, ctx.leaseMs);
+}
+
 export function isStale(ctx: SqlContext, row: RunRow, now: number): boolean {
   if (
     (row.status !== "running" && row.status !== "suspended") ||
@@ -57,11 +68,19 @@ export function isStale(ctx: SqlContext, row: RunRow, now: number): boolean {
     return false;
   }
 
-  if (row.owner_host !== null && ctx.owner.isAlive({ host: row.owner_host, pid: row.owner_pid })) {
-    return false;
-  }
+  return ownerLost(
+    ctx,
+    { host: row.owner_host, pid: row.owner_pid, heartbeatAt: row.heartbeat_at },
+    now,
+  );
+}
 
-  return now >= leaseExpiresAt(row.heartbeat_at, ctx.leaseMs);
+export function isStaleRun(ctx: SqlContext, run: RunRecord, now: number): boolean {
+  return (
+    (run.status === "running" || run.status === "suspended") &&
+    run.owner !== undefined &&
+    ownerLost(ctx, run.owner, now)
+  );
 }
 
 export function emitRun(

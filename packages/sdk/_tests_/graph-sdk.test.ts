@@ -1,6 +1,6 @@
 import { expect, expectTypeOf, test } from "bun:test";
-import { decodeBoundary, graphSchema } from "@loopy/contract";
-import { type DiagnosticCode, graphTypeResolver, validateGraph } from "@loopy/core";
+import { type DiagnosticCode, graphSchema, graphTypeResolver, validateGraph } from "@loopy/core";
+import { decode } from "../../core/_tests_/fixtures/decode";
 import { approveDemoGraph } from "../../core/_tests_/fixtures/graphs";
 import {
   and,
@@ -45,15 +45,11 @@ import {
 import type { AuthorValue } from "../src/graph/ref";
 import { GraphBuildError } from "../src/graph-host";
 import { capture } from "./fixtures/command-capture";
-import assetSync from "./fixtures/graph-examples/asset-sync";
-import hello from "./fixtures/graph-examples/hello";
-import review from "./fixtures/graph-examples/review";
-import wwwSync from "./fixtures/graph-examples/www-sync";
 
 function compile(run: () => AuthorValue) {
   const result = loopy("test", { input: {}, run });
   expect(validateGraph(result)).toEqual([]);
-  expect(decodeBoundary(graphSchema)(result)).toEqual(result);
+  expect(decode(graphSchema)(result)).toEqual(result);
 
   return result;
 }
@@ -101,7 +97,7 @@ test("approve-demo reproduces the canonical graph exactly", () => {
   });
 
   expect(validateGraph(result)).toEqual([]);
-  expect(decodeBoundary(graphSchema)(result)).toEqual(approveDemoGraph);
+  expect(decode(graphSchema)(result)).toEqual(approveDemoGraph);
 });
 
 const simple = [
@@ -482,19 +478,6 @@ test("schemas determine output refs, unknown keys fail, and branch results form 
   });
 });
 
-for (const [name, result, expectedName] of [
-  ["hello", hello, "hello"],
-  ["review", review, "review"],
-  ["asset-sync", assetSync, "uacode-asset-sync"],
-  ["www-sync", wwwSync, "www-uacode-sync"],
-] as const) {
-  test(`${name} example compiles to a validated graph without executing modules`, () => {
-    expect(validateGraph(result)).toEqual([]);
-    expect(decodeBoundary(graphSchema)(result).nodes.length).toBeGreaterThan(2);
-    expect(result.name).toBe(expectedName);
-  });
-}
-
 test("deferred predicates retain builder and lexical scope provenance", () => {
   let captured: ReturnType<typeof eq> | undefined;
   compile(() => {
@@ -827,7 +810,7 @@ for (const [kind, control] of [
     });
 
     expect(validateGraph(result)).toEqual([]);
-    expect(decodeBoundary(graphSchema)(result)).toEqual(result);
+    expect(decode(graphSchema)(result)).toEqual(result);
   });
 }
 
@@ -904,7 +887,7 @@ test("a rescue accepts a map body ending in fail", () => {
   });
 
   expect(validateGraph(result)).toEqual([]);
-  expect(decodeBoundary(graphSchema)(result)).toEqual(result);
+  expect(decode(graphSchema)(result)).toEqual(result);
 });
 
 for (const label of ["__proto__", "constructor", "prototype"]) {

@@ -80,8 +80,8 @@ async function main() {
 
     const after = await journey.call(routes.runs, runs);
     equal(
-      after.map((run) => run.id),
-      before.map((run) => run.id),
+      after.runs.map((run) => run.id),
+      before.runs.map((run) => run.id),
       "invalid_input_created_run",
     );
 

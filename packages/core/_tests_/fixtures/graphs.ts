@@ -176,3 +176,105 @@ export function inputGraph(
     edges: [],
   });
 }
+
+export const mapGraph = decode(graphSchema)({
+  version: 1,
+  meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
+  name: "map",
+  input: { items: "json" },
+  entry: "map",
+  outputs: { ref: "map", path: [] },
+  nodes: [
+    {
+      id: "map",
+      kind: "map",
+      scope: null,
+      label: null,
+      over: { ref: "input", path: ["items"] },
+      body: "body",
+      item: "item",
+      index: "index",
+      concurrency: 4,
+      onError: "collect",
+    },
+    {
+      id: "body",
+      kind: "format",
+      scope: "map",
+      label: null,
+      template: "{i}:{value}",
+      values: { i: { ref: "index", path: [] }, value: "item" },
+    },
+    {
+      id: "end",
+      kind: "join",
+      scope: "map",
+      label: null,
+      result: {
+        kind: "value" as const,
+        value: { value: { ref: "item", path: [] }, formatted: { ref: "body", path: [] } },
+      },
+    },
+  ],
+  edges: [
+    { from: "body", to: "end", kind: "next" },
+    { from: "end", to: "map", kind: "join" },
+  ],
+});
+
+export function numericBranchGraph(): Graph {
+  return decode(graphSchema)({
+    version: 1,
+    meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
+    name: "derived-types",
+    input: {},
+    entry: "branch",
+    outputs: null,
+    nodes: [
+      {
+        id: "branch",
+        kind: "branch",
+        scope: null,
+        label: null,
+        predicate: { op: "eq", left: true, right: true },
+        arms: { yes: "yes", no: "no" },
+      },
+      {
+        id: "yes",
+        kind: "join",
+        scope: "branch",
+        label: null,
+        result: { kind: "value" as const, value: 1 },
+      },
+      {
+        id: "no",
+        kind: "join",
+        scope: "branch",
+        label: null,
+        result: { kind: "value" as const, value: 2 },
+      },
+      {
+        id: "result",
+        kind: "join",
+        scope: null,
+        label: null,
+        result: { kind: "value" as const, value: { ref: "branch", path: [] } },
+      },
+      {
+        id: "check",
+        kind: "branch",
+        scope: null,
+        label: null,
+        predicate: { op: "gt", left: { ref: "branch", path: [] }, right: 0 },
+        arms: { yes: "pass", no: "fail" },
+      },
+      { id: "pass", kind: "uuid", scope: "check", label: null },
+      { id: "fail", kind: "uuid", scope: "check", label: null },
+    ],
+    edges: [
+      { from: "yes", to: "result", kind: "join" },
+      { from: "no", to: "result", kind: "join" },
+      { from: "result", to: "check", kind: "next" },
+    ],
+  });
+}

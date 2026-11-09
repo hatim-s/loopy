@@ -87,7 +87,7 @@ test("run views read no registry, including runs of deleted definitions", async 
   await f.run("canonical", f.a, "chosen", "queued");
   await f.run("alias", "alias", "chosen", "queued");
   await f.run("missing", f.a, "removed", "queued");
-  const runs = await Effect.runPromise(f.service.listRuns({ limit: 200 }));
+  const { runs } = await Effect.runPromise(f.service.listRuns({ limit: 200 }));
   expect(runs.map((run) => [run.id, run.slug]).sort()).toEqual([
     ["alias", "chosen"],
     ["canonical", "chosen"],
@@ -138,7 +138,7 @@ test("native adapter distinguishes absence from corrupt existing files", async (
   writeFileSync(join(f.a, ".loopy", "loopies", "obsolete.json"), JSON.stringify({ version: 1 }));
   await expect(Effect.runPromise(service.startRun("obsolete", {}, f.a))).rejects.toMatchObject({
     _tag: "RegistryError",
-    message: expect.stringContaining("uses an old format"),
+    message: expect.stringContaining("uses an old or invalid format"),
   });
   await expect(
     Effect.runPromise(service.putSchedule("obsolete", { cron: "* * * * *" }, f.a)),

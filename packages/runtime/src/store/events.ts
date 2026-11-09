@@ -40,9 +40,8 @@ function append(write: SqlWrite, change: RuntimeEventChange, nodeId: string | nu
     throw new Error("Event was not appended. Restore storage.");
   }
 
-  // The clone keeps a published event apart from records the writer keeps updating in place.
   const event: RuntimeEvent = {
-    ...structuredClone(change),
+    ...change,
     sequence: row.sequence,
     at: write.at,
     txn: write.txn,

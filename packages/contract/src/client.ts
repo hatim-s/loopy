@@ -38,7 +38,10 @@ export type RouteOutcome<R extends Route> =
   | { readonly kind: "error"; readonly status: number; readonly error: ErrorBody["error"] }
   | { readonly kind: "malformed"; readonly status: number };
 
-/** The `/api` path with captured segments and search values filled in. */
+/** Every route path is served under this prefix. */
+export const API_MOUNT = "/api";
+
+/** The mounted path with captured segments and search values filled in. */
 export function routeUrl<R extends Route>(route: R, input: RouteInput<R>): string {
   const path = route.path
     .split("/")
@@ -57,7 +60,7 @@ export function routeUrl<R extends Route>(route: R, input: RouteInput<R>): strin
     }
   }
 
-  return search.size > 0 ? `/api${path}?${search}` : `/api${path}`;
+  return search.size > 0 ? `${API_MOUNT}${path}?${search}` : `${API_MOUNT}${path}`;
 }
 
 /** Encodes the body through the route schema, so a value the server would reject never leaves. */

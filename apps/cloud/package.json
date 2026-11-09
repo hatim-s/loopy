@@ -8,5 +8,8 @@
     "@loopy/contract": "workspace:*",
     "@loopy/runtime": "workspace:*",
     "@loopy/compiler": "workspace:*"
+  },
+  "devDependencies": {
+    "@loopy/sdk": "workspace:*"
   }
 }

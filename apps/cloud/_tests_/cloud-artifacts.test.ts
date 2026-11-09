@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import type { PutLoopyBody, SourceArtifact } from "@loopy/contract";
 import { revision } from "@loopy/core";
-import { code, loopy } from "@loopy/sdk/graph";
+import { code, loopy } from "@loopy/sdk";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
 import { ARTIFACT_LIMITS } from "../src/artifacts";
 import { r2Key } from "../src/artifacts/storage";

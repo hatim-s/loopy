@@ -83,7 +83,7 @@ function NextCell({ loopy, now }: { loopy: LoopyView; now: number }) {
     return <span className="text-faint">None</span>;
   }
 
-  if (schedule.nextFireAt === null) {
+  if (schedule.state === "declared") {
     return <span className="text-xs text-muted">Declared, not scheduled</span>;
   }
 

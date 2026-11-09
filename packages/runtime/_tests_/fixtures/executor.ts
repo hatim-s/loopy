@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { ExecutionSpec } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
-import { loopy, sh } from "@loopy/sdk/graph";
+import { loopy, sh } from "@loopy/sdk";
 import { Schema } from "effect";
 import { LocalExecutor } from "../../src/executor";
 import { FilesystemReceipts } from "../../src/executor/receipts";

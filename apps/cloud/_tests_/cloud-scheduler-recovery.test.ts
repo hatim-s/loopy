@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { sleep, wait } from "@loopy/sdk/graph";
+import { sleep, wait } from "@loopy/sdk";
 import { Effect } from "effect";
 import { SCHEDULER } from "../src/scheduler";
 import { base, expired, fixture, graph, work } from "./fixtures/scheduler";

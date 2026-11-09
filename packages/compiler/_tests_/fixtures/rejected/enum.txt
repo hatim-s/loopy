@@ -1,3 +1,3 @@
-import {loopy} from "__SDK__";
+import {loopy} from "loopy";
 enum SideEffect { value = Date.now() }
 export default loopy("invalid", {input:{},run:()=>1});

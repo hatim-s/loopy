@@ -5,10 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./graph": "./src/graph/index.ts",
     "./graph-host": "./src/graph-host.ts"
   },
   "dependencies": {
-    "@loopy/core": "workspace:*"
+    "@loopy/core": "workspace:*",
+    "effect": "catalog:"
   }
 }

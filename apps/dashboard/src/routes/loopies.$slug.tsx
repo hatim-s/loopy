@@ -193,12 +193,12 @@ function LoopyHead({ loopy, graph }: { loopy: LoopyView; graph: GraphRevisionVie
               {loopy.schedule ? (
                 <span className="inline-flex items-baseline gap-2">
                   <CronReading cron={loopy.schedule.cron} tz={loopy.schedule.tz} />
-                  {loopy.schedule.enabled && loopy.schedule.nextFireAt ? (
+                  {loopy.schedule.state === "declared" ? (
+                    <span className="text-muted">declared, not scheduled</span>
+                  ) : loopy.schedule.enabled ? (
                     <FireTime at={loopy.schedule.nextFireAt} now={now} />
                   ) : (
-                    <span className="text-muted">
-                      {loopy.schedule.nextFireAt === null ? "declared, not scheduled" : "paused"}
-                    </span>
+                    <span className="text-muted">paused</span>
                   )}
                 </span>
               ) : (
@@ -231,7 +231,7 @@ function LoopyHead({ loopy, graph }: { loopy: LoopyView; graph: GraphRevisionVie
             search={{ workspace: loopy.workspace, slug: loopy.slug }}
             className="btn"
           >
-            {loopy.schedule?.nextFireAt ? "Edit schedule" : "Add schedule"}
+            {loopy.schedule?.state === "saved" ? "Edit schedule" : "Add schedule"}
           </Link>
           <button
             type="button"

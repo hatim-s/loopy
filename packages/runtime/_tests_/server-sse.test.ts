@@ -11,6 +11,7 @@ import {
 } from "@loopy/contract";
 import { eventFrame } from "@loopy/contract/server";
 import type { RuntimeEvent } from "@loopy/core";
+import { loopy } from "@loopy/sdk";
 import { Effect, Schema, Scope } from "effect";
 import { localDaemon, readDaemonFile } from "../src/local";
 import { serveHttp } from "./fixtures/http-server";
@@ -127,7 +128,7 @@ async function reconnectFrames(
 }
 
 test("SSE delivers exact transactions across replay, live commits and Last-Event-ID reconnect", async () => {
-  const f = fixture("events", "run: () => 1");
+  const f = fixture(loopy("events", { input: {}, run: () => 1 }));
   await save(f);
   const store = await fixtureStore(f.home);
 

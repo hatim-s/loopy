@@ -1,6 +1,7 @@
 import { decodeBoundary } from "@loopy/contract";
 import {
   AUTHORITY_MAX_BODY_BYTES,
+  AUTHORITY_REJECTED_STATUS,
   AuthorityError,
   type AuthorityInput,
   authorityErrorSchema,
@@ -48,7 +49,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
         });
 
         if (!response.ok) {
-          if (response.status === 409) {
+          if (response.status === AUTHORITY_REJECTED_STATUS) {
             const body: unknown = JSON.parse(await this.body(response));
             const rejected = decodeBoundary(authorityErrorSchema)(body);
             throw new AuthorityError(rejected.error);

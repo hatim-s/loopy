@@ -143,7 +143,7 @@ export class SummarySizeProbe {
 
           value = {
             loopies: await Effect.runPromise(service.listLoopies(workspace)),
-            runs: await Effect.runPromise(service.listRuns({ limit: 200 })),
+            runs: (await Effect.runPromise(service.listRuns({ limit: 200 }))).runs,
           };
           break;
         }
