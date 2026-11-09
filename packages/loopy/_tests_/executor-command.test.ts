@@ -6,13 +6,13 @@ import { initialState, step } from "@loopy/core/engine";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { activate } from "@loopy/runtime/host";
 import { SecretStore } from "@loopy/runtime/local";
-import { MemoryStore } from "@loopy/runtime/store";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Effect, Schema } from "effect";
 import { receiptPath } from "../../runtime/src/executor/receipts";
 import { prepareLaunch } from "../../runtime/src/local/process";
 import { newRun } from "./fixture";
 import { commandSpec, fixture } from "./fixtures/executor";
+import { MemorySqlStore } from "./store-fixture";
 
 test("full inherited environment stays out of sandbox launcher arguments", async () => {
   const f = await fixture();
@@ -90,7 +90,7 @@ test("graph command timeout survives serialization and terminates the actual sub
     loopy("timeout", {
       input: {},
       run: () => sh(["/bin/sleep", "10"], { timeout: 100 }),
-    }).graph,
+    }),
   );
 
   const dispatch = step(graph, initialState("run", {}), {
@@ -125,7 +125,7 @@ test("graph command capture limit survives serialization and bounds actual stdou
     loopy("capture-limit", {
       input: {},
       run: () => sh(["printf", "%s", "x".repeat(1024)], { maxOutputBytes: 256 }),
-    }).graph,
+    }),
   );
 
   const dispatch = step(graph, initialState("run", {}), {
@@ -315,7 +315,7 @@ test("parser execution failures propagate to the stored graph node and run", asy
   const graph = loopy("parser-failure", {
     input: {},
     run: () => sh(["printf", "raw"], { retry: { attempts: 1 } }),
-  }).graph;
+  });
 
   const node = graph.nodes.find((node) => node.kind === "command");
 
@@ -324,7 +324,7 @@ test("parser execution failures propagate to the stored graph node and run", asy
   }
 
   node.parse = { bundleHash: "a".repeat(64), input: {} };
-  const store = new MemoryStore();
+  const store = new MemorySqlStore();
   await Effect.runPromise(store.createRun(newRun()));
   expect(
     await Effect.runPromise(activate({ store, executor: f.executor, graph, runId: "run" })),

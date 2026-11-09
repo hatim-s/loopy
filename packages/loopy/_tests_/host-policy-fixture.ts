@@ -1,8 +1,9 @@
 import type { ExecutionKey, ExecutionResult, Receipt } from "@loopy/core";
 import { executionKeyString } from "@loopy/core";
+import type { DurableExecutionProvider } from "@loopy/runtime/host";
 import { code, loopy, parallel, wait } from "@loopy/sdk/graph";
-import { Effect } from "effect";
-import type { DurableExecutionProvider } from "../../runtime/src/host/durable";
+import { Deferred, Effect } from "effect";
+import { MemorySqlStore } from "./store-fixture";
 
 export const policySuccess: ExecutionResult = {
   kind: "succeeded",
@@ -34,7 +35,7 @@ export function policyGraph() {
         work: policyWork,
         approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
       }),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -69,5 +70,27 @@ export class PolicyProvider implements DurableExecutionProvider {
 
       return { kind: "started" as const };
     });
+  }
+}
+
+/** Completes `retried` once a committed batch schedules a retry. */
+export class RetryGateStore extends MemorySqlStore {
+  constructor(
+    private readonly retried: Deferred.Deferred<void>,
+    options: { leaseMs?: number } = {},
+  ) {
+    super(options);
+  }
+
+  override apply(batch: Parameters<MemorySqlStore["apply"]>[0]) {
+    return super
+      .apply(batch)
+      .pipe(
+        Effect.tap(() =>
+          batch.effects.some((effect) => effect.kind === "schedule_retry")
+            ? Deferred.succeed(this.retried, undefined)
+            : Effect.void,
+        ),
+      );
   }
 }

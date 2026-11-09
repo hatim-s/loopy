@@ -14,23 +14,25 @@ const manifestSchema = Schema.Struct({
   exports: Schema.Record(Schema.String, Schema.String),
 });
 
-async function packageExports() {
+async function vendoredPackages() {
+  const entries = await readdir(packages, { withFileTypes: true });
+
+  return entries.flatMap((entry) =>
+    entry.isDirectory() && entry.name !== "loopy" ? [entry.name] : [],
+  );
+}
+
+async function packageExports(vendored: readonly string[]) {
   const exports = new Map<string, string>();
 
-  for (const directory of await readdir(packages, { withFileTypes: true })) {
-    if (!directory.isDirectory() || directory.name === "loopy") {
-      continue;
-    }
-
-    const manifest: unknown = await Bun.file(
-      resolve(packages, directory.name, "package.json"),
-    ).json();
+  for (const name of vendored) {
+    const manifest: unknown = await Bun.file(resolve(packages, name, "package.json")).json();
 
     const decoded = Schema.decodeUnknownSync(manifestSchema)(manifest);
 
     for (const [subpath, target] of Object.entries(decoded.exports)) {
       const specifier = decoded.name + (subpath === "." ? "" : subpath.slice(1));
-      exports.set(specifier, relative(packages, resolve(packages, directory.name, target)));
+      exports.set(specifier, relative(packages, resolve(packages, name, target)));
     }
   }
 
@@ -43,14 +45,12 @@ function moduleSpecifier(node: ts.StringLiteral) {
   return (
     ((ts.isImportDeclaration(parent) || ts.isExportDeclaration(parent)) &&
       parent.moduleSpecifier === node) ||
-    ts.isExternalModuleReference(parent) ||
     (ts.isLiteralTypeNode(parent) && ts.isImportTypeNode(parent.parent)) ||
     (ts.isCallExpression(parent) &&
       parent.arguments[0] === node &&
       (parent.expression.kind === ts.SyntaxKind.ImportKeyword ||
         (ts.isPropertyAccessExpression(parent.expression) &&
-          (parent.expression.getText() === "import.meta.resolve" ||
-            parent.expression.getText() === "Bun.resolveSync"))))
+          parent.expression.getText() === "Bun.resolveSync")))
   );
 }
 
@@ -110,7 +110,9 @@ async function rewriteModules(directory: string, exports: Map<string, string>) {
 
 await rm(packageDist, { recursive: true, force: true });
 
-const exports = await packageExports();
+const vendored = await vendoredPackages();
+
+const exports = await packageExports(vendored);
 
 const config = resolve(packages, `loopy/.tsconfig.build.generated-${process.pid}.json`);
 
@@ -123,6 +125,7 @@ await Bun.write(
   JSON.stringify({
     extends: "./tsconfig.build.json",
     compilerOptions: { paths },
+    include: ["src", ...vendored.map((name) => `../${name}/src`)],
   }),
 );
 
@@ -166,6 +169,6 @@ await cp(resolve(root, "LICENSE"), resolve(packages, "loopy/LICENSE"));
 
 await cp(resolve(root, "README.md"), resolve(packages, "loopy/README.md"));
 
-await chmod(resolve(packageDist, "loopy/src/cli.js"), 0o755);
+await chmod(resolve(packageDist, "cli/src/index.js"), 0o755);
 
 console.log("Built loopy with vendored workspace modules and the dashboard.");

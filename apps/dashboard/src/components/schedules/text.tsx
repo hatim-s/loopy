@@ -1,7 +1,6 @@
-import { describeCron } from "../../lib/cron";
-import { span, timestamp } from "../../lib/format";
+import { describeCron } from "@loopy/contract";
+import { timestamp, until } from "../../lib/format";
 
-/** The cron in words over the cron itself. Unsupported expressions keep only the cron. */
 export function CronReading({ cron, tz }: { cron: string; tz?: string }) {
   const reading = describeCron(cron);
 
@@ -28,7 +27,6 @@ const DAY_TIME = new Intl.DateTimeFormat(undefined, {
   hourCycle: "h23",
 });
 
-/** When something fires: the clock time within a day, else the date, with the wait below. */
 export function FireTime({ at, now }: { at: string; now: number }) {
   const ms = Date.parse(at) - now;
   const date = new Date(at);
@@ -36,7 +34,7 @@ export function FireTime({ at, now }: { at: string; now: number }) {
   return (
     <time dateTime={at} title={timestamp(at)} className="block tabular-nums">
       <span className="block">{ms < 86_400_000 ? TIME.format(date) : DAY_TIME.format(date)}</span>
-      <span className="block text-xs text-muted">{ms > 0 ? `in ${span(ms)}` : "due now"}</span>
+      <span className="block text-xs text-muted">{until(at, now)}</span>
     </time>
   );
 }

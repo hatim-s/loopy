@@ -95,7 +95,6 @@ export async function paginationResponse(
 ) {
   const store = new SqlRunStore(new DurableSqlDriver(ctx.storage), {
     owner: { identity: { pid: null, host: "pagination-probe" }, isAlive: () => false },
-    now: () => Date.parse(at),
   });
 
   const url = new URL(request.url);

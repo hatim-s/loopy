@@ -1,11 +1,11 @@
 import {
   decodeBoundary,
+  receiptSchema,
   type SandboxArtifactRead,
   type SandboxArtifactRequest,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
   sandboxErrorSchema,
-  sandboxReceiptSchema,
 } from "@loopy/contract";
 import type { ExecutionKey, ExecutionSpec } from "@loopy/core";
 import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
@@ -60,7 +60,7 @@ export class SandboxProvider implements DurableExecutionProvider {
       const text = yield* readBoundedText(response, 4 * 1024 * 1024);
 
       return yield* decodeProtocol("receipt", () =>
-        decodeBoundary(sandboxReceiptSchema)(JSON.parse(text)),
+        decodeBoundary(receiptSchema)(JSON.parse(text)),
       );
     });
   }

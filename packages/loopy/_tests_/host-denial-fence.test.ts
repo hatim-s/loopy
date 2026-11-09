@@ -1,19 +1,19 @@
 import { expect, test } from "bun:test";
-import { MemoryStore } from "@loopy/runtime/store";
+import { activateDurable } from "@loopy/runtime/host";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Effect } from "effect";
-import { activateDurable } from "../../runtime/src/host/durable";
 import { newRun } from "./fixture";
 import { PolicyProvider } from "./host-policy-fixture";
+import { memoryStore } from "./store-fixture";
 
 test("an admission denial reloads state and cannot overwrite a newer persisted attempt", async () => {
-  const store = new MemoryStore();
+  const store = memoryStore();
   const provider = new PolicyProvider();
 
   const graph = loopy("limited", {
     input: {},
     run: () => sh(["true"], { rateLimit: { key: "shared", limit: 1, window: "1m" } }),
-  }).graph;
+  });
 
   const at = newRun().createdAt;
   await Effect.runPromise(store.createRun(newRun()));
@@ -38,7 +38,16 @@ test("an admission denial reloads state and cannot overwrite a newer persisted a
 
   expect(
     await Effect.runPromise(
-      activateDurable({ store, provider, graph, runId: "run", token: "owner", at }),
+      activateDurable({
+        store,
+        provider,
+        graph,
+        runId: "run",
+        token: "owner",
+        at,
+        maxWork: 32,
+        pollMs: 1000,
+      }),
     ),
   ).toMatchObject({ status: "pending" });
   expect(await Effect.runPromise(store.getNodeRuns("run"))).toMatchObject([

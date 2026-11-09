@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CommandExecutionError } from "@loopy/core";
+import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Schema } from "effect";
 import { executeLocalCommand } from "../../runtime/src/local/process";
 import { filesystem } from "../../runtime/src/local/sandbox/io";

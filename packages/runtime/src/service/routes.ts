@@ -1,5 +1,6 @@
 import {
   type DaemonView,
+  type DashboardReader,
   DEFAULT_ERROR_MESSAGES,
   decodeBoundary,
   type ErrorCode,
@@ -46,7 +47,9 @@ export function errorResponse(code: ErrorCode, message = DEFAULT_ERROR_MESSAGES[
 export type RouteDependencies = {
   service: Service;
   onError?: (cause: Cause.Cause<unknown>) => void;
-  store: Pick<Store, "getLogs" | "runningCount" | "nextWakeAt"> & EventReader;
+  store: Pick<Store, "getLogs" | "nextWakeAt"> &
+    Pick<DashboardReader, "runningCount"> &
+    EventReader;
   cwd: string;
   daemon: Pick<DaemonView, "pid" | "startedAt" | "concurrency">;
 };

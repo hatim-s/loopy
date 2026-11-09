@@ -1,55 +1,32 @@
-import { createHash } from "node:crypto";
-import { cp, lstat, mkdir, readdir, readFile, symlink } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import { routes } from "@loopy/contract";
-import { catalogSchema } from "../playground/repository";
-import {
-  cli,
-  environment,
-  home,
-  port,
-  root,
-  selected,
-  source,
-  state,
-  upstream,
-  writeEvidence,
-} from "./config";
+import { decodeBoundary, routes } from "@loopy/contract";
+import { catalogSchema, regularFiles } from "../playground/repository";
+import { sha256Hex } from "../shared/hash";
+import { root } from "../stack/constants";
+import { cli, environment, evidencePath, home, port, source, state, upstream } from "./config";
 import { OwnedDaemon } from "./daemon";
+import { DAEMON, PLANNED_RUNS, selected } from "./plan";
 
-export async function treeFiles(directory: string): Promise<string[]> {
-  const files: string[] = [];
-
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...(await treeFiles(path)));
-    } else if (entry.isFile()) {
-      files.push(path);
-    } else {
-      throw new Error(`Frozen source contains an unsupported entry: ${path}`);
-    }
-  }
-
-  return files.sort();
+// Retained evidence records hashes over full-path order, so the listing is re-sorted that way.
+export async function sortedFiles(directory: string) {
+  return (await regularFiles(directory)).sort();
 }
 
 export async function frozenHash(directory: string) {
-  const hash = createHash("sha256");
+  const parts: Uint8Array[] = [];
 
-  for (const path of await treeFiles(join(directory, "fixtures"))) {
-    hash.update(`${relative(directory, path)}\0`);
-    hash.update(await readFile(path));
+  for (const path of await sortedFiles(join(directory, "fixtures"))) {
+    parts.push(new TextEncoder().encode(`${relative(directory, path)}\0`), await readFile(path));
   }
 
-  return hash.digest("hex");
+  return sha256Hex(Buffer.concat(parts));
 }
 
 export async function selections() {
   return Promise.all(
     selected.map(async ({ group, slug }) => {
-      const catalog = catalogSchema.parse(
+      const catalog = decodeBoundary(catalogSchema)(
         JSON.parse(await readFile(join(source, "fixtures", group, "modules/catalog.json"), "utf8")),
       );
 
@@ -156,16 +133,18 @@ export async function prepare() {
       sourceHash: await frozenHash(source),
       selections: selection,
       revisions,
-      plannedRuns: 45,
+      plannedRuns: PLANNED_RUNS,
       performedRuns: 0,
       mode: "actual Bun daemon with sandbox-exec on host OS",
       port,
-      concurrency: 4,
-      leaseMs: 2000,
+      ...DAEMON,
     };
 
-    await Bun.write(resolve(state, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-    await writeEvidence("-preflight", manifest);
+    const json = `${JSON.stringify(manifest, null, 2)}\n`;
+
+    // Preflight evidence is retained history, so a rerun must not overwrite it.
+    await writeFile(evidencePath("-preflight"), json, { flag: "wx" });
+    await Bun.write(resolve(state, "manifest.json"), json);
   } finally {
     await daemon.stop();
   }

@@ -1,11 +1,10 @@
-import type { PutScheduleBody, ScheduleView } from "@loopy/contract";
+import { describeCron, type PutScheduleBody, type ScheduleView } from "@loopy/contract";
 import { type ReactNode, useState } from "react";
 import { BackendError } from "../../backend/backend";
-import { describeCron } from "../../lib/cron";
-import { parseJsonInput } from "../../lib/input-form";
 import { useSaveSchedule } from "../../lib/mutations";
 import { Button } from "../button";
-import { ResolveError } from "../resolve-form";
+import { CodedError } from "../error-banner";
+import { JsonField, useJsonText } from "../json-field";
 
 export type ScheduleDraft = Pick<ScheduleView, "cron" | "tz" | "input" | "enabled">;
 
@@ -53,9 +52,9 @@ export function ScheduleForm({
   const save = useSaveSchedule(slug, workspace);
   const [cron, setCron] = useState(draft.cron);
   const [tz, setTz] = useState(draft.tz);
-  const [inputText, setInputText] = useState(() => JSON.stringify(draft.input, null, 2));
+  const inputJson = useJsonText(JSON.stringify(draft.input, null, 2));
   const [enabled, setEnabled] = useState(draft.enabled);
-  const input = parseJsonInput(inputText);
+  const input = inputJson.parsed;
   const reading = describeCron(cron);
   const field = rejectedField(save.error);
   const errorAt = (name: Field) => (field === name ? save.error : null);
@@ -94,17 +93,13 @@ export function ScheduleForm({
         <FieldError error={errorAt("tz")} />
       </Labelled>
       <div className="sm:col-span-2">
-        <Labelled label="Input, as JSON. Each fire starts a run with it.">
-          <textarea
-            value={inputText}
-            onChange={(event) => setInputText(event.target.value)}
-            rows={3}
-            spellCheck={false}
-            aria-invalid={!input.valid || field === "input"}
-            className="field"
-          />
-        </Labelled>
-        {!input.valid && <span className="text-xs text-danger">The input is not valid JSON.</span>}
+        <JsonField
+          label="Input, as JSON. Each fire starts a run with it."
+          noun="input"
+          json={inputJson}
+          rows={3}
+          rejected={field === "input"}
+        />
         <FieldError error={errorAt("input")} />
       </div>
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
@@ -125,7 +120,7 @@ export function ScheduleForm({
       </div>
       {save.error && field === undefined && (
         <div className="sm:col-span-2">
-          <ResolveError error={save.error} />
+          <CodedError error={save.error} />
         </div>
       )}
     </form>

@@ -1,8 +1,8 @@
-import { descriptorCommand } from "../../descriptor";
+import { builtin } from "../../graph/nodes/command";
 import { parseBranch, parseRemote, parseTag } from "../parse/git";
 
 export const change = {
-  add: descriptorCommand({
+  add: builtin({
     namespace: "git",
     name: "add",
     program: "git",
@@ -16,7 +16,7 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  commit: descriptorCommand({
+  commit: builtin({
     namespace: "git",
     name: "commit",
     program: "git",
@@ -34,7 +34,7 @@ export const change = {
     positionals: [{ name: "paths", optional: true, variadic: true }],
     positionalSeparator: true,
   }),
-  push: descriptorCommand({
+  push: builtin({
     namespace: "git",
     name: "push",
     program: "git",
@@ -51,7 +51,7 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  pull: descriptorCommand({
+  pull: builtin({
     namespace: "git",
     name: "pull",
     program: "git",
@@ -63,7 +63,7 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  fetch: descriptorCommand({
+  fetch: builtin({
     namespace: "git",
     name: "fetch",
     program: "git",
@@ -77,7 +77,7 @@ export const change = {
     style: "equals",
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  checkout: descriptorCommand({
+  checkout: builtin({
     namespace: "git",
     name: "checkout",
     program: "git",
@@ -90,7 +90,7 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  switch: descriptorCommand({
+  switch: builtin({
     namespace: "git",
     name: "switch",
     program: "git",
@@ -102,57 +102,63 @@ export const change = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  branch: descriptorCommand({
-    parse: parseBranch,
-    exclude: ["showCurrent", "delete", "force"],
-    preset: {
-      flags: {
-        format:
-          "%(refname:short)%00%(HEAD)%00%(upstream:short)%00%(objectname)%00%(upstream:track)",
+  branch: builtin(
+    {
+      exclude: ["showCurrent", "delete", "force"],
+      preset: {
+        flags: {
+          format:
+            "%(refname:short)%00%(HEAD)%00%(upstream:short)%00%(objectname)%00%(upstream:track)",
+        },
       },
+      namespace: "git",
+      name: "branch",
+      program: "git",
+      path: ["branch"],
+      flags: {
+        all: { cli: "--all", kind: "boolean" },
+        delete: { cli: "--delete", kind: "boolean" },
+        force: { cli: "--force", kind: "boolean" },
+        remote: { cli: "--remotes", kind: "boolean" },
+        format: { cli: "--format", kind: "string" },
+        showCurrent: { cli: "--show-current", kind: "boolean" },
+      },
+      style: "equals",
+      positionals: [{ name: "paths", optional: true, variadic: true }],
     },
-    namespace: "git",
-    name: "branch",
-    program: "git",
-    path: ["branch"],
-    flags: {
-      all: { cli: "--all", kind: "boolean" },
-      delete: { cli: "--delete", kind: "boolean" },
-      force: { cli: "--force", kind: "boolean" },
-      remote: { cli: "--remotes", kind: "boolean" },
-      format: { cli: "--format", kind: "string" },
-      showCurrent: { cli: "--show-current", kind: "boolean" },
+    { parse: parseBranch, out: { kind: "value", type: "json[]" } },
+  ),
+  remote: builtin(
+    {
+      preset: { flags: { verbose: true } },
+      namespace: "git",
+      name: "remote",
+      program: "git",
+      path: ["remote"],
+      flags: {
+        verbose: { cli: "-v", kind: "boolean" },
+      },
+      positionals: [{ name: "paths", optional: true, variadic: true }],
     },
-    style: "equals",
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-  remote: descriptorCommand({
-    parse: parseRemote,
-    preset: { flags: { verbose: true } },
-    namespace: "git",
-    name: "remote",
-    program: "git",
-    path: ["remote"],
-    flags: {
-      verbose: { cli: "-v", kind: "boolean" },
+    { parse: parseRemote, out: { kind: "value", type: "json[]" } },
+  ),
+  tag: builtin(
+    {
+      exclude: ["delete", "annotate", "message"],
+      preset: { flags: { format: "%(refname:short)%00%(objectname)%00%(taggerdate:iso-strict)" } },
+      namespace: "git",
+      name: "tag",
+      program: "git",
+      path: ["tag"],
+      flags: {
+        list: { cli: "--list", kind: "boolean" },
+        delete: { cli: "--delete", kind: "boolean" },
+        annotate: { cli: "--annotate", kind: "boolean" },
+        message: { cli: "-m", kind: "string" },
+        format: { cli: "--format", kind: "string" },
+      },
+      positionals: [{ name: "paths", optional: true, variadic: true }],
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
-  tag: descriptorCommand({
-    parse: parseTag,
-    exclude: ["delete", "annotate", "message"],
-    preset: { flags: { format: "%(refname:short)%00%(objectname)%00%(taggerdate:iso-strict)" } },
-    namespace: "git",
-    name: "tag",
-    program: "git",
-    path: ["tag"],
-    flags: {
-      list: { cli: "--list", kind: "boolean" },
-      delete: { cli: "--delete", kind: "boolean" },
-      annotate: { cli: "--annotate", kind: "boolean" },
-      message: { cli: "-m", kind: "string" },
-      format: { cli: "--format", kind: "string" },
-    },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
-  }),
+    { parse: parseTag, out: { kind: "value", type: "json[]" } },
+  ),
 };

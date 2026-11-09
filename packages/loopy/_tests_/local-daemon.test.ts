@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { daemonUrl, localDaemon, openRunStore, readDaemonFile } from "@loopy/runtime/local";
 import { Effect, Exit, Scope } from "effect";
+import { removeDaemonFile, writeDaemonFile } from "../../runtime/src/local/daemon/file";
 
 const roots: string[] = [];
 
@@ -240,4 +241,51 @@ test("an already published daemon starts again without touching a contested star
       }),
     ),
   );
+});
+
+test("discovery cleanup never removes another daemon token", () => {
+  const home = directory();
+  writeDaemonFile(home, {
+    pid: process.pid,
+    port: 4310,
+    token: "fixture-token",
+    startedAt: new Date().toISOString(),
+  });
+  removeDaemonFile(home, "different-token");
+  expect(readDaemonFile(home)?.token).toBe("fixture-token");
+  removeDaemonFile(home, "fixture-token");
+  expect(readDaemonFile(home)).toBeUndefined();
+});
+
+test("ui refuses an explicit port that differs from the running daemon", async () => {
+  const home = directory();
+  writeDaemonFile(home, {
+    pid: process.pid,
+    port: 4999,
+    token: "fixture-token",
+    startedAt: new Date().toISOString(),
+  });
+
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      resolve(import.meta.dir, "../../cli/src/index.ts"),
+      "--home",
+      home,
+      "ui",
+      "--port",
+      "5000",
+    ],
+    {
+      cwd: home,
+      env: { PATH: process.env.PATH, HOME: home, TMPDIR: home, LOOPY_HOME: home },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+
+  expect(await new Response(child.stderr).text()).toContain(
+    "A daemon is already running on port 4999.",
+  );
+  expect(await child.exited).toBe(1);
 });

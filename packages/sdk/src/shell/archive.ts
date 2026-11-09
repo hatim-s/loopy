@@ -1,7 +1,7 @@
-import { descriptorCommand } from "../descriptor";
+import { builtin } from "../graph/nodes/command";
 
 export const archive = {
-  tar: descriptorCommand({
+  tar: builtin({
     namespace: "archive",
     name: "tar",
     program: "tar",
@@ -17,7 +17,7 @@ export const archive = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  gzip: descriptorCommand({
+  gzip: builtin({
     namespace: "archive",
     name: "gzip",
     program: "gzip",
@@ -30,7 +30,7 @@ export const archive = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  zip: descriptorCommand({
+  zip: builtin({
     namespace: "archive",
     name: "zip",
     program: "zip",
@@ -42,7 +42,7 @@ export const archive = {
     },
     positionals: [{ name: "paths", optional: true, variadic: true }],
   }),
-  unzip: descriptorCommand({
+  unzip: builtin({
     namespace: "archive",
     name: "unzip",
     program: "unzip",

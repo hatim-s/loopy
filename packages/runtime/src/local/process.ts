@@ -2,13 +2,9 @@ import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { CommandResult, ExecutionMode } from "@loopy/core";
-import {
-  CommandExecutionError,
-  errnoCode,
-  type ResolvedCommand,
-  requirePositiveInteger,
-} from "@loopy/core";
+import { errnoCode, requirePositiveInteger } from "@loopy/core";
 import { Data, Effect, Exit } from "effect";
+import { CommandExecutionError, type ResolvedCommand } from "./command-error";
 import type { ProcessFilesystemError } from "./sandbox/io";
 import { filesystem } from "./sandbox/io";
 import { sandboxLauncher } from "./sandbox/launcher";

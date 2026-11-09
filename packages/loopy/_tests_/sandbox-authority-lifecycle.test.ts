@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SandboxExecutionResult } from "@loopy/contract";
+import type { ExecutionResult } from "@loopy/contract";
 import { Effect } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
+import { stateLayout } from "../../../apps/sandbox/src/state-root";
 import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
 import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
@@ -17,7 +18,7 @@ class FaultAuthority extends FilesystemAuthority {
   unavailable = false;
   failBeforeCommit = false;
   reads = 0;
-  drops = 0;
+  readonly dropped = Promise.withResolvers<void>();
   override read(id: string) {
     const baseread = super.read.bind(this);
 
@@ -45,8 +46,8 @@ class FaultAuthority extends FilesystemAuthority {
 
       if (this.drop) {
         this.drop = false;
-        this.drops++;
         this.unavailable = true;
+        this.dropped.resolve();
 
         return yield* Effect.fail(failure("fixture", new Error("Acknowledgement dropped")));
       }
@@ -56,22 +57,10 @@ class FaultAuthority extends FilesystemAuthority {
   }
 }
 
-async function eventually(predicate: () => boolean) {
-  for (let index = 0; index < 200; index++) {
-    if (predicate()) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-
-  throw new Error("Expected bounded reconciliation progress.");
-}
-
 test("lost admission acknowledgement and unavailable resolving reads retain one same-session start gate", async () => {
   const { config, request, resultsFor } = await fixture();
   const authority = new FaultAuthority(config.stateRoot);
-  const complete = Promise.withResolvers<SandboxExecutionResult>();
+  const complete = Promise.withResolvers<ExecutionResult>();
   let starts = 0;
   let recoveries = 0;
 
@@ -98,7 +87,7 @@ test("lost admission acknowledgement and unavailable resolving reads retain one 
 
   authority.drop = true;
   const first = run(service.start(request));
-  await eventually(() => authority.drops === 1);
+  await authority.dropped.promise;
   const second = run(service.start(request));
   expect(starts).toBe(0);
   authority.unavailable = false;
@@ -118,7 +107,9 @@ test("lost admission acknowledgement and unavailable resolving reads retain one 
   expect(starts).toBe(1);
   expect(recoveries).toBe(0);
   expect(
-    (await readdir(join(config.stateRoot, "receipts"))).filter((name) => name.endsWith(".json")),
+    (await readdir(stateLayout(config.stateRoot).receipts)).filter((name) =>
+      name.endsWith(".json"),
+    ),
   ).toHaveLength(1);
 });
 
@@ -182,7 +173,7 @@ test("shutdown ends unresolved admission before lock release and a successor onl
 
   authority.drop = true;
   const pending = run(first.start(request)).catch(() => undefined);
-  await eventually(() => authority.drops === 1);
+  await authority.dropped.promise;
   await run(first.close());
   await pending;
   await expect(run(first.start(request))).rejects.toThrow("stopping");
@@ -223,7 +214,7 @@ test("ambiguous admission resolved to another admitting session recovers without
         if (reply.kind === "created") {
           yield* Effect.promise(() =>
             writeFile(
-              join(config.stateRoot, "receipts", `${input.plan.id}.json`),
+              join(stateLayout(config.stateRoot).receipts, `${input.plan.id}.json`),
               JSON.stringify({ ...reply.record, session: { epoch: 1, nonce: "older-session" } }),
             ),
           );

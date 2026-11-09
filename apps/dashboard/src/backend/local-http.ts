@@ -1,7 +1,6 @@
 import { routes, type ServerEvent, serverEventSchema } from "@loopy/contract";
 import { Effect, Schema, Stream } from "effect";
 import { BackendError, type EventSubscription, type LoopyBackend, type StreamEnd } from "./backend";
-import { httpBaseUrl } from "./config";
 import { decodeBody, errorFrom, httpRequests, readText, runRequest } from "./http-wire";
 
 type Route = {
@@ -122,10 +121,9 @@ export function httpTransport(
   { baseUrl, token }: LocalHttpOptions,
   eventBatchSchema: Schema.Codec<ServerEvent[]> = batchSchema,
 ) {
-  const base = httpBaseUrl(baseUrl);
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-  const { withResponse, fetchText } = httpRequests(base, headers);
+  const { withResponse, fetchText } = httpRequests(baseUrl, headers);
 
   async function send<R extends Route>(
     route: R,

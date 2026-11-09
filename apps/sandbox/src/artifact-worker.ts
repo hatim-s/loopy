@@ -9,9 +9,8 @@ import {
   sandboxArtifactPathSchema,
 } from "@loopy/contract";
 import { errnoCode } from "@loopy/core";
-import { Effect, Result } from "effect";
-import { ArtifactError } from "./artifact-error";
-import { failure } from "./operations";
+import { CONTAINER } from "./container-layout";
+import { SandboxRequestError } from "./request-error";
 
 async function readArtifactFile(path: string): Promise<SandboxArtifact> {
   const directories = [];
@@ -19,7 +18,7 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
 
   try {
     let directory = await open(
-      "/workspace",
+      CONTAINER.workspace,
       constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
     );
 
@@ -28,7 +27,7 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
     const name = parts.pop();
 
     if (name === undefined) {
-      throw new ArtifactError("invalid_request", "Supply an artifact file path.");
+      throw new SandboxRequestError("invalid_request", "Supply an artifact file path.");
     }
 
     // Held directory descriptors pin every ancestor. O_NOFOLLOW prevents symlink substitution.
@@ -47,14 +46,14 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
     const before = await file.stat();
 
     if (!before.isFile()) {
-      throw new ArtifactError(
+      throw new SandboxRequestError(
         "invalid_request",
         "Artifact must be a regular file without symlinks.",
       );
     }
 
     if (before.size > SANDBOX_MAX_ARTIFACT_BYTES) {
-      throw new ArtifactError("output_limit", "Artifact exceeds the 1 MiB byte limit.");
+      throw new SandboxRequestError("output_limit", "Artifact exceeds the 1 MiB byte limit.");
     }
 
     const buffer = Buffer.alloc(SANDBOX_MAX_ARTIFACT_BYTES + 1);
@@ -71,7 +70,7 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
     }
 
     if (size > SANDBOX_MAX_ARTIFACT_BYTES) {
-      throw new ArtifactError("output_limit", "Artifact exceeds the 1 MiB byte limit.");
+      throw new SandboxRequestError("output_limit", "Artifact exceeds the 1 MiB byte limit.");
     }
 
     const after = await file.stat();
@@ -82,7 +81,7 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
       after.ctimeMs !== before.ctimeMs ||
       size !== after.size
     ) {
-      throw new ArtifactError(
+      throw new SandboxRequestError(
         "conflict",
         "Artifact changed during export. Export after the run is terminal.",
       );
@@ -105,31 +104,14 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
   }
 }
 
-export function readArtifact(path: string) {
-  return Effect.tryPromise({
-    try: () => readArtifactFile(path),
-    catch: (cause) => (cause instanceof ArtifactError ? cause : failure("artifact file", cause)),
-  }).pipe(Effect.uninterruptible);
-}
-
 if (import.meta.main) {
   let response: SandboxArtifactRead;
 
   try {
     const path = decodeBoundary(sandboxArtifactPathSchema)(process.argv[2]);
-    const read = await Effect.runPromise(readArtifact(path).pipe(Effect.result));
-
-    if (Result.isFailure(read)) {
-      throw read.failure instanceof ArtifactError
-        ? read.failure
-        : "cause" in read.failure
-          ? read.failure.cause
-          : read.failure;
-    }
-
-    response = { kind: "artifact", artifact: read.success };
+    response = { kind: "artifact", artifact: await readArtifactFile(path) };
   } catch (cause) {
-    if (cause instanceof ArtifactError) {
+    if (cause instanceof SandboxRequestError) {
       response = { kind: "error", error: { code: cause.code, message: cause.message } };
     } else {
       const missing = errnoCode(cause) === "ENOENT";

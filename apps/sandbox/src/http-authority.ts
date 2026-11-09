@@ -10,6 +10,7 @@ import {
 } from "@loopy/contract";
 import type { Schema } from "effect";
 import { Effect } from "effect";
+import { readBounded } from "./http-body";
 import { failure, type ImmutableResults, type SandboxAttemptAuthority } from "./operations";
 
 export class HttpSandboxAuthority implements SandboxAttemptAuthority {
@@ -76,37 +77,18 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
     });
   }
 
-  private async body(response: Response): Promise<string> {
+  private async body(response: Response) {
     if (!response.body) {
       throw new Error("Receipt authority returned an empty response.");
     }
 
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
+    const bytes = await readBounded(response.body, SANDBOX_MAX_REQUEST_BYTES);
 
-    try {
-      while (true) {
-        const next = await reader.read();
-
-        if (next.done) {
-          break;
-        }
-
-        size += next.value.byteLength;
-
-        if (size > SANDBOX_MAX_REQUEST_BYTES) {
-          await reader.cancel();
-          throw new Error("Receipt authority response exceeds 16 MiB.");
-        }
-
-        chunks.push(next.value);
-      }
-    } finally {
-      reader.releaseLock();
+    if (bytes === null) {
+      throw new Error("Receipt authority response exceeds 16 MiB.");
     }
 
-    return Buffer.concat(chunks).toString("utf8");
+    return bytes.toString("utf8");
   }
 
   status() {

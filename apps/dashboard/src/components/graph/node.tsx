@@ -7,8 +7,9 @@ import {
   useStoreApi,
 } from "@xyflow/react";
 import type { FocusEvent } from "react";
-import { type GraphNodeModel, isInFlight, type NodeState } from "../../lib/graph";
+import type { GraphNodeModel, NodeState } from "../../lib/graph";
 import { NODE_SIZE, nodeSize } from "../../lib/graph-layout";
+import { isInFlight, statusWord } from "../../lib/status";
 import { KindGlyph } from "./kind-glyph";
 
 export type FlowNode = Node<{ model: GraphNodeModel }, "loopy">;
@@ -28,13 +29,11 @@ function spokenState(state: NodeState): string {
     return IDLE_TEXT[state.reason];
   }
 
-  return state.kind === "ran" ? state.status.replace("_", " ") : "saved definition";
+  return state.kind === "ran" ? statusWord(state.status).toLowerCase() : "saved definition";
 }
 
-/**
- * The short read-out at the end of a node. In-flight work names its state. Settled work in a
- * map counts the executions that passed out of those that ran, leaving skipped arms out.
- */
+// Settled work in a map counts the executions that passed out of those that ran, so skipped arms
+// stay out of the count.
 function StateMark({ model }: { model: GraphNodeModel }) {
   const { state, executions } = model;
 
@@ -61,7 +60,7 @@ function StateMark({ model }: { model: GraphNodeModel }) {
     );
   }
 
-  return <span className="node-mark">{state.status.replace("_", " ")}</span>;
+  return <span className="node-mark">{statusWord(state.status).toLowerCase()}</span>;
 }
 
 const PLATE_W = NODE_SIZE.control.width;
@@ -70,7 +69,7 @@ const PLATE_H = NODE_SIZE.control.height;
 
 const PLATE = `M8 .75H${PLATE_W - 15}L${PLATE_W - 0.75} ${PLATE_H / 2}L${PLATE_W - 15} ${PLATE_H - 0.75}H8Q.75 ${PLATE_H - 0.75} .75 ${PLATE_H - 8}V8Q.75 .75 8 .75Z`;
 
-/** Control nodes draw as a signpost plate pointing down the line, so they never read as work. */
+// A signpost plate pointing down the line, so control nodes never read as work.
 function Plate() {
   return (
     <svg className="node-plate" viewBox={`0 0 ${PLATE_W} ${PLATE_H}`} aria-hidden="true">
@@ -160,7 +159,6 @@ function useRevealOnFocus(model: GraphNodeModel, x: number, y: number) {
   };
 }
 
-/** A button so keyboard users can inspect the node. Its click reaches the canvas's onNodeClick. */
 export function GraphNode(props: NodeProps<FlowNode>) {
   const {
     data: { model },

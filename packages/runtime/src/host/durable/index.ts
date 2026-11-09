@@ -1,40 +1,17 @@
 import {
-  type ExecutionKey,
-  type ExecutionSpec,
   type Graph,
   OwnershipError,
-  type Receipt,
   type RunOutcome,
   type RunRecord,
-  requirePositiveInteger,
   type Store,
 } from "@loopy/core";
-import { type EngineEvent, initialState, step } from "@loopy/core/engine";
-import { Data, Effect } from "effect";
-import { planActivation } from "../activation/plan";
+import { Effect } from "effect";
+import { commitTurn, type HostWork, workId } from "../turn";
+import type { DurableExecutionProvider } from "./provider";
 import { durableWakeAt } from "./wake";
-import { type DurableWork, durableWorkId, reconcileDurableWork } from "./work";
+import { reconcileDurableWork } from "./work";
 
-export class DurableProviderError extends Data.TaggedError("DurableProviderError")<{
-  operation: "lookup" | "start";
-  reason: "transport" | "protocol";
-  message: string;
-  cause: unknown;
-}> {}
-
-/** Receipts are durable and keyed by the complete execution key and attempt.
- * start atomically deduplicates that identity and returns promptly, without waiting
- * for execution. lookup reports started while work lives, or a finished uncertain
- * result if its worker disappears. A transport failure fails with DurableProviderError instead of returning none.
- */
-export interface DurableExecutionProvider {
-  lookup(key: ExecutionKey, attempt: number): Effect.Effect<Receipt, DurableProviderError>;
-  start(
-    key: ExecutionKey,
-    attempt: number,
-    spec: ExecutionSpec,
-  ): Effect.Effect<Receipt, DurableProviderError>;
-}
+export { type DurableExecutionProvider, DurableProviderError } from "./provider";
 
 export type DurableActivationOptions = {
   store: Store;
@@ -45,8 +22,8 @@ export type DurableActivationOptions = {
   token: string;
   at: string;
   /** Maximum dispatch/receipt checks and samples. Each can commit one completion transition. */
-  maxWork?: number;
-  pollMs?: number;
+  maxWork: number;
+  pollMs: number;
   /** Persist the returned cursor to fairly reconcile graphs wider than maxWork. */
   cursor?: string | null;
 };
@@ -105,56 +82,39 @@ function own(store: Store, run: RunRecord, token: string) {
  */
 export function activateDurable(options: DurableActivationOptions) {
   return Effect.gen(function* () {
-    const { store, graph, runId, token, at } = options;
-    const maxWork = requirePositiveInteger(options.maxWork ?? 32, "maxWork");
-    const pollMs = requirePositiveInteger(options.pollMs ?? 1000, "pollMs");
-    const now = Date.parse(at);
+    const { store, graph, runId, token, at, maxWork, pollMs } = options;
+    const stored = yield* store.getRun(runId);
 
-    if (!Number.isFinite(now)) {
-      return yield* Effect.die(new Error("Activation time is invalid. Supply an ISO timestamp."));
-    }
-
-    let run = yield* store.getRun(runId);
-
-    if (!run) {
+    if (!stored) {
       return yield* Effect.die(
         new Error(`Run '${runId}' does not exist. Create the run before activating it.`),
       );
     }
 
-    const terminal = finished(run);
+    const terminal = finished(stored);
 
     if (terminal) {
-      if (run.owner?.token === token) {
+      if (stored.owner?.token === token) {
         yield* store.release(runId, token);
       }
 
       return terminal;
     }
 
-    run = yield* own(store, run, token);
-
-    const queue = new Map<string, DurableWork>();
+    const run = yield* own(store, stored, token);
+    const turn = { store, graph, runId, token, input: run.input };
+    const queue = new Map<string, HostWork>();
     let cursor = options.cursor ?? null;
-    const input = run.input;
 
-    const commit = (event: EngineEvent) =>
+    const commit = (event: Parameters<typeof commitTurn>[1]) =>
       Effect.gen(function* () {
-        const state = initialState(runId, input, yield* store.getNodeRuns(runId));
-        const transition = step(graph, state, event);
+        const { disposition, work } = yield* commitTurn(turn, event);
 
-        const plan = planActivation(transition);
-
-        // Persist the whole transition before any provider work, even beyond this turn's budget.
-        yield* store.apply({ runId, token, effects: plan.storeEffects });
-
-        for (const effect of plan.work) {
-          if (effect.kind !== "schedule_retry") {
-            queue.set(durableWorkId(effect), effect);
-          }
+        for (const effect of work) {
+          queue.set(workId(effect), effect);
         }
 
-        return plan.disposition;
+        return disposition;
       });
 
     let disposition = yield* commit({ kind: "run_started", at });
@@ -171,10 +131,7 @@ export function activateDurable(options: DurableActivationOptions) {
       queue.delete(id);
       cursor = id;
 
-      const event = yield* reconcileDurableWork({
-        ...options,
-        work,
-      });
+      const event = yield* reconcileDurableWork({ ...options, work });
 
       if (event) {
         disposition = yield* commit(event);
@@ -206,7 +163,7 @@ export function activateDurable(options: DurableActivationOptions) {
     const nextWakeAt = durableWakeAt({
       nodes: yield* store.getNodeRuns(runId),
       remaining: queue.values(),
-      now,
+      now: Date.parse(at),
       pollMs,
       leaseMs: store.leaseMs,
     });

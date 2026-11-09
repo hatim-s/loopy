@@ -1,11 +1,12 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import { type NodeRun, type StoreEffect } from "@loopy/core";
 import { makeLocalService, Registry } from "@loopy/runtime/local";
 import { Effect } from "effect";
 import { fixtureSqlite, fixtureStore } from "./fixtures/service-runtime";
+import { runAt } from "./store-fixture";
 
 export async function largeMapFixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-dashboard-10k-map-")));
@@ -15,7 +16,7 @@ export async function largeMapFixture() {
   const source = join(root, "reindex-docs.loopy.ts");
   writeFileSync(
     source,
-    `import {loopy,map,code} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))};
+    `import {loopy,map,code} from "loopy";
 export default loopy("reindex-docs", {
   description: "Synthetic completed 10,000-item fixture. No engine or provider calls.",
   input: {items:"string[]"},
@@ -36,11 +37,12 @@ export default loopy("reindex-docs", {
 
   const registry = await Effect.runPromise(Registry.make(home, root));
   let now = Date.parse("2026-10-22T06:00:00.000Z");
-  const store = await fixtureSqlite(join(home, "runs.sqlite"), () => now);
+  const store = await fixtureSqlite(join(home, "runs.sqlite"));
+  const onClock = runAt(() => now);
 
   const service = makeLocalService({
     store,
-    clock: { ...{ now: Date.now }, now: () => now },
+    clock: { now: () => now },
     home: home,
     cwd: root,
   });
@@ -73,7 +75,7 @@ export default loopy("reindex-docs", {
     throw new Error("Fixture graph lacks its map/code nodes.");
   }
 
-  await Effect.runPromise(
+  await onClock(
     store.createRun({
       id: runId,
       slug: "reindex-docs",
@@ -85,7 +87,7 @@ export default loopy("reindex-docs", {
       updatedAt: at,
     }),
   );
-  await Effect.runPromise(store.claim(runId, "synthetic-owner"));
+  await onClock(store.claim(runId, "synthetic-owner"));
   const started = performance.now();
 
   for (let base = 0; base < items.length; base += 500) {
@@ -116,7 +118,7 @@ export default loopy("reindex-docs", {
       ];
     });
 
-    await Effect.runPromise(store.apply({ runId, token: "synthetic-owner", effects }));
+    await onClock(store.apply({ runId, token: "synthetic-owner", effects }));
   }
 
   const rootEffects: StoreEffect[] = compiled.graph.nodes
@@ -136,7 +138,7 @@ export default loopy("reindex-docs", {
     }));
 
   now = Date.parse("2026-10-22T06:01:00.000Z");
-  await Effect.runPromise(
+  await onClock(
     store.apply({
       runId,
       token: "synthetic-owner",
@@ -150,7 +152,7 @@ export default loopy("reindex-docs", {
       ],
     }),
   );
-  await Effect.runPromise(store.release(runId, "synthetic-owner"));
+  await onClock(store.release(runId, "synthetic-owner"));
 
   return {
     root,
@@ -181,7 +183,7 @@ export async function manyRunsFixture() {
   const source = join(root, "queue-drain.loopy.ts");
   writeFileSync(
     source,
-    `import {loopy} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))};\nexport default loopy("queue-drain",{input:{},run:()=>null});\n`,
+    `import {loopy} from "loopy";\nexport default loopy("queue-drain",{input:{},run:()=>null});\n`,
   );
   const compiled = await Effect.runPromise(compile(source));
 

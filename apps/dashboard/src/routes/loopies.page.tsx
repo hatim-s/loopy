@@ -7,7 +7,7 @@ import { Load, Note } from "../components/ui/load";
 import { Segmented } from "../components/ui/segmented";
 import { RunPill, StatusPill } from "../components/ui/status";
 import { useClock } from "../lib/clock";
-import { ago } from "../lib/format";
+import { ago, countTotal } from "../lib/format";
 import {
   LOOPY_FILTERS,
   LOOPY_SORTS,
@@ -116,7 +116,7 @@ function LoopyRows({ rows, now }: { rows: LoopyRow[]; now: number }) {
         <tbody>
           {rows.map((loopy) => {
             const rate = successRate(loopy.counts);
-            const total = Object.values(loopy.counts).reduce((sum, count) => sum + count, 0);
+            const total = countTotal(loopy.counts);
 
             return (
               <tr key={`${loopy.workspace}:${loopy.slug}`} className="[&>td]:h-14">

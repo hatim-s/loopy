@@ -1,26 +1,23 @@
 import {
+  counter,
   EXECUTION_MODES,
-  FIELD_TYPES,
   HOOK_EVENT_KINDS,
+  hookRecordSchema,
+  jsonSchema,
   LOOPY_SCOPES,
+  logRecordSchema,
   NODE_RUN_STATUSES,
+  nodeRunSchema,
+  positiveInt,
   RUN_EVENT_KINDS,
+  recordSpecSchema,
+  runStatusSchema,
   SCHEDULE_EVENT_KINDS,
-  STEP_STATUSES,
+  scheduleSchema,
+  struct,
 } from "@loopy/core";
 import { Schema } from "effect";
-import { struct } from "./codec";
-
 import { scopeCountsSchema } from "./dashboard";
-import { nodeRunViewSchema } from "./graph";
-import { jsonSchema } from "./json";
-import {
-  hookRecordSchema,
-  logRecordSchema,
-  runStatusSchema,
-  scheduleSchema,
-  stepRecordSchema,
-} from "./records";
 
 const runBaseSchema = struct({
   id: Schema.String,
@@ -29,16 +26,13 @@ const runBaseSchema = struct({
   loopy: struct({ slug: Schema.String, description: Schema.NullOr(Schema.String) }),
   input: jsonSchema,
   truncatedFields: Schema.optional(
-    struct({
-      input: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-      output: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-    }),
+    struct({ input: Schema.optional(counter), output: Schema.optional(counter) }),
   ),
   createdAt: Schema.String,
   updatedAt: Schema.String,
   owner: Schema.NullOr(
     struct({
-      pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+      pid: Schema.NullOr(counter),
       host: Schema.String,
       heartbeatAt: Schema.String,
     }),
@@ -48,7 +42,7 @@ const runBaseSchema = struct({
     struct({
       hook: Schema.String,
       token: Schema.String,
-      seq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      seq: counter,
       expiresAt: Schema.NullOr(Schema.String),
       since: Schema.String,
     }),
@@ -79,16 +73,12 @@ export type ScheduleView = Schema.Schema.Type<typeof scheduleViewSchema>;
 
 export const loopyViewSchema = struct({
   slug: Schema.String,
-  /** The project root whose registry resolved this entry. Graph and start requests send it back. */
-
+  // The project root whose registry resolved this entry; graph and start requests send it back.
   workspace: Schema.String,
   description: Schema.NullOr(Schema.String),
   scope: Schema.Literals(LOOPY_SCOPES),
   mode: Schema.Literals(EXECUTION_MODES),
-  input: Schema.Union([
-    Schema.Record(Schema.String, Schema.mutableKey(Schema.Literals(FIELD_TYPES))),
-    Schema.Literal("schema"),
-  ]),
+  input: Schema.Union([recordSpecSchema, Schema.Literal("schema")]),
   schedule: Schema.NullOr(
     struct({
       cron: Schema.String,
@@ -98,10 +88,7 @@ export const loopyViewSchema = struct({
     }),
   ),
   lastRun: Schema.NullOr(runViewSchema),
-  counts: Schema.Record(
-    runStatusSchema,
-    Schema.mutableKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  ),
+  counts: Schema.Record(runStatusSchema, Schema.mutableKey(counter)),
   latestRuns: Schema.optional(
     Schema.Array(runViewSchema).pipe(Schema.mutable).check(Schema.isMaxLength(10)),
   ),
@@ -111,33 +98,32 @@ export type LoopyView = Schema.Schema.Type<typeof loopyViewSchema>;
 
 export const runSnapshotViewSchema = struct({
   run: runViewSchema,
-  nodeRuns: Schema.Array(nodeRunViewSchema).pipe(Schema.mutable),
+  nodeRuns: Schema.Array(nodeRunSchema).pipe(Schema.mutable),
   scopes: Schema.optional(Schema.Array(scopeCountsSchema).pipe(Schema.mutable)),
   nodeRunsNext: Schema.optional(Schema.NullOr(Schema.String)),
   truncatedOutputs: Schema.optional(Schema.Record(Schema.String, Schema.mutableKey(Schema.Finite))),
   hooksTruncated: Schema.optional(Schema.Boolean),
-  steps: Schema.Array(stepRecordSchema).pipe(Schema.mutable),
   logs: Schema.Array(logRecordSchema).pipe(Schema.mutable),
   hooks: Schema.Array(hookRecordSchema).pipe(Schema.mutable),
-  cursor: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  cursor: counter,
   epoch: Schema.String,
 });
 
 export type RunSnapshotView = Schema.Schema.Type<typeof runSnapshotViewSchema>;
 
 export const daemonViewSchema = struct({
-  pid: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  pid: Schema.NullOr(counter),
   startedAt: Schema.String,
-  concurrency: Schema.Int.check(Schema.isGreaterThan(0)),
-  running: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  concurrency: positiveInt,
+  running: counter,
   nextWakeAt: Schema.NullOr(Schema.String),
 });
 
 export type DaemonView = Schema.Schema.Type<typeof daemonViewSchema>;
 
 const eventBaseSchema = struct({
-  truncatedOutputBytes: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-  sequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  truncatedOutputBytes: Schema.optional(counter),
+  sequence: counter,
   at: Schema.String,
   txn: Schema.String,
   runId: Schema.NullOr(Schema.String),
@@ -154,13 +140,7 @@ export const serverEventSchema = Schema.Union([
     ...eventBaseSchema.fields,
     entity: Schema.Literal("node"),
     kind: Schema.Literals(NODE_RUN_STATUSES),
-    record: nodeRunViewSchema,
-  }),
-  struct({
-    ...eventBaseSchema.fields,
-    entity: Schema.Literal("step"),
-    kind: Schema.Literals(STEP_STATUSES),
-    record: stepRecordSchema,
+    record: nodeRunSchema,
   }),
   struct({
     ...eventBaseSchema.fields,
@@ -193,7 +173,7 @@ export const serverEventSchema = Schema.Union([
 export type ServerEvent = Schema.Schema.Type<typeof serverEventSchema>;
 
 export const cursorViewSchema = struct({
-  cursor: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  cursor: counter,
   epoch: Schema.String,
 });
 

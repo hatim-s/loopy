@@ -120,7 +120,7 @@ export default loopy("packed", {input: {}, run: () => {
     );
     await Bun.write(join(fixture, "answer.ts"), "export default () => 42;");
     await run([
-      "node_modules/loopy/dist/loopy/src/cli.js",
+      "node_modules/loopy/dist/cli/src/index.js",
       "--home",
       home,
       "--cwd",
@@ -161,15 +161,19 @@ await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     replace: false, source: {path: ${JSON.stringify(join(fixture, "entry.ts"))}, workspace: cwd},
   });
   const run = yield* service.startRun("packed", {}, cwd);
-  yield* daemon.tick;
-  const snapshot = yield* service.runSnapshot(run.id);
+  yield* Effect.forkScoped(daemon.run);
+  let snapshot = yield* service.runSnapshot(run.id);
+  for (let attempt = 0; attempt < 600 && (snapshot.run.status === "queued" || snapshot.run.status === "running"); attempt++) {
+    yield* Effect.sleep(50);
+    snapshot = yield* service.runSnapshot(run.id);
+  }
   if (snapshot.run.status !== "succeeded" || snapshot.run.output !== 42) {
     throw new Error(JSON.stringify(snapshot));
   }
 })));
 const home = ${JSON.stringify(home)};
 try {
-  const cli = Bun.spawn([process.execPath, "--no-env-file", "node_modules/loopy/dist/loopy/src/cli.js", "--home", home, "--cwd", ${JSON.stringify(fixture)}, "list"], {
+  const cli = Bun.spawn([process.execPath, "--no-env-file", "node_modules/loopy/dist/cli/src/index.js", "--home", home, "--cwd", ${JSON.stringify(fixture)}, "list"], {
     stdout: "pipe", stderr: "pipe",
   });
   const [stdout, stderr, exit] = await Promise.all([

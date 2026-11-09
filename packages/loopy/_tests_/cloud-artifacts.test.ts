@@ -199,7 +199,7 @@ function artifact(hash: string, content: string): SourceArtifact {
 }
 
 async function executable(workspace: string): Promise<PutLoopyBody> {
-  const { graph } = loopy("executable", {
+  const graph = loopy("executable", {
     input: {},
     run: () =>
       code("execute", { in: {}, module: "./entry.ts", out: { kind: "value", type: "string" } }),
@@ -432,7 +432,7 @@ test("aggregate capacity rejects new and replacement pointers while existing ope
     body: { error: capacityError },
   });
   expect(await call(workspace, "get", "definition-3")).toMatchObject({
-    body: { value: { description } },
+    body: { value: { graph: { meta: { description } } } },
   });
   expect(await call(workspace, "save", equalReplacement)).toMatchObject({ status: 200 });
   expect(await call(workspace, "get", "definition-0")).toMatchObject({

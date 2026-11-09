@@ -1,6 +1,8 @@
 import { type ExecutionPage, routes } from "@loopy/contract";
 import { Effect } from "effect";
-import { assert, equal, type Journey } from "./client";
+import { assert, equal } from "../shared/assert";
+import { compileFixture } from "../shared/fixture-client";
+import type { Journey } from "./client";
 
 export async function pages(journey: Journey, runId: string) {
   const query = `slug=cloud-journey-execution&workspace=fixtures&limit=1`;
@@ -121,7 +123,7 @@ export async function isolation(journey: Journey, runId: string) {
     method: "POST",
     body: { input: { name: "fixture", chooseYes: true, items: [] }, workspace: "other" },
   });
-  const compiled = await Effect.runPromise(journey.compiled("execution.ts"));
+  const compiled = await Effect.runPromise(compileFixture("execution.ts"));
   await journey.denied(`/loopies/${compiled.graph.name}`, 403, "forbidden", {
     method: "PUT",
     body: { ...compiled, source: { ...compiled.source, workspace: "other" } },

@@ -1,7 +1,36 @@
-import { isFieldValue } from "./field-value";
-import type { Graph, InputValidation, RecordSpec } from "./graph";
-import type { Json } from "./model";
+import { type Graph, type InputValidation, UNKNOWN_KEY_MODES } from "./graph";
+import type { RecordSpec } from "./graph/values";
+import type { Json } from "./json";
+import { matchesRecordSpec, recordField, recordFields } from "./record-spec";
 import { isNumber, isRecord, requireOneOf, requireRecord } from "./validation";
+
+function minimumIssue(key: string) {
+  return `Input minimum '${key}' requires an array field and a nonnegative integer.`;
+}
+
+/** Checks the rules a decoded validation must meet against its record fields. */
+export function inputValidationIssue(validation: InputValidation, fields: RecordSpec) {
+  for (const [key, minimum] of Object.entries(validation.minItems)) {
+    if (
+      !recordField(fields, key)?.endsWith("[]") ||
+      !Number.isSafeInteger(minimum) ||
+      minimum < 0
+    ) {
+      return minimumIssue(key);
+    }
+  }
+
+  if (
+    validation.root === "json" &&
+    (validation.unknownKeys !== "passthrough" ||
+      Object.keys(validation.minItems).length > 0 ||
+      recordFields(fields).some(({ optional, kind }) => !optional || kind !== "json"))
+  ) {
+    return "JSON input roots require passthrough, optional JSON field hints and no array constraints.";
+  }
+
+  return null;
+}
 
 // BOUNDARY: JavaScript builders can supply untyped validation options.
 export function parseInputValidation(value: unknown, fields: RecordSpec) {
@@ -15,50 +44,34 @@ export function parseInputValidation(value: unknown, fields: RecordSpec) {
     throw new Error("Input validation accepts minItems, unknownKeys and root only.");
   }
 
-  const unknownKeys = requireOneOf(
-    options.unknownKeys,
-    ["strip", "reject", "passthrough"] as const,
-    "Unknown input keys",
+  const unknownKeys = requireOneOf(options.unknownKeys, UNKNOWN_KEY_MODES, "Unknown input keys");
+
+  const minItems = Object.entries(requireRecord(options.minItems, "Input array minimums")).map(
+    ([key, minimum]) => {
+      if (!isNumber(minimum)) {
+        throw new Error(minimumIssue(key));
+      }
+
+      return [key, minimum] as const;
+    },
   );
 
-  const minItems = Object.fromEntries(
-    Object.entries(requireRecord(options.minItems, "Input array minimums")).map(
-      ([key, minimum]) => {
-        const field = fields[key] ?? fields[`${key}?`];
+  const validation: InputValidation = {
+    minItems: Object.fromEntries(minItems),
+    unknownKeys,
+    root:
+      options.root === undefined
+        ? undefined
+        : requireOneOf(options.root, ["json"] as const, "Input root"),
+  };
 
-        if (
-          !field?.endsWith("[]") ||
-          !isNumber(minimum) ||
-          !Number.isSafeInteger(minimum) ||
-          minimum < 0
-        ) {
-          throw new Error(
-            `Input minimum '${key}' requires an array field and a nonnegative integer.`,
-          );
-        }
+  const issue = inputValidationIssue(validation, fields);
 
-        return [key, minimum];
-      },
-    ),
-  );
-
-  const root =
-    options.root === undefined
-      ? undefined
-      : requireOneOf(options.root, ["json"] as const, "Input root");
-
-  if (
-    root === "json" &&
-    (unknownKeys !== "passthrough" ||
-      Object.keys(minItems).length > 0 ||
-      Object.entries(fields).some(([key, type]) => !key.endsWith("?") || type !== "json"))
-  ) {
-    throw new Error(
-      "JSON input roots require passthrough, optional JSON field hints and no array constraints.",
-    );
+  if (issue !== null) {
+    throw new Error(issue);
   }
 
-  return { minItems, unknownKeys, root } satisfies InputValidation;
+  return validation;
 }
 
 export function validateGraphInput(graph: Pick<Graph, "input" | "inputValidation">, input: Json) {
@@ -72,19 +85,12 @@ export function validateGraphInput(graph: Pick<Graph, "input" | "inputValidation
     return { ok: false as const, error: "Graph input requires a record schema and an object." };
   }
 
-  const fields = Object.entries(spec).map(([field, kind]) => ({
-    key: field.replace(/\?$/, ""),
-    optional: field.endsWith("?"),
-    kind,
-  }));
+  const fields = recordFields(spec);
 
   if (
     ((graph.inputValidation?.unknownKeys ?? "reject") === "reject" &&
       Object.keys(input).some((key) => !fields.some((field) => field.key === key))) ||
-    fields.some(
-      ({ key, optional, kind }) =>
-        !(optional && input[key] === undefined) && !isFieldValue(kind, input[key]),
-    ) ||
+    !matchesRecordSpec(input, spec) ||
     Object.entries(graph.inputValidation?.minItems ?? {}).some(([key, minimum]) => {
       const value = input[key];
 

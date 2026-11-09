@@ -1,19 +1,16 @@
 import {
+  emptyRunCounts,
   type LoopyView,
   loopyView,
+  type RunDefinitionCount,
+  type RunPageQuery,
   type RunView,
   type routes,
   runView,
+  type StatusCounts,
   serverEvent,
 } from "@loopy/contract";
-import {
-  emptyRunCounts,
-  type RunDefinitionCount,
-  type RunFilter,
-  type RunRecord,
-  type RuntimeEvent,
-  type StatusCounts,
-} from "@loopy/core";
+import type { RunRecord, RuntimeEvent } from "@loopy/core";
 import type { Schema } from "effect";
 import { Effect } from "effect";
 import { type DefinitionCatalog, makeDefinitionCatalog } from "./definition-catalog";
@@ -64,31 +61,14 @@ export function makeRunViews(options: ServiceOptions) {
     const now = timestamp();
     const hooks = yield* options.store.pendingHooks(ids, now);
 
-    return (run: RunRecord): RunView => {
-      const view = runView({
+    return (run: RunRecord): RunView =>
+      runView({
         run,
         loopy: { slug: run.slug, description: descriptions.get(run) ?? null },
-        steps: [],
-        hooks: [],
+        hook: hooks.get(run.id),
         now,
         leaseMs: options.store.leaseMs,
       });
-
-      const hook = hooks.get(run.id);
-
-      return hook
-        ? {
-            ...view,
-            waitingOn: {
-              hook: hook.name,
-              token: hook.token,
-              seq: hook.seq,
-              expiresAt: hook.expiresAt,
-              since: hook.createdAt,
-            },
-          }
-        : view;
-    };
   });
 
   const listRuns = Effect.fn("run-views.listRuns")(function* (
@@ -130,7 +110,7 @@ export function makeRunViews(options: ServiceOptions) {
           continue;
         }
 
-        const filter: RunFilter = { slug: saved.slug };
+        const filter: Pick<RunPageQuery, "slug" | "workspace"> = { slug: saved.slug };
 
         if (saved.scope !== "global") {
           filter.workspace = identity;

@@ -1,8 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { routes } from "@loopy/contract";
-import { httpBaseUrl } from "../src/backend/config";
 import { httpTransport, localHttpBackend } from "../src/backend/local-http";
-import { browserConnection } from "../src/lib/connection";
+import { bootSession, httpBaseUrl } from "../src/session/boot";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 
@@ -70,9 +69,10 @@ test("base URL prefix is preserved and URL credentials or selectors are rejected
   cleanups.push(async () => {
     await server.stop(true);
   });
-  await localHttpBackend({ baseUrl: `${server.url.origin}/loopy/`, token: null }).cursor(
-    AbortSignal.timeout(1000),
-  );
+  await localHttpBackend({
+    baseUrl: httpBaseUrl(`${server.url.origin}/loopy/`),
+    token: null,
+  }).cursor(AbortSignal.timeout(1000));
   expect(path).toBe("/loopy/api/cursor");
   const transport = httpTransport({ baseUrl: server.url.origin, token: null });
   await expect(
@@ -96,57 +96,46 @@ test("base URL prefix is preserved and URL credentials or selectors are rejected
 });
 
 test("bootstrap removes secrets before storage, scopes them by API, and ignores query origins", () => {
-  const values = new Map<string, string>([["loopy-token", "old"]]);
+  const values = new Map<string, string>();
 
   const storage = {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => {
       values.set(key, value);
     },
-    removeItem: (key: string) => {
-      values.delete(key);
-    },
   };
 
-  let cleaned = "";
+  const replaced: { url: string; storedBefore: boolean }[] = [];
 
   const options = {
     baseUrl: "https://api.example/",
     pageUrl: "https://dashboard.example/?api=https://evil.example#token=bootstrap",
     storage: () => storage,
     replaceUrl: (url: string) => {
-      expect(values.has("loopy-token:https://api.example")).toBe(false);
-      cleaned = url;
+      replaced.push({ url, storedBefore: values.has("loopy-token:https://api.example") });
     },
   };
 
-  expect(browserConnection(options)).toEqual({
-    baseUrl: "https://api.example",
-    token: "bootstrap",
+  expect(bootSession(options)).toEqual({ baseUrl: "https://api.example", token: "bootstrap" });
+
+  const [cleaned] = replaced;
+
+  expect(cleaned?.storedBefore).toBe(false);
+  expect(cleaned?.url).not.toContain("bootstrap");
+
+  const later = { ...options, pageUrl: cleaned?.url ?? "" };
+
+  expect(bootSession(later)).toEqual({ baseUrl: "https://api.example", token: "bootstrap" });
+  expect(bootSession({ ...later, baseUrl: "https://other.example" }).token).toBeNull();
+  expect(bootSession({ ...later, baseUrl: "https://api.example/other" }).token).toBeNull();
+
+  const blocked = bootSession({
+    ...options,
+    storage: () => {
+      throw new Error("Blocked");
+    },
   });
-  expect(cleaned).not.toContain("bootstrap");
-  expect(values.has("loopy-token")).toBe(false);
-  expect(browserConnection({ ...options, pageUrl: cleaned })).toEqual({
-    baseUrl: "https://api.example",
-    token: "bootstrap",
-  });
-  expect(
-    browserConnection({ ...options, baseUrl: "https://other.example", pageUrl: cleaned }).token,
-  ).toBeNull();
-  expect(
-    browserConnection({ ...options, baseUrl: "https://api.example/other", pageUrl: cleaned }).token,
-  ).toBeNull();
-  let removed = false;
-  expect(
-    browserConnection({
-      ...options,
-      storage: () => {
-        throw new Error("Blocked");
-      },
-      replaceUrl() {
-        removed = true;
-      },
-    }).token,
-  ).toBe("bootstrap");
-  expect(removed).toBe(true);
+
+  expect(blocked.token).toBe("bootstrap");
+  expect(replaced).toHaveLength(2);
 });

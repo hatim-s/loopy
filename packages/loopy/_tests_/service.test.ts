@@ -12,7 +12,7 @@ import { Effect } from "effect";
 import { makeArtifactRegistry } from "../../runtime/src/local/save-compiled";
 import { compiledBody } from "./compiled-fixture";
 import { FakeExecutor } from "./fixture";
-import { fixtureDaemon, fixtureStore } from "./fixtures/service-runtime";
+import { fixtureDaemon, fixtureStore, waitUntil } from "./fixtures/service-runtime";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 
@@ -33,19 +33,13 @@ async function fixture(definition = "") {
   export default loopy("service", { ${definition} input: { name: "string" }, secrets: ["PRIVATE"], run: () => 1 });`,
   );
 
-  const {
-    default: definitionValue,
-  }: {
-    default: {
-      graph: Graph;
-    };
-  } = await import(source);
+  const { default: definitionValue }: { default: Graph } = await import(source);
 
   const registry = await Effect.runPromise(Registry.make(home, root));
 
   const body = await compiledBody("service", source, {
-    scope: definitionValue.graph.meta.scope,
-    schedule: definitionValue.graph.meta.schedule ?? null,
+    scope: definitionValue.meta.scope,
+    schedule: definitionValue.meta.schedule ?? null,
     secrets: ["PRIVATE"],
   });
 
@@ -53,7 +47,7 @@ async function fixture(definition = "") {
   body.revision = await revision(body.graph);
   await Effect.runPromise(registry.save(body));
   let now = Date.parse("2026-10-17T00:00:00.000Z");
-  const clock = { ...{ now: Date.now }, now: () => now };
+  const clock = { now: () => now };
   const store = await fixtureStore(home);
 
   const service = makeLocalService({
@@ -71,6 +65,8 @@ async function fixture(definition = "") {
   return {
     service,
     store,
+    runs: () =>
+      Effect.runPromise(store.queryRuns({ limit: 200, now: new Date(now).toISOString() })),
     root,
     home,
     clock,
@@ -82,11 +78,11 @@ async function fixture(definition = "") {
 }
 
 test("service validates input before queuing and hides registry private fields", async () => {
-  const { service, store, root } = await fixture();
+  const { service, runs, root } = await fixture();
   await expect(Effect.runPromise(service.startRun("service", {}, root))).rejects.toMatchObject({
     code: "bad_request",
   });
-  expect(await Effect.runPromise(store.listRuns())).toEqual([]);
+  expect(await runs()).toEqual([]);
   const run = await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
   expect(run).toMatchObject({ status: "queued", input: { name: "Hatim" }, owner: null });
   const [loopy] = await Effect.runPromise(service.listLoopies());
@@ -343,7 +339,7 @@ test("definition defaults apply and workspace schedule mutations stay isolated",
 });
 
 test("disabled schedules stay dormant and re-enabling waits for the next slot", async () => {
-  const { service, store, clock, advance } = await fixture();
+  const { service, store, runs, clock, advance } = await fixture();
 
   const daemon = await fixtureDaemon({
     concurrency: 4,
@@ -352,7 +348,7 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     revisionFor: () => Effect.succeed("bundle"),
     prepare: () =>
       Effect.succeed({
-        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }).graph,
+        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }),
         executor: new FakeExecutor(),
       }),
   });
@@ -365,15 +361,23 @@ test("disabled schedules stay dormant and re-enabling waits for the next slot", 
     }),
   );
   advance(120000);
-  expect(await Effect.runPromise(daemon.tick)).toEqual({ fired: 0, activated: 0 });
-  expect(await Effect.runPromise(store.listRuns())).toEqual([]);
+  await Effect.runPromise(daemon.pass);
+  expect(await runs()).toEqual([]);
   expect(await Effect.runPromise(service.setScheduleEnabled("service", true))).toMatchObject({
     nextFireAt: "2026-10-17T00:03:00.000Z",
   });
-  expect(await Effect.runPromise(daemon.tick)).toEqual({ fired: 0, activated: 0 });
+  await Effect.runPromise(daemon.pass);
+  expect(await runs()).toEqual([]);
   advance(60000);
-  expect(await Effect.runPromise(daemon.tick)).toEqual({ fired: 1, activated: 1 });
-  await Effect.runPromise(daemon.stop);
+  await Effect.runPromise(daemon.pass);
+  await Effect.runPromise(
+    waitUntil(
+      Effect.map(
+        store.queryRuns({ limit: 200, now: new Date(clock.now()).toISOString() }),
+        (all) => all.length === 1 && all[0]?.status === "succeeded",
+      ),
+    ),
+  );
 });
 
 test("global schedules use the service workspace and preserve other workspaces", async () => {
@@ -425,7 +429,7 @@ async function pausedScheduleDaemon(f: Awaited<ReturnType<typeof fixture>>) {
     },
     prepare: () =>
       Effect.succeed({
-        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }).graph,
+        graph: loopy("test", { input: { name: "string" }, run: ({ input }) => input }),
         executor: new FakeExecutor(),
       }),
   });
@@ -441,7 +445,6 @@ for (const mutation of ["PUT", "disable"]) {
     );
     f.advance(60000);
     const paused = await pausedScheduleDaemon(f);
-    const ticking = Effect.runPromise(paused.daemon.tick);
     await paused.entered;
 
     try {
@@ -456,12 +459,11 @@ for (const mutation of ["PUT", "disable"]) {
         mutation === "PUT" ? "2026-10-17T01:00:00.000Z" : "2026-10-17T00:01:00.000Z",
       );
       paused.release();
-      expect(await ticking).toEqual({ fired: 0, activated: 0 });
-      expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+      await Effect.runPromise(paused.daemon.pass);
+      expect(await f.runs()).toEqual([]);
       expect(await Effect.runPromise(f.service.listSchedules())).toEqual([saved]);
     } finally {
       paused.release();
-      await ticking;
       await Effect.runPromise(paused.daemon.stop);
     }
   });
@@ -514,6 +516,25 @@ test("run graphs stay pinned to the revision each run started on", async () => {
   });
 });
 
+test("putLoopy preserves every author option from graph meta", async () => {
+  const { service, root, registry } = await fixture();
+
+  const meta = {
+    description: "Author metadata",
+    schedule: { cron: "0 9 * * *", tz: "Asia/Kolkata" },
+    secrets: ["TOKEN"],
+    mode: "full" as const,
+    scope: "global" as const,
+  };
+
+  await Effect.runPromise(
+    service.putLoopy("metadata", await compiledBody("metadata", join(root, "metadata.ts"), meta)),
+  );
+  const saved = await Effect.runPromise(registry.get("metadata"));
+  expect(saved).toMatchObject({ version: 3, graph: { meta } });
+  expect(saved).not.toHaveProperty("description");
+});
+
 test("service maps completion between requireRun and claim to not_claimable", async () => {
   const { service, store, root } = await fixture();
   const run = await Effect.runPromise(service.startRun("service", { name: "Hatim" }, root));
@@ -521,7 +542,17 @@ test("service maps completion between requireRun and claim to not_claimable", as
   store.claim = (id, token) =>
     Effect.gen(function* () {
       yield* claim(id, "finisher");
-      yield* store.finishRun(id, "finisher", { status: "succeeded", output: 1 });
+      yield* store.apply({
+        runId: id,
+        token: "finisher",
+        effects: [
+          {
+            kind: "finish_run",
+            outcome: { status: "succeeded", output: 1 },
+            at: new Date().toISOString(),
+          },
+        ],
+      });
       yield* store.release(id, "finisher");
 
       return yield* claim(id, token);

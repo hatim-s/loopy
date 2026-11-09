@@ -1,11 +1,12 @@
+import { fieldKey } from "../record-spec";
 import { isRecord } from "../validation";
 import type { Node, Value } from ".";
 import { values } from "./context";
 
-export const RESERVED_GRAPH_NAMES = ["__proto__", "constructor", "prototype"] as const;
+const RESERVED_GRAPH_NAMES = ["__proto__", "constructor", "prototype"] as const;
 
 export function isReservedGraphName(name: string): boolean {
-  return RESERVED_GRAPH_NAMES.some((reserved) => reserved === name.replace(/\?$/, ""));
+  return RESERVED_GRAPH_NAMES.some((reserved) => reserved === fieldKey(name));
 }
 
 function valueNames(value: Value): string[] {

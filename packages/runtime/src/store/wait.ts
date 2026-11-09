@@ -1,43 +1,22 @@
 import {
+  checkOutSchema,
   executionKeyString,
   type HookRecord,
-  isFieldValue,
-  isRecord,
   isTerminalRun,
   type Json,
-  MAX_OUTPUT_BYTES,
   type NodeRun,
-  outputBytes,
+  outSchemaMessage,
   type RunRecord,
   type StoreEffect,
   type WaitRecord,
   type WaitResolution,
 } from "@loopy/core";
+import { Struct } from "effect";
 import { StoreInvariantError } from "./operation";
 import { utc } from "./timestamps";
 
 export function publicHook(wait: WaitRecord): HookRecord {
-  const hook: HookRecord = {
-    token: wait.token,
-    runId: wait.runId,
-    seq: wait.seq,
-    name: wait.name,
-    createdAt: wait.createdAt,
-  };
-
-  if (wait.payload !== undefined) {
-    hook.payload = wait.payload;
-  }
-
-  if (wait.resolvedAt !== undefined) {
-    hook.resolvedAt = wait.resolvedAt;
-  }
-
-  if (wait.expiredAt !== undefined) {
-    hook.expiredAt = wait.expiredAt;
-  }
-
-  return hook;
+  return Struct.omit(wait, ["executionKey", "schema"]);
 }
 
 export function registerWait(
@@ -95,33 +74,9 @@ export function checkSignal({
     };
   }
 
-  if (outputBytes(payload) > MAX_OUTPUT_BYTES) {
-    return {
-      kind: "rejected",
-      code: "bad_request",
-      message: "Wait payload exceeds the 1 MiB inline limit.",
-    };
-  }
+  const issue = checkOutSchema(payload, wait.schema);
 
-  const schema = wait.schema;
-
-  const valid =
-    schema.kind === "value"
-      ? isFieldValue(schema.type, payload)
-      : isRecord(payload) &&
-        Object.entries(schema.fields).every(([field, type]) => {
-          const key = field.replace(/\?$/, "");
-
-          return (
-            (field.endsWith("?") && payload[key] === undefined) || isFieldValue(type, payload[key])
-          );
-        });
-
-  return valid
+  return issue === null
     ? null
-    : {
-        kind: "rejected",
-        code: "bad_request",
-        message: "Wait payload does not match its declared schema.",
-      };
+    : { kind: "rejected", code: "bad_request", message: outSchemaMessage("Wait payload", issue) };
 }

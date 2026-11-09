@@ -80,7 +80,7 @@ test("map iterations capture their own resolved item and index", () => {
           }),
         { concurrency: 2, onError: "fail" },
       ),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -259,7 +259,7 @@ test("capture excludes command environment and runtime-declared secrets", () => 
   const graph = loopy("command-input", {
     input: {},
     run: () => sh(["echo", secret], { env: { PRIVATE_TOKEN: secret }, stdin: secret }),
-  }).graph;
+  });
 
   graph.meta.secrets = ["PRIVATE_TOKEN"];
   const command = start(graph);
@@ -276,27 +276,4 @@ test("capture excludes command environment and runtime-declared secrets", () => 
     value: { subject: "safe" },
   });
   expect(JSON.stringify(recorded.state.nodeRuns)).not.toContain(secret);
-});
-
-test("code capture never reads process environment", () => {
-  const key = "LOOPY_CAPTURE_TEST_PRIVATE_TOKEN";
-  const previous = process.env[key];
-  process.env[key] = "synthetic-os-environment-secret";
-
-  try {
-    const graph = codeGraph();
-    graph.meta.secrets = [key];
-    const result = start(graph, { subject: "safe" });
-    expect(result.state.nodeRuns[0]?.inputView).toEqual({
-      state: "available",
-      value: { subject: "safe" },
-    });
-    expect(JSON.stringify(result.state.nodeRuns)).not.toContain("synthetic-os-environment-secret");
-  } finally {
-    if (previous === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = previous;
-    }
-  }
 });

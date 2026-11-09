@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import { type NodeRun, type Store } from "@loopy/core";
-import { MemoryStore, makeSqliteRunStore } from "@loopy/runtime/store";
+import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { Cause, Effect, Exit, Schema, Scope } from "effect";
-import { SCHEMA, WAIT_SCHEMA } from "../../runtime/src/store/sqlite/store-schema";
 import { newRun } from "./fixture";
+import { legacyDatabase } from "./fixtures/sqlite/legacy";
+import { memoryStore, runAt } from "./store-fixture";
 
 const scopes: Scope.Closeable[] = [];
 
@@ -35,15 +36,15 @@ const at = "2026-10-20T00:00:00.000Z";
 
 const deadline = "2026-10-20T00:00:01.000Z";
 
+const run = runAt(() => Date.parse(at));
+
 async function sqlite() {
   const home = mkdtempSync(join(tmpdir(), "loopy-wait-"));
   homes.push(home);
   const file = join(home, "runs.sqlite");
 
   const store = await Effect.runPromise(
-    makeSqliteRunStore(file, () => Date.parse(at)).pipe(
-      Effect.provideService(Scope.Scope, fixtureScope()),
-    ),
+    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
   );
 
   return { store, file };
@@ -66,9 +67,9 @@ function waiting(index = 0): NodeRun {
 }
 
 async function prepare(store: Store) {
-  await Effect.runPromise(store.createRun(newRun()));
-  await Effect.runPromise(store.claim("run", "owner"));
-  await Effect.runPromise(
+  await run(store.createRun(newRun()));
+  await run(store.claim("run", "owner"));
+  await run(
     store.apply({
       runId: "run",
       token: "owner",
@@ -87,27 +88,24 @@ async function prepare(store: Store) {
   );
 }
 
-for (const kind of ["memory", "sqlite"] as const) {
+for (const kind of ["portable", "local"] as const) {
   test(`${kind} signal validates payload, resolves once, and commits node/hook/wake together`, async () => {
-    const store =
-      kind === "memory" ? new MemoryStore(() => Date.parse(at)) : (await sqlite()).store;
+    const store = kind === "portable" ? memoryStore() : (await sqlite()).store;
 
     await prepare(store);
-    const wait = (await Effect.runPromise(store.getWaits("run")))[0];
+    const wait = (await run(store.getWaits("run")))[0];
 
     if (!wait) {
       throw new Error("Missing wait.");
     }
 
-    const cursor = await Effect.runPromise(store.eventCursor());
+    const cursor = await run(store.eventCursor());
     expect(
-      await Effect.runPromise(
-        store.resolveWait({ token: wait.token, payload: { approved: "yes" }, at }),
-      ),
+      await run(store.resolveWait({ token: wait.token, payload: { approved: "yes" }, at })),
     ).toMatchObject({ kind: "rejected", code: "bad_request" });
-    expect(await Effect.runPromise(store.eventCursor())).toEqual(cursor);
+    expect(await run(store.eventCursor())).toEqual(cursor);
     expect(
-      await Effect.runPromise(
+      await run(
         store.resolveWait({
           token: wait.token,
           payload: { approved: true, oversized: "x".repeat(1024 * 1024) },
@@ -119,52 +117,51 @@ for (const kind of ["memory", "sqlite"] as const) {
       code: "bad_request",
       message: "Wait payload exceeds the 1 MiB inline limit.",
     });
-    expect(await Effect.runPromise(store.eventCursor())).toEqual(cursor);
+    expect(await run(store.eventCursor())).toEqual(cursor);
 
     const results = await Promise.all([
-      Effect.runPromise(store.resolveWait({ token: wait.token, payload: { approved: true }, at })),
-      Effect.runPromise(store.resolveWait({ token: wait.token, payload: { approved: false }, at })),
+      run(store.resolveWait({ token: wait.token, payload: { approved: true }, at })),
+      run(store.resolveWait({ token: wait.token, payload: { approved: false }, at })),
     ]);
 
     expect(results.map((result) => result.kind)).toEqual(["resolved", "rejected"]);
-    await Effect.runPromise(store.release("run", "owner"));
-    expect(await Effect.runPromise(store.getRun("run"))).toMatchObject({
+    await run(store.release("run", "owner"));
+    expect(await run(store.getRun("run"))).toMatchObject({
       status: "suspended",
       wakeAt: at,
     });
-    expect((await Effect.runPromise(store.getRun("run")))?.owner).toBeUndefined();
-    expect(await Effect.runPromise(store.dueRuns(at))).toHaveLength(1);
-    expect(await Effect.runPromise(store.getNodeRuns("run"))).toMatchObject([
+    expect((await run(store.getRun("run")))?.owner).toBeUndefined();
+    expect(await run(store.dueRuns(at))).toHaveLength(1);
+    expect(await run(store.getNodeRuns("run"))).toMatchObject([
       { status: "succeeded", output: { approved: true } },
     ]);
-    expect(await Effect.runPromise(store.getWaits("run"))).toMatchObject([
+    expect(await run(store.getWaits("run"))).toMatchObject([
       { resolvedAt: at, payload: { approved: true } },
     ]);
-    const events = await Effect.runPromise(store.events(cursor.cursor, 20));
+    const events = await run(store.events(cursor.cursor, 20));
     const resolved = events.find((event) => event.entity === "hook" && event.kind === "resolved");
     expect(
       events.filter((event) => event.txn === resolved?.txn).map((event) => event.entity),
     ).toEqual(["hook", "node", "run"]);
   });
   test(`${kind} deadline wins at equality, timeout expires hook, and cancellation rejects signals`, async () => {
-    const store =
-      kind === "memory" ? new MemoryStore(() => Date.parse(at)) : (await sqlite()).store;
+    const store = kind === "portable" ? memoryStore() : (await sqlite()).store;
 
     await prepare(store);
-    const wait = (await Effect.runPromise(store.getWaits("run")))[0];
+    const wait = (await run(store.getWaits("run")))[0];
 
     if (!wait) {
       throw new Error("Missing wait.");
     }
 
     expect(
-      await Effect.runPromise(
+      await run(
         store.resolveWait({ token: wait.token, payload: { approved: true }, at: deadline }),
       ),
     ).toMatchObject({ kind: "rejected", code: "unknown_hook" });
-    await Effect.runPromise(store.release("run", "owner"));
-    await Effect.runPromise(store.claim("run", "timeout"));
-    await Effect.runPromise(
+    await run(store.release("run", "owner"));
+    await run(store.claim("run", "timeout"));
+    await run(
       store.apply({
         runId: "run",
         token: "timeout",
@@ -185,21 +182,24 @@ for (const kind of ["memory", "sqlite"] as const) {
         ],
       }),
     );
-    expect(await Effect.runPromise(store.getWaits("run"))).toMatchObject([{ expiredAt: deadline }]);
-    await Effect.runPromise(store.finishRun("run", "timeout", { status: "cancelled" }));
+    expect(await run(store.getWaits("run"))).toMatchObject([{ expiredAt: deadline }]);
+    await run(
+      store.apply({
+        runId: "run",
+        token: "timeout",
+        effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at }],
+      }),
+    );
     expect(
-      await Effect.runPromise(
-        store.resolveWait({ token: wait.token, payload: { approved: true }, at }),
-      ),
+      await run(store.resolveWait({ token: wait.token, payload: { approved: true }, at })),
     ).toMatchObject({ kind: "rejected", code: "unknown_hook" });
   });
   test(`${kind} wait registration is idempotent and scoped, and failed batches roll back`, async () => {
-    const store =
-      kind === "memory" ? new MemoryStore(() => Date.parse(at)) : (await sqlite()).store;
+    const store = kind === "portable" ? memoryStore() : (await sqlite()).store;
 
     await prepare(store);
-    await Effect.runPromise(store.release("run", "owner"));
-    await Effect.runPromise(store.claim("run", "owner2"));
+    await run(store.release("run", "owner"));
+    await run(store.claim("run", "owner2"));
 
     const register = {
       kind: "register_wait",
@@ -209,8 +209,8 @@ for (const kind of ["memory", "sqlite"] as const) {
       at,
     } as const;
 
-    await Effect.runPromise(store.apply({ runId: "run", token: "owner2", effects: [register] }));
-    expect(await Effect.runPromise(store.getWaits("run"))).toHaveLength(1);
+    await run(store.apply({ runId: "run", token: "owner2", effects: [register] }));
+    expect(await run(store.getWaits("run"))).toHaveLength(1);
 
     const rejected = await Effect.runPromiseExit(
       store.apply({
@@ -232,9 +232,9 @@ for (const kind of ["memory", "sqlite"] as const) {
 
     expect(Cause.hasDies(rejected.cause)).toBe(true);
     expect(Cause.squash(rejected.cause)).toMatchObject({ message: "Wait belongs to another run." });
-    expect(await Effect.runPromise(store.getWaits("run"))).toHaveLength(1);
-    expect(await Effect.runPromise(store.getNodeRuns("run"))).toHaveLength(1);
-    await Effect.runPromise(
+    expect(await run(store.getWaits("run"))).toHaveLength(1);
+    expect(await run(store.getNodeRuns("run"))).toHaveLength(1);
+    await run(
       store.apply({
         runId: "run",
         token: "owner2",
@@ -244,49 +244,45 @@ for (const kind of ["memory", "sqlite"] as const) {
         ],
       }),
     );
-    const waits = await Effect.runPromise(store.getWaits("run"));
+    const waits = await run(store.getWaits("run"));
     expect(waits).toHaveLength(2);
     expect(waits[0]?.token).not.toEqual(waits[1]?.token);
-    await Effect.runPromise(store.finishRun("run", "owner2", { status: "cancelled" }));
-    expect(
-      (await Effect.runPromise(store.getWaits("run"))).every((wait) => wait.expiredAt === at),
-    ).toBe(true);
+    await run(
+      store.apply({
+        runId: "run",
+        token: "owner2",
+        effects: [{ kind: "finish_run", outcome: { status: "cancelled" }, at }],
+      }),
+    );
+    expect((await run(store.getWaits("run"))).every((wait) => wait.expiredAt === at)).toBe(true);
   });
 }
 
 test("sqlite reopen retains accepted payload and wake without a second resolution", async () => {
   const { store, file } = await sqlite();
   await prepare(store);
-  await Effect.runPromise(store.release("run", "owner"));
-  const wait = (await Effect.runPromise(store.getWaits("run")))[0];
+  await run(store.release("run", "owner"));
+  const wait = (await run(store.getWaits("run")))[0];
 
   if (!wait) {
     throw new Error("Missing wait.");
   }
 
   expect(
-    (
-      await Effect.runPromise(
-        store.resolveWait({ token: wait.token, payload: { approved: true }, at }),
-      )
-    ).kind,
+    (await run(store.resolveWait({ token: wait.token, payload: { approved: true }, at }))).kind,
   ).toBe("resolved");
-  await Effect.runPromise(store.close());
+  await run(store.close());
 
   const reopened = await Effect.runPromise(
     makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
   );
 
-  expect(await Effect.runPromise(reopened.getNodeRuns("run"))).toMatchObject([
+  expect(await run(reopened.getNodeRuns("run"))).toMatchObject([
     { status: "succeeded", output: { approved: true } },
   ]);
-  expect(await Effect.runPromise(reopened.dueRuns(at))).toHaveLength(1);
+  expect(await run(reopened.dueRuns(at))).toHaveLength(1);
   expect(
-    (
-      await Effect.runPromise(
-        reopened.resolveWait({ token: wait.token, payload: { approved: false }, at }),
-      )
-    ).kind,
+    (await run(reopened.resolveWait({ token: wait.token, payload: { approved: false }, at }))).kind,
   ).toBe("rejected");
 });
 
@@ -295,13 +291,11 @@ test("schema 13 upgrade preserves records and legacy schema rejection never rese
   homes.push(home);
   const file = join(home, "runs.sqlite");
   const epoch = crypto.randomUUID();
-  const db = new Database(file);
-  db.exec(SCHEMA.replace(WAIT_SCHEMA, ""));
+  const db = legacyDatabase(file, 13);
   db.query("INSERT INTO meta VALUES ('epoch',?)").run(epoch);
   db.query(
     "INSERT INTO runs(id,slug,revision,workspace,input_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
   ).run("run", "test", "bundle", "/workspace", "{}", "queued", at, at);
-  db.exec("PRAGMA user_version=13");
   db.close();
 
   const upgraded = await Effect.runPromise(

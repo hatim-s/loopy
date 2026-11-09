@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Lazy, Loaded } from "../../lib/view-models";
+import type { Lazy } from "../../lib/view-models";
 import { ErrorBanner } from "../error-banner";
 
 /**
@@ -7,7 +7,7 @@ import { ErrorBanner } from "../error-banner";
  * does not jump. Errors show the backend's own message, which names what failed and what to do.
  */
 export function Load<T>(props: {
-  value: Loaded<T> | Lazy<T>;
+  value: Lazy<T>;
   pending: ReactNode;
   children: (data: T, fetching: boolean) => ReactNode;
 }) {
@@ -32,7 +32,6 @@ export function Load<T>(props: {
   }
 }
 
-/** A muted line for loading and empty states inside panels and tables. */
 export function Note({ children }: { children: ReactNode }) {
   return <p className="muted-note">{children}</p>;
 }

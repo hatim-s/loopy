@@ -18,11 +18,9 @@ export function Nav() {
         <ThemeToggle />
         <Mark label="Loopy home" />
         <nav className="nav-links" aria-label="Primary">
-          <a href="#docs">Docs</a>
           <a href="#how" className="hide-sm">
             Examples
           </a>
-          <a href="#github">GitHub</a>
         </nav>
         <a className="btn btn-accent" href="#start">
           Install

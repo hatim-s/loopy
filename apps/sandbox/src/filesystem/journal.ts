@@ -17,10 +17,14 @@ import { Effect, Result } from "effect";
 import { attemptHash, attemptId } from "../admission";
 import { readBytes } from "../journal-files";
 import { checked, failure, io } from "../operations";
-import { storedReceiptSchema } from "../receipts";
+import { stateLayout } from "../state-root";
+import { legacyRecord } from "./legacy";
 
 export class FilesystemJournal {
-  constructor(private readonly root: string) {}
+  private readonly layout: ReturnType<typeof stateLayout>;
+  constructor(private readonly root: string) {
+    this.layout = stateLayout(root);
+  }
   validPlan(plan: DockerAttemptPlan) {
     const names = attemptResourceNames(plan.id, attemptHash(workspaceVolumeInput(this.root, plan)));
 
@@ -38,48 +42,21 @@ export class FilesystemJournal {
         return yield* Effect.fail(new AuthorityError("invalid_state"));
       }
 
-      const bytes = yield* io("filesystem-journal", () =>
-        readBytes(join(this.root, "receipts", `${id}.json`)),
-      );
+      const bytes = yield* io("filesystem-journal", () => readBytes(this.receiptPath(id)));
 
       if (!bytes) {
         return null;
       }
 
       const value = yield* checked("receipt JSON", () => JSON.parse(bytes.toString("utf8")));
-      let record: AttemptRecord;
 
       const decoded = yield* checked("receipt decode", () =>
         decodeBoundary(attemptRecordSchema)(value),
       ).pipe(Effect.result);
 
-      if (Result.isSuccess(decoded)) {
-        record = decoded.success;
-      } else {
-        const legacy = yield* checked("retained receipt decode", () =>
-          decodeBoundary(storedReceiptSchema)(value),
-        );
-
-        const { kind, ...fields } = legacy;
-
-        const plan = {
-          id: fields.id,
-          requestHash: fields.requestHash,
-          workspace: fields.workspace,
-          executionKey: fields.executionKey,
-          attempt: fields.attempt,
-          container: fields.container,
-          inputVolume: fields.inputVolume,
-          volume: fields.volume,
-          deadline: fields.deadline,
-        };
-
-        const session = { epoch: 1, nonce: "legacy-filesystem-recovery" };
-        record =
-          kind === "started"
-            ? { kind, plan, session }
-            : { kind, plan, session, result: { kind: "inline", value: legacy.result } };
-      }
+      const record = Result.isSuccess(decoded)
+        ? decoded.success
+        : yield* checked("retained receipt decode", () => legacyRecord(value));
 
       if (record.plan.id !== id || !this.validPlan(record.plan)) {
         return yield* Effect.fail(
@@ -98,9 +75,7 @@ export class FilesystemJournal {
     return Effect.gen({ self: this }, function* () {
       const result: AttemptRecord[] = [];
 
-      for (const name of yield* io("filesystem-journal", () =>
-        readdir(join(this.root, "receipts")),
-      )) {
+      for (const name of yield* io("filesystem-journal", () => readdir(this.layout.receipts))) {
         if (/^[a-f0-9]{64}\.json$/.test(name)) {
           const record = yield* this.read(name.slice(0, -5));
 
@@ -114,10 +89,17 @@ export class FilesystemJournal {
     }).pipe(Effect.uninterruptible);
   }
 
+  receiptPath(id: string) {
+    return join(this.layout.receipts, `${id}.json`);
+  }
+
+  guardPath(attemptId: string) {
+    return join(this.layout.exports, `${attemptId}.json`);
+  }
+
   releasedPath(token: string) {
     return join(
-      this.root,
-      "exports",
+      this.layout.exports,
       `${createHash("sha256").update(token).digest("hex")}.released.json`,
     );
   }
@@ -151,12 +133,10 @@ export class FilesystemJournal {
     return Effect.gen({ self: this }, function* () {
       const result: ExportRecord[] = [];
 
-      for (const name of yield* io("filesystem-journal", () =>
-        readdir(join(this.root, "exports")),
-      )) {
+      for (const name of yield* io("filesystem-journal", () => readdir(this.layout.exports))) {
         if (/^[a-f0-9]{64}\.json$/.test(name)) {
           const bytes = yield* io("filesystem-journal", () =>
-            readBytes(join(this.root, "exports", name)),
+            readBytes(join(this.layout.exports, name)),
           );
 
           if (bytes) {

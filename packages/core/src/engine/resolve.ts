@@ -1,13 +1,8 @@
-import {
-  type ExecutionKey,
-  executionKeyString,
-  isRecord,
-  isRef,
-  type Json,
-  projectValue,
-  type Ref,
-  type Value,
-} from "..";
+import { type ExecutionKey, executionKeyString, scopeHasPrefix } from "../graph/key";
+import { isRef, projectValue } from "../graph/ref";
+import { INPUT_REF, type Ref, type Value } from "../graph/values";
+import type { Json } from "../json";
+import { isRecord } from "../validation";
 import type { EngineState } from "./state";
 
 export type ResolutionContext = {
@@ -22,7 +17,7 @@ export function reference(
   state: EngineState,
   context: ResolutionContext,
 ): Json | undefined {
-  if (value.ref === "input") {
+  if (value.ref === INPUT_REF) {
     return projectValue(state.input, value.path);
   }
 
@@ -36,13 +31,8 @@ export function reference(
     const run = state.nodeRuns.find(
       (run) =>
         String(run.key.nodeId) === value.ref &&
-        run.key.runId === state.runId &&
         run.key.scope.length === scope.length &&
-        scope.every(
-          (part, index) =>
-            run.key.scope[index]?.nodeId === part.nodeId &&
-            run.key.scope[index]?.index === part.index,
-        ),
+        scopeHasPrefix(run.key.scope, scope),
     );
 
     if (run?.status === "succeeded") {

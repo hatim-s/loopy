@@ -6,11 +6,11 @@ import {
   DriverCleanupFailed,
   LeaseReleaseFailed,
 } from "@loopy/runtime/host";
-import { MemoryStore } from "@loopy/runtime/store";
 import { code, loopy, parallel } from "@loopy/sdk/graph";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "./fixture";
+import { MemorySqlStore } from "./store-fixture";
 
 function graph(wide = false) {
   const work = () =>
@@ -19,7 +19,7 @@ function graph(wide = false) {
   const graph = loopy("test", {
     input: {},
     run: () => (wide ? parallel({ first: work, second: work }) : work()),
-  }).graph;
+  });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -39,7 +39,7 @@ for (const primary of ["read", "graph", "interrupt"] as const) {
       Effect.gen(function* () {
         const started = yield* Deferred.make<void>();
 
-        class BrokenStore extends MemoryStore {
+        class BrokenStore extends MemorySqlStore {
           override getNodeRuns(id: string) {
             return primary === "read" ? Effect.fail(unavailable("read")) : super.getNodeRuns(id);
           }
@@ -115,7 +115,7 @@ test("ownership loss interrupts and joins work before fenced release", async () 
       const started = yield* Deferred.make<void>();
       const events: string[] = [];
 
-      class LostStore extends MemoryStore {
+      class LostStore extends MemorySqlStore {
         override heartbeat() {
           return Effect.succeed(false);
         }
@@ -126,7 +126,7 @@ test("ownership loss interrupts and joins work before fenced release", async () 
         }
       }
 
-      const store = new LostStore(undefined, 1000);
+      const store = new LostStore({ leaseMs: 1000 });
       yield* store.createRun(newRun());
 
       const executor: Executor = {
@@ -170,8 +170,8 @@ test("consuming first completion never interrupts its sibling", async () => {
       let executions = 0;
       let stopped = false;
 
-      class RecordingStore extends MemoryStore {
-        override apply(batch: Parameters<MemoryStore["apply"]>[0]) {
+      class RecordingStore extends MemorySqlStore {
+        override apply(batch: Parameters<MemorySqlStore["apply"]>[0]) {
           return super
             .apply(batch)
             .pipe(
@@ -223,7 +223,7 @@ test("consuming first completion never interrupts its sibling", async () => {
 });
 
 test("apply failure never dispatches uncommitted work and releases the lease", async () => {
-  class BrokenStore extends MemoryStore {
+  class BrokenStore extends MemorySqlStore {
     override apply() {
       return Effect.fail(unavailable("apply"));
     }
@@ -247,7 +247,7 @@ test("a stalled release reports unknown completion and retains the graph exit", 
     Effect.gen(function* () {
       const releasing = yield* Deferred.make<void>();
 
-      class StalledStore extends MemoryStore {
+      class StalledStore extends MemorySqlStore {
         override release() {
           return Deferred.succeed(releasing, undefined).pipe(Effect.andThen(Effect.never));
         }
@@ -280,7 +280,7 @@ test("interruption of a started receipt never repeats execution or business-canc
   await Effect.runPromise(
     Effect.gen(function* () {
       const observed = yield* Deferred.make<void>();
-      const store = new MemoryStore();
+      const store = new MemorySqlStore();
       yield* store.createRun(newRun());
       let executions = 0;
 
@@ -315,13 +315,13 @@ for (const primary of ["ownership", "root"] as const) {
         const entered = yield* Deferred.make<void>();
         const defect = new Error("executor cleanup defect");
 
-        class LosingStore extends MemoryStore {
+        class LosingStore extends MemorySqlStore {
           override heartbeat() {
             return Effect.succeed(false);
           }
         }
 
-        const store = new LosingStore(undefined, 1000);
+        const store = new LosingStore({ leaseMs: 1000 });
 
         const executor: Executor = {
           lookup: () => Effect.succeed({ kind: "none" }),

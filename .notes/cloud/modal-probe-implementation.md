@@ -1,5 +1,7 @@
 # Modal probe implementation, local preparation only
 
+Status: superseded. The probe implementation and its test were deleted from the repository on 2026-11-08 by owner decision; commit 844c871 still holds them.
+
 Prepared on 2026-10-22 in `/Users/hatim.shakir/projects/loopy/cloud-integration`, branch `cloud-integration`, starting HEAD `b02de1b97300573891b020c5539690bf94a4e7ae`.
 
 No cloud action is approved or performed. No SDK runtime import, SDK client construction, provider request, credential read, service startup, Docker command, browser action, commit or push was performed during this implementation. Modal was inspected as text in `node_modules/modal/dist/index.d.ts` and `index.js`. Parent-owned package, lock and planning changes were left alone. Existing runtime, host and public contracts are unchanged.

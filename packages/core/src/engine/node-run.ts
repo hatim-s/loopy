@@ -1,9 +1,10 @@
-import type { NodeRun, RunOutcome } from "..";
-import type { Effect } from "./effects";
+import type { NodeRun } from "../graph/node-run";
+import type { RunOutcome } from "../model";
+import type { EngineEffect } from "./effects";
 import { sameExecution } from "./resolve";
 import type { EngineState } from "./state";
 
-export type Transition = { state: EngineState; effects: Effect[] };
+export type Transition = { state: EngineState; effects: EngineEffect[] };
 
 export function write(transition: Transition, nodeRun: NodeRun) {
   const index = transition.state.nodeRuns.findIndex((run) => sameExecution(run.key, nodeRun.key));

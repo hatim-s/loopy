@@ -1,9 +1,7 @@
 import type { Database } from "bun:sqlite";
+import { MAX_PREVIEW_BYTES } from "@loopy/contract";
 import type { SqlValue } from "@loopy/runtime/store/portable";
-import {
-  FEED_SCAN_LIMIT,
-  PREVIEW_BYTES,
-} from "../../../../../packages/runtime/src/store/query-utils";
+import { FEED_SCAN_LIMIT } from "../../../../../packages/runtime/src/store/query-utils";
 import {
   PENDING_HOOK,
   RUN_PREVIEW_COLUMNS,
@@ -127,7 +125,7 @@ export function sqlCases(db: Database) {
   add(
     "executions.page",
     nodeSource,
-    `SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>${PREVIEW_BYTES} THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE run_id=? AND scope=? ORDER BY execution_key LIMIT ?`,
+    `SELECT execution_key,CASE WHEN status='succeeded' AND length(CAST(output AS BLOB))>${MAX_PREVIEW_BYTES} THEN json_remove(json_set(record,'$.output',NULL),'$.inputView') ELSE json_remove(record,'$.inputView') END AS record,CASE WHEN status='succeeded' THEN length(CAST(output AS BLOB)) ELSE 0 END AS bytes FROM node_runs WHERE run_id=? AND scope=? ORDER BY execution_key LIMIT ?`,
     [run.id, "[]", 51],
   );
 
@@ -141,7 +139,7 @@ export function sqlCases(db: Database) {
     add(
       "execution.attempts",
       nodeSource,
-      "SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>16384 THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201",
+      `SELECT attempt,length(CAST(record->'$.output' AS BLOB)) AS bytes,CASE WHEN json_type(record,'$.output') IS NOT NULL AND length(CAST(record->'$.output' AS BLOB))>${MAX_PREVIEW_BYTES} THEN json_set(record,'$.output',NULL) ELSE record END AS record FROM node_attempts WHERE run_id=? AND execution_key=? AND attempt>? ORDER BY attempt LIMIT 201`,
       [run.id, key, 0],
     );
   }

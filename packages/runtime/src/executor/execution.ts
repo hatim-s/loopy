@@ -1,5 +1,4 @@
 import {
-  CommandExecutionError,
   durationMs,
   type ExecutionKey,
   type ExecutionResult,
@@ -11,7 +10,12 @@ import {
   limitLogs,
 } from "@loopy/core";
 import { Cause, Effect, Exit } from "effect";
-import { executeLocalCommand, spawnCaptured, withBundleSandbox } from "../local/execution-host";
+import {
+  CommandExecutionError,
+  executeLocalCommand,
+  spawnCaptured,
+  withBundleSandbox,
+} from "../local/execution-host";
 import { type ExecutionOptions, type PreparedExecution, prepareExecution } from "./prepare";
 import { bundleResult } from "./protocol";
 import type { FilesystemReceipts } from "./receipts";

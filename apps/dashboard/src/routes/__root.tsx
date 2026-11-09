@@ -5,8 +5,8 @@ import { Crumbs } from "../components/shell/crumbs";
 import { DaemonPill } from "../components/shell/daemon-pill";
 import { Sidebar } from "../components/shell/sidebar";
 import { Icon } from "../components/ui/icon";
-import { useSessionStream } from "../lib/connection";
 import type { RouterContext } from "../router-context";
+import { useSessionStream } from "../session/access";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: Shell,

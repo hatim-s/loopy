@@ -1,11 +1,10 @@
-import { resolve } from "node:path";
 import { Effect } from "effect";
 import type { CommandRunner, ProcessOptions } from "../../../sandbox/src/process";
 import { runCommand } from "../../../sandbox/src/process";
-import { fixtureIO } from "../fixture-effect";
-import { assert, equal } from "../journey/client";
-import { withWaitClient } from "../wait-client";
+import { assert, equal } from "../shared/assert";
+import { fixtureIO } from "./fixture-effect";
 import { type Config, marker, oneReceipt, ownedContainer, ownerOf, until } from "./resources";
+import { withWaitClient } from "./wait-client";
 
 export type FaultMode = "kill_wait_client" | "unavailable_inspect_socket";
 
@@ -28,7 +27,6 @@ export class TransportFaults {
   constructor(
     private readonly config: Config,
     readonly mode: FaultMode,
-    private readonly commandRunner: CommandRunner = runCommand,
   ) {}
 
   restore() {
@@ -65,7 +63,7 @@ export class TransportFaults {
               // Only this invocation sees the absent socket. The selected context and daemon stay intact.
               const socket = `/var/empty/loopy-transport-${ownerOf(this.config).slice(0, 16)}.sock`;
 
-              const output = yield* this.commandRunner(
+              const output = yield* runCommand(
                 [argv[0] ?? "docker", "--host", `unix://${socket}`, ...argv.slice(3)],
                 options,
               );
@@ -89,7 +87,7 @@ export class TransportFaults {
               return output;
             }
 
-            return yield* this.commandRunner(argv, options);
+            return yield* runCommand(argv, options);
           }),
         ).pipe(
           Effect.ensuring(
@@ -114,7 +112,7 @@ export class TransportFaults {
       return yield* withWaitClient(
         Effect.sync(() => {
           const child = Bun.spawn(argv, {
-            cwd: options.cwd ?? resolve(this.config.worktree),
+            cwd: options.cwd,
             env: options.env,
             stdin: "ignore",
             stdout: "pipe",

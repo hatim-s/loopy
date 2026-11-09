@@ -1,13 +1,11 @@
-import { type GraphView, isRecord, isRef, type Ref, type Value } from "@loopy/contract";
+import { isRecord, isRef, type Ref, type Value } from "@loopy/contract";
+import type { GraphNode } from "./graph";
+import { nodeIdParts } from "./node-id";
 
-type GraphNode = GraphView["nodes"][number];
-
-/** References read by label: `1:plan` with path `dirty` prints as `plan.dirty`. */
 export function refText(ref: Ref): string {
-  return [ref.ref.replace(/^\d+:/, ""), ...ref.path].join(".");
+  return [nodeIdParts(ref.ref).local, ...ref.path].join(".");
 }
 
-/** Literals print as JSON and references as `node.path`, since they resolve only at run time. */
 export function valueText(value: Value): string {
   if (isRef(value)) {
     return refText(value);
@@ -44,7 +42,6 @@ function operandText(operand: Operand): string {
   return isRef(operand) && "size" in operand ? `size(${refText(operand)})` : valueText(operand);
 }
 
-/** A predicate as one readable line, such as `plan.dirty = true and not exists(notes)`. */
 export function predicateText(predicate: Predicate): string {
   switch (predicate.op) {
     case "exists":
@@ -73,12 +70,10 @@ export function predicateText(predicate: Predicate): string {
   }
 }
 
-/** A value as a person reads it in a line of text: scalars bare, references by name. */
 function plainText(value: Value): string {
   return isRef(value) || Array.isArray(value) || isRecord(value) ? valueText(value) : String(value);
 }
 
-/** The one line a node shows under its title, or null when its kind has nothing to add. */
 export function kindDetail(node: GraphNode): string | null {
   switch (node.kind) {
     case "code": {

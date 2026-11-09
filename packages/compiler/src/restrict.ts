@@ -1,13 +1,12 @@
 import { dirname, resolve } from "node:path";
 import { MAX_SOURCE_BYTES, MAX_SOURCE_FILES } from "@loopy/contract";
-import { builtinCommandKeys } from "@loopy/sdk/graph-host";
+import { builtinCommandKeys, commandKey } from "@loopy/sdk/graph-host";
 import { Effect } from "effect";
 import { type Expression, parseSync, type Statement } from "oxc-parser";
 import {
   type Context,
   callable,
   declarationKind,
-  expressionRule,
   literal,
   name,
   refuse,
@@ -15,21 +14,17 @@ import {
   unwrap,
 } from "./ast";
 import { diagnostic } from "./diagnostic";
-import { AuthorError, authorSource, type CompilationError } from "./errors";
+import { AuthorDiagnostics, authorFailure, authorSource, type CompilationError } from "./errors";
 import { checkCodeModule } from "./module";
 import { modulePath } from "./module-imports";
+import { expressionRule } from "./rules";
 import type { AuthorModule, CompilerDiagnostic, ParserSource } from "./types";
 
-function parserSource(context: Context, node: Expression) {
-  if (
-    node.type === "TSAsExpression" ||
-    node.type === "TSSatisfiesExpression" ||
-    node.type === "TSNonNullExpression"
-  ) {
-    parserSource(context, node.expression);
+/** The only module specifiers that bind trusted builder calls in author source. */
+export const SDK_SPECIFIERS: readonly string[] = ["loopy", "loopy/graph"];
 
-    return;
-  }
+function parserSource(context: Context, init: Expression) {
+  const node = unwrap(init);
 
   if (node.type !== "CallExpression" || callable(node.callee, context.scope) !== "defineCommand") {
     return;
@@ -45,35 +40,39 @@ function parserSource(context: Context, node: Expression) {
   }
 
   const properties = descriptor.properties.filter((property) => property.type === "Property");
-  const parser = properties.find((property) => name(property.key) === "parse");
+  const property = (key: string) => properties.find((entry) => name(entry.key) === key);
+  const parser = property("parse");
 
   if (!parser) {
     return;
   }
 
-  const key = properties.find((property) => name(property.key) === "key");
-  const namespace = properties.find((property) => name(property.key) === "namespace");
-  const command = properties.find((property) => name(property.key) === "name");
+  const keyLiteral = (key: string) => literal(context, property(key)?.value, "command_key");
+  const key = property("key") ? keyLiteral("key") : null;
+  const namespace = key === null ? keyLiteral("namespace") : null;
+  const command = key === null ? keyLiteral("name") : null;
 
-  const id = key
-    ? literal(context, key.value, "command_key")
-    : `${literal(context, namespace?.value, "command_key")}.${literal(context, command?.value, "command_key")}`;
+  const id =
+    key ??
+    (namespace === null || command === null ? null : commandKey({ namespace, name: command }));
 
-  if (id !== null) {
-    if (context.parsers.has(id) || builtinCommandKeys.includes(id)) {
-      refuse(
-        context,
-        node,
-        "command_key",
-        "Custom parser keys must be unique and cannot replace built-in commands.",
-      );
-    }
+  if (id === null) {
+    return;
+  }
 
-    const path = literal(context, parser.value, "module_path");
+  if (context.parsers.has(id) || builtinCommandKeys.includes(id)) {
+    refuse(
+      context,
+      node,
+      "command_key",
+      "Custom parser keys must be unique and cannot replace built-in commands.",
+    );
+  }
 
-    if (path !== null) {
-      context.parsers.set(id, { file: resolve(dirname(context.file), path) });
-    }
+  const path = literal(context, parser.value, "module_path");
+
+  if (path !== null) {
+    context.parsers.set(id, { file: resolve(dirname(context.file), path), exportName: "default" });
   }
 }
 
@@ -87,7 +86,6 @@ type Inspection = {
   diagnostics: CompilerDiagnostic[];
   scopes: Map<string, Scope>;
   entry: string;
-  sdkPaths: Set<string>;
   sourceBytes: number;
 };
 
@@ -108,16 +106,11 @@ function importBindings(
     }
 
     const original = name(item.imported) ?? "";
-
-    // SDK aliases would hide literal positions and callback roles from this pass.
-    if (sdk && item.local.name !== original) {
-      refuse(context, item, "sdk_alias", "Import SDK exports under their original names.");
-    }
-
     const binding = sdk ? "sdk" : (imported.get(original) ?? "function");
 
+    // Aliases would hide literal positions and callback roles from this pass.
     if (binding === "sdk" && item.local.name !== original) {
-      refuse(context, item, "sdk_alias", "Keep SDK names unchanged across author modules.");
+      refuse(context, item, "sdk_alias", "Import SDK exports under their original names.");
     }
 
     context.scope.set(item.local.name, binding);
@@ -138,17 +131,7 @@ const inspectImports = Effect.fn(function* (
     }
 
     const specifier = statement.source.value;
-
-    const dependency =
-      specifier.startsWith(".") || specifier.startsWith("/")
-        ? yield* modulePath(specifier, file)
-        : undefined;
-
-    const sdk =
-      specifier === "loopy" ||
-      specifier === "loopy/graph" ||
-      (dependency !== undefined && state.sdkPaths.has(dependency));
-
+    const sdk = SDK_SPECIFIERS.includes(specifier);
     let imported: Scope = new Map();
 
     if (!sdk) {
@@ -249,10 +232,6 @@ function inspectStatements(context: Context, statements: Statement[], requireLoo
     }
 
     if (node.type === "FunctionDeclaration") {
-      if (node.id) {
-        context.scope.set(node.id.name, "function");
-      }
-
       continue;
     }
 
@@ -274,17 +253,17 @@ function inspectStatements(context: Context, statements: Statement[], requireLoo
 function inspectModule(
   file: string,
   state: Inspection,
-): Effect.Effect<Scope, CompilationError | AuthorError> {
+): Effect.Effect<Scope, CompilationError | AuthorDiagnostics> {
   return Effect.gen(function* () {
     const { modules, parsers, diagnostics, scopes } = state;
     const input = Bun.file(file);
 
     if (modules.size >= MAX_SOURCE_FILES) {
-      return yield* new AuthorError({
-        code: "source_error",
+      return yield* authorFailure(
+        "source_error",
         file,
-        message: "Builder source must fit within 32 files.",
-      });
+        `Builder source must fit within ${MAX_SOURCE_FILES} files.`,
+      );
     }
 
     const source = yield* authorSource("read author source", file, () =>
@@ -294,11 +273,11 @@ function inspectModule(
     state.sourceBytes += Buffer.byteLength(source);
 
     if (state.sourceBytes > MAX_SOURCE_BYTES) {
-      return yield* new AuthorError({
-        code: "source_error",
+      return yield* authorFailure(
+        "source_error",
         file,
-        message: "Builder source must fit within 256 KiB.",
-      });
+        `Builder source must fit within ${MAX_SOURCE_BYTES / 1024} KiB.`,
+      );
     }
 
     const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
@@ -317,7 +296,7 @@ function inspectModule(
       source,
       scope,
       diagnostics,
-      edits: [],
+      modules: [],
       parsers,
       sourceCalls: [],
     };
@@ -343,17 +322,17 @@ function inspectModule(
       );
     }
 
-    for (const edit of context.edits) {
-      // BOUNDARY: The edit text was produced by JSON.stringify from a resolved module path.
-      const modulePath: string = JSON.parse(edit.text);
-
-      const checked = yield* checkCodeModule(modulePath);
-      diagnostics.push(...checked.diagnostics);
+    for (const module of context.modules) {
+      yield* checkCodeModule(module.path, diagnostics);
     }
 
-    const evaluated = context.edits
+    const evaluated = context.modules
       .sort((a, b) => b.start - a.start)
-      .reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), source);
+      .reduce(
+        (text, module) =>
+          text.slice(0, module.start) + JSON.stringify(module.path) + text.slice(module.end),
+        source,
+      );
 
     modules.set(file, { file, source, evaluated, sourceCalls: context.sourceCalls });
     scopes.set(file, scope);
@@ -372,19 +351,16 @@ export const restrict = Effect.fn(function* (file: string) {
     diagnostics,
     scopes: new Map(),
     entry: file,
-    sdkPaths: new Set([
-      yield* modulePath(Bun.resolveSync("@loopy/sdk", import.meta.dir), import.meta.filename),
-      yield* modulePath(Bun.resolveSync("@loopy/sdk/graph", import.meta.dir), import.meta.filename),
-    ]),
     sourceBytes: 0,
   });
 
   for (const parser of parsers.values()) {
-    const checked = yield* checkCodeModule(parser.file);
-    diagnostics.push(...checked.diagnostics);
+    yield* checkCodeModule(parser.file, diagnostics);
   }
 
-  return diagnostics.length > 0
-    ? { ok: false as const, diagnostics }
-    : { ok: true as const, modules: [...modules.values()], parsers };
+  if (diagnostics.length > 0) {
+    return yield* new AuthorDiagnostics({ diagnostics });
+  }
+
+  return { modules: [...modules.values()], parsers };
 });

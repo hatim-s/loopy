@@ -1,7 +1,7 @@
-import type { Duration } from "./graph";
-import { isNumber } from "./validation";
+import { Schema } from "effect";
+import { isNumber, isString } from "./validation";
 
-export type { Duration } from "./graph";
+export type Duration = number | `${number}${"s" | "m" | "h" | "d"}`;
 
 const UNITS = new Map([
   ["s", 1000],
@@ -11,6 +11,11 @@ const UNITS = new Map([
 ]);
 
 const DURATION = /^(\d+(?:\.\d+)?)([smhd])$/;
+
+// BOUNDARY: Durations arrive as JSON numbers or unit-suffixed strings.
+export const durationSchema = Schema.declare<Duration>((value): value is Duration =>
+  isNumber(value) ? Number.isFinite(value) && value >= 0 : isString(value) && DURATION.test(value),
+);
 
 export function durationMs(duration: Duration): number {
   const match = isNumber(duration) ? null : DURATION.exec(duration);

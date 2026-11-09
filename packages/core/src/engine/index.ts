@@ -1,7 +1,5 @@
-export type { Effect } from "./effects";
+export type { EngineEffect } from "./effects";
 
-export { validateOutput } from "./output";
-
-export { type EngineEvent, type EngineState, initialState } from "./state";
+export { type EngineEvent, type EngineState, initialState, type Sample } from "./state";
 
 export { step } from "./step";

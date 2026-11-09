@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 
 export type SegmentOption<V extends string> = { value: V; label: ReactNode; count?: number };
 
-/** One choice from a few. The chosen button carries aria-pressed. */
 export function Segmented<V extends string>(props: {
   label: string;
   value: V;

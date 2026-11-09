@@ -1,5 +1,10 @@
-import type { CompilerDiagnosticCode } from "@loopy/core";
-import type { CompilerDiagnostic } from "./types";
+import type { CompilerDiagnostic, CompilerDiagnosticCode } from "./types";
+
+export function position(source: string, offset: number) {
+  const lines = source.slice(0, offset).split("\n");
+
+  return { line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 };
+}
 
 export function diagnostic(
   file: string,
@@ -8,7 +13,5 @@ export function diagnostic(
   code: CompilerDiagnosticCode,
   message: string,
 ): CompilerDiagnostic {
-  const lines = source.slice(0, start).split("\n");
-
-  return { code, message, file, line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 };
+  return { code, message, file, ...position(source, start) };
 }

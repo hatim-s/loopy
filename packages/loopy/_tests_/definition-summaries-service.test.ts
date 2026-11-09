@@ -39,7 +39,7 @@ test("definition projection hides graph, bundles and secrets and displays JSON i
   expect(decodeBoundary(definitionSummarySchema)(summary)).toEqual(summary);
   expect((await Effect.runPromise(f.service.listLoopies(f.a)))[0]).toMatchObject({
     input: "schema",
-    description: saved.description,
+    description: saved.graph.meta.description,
   });
 });
 
@@ -101,8 +101,8 @@ test("run metadata fetches each selected slug once per canonical workspace and c
   await f.run("missing-alias", "alias", "removed", "queued");
   const runs = await Effect.runPromise(f.service.listRuns({ limit: 200 }));
   expect(runs.filter((run) => run.slug === "chosen").map((run) => run.loopy.description)).toEqual([
-    saved.description,
-    saved.description,
+    saved.graph.meta.description,
+    saved.graph.meta.description,
   ]);
   expect(
     runs.filter((run) => run.slug === "removed").every((run) => run.loopy.description === null),
@@ -128,7 +128,9 @@ test("start and schedule use direct get, distinguishing absent definitions from 
     ).rejects.toMatchObject(error);
   }
 
-  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: "2026-10-23T00:00:00.000Z" })),
+  ).toEqual([]);
   expect(await Effect.runPromise(f.store.listSchedules())).toEqual([]);
   expect(f.calls.graphs).toEqual(["missing", "missing", "corrupt", "corrupt"]);
   expect(f.calls.lists.size).toBe(0);
@@ -162,7 +164,7 @@ test("native adapter distinguishes absence from corrupt existing files", async (
   ).rejects.toMatchObject({
     code: "not_found",
   });
-  writeFileSync(join(f.a, ".loopy", "loopies", "native.json"), JSON.stringify({ version: 2 }));
+  writeFileSync(join(f.a, ".loopy", "loopies", "native.json"), JSON.stringify({ version: 3 }));
   await expect(Effect.runPromise(service.startRun("native", {}, f.a))).rejects.toHaveProperty(
     "_tag",
     "RegistryError",
@@ -182,5 +184,7 @@ test("native adapter distinguishes absence from corrupt existing files", async (
     "_tag",
     "RegistryError",
   );
-  expect(await Effect.runPromise(f.store.listRuns())).toEqual([]);
+  expect(
+    await Effect.runPromise(f.store.queryRuns({ limit: 200, now: "2026-10-23T00:00:00.000Z" })),
+  ).toEqual([]);
 });

@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { defaultHome } from "@loopy/runtime/local";
 
 const root = resolve(import.meta.dir, "..");
 
@@ -18,7 +18,7 @@ async function run(args: string[], cwd = root) {
 
 await run(["run", "build"]);
 
-const packages = join(homedir(), ".loopy", "packages");
+const packages = join(defaultHome(), "packages");
 
 await mkdir(packages, { recursive: true });
 

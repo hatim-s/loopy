@@ -8,7 +8,7 @@ import type { NodeRun } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { StorageError } from "../../core/src/store";
 import { newRun } from "./fixture";
-import { createTestStores } from "./store-fixture";
+import { createTestStores, runAt } from "./store-fixture";
 
 const { openTestStore, closeTestStore, closeTestStores } = createTestStores();
 
@@ -70,11 +70,13 @@ test("node runs, logs, event revisions and rate windows survive reopening", asyn
     }),
   );
   await Effect.runPromise(f.store.acquireRateLimit("shared", 1, 60_000, newRun().createdAt));
-  const expected = await Effect.runPromise(f.store.snapshotRun("run"));
+  const expected = await Effect.runPromise(f.store.dashboardSnapshot("run"));
+  const logs = await Effect.runPromise(f.store.getLogs("run"));
   closeTestStore(f.store);
   const reopened = openTestStore(f.file);
 
-  expect(await Effect.runPromise(reopened.snapshotRun("run"))).toEqual(expected);
+  expect(await Effect.runPromise(reopened.dashboardSnapshot("run"))).toEqual(expected);
+  expect(await Effect.runPromise(reopened.getLogs("run"))).toEqual(logs);
   expect(await Effect.runPromise(reopened.getNodeRuns("run"))).toEqual([record]);
   expect(
     await Effect.runPromise(reopened.acquireRateLimit("shared", 1, 60_000, newRun().createdAt)),
@@ -94,7 +96,7 @@ test("outbox insertion failure rolls back nodes, logs and outcomes without publi
   const f = fixture();
   await Effect.runPromise(f.store.createRun(newRun()));
   await Effect.runPromise(f.store.claim("run", "owner"));
-  const before = await Effect.runPromise(f.store.snapshotRun("run"));
+  const before = await Effect.runPromise(f.store.dashboardSnapshot("run"));
   let deliveries = 0;
   f.store.subscribe(() => {
     deliveries++;
@@ -126,7 +128,8 @@ test("outbox insertion failure rolls back nodes, logs and outcomes without publi
       }),
     ),
   ).rejects.toThrow("outbox unavailable");
-  expect(await Effect.runPromise(f.store.snapshotRun("run"))).toEqual(before);
+  expect(await Effect.runPromise(f.store.dashboardSnapshot("run"))).toEqual(before);
+  expect(await Effect.runPromise(f.store.getLogs("run"))).toEqual([]);
   expect(deliveries).toBe(0);
   f.db.exec("DROP TRIGGER reject_event");
   await Effect.runPromise(
@@ -139,15 +142,17 @@ test("outbox insertion failure rolls back nodes, logs and outcomes without publi
   expect(deliveries).toBe(1);
 });
 
-for (const malformed of [
-  { ...newRun(), status: "unknown" },
-  {
-    ...newRun(),
-    owner: { token: "x", pid: "wrong", host: "host", heartbeatAt: newRun().createdAt },
-  },
-  [],
-]) {
-  test("event reads reject malformed run records", async () => {
+for (const [name, malformed] of [
+  [
+    "an owner pid of the wrong type",
+    {
+      ...newRun(),
+      owner: { token: "x", pid: "wrong", host: "host", heartbeatAt: newRun().createdAt },
+    },
+  ],
+  ["a non-object record", []],
+] as const) {
+  test(`event reads reject a run record with ${name}`, async () => {
     const f = fixture();
     await Effect.runPromise(f.store.createRun(newRun()));
     f.db.query("UPDATE events SET record=?").run(JSON.stringify(malformed));
@@ -184,10 +189,11 @@ for (const alive of [true, false]) {
     }
 
     let now = Date.parse(newRun().createdAt);
-    const store = openTestStore(":memory:", () => now, { leaseMs: 2000 });
+    const run = runAt(() => now);
+    const store = openTestStore(":memory:", { leaseMs: 2000 });
 
     try {
-      await Effect.runPromise(
+      await run(
         store.createRun({
           ...newRun(),
           status: "running",
@@ -206,12 +212,12 @@ for (const alive of [true, false]) {
       );
 
       if (alive) {
-        await expect(Effect.runPromise(store.claim("run", "new"))).rejects.toThrow("not owned");
+        await expect(run(store.claim("run", "new"))).rejects.toThrow("not owned");
       } else {
-        expect(await Effect.runPromise(store.claim("run", "new"))).toMatchObject({
+        expect(await run(store.claim("run", "new"))).toMatchObject({
           owner: { token: "new", pid: process.pid },
         });
-        expect(await Effect.runPromise(store.heartbeat("run", "old"))).toBe(false);
+        expect(await run(store.heartbeat("run", "old"))).toBe(false);
       }
     } finally {
       child.kill();
@@ -220,7 +226,7 @@ for (const alive of [true, false]) {
   });
 }
 
-test("persisted schema failures expose a corrupt reason and field diagnostics", () => {
+test("event reads reject an unknown run status as corrupt with field diagnostics", () => {
   const f = fixture();
   Effect.runSync(f.store.createRun(newRun()));
   f.db.query("UPDATE events SET record=?").run(JSON.stringify({ ...newRun(), status: "unknown" }));

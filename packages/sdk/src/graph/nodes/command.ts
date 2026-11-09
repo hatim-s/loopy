@@ -1,11 +1,10 @@
-import type { Duration, RateLimit } from "@loopy/core";
-import { type GraphRetry, type OutSchema, parseArgv } from "@loopy/core";
-import { type CommandDescriptor, validateCommandDescriptor } from "../../define-command";
-import { currentBuilder } from "../builder";
-import { commandArgv } from "../command-argv";
+import type { CommandResult, Duration, Json, RateLimit } from "@loopy/core";
+import { type CommandFlagSpec, type GraphRetry, type OutSchema, parseArgv } from "@loopy/core";
+import { type CommandDescriptor, type Prepare, validateCommandDescriptor } from "../../descriptor";
+import { currentBuilder, retryPolicy } from "../builder";
+import { type CommandArguments, commandArgv } from "../command-argv";
 import type { CommandInput, CommandRawInput } from "../command-input";
 import { type AuthorValue, type Ref, type RefValue, serialize, serializeValues } from "../ref";
-
 import type { Infer, SchemaFields } from "../types";
 
 type Options = {
@@ -19,40 +18,55 @@ type Options = {
   rateLimit?: RateLimit;
 };
 
-type Input = {
-  args?: readonly (string | Ref<string>)[];
-  revisions?: readonly (string | Ref<string>)[];
-  paths?: readonly (string | Ref<string>)[];
-  flags?: Readonly<Record<string, AuthorValue>>;
+export const commandOutput = {
+  kind: "record",
+  fields: { stdout: "string", stderr: "string", exitCode: "number" },
+} as const;
+
+type CommandOutput = Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
+
+/** Built-in parsers receive the prepared operands; only wc reads them. */
+export type Parser<R> = (result: CommandResult, input: { args?: readonly Json[] }) => R;
+
+/** Symbol keys keep host metadata out of the author call surface the compiler enumerates. */
+export const PARSER = Symbol("loopy.command.parser");
+
+type CallArguments<I> = I extends { args: readonly unknown[] }
+  ? [input: I, options?: Options]
+  : [input?: I, options?: Options];
+
+export type CommandCall<
+  D extends CommandDescriptor,
+  S extends OutSchema,
+  R extends CommandDescriptor = D,
+> = {
+  (...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
+  readonly descriptor: D;
+  raw: (...args: CallArguments<CommandRawInput<R>>) => CommandOutput;
 };
 
-function record({
-  label,
-  descriptor,
-  input,
-  options,
-  mode,
-  out,
-}: {
-  label: string | null;
-  descriptor: GraphCommandDescriptor;
-  input: Input;
-  options: Options;
-  mode: "parsed" | "raw";
-  out: OutSchema;
-}) {
+function addCommand(
+  node: {
+    key: string;
+    out: OutSchema;
+    argv: readonly (string | RefValue)[];
+    flags: Readonly<Record<string, AuthorValue>>;
+    flagSpec?: CommandFlagSpec;
+    okExitCodes: readonly number[];
+    parse: Readonly<Record<string, AuthorValue>> | null;
+  },
+  options: Options,
+) {
   const builder = currentBuilder();
-  const key = descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
-  const rendered = commandArgv(descriptor, input, mode);
 
-  const node = builder.add(
+  return builder.add(
     {
       kind: "command",
-      key,
-      out,
-      argv: [rendered.program, ...rendered.argv].map((arg) => serialize(arg, builder)),
-      flags: serializeValues(rendered.flags, builder),
-      flagSpec: rendered.flagSpec,
+      key: node.key,
+      out: node.out,
+      argv: node.argv.map((arg) => serialize(arg, builder)),
+      flags: serializeValues(node.flags, builder),
+      ...(node.flagSpec && { flagSpec: node.flagSpec }),
       options: {
         cwd: serialize(options.cwd, builder),
         env: serializeValues(options.env ?? {}, builder),
@@ -61,75 +75,62 @@ function record({
         maxOutputBytes: options.maxOutputBytes,
       },
       rateLimit: options.rateLimit ?? null,
-      retry: builder.retry(options.retry),
-      okExitCodes: [...(descriptor.okExitCodes ?? [0])],
-      parse:
-        mode === "parsed" && descriptor.parse
-          ? { bundleHash: null, input: serializeValues(rendered.parseInput, builder) }
-          : null,
+      retry: retryPolicy(options.retry),
+      okExitCodes: [...node.okExitCodes],
+      parse: node.parse && { bundleHash: null, input: serializeValues(node.parse, builder) },
     },
-    label,
-  );
-
-  return node.id;
+    options.label ?? null,
+  ).id;
 }
 
-export const commandOutput = {
-  kind: "record",
-  fields: { stdout: "string", stderr: "string", exitCode: "number" },
-} as const;
+/** The direct call applies presets, exclusions and preparation; `.raw` passes flags through. */
+type CallMode = { out: OutSchema; prepare?: Prepare; parses: boolean };
 
-type CallArguments<I> = I extends { args: readonly unknown[] }
-  ? [input: I, options?: Options]
-  : [input?: I, options?: Options];
-
-export type GraphCommandDescriptor = Omit<CommandDescriptor, "parse"> & { parse?: string };
-
-type CommandCall<D extends GraphCommandDescriptor, S extends OutSchema> = {
-  (...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
-  readonly descriptor: D;
-  raw: (
-    ...args: CallArguments<CommandRawInput<D>>
-  ) => Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
-};
-
-export function defineCommand<const D extends GraphCommandDescriptor>(
-  descriptor: D & { parse?: never },
-): CommandCall<D, typeof commandOutput>;
-export function defineCommand<const S extends OutSchema, const D extends GraphCommandDescriptor>(
-  descriptor: D & { parse: string },
-  out: S,
-): CommandCall<D, S>;
-export function defineCommand<const S extends OutSchema, const D extends GraphCommandDescriptor>(
-  descriptor: D,
-  schema?: S,
+function descriptorCommand(
+  descriptor: CommandDescriptor,
+  input: CommandArguments,
+  options: Options,
+  mode: CallMode | null,
 ) {
-  validateCommandDescriptor(descriptor);
-  const out = schema ?? commandOutput;
+  const rendered = commandArgv(
+    descriptor,
+    input,
+    mode ? { kind: "parsed", prepare: mode.prepare } : { kind: "raw" },
+  );
+
+  return addCommand(
+    {
+      key: rendered.key,
+      out: mode?.out ?? commandOutput,
+      argv: [rendered.program, ...rendered.operands],
+      flags: rendered.flags,
+      flagSpec: rendered.flagSpec,
+      okExitCodes: rendered.okExitCodes,
+      parse: mode?.parses ? rendered.parseInput : null,
+    },
+    options,
+  );
+}
+
+function commandCall<D extends CommandDescriptor, S extends OutSchema, R extends CommandDescriptor>(
+  descriptor: D,
+  mode: CallMode & { out: S },
+  rawDescriptor: R,
+) {
+  new Set([descriptor, rawDescriptor]).forEach(validateCommandDescriptor);
+
   function call(...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
-  function call(input: Input = {}, options: Options = {}): Ref<Infer<S>, SchemaFields<S>> {
-    return currentBuilder().ref(
-      record({ label: options.label ?? null, descriptor, input, options, mode: "parsed", out }),
-      out,
-    );
+  function call(
+    input: CommandArguments = {},
+    options: Options = {},
+  ): Ref<Infer<S>, SchemaFields<S>> {
+    return currentBuilder().ref(descriptorCommand(descriptor, input, options, mode), mode.out);
   }
 
-  function raw(
-    ...args: CallArguments<CommandRawInput<D>>
-  ): Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
-  function raw(
-    input: Input = {},
-    options: Options = {},
-  ): Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>> {
-    return currentBuilder().ref(
-      record({
-        label: options.label ?? null,
-        descriptor,
-        input,
-        options,
-        mode: "raw",
-        out: commandOutput,
-      }),
+  function raw(...args: CallArguments<CommandRawInput<R>>): CommandOutput;
+  function raw(input: CommandArguments = {}, options: Options = {}): CommandOutput {
+    return currentBuilder().ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>(
+      descriptorCommand(rawDescriptor, input, options, null),
       commandOutput,
     );
   }
@@ -137,53 +138,67 @@ export function defineCommand<const S extends OutSchema, const D extends GraphCo
   return Object.assign(call, { raw, descriptor });
 }
 
-function shell({
-  label,
-  key,
-  argv,
-  options,
-}: {
-  label: string | null;
-  key: string;
-  argv: readonly (string | RefValue)[];
-  options: Options;
-}) {
-  const builder = currentBuilder();
+export function defineCommand<const D extends CommandDescriptor>(
+  descriptor: D & { parse?: never },
+): CommandCall<D, typeof commandOutput>;
+export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
+  descriptor: D & { parse: string },
+  out: S,
+): CommandCall<D, S>;
+export function defineCommand<const S extends OutSchema, const D extends CommandDescriptor>(
+  descriptor: D,
+  out?: S,
+) {
+  return commandCall(
+    descriptor,
+    { out: out ?? commandOutput, parses: Boolean(descriptor.parse) },
+    descriptor,
+  );
+}
 
-  const node = builder.add(
-    {
-      kind: "command",
-      key,
-      out: commandOutput,
-      argv: argv.map((arg) => serialize(arg, builder)),
-      flags: {},
-      options: {
-        cwd: serialize(options.cwd, builder),
-        env: serializeValues(options.env ?? {}, builder),
-        stdin: serialize(options.stdin, builder),
-        timeout: options.timeout,
-        maxOutputBytes: options.maxOutputBytes,
-      },
-      rateLimit: options.rateLimit ?? null,
-      retry: builder.retry(options.retry),
-      okExitCodes: [0],
-      parse: null,
-    },
-    label,
+export function builtin<const D extends CommandDescriptor>(
+  descriptor: D,
+): CommandCall<D, typeof commandOutput>;
+export function builtin<
+  const D extends CommandDescriptor,
+  const S extends OutSchema,
+  const R extends CommandDescriptor = D,
+>(
+  descriptor: D,
+  parsed: { parse: Parser<Infer<S>>; out: S; prepare?: Prepare; raw?: R },
+): CommandCall<D, S, R>;
+export function builtin<
+  D extends CommandDescriptor,
+  S extends OutSchema,
+  R extends CommandDescriptor,
+>(descriptor: D, parsed?: { parse: Parser<Infer<S>>; out: S; prepare?: Prepare; raw?: R }) {
+  const mode: CallMode = parsed
+    ? { out: parsed.out, prepare: parsed.prepare, parses: true }
+    : { out: commandOutput, parses: false };
+
+  const call = commandCall(descriptor, mode, parsed?.raw ?? descriptor);
+
+  return parsed ? Object.assign(call, { [PARSER]: parsed.parse }) : call;
+}
+
+function shell(key: string, argv: readonly (string | RefValue)[], options: Options) {
+  const id = addCommand(
+    { key, out: commandOutput, argv, flags: {}, okExitCodes: [0], parse: null },
+    options,
   );
 
-  return builder.ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>(
-    node.id,
+  return currentBuilder().ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>(
+    id,
     commandOutput,
   );
 }
 
 function exec(argv: readonly (string | RefValue)[], options: Options = {}) {
-  return shell({ label: options.label ?? null, key: "sh.exec", argv, options });
+  return shell("sh.exec", argv, options);
 }
 
 function run(line: string, options: Options = {}) {
-  return shell({ label: options.label ?? null, key: "sh.run", argv: parseArgv(line), options });
+  return shell("sh.run", parseArgv(line), options);
 }
 
 export const sh = Object.assign(exec, { exec, run });

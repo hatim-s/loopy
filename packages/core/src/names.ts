@@ -1,7 +1,6 @@
-/** Identifier formats shared by authoring, validation, storage and the CLI. */
-export const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
+const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
-export const SECRET_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
+const SECRET_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 
 export function validateSlug(slug: string): void {
   if (!SLUG_PATTERN.test(slug)) {

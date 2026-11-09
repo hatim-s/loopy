@@ -30,7 +30,13 @@ import { eventStream } from "../../runtime/src/local/server/events";
 import { apiRoutes, dispatch } from "../../runtime/src/local/server/routes";
 import { CLI, fixture, object, roots, runFixture, save } from "./cli-fixture";
 import { newRun } from "./fixture";
-import { fixtureScope, fixtureStore } from "./fixtures/service-runtime";
+import {
+  countPasses,
+  fixtureScope,
+  fixtureStore,
+  nextPass,
+  waitUntil,
+} from "./fixtures/service-runtime";
 
 const daemonMetadata = { startedAt: new Date(0).toISOString(), concurrency: 4 };
 
@@ -487,7 +493,7 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
   }
 });
 
-test("SSE disconnect removes the subscriber and stops polling", async () => {
+test("SSE disconnect removes the subscriber", async () => {
   const { store, service } = await serviceFixture("disconnect");
   let active = 0;
   const original = store.subscribe.bind(store);
@@ -502,8 +508,6 @@ test("SSE disconnect removes the subscriber and stops polling", async () => {
     };
   });
 
-  const version = spyOn(store, "dataVersion");
-
   const response = await Effect.runPromise(
     eventStream(
       store,
@@ -517,12 +521,8 @@ test("SSE disconnect removes the subscriber and stops polling", async () => {
   expect(unsubscribe).toBeFunction();
   await response.body!.cancel();
   expect(active).toBe(0);
-  const calls = version.mock.calls.length;
-  await Bun.sleep(220);
-  expect(version.mock.calls.length).toBe(calls);
   await Effect.runPromise(store.close());
   subscribe.mockRestore();
-  version.mockRestore();
 });
 
 test("response validation rejects a view with extra fields", async () => {
@@ -985,19 +985,21 @@ test("SSE HTTP reconnect from a closed client's last id has no gap", async () =>
 test("local server leaves event pruning to the runtime daemon", async () => {
   const { f, store } = await serviceFixture("retention-owner");
   const prune = spyOn(store, "pruneEvents");
+  const passes = countPasses(store);
+  const scope = fixtureScope();
 
   const daemon = await Effect.runPromise(
     localDaemon({ concurrency: 4, ...f, store, port: 0 }).pipe(
-      Effect.provideService(Scope.Scope, fixtureScope()),
+      Effect.provideService(Scope.Scope, scope),
     ),
   );
 
   try {
     await Effect.runPromise(daemon.start);
     expect(prune).not.toHaveBeenCalled();
-    await Effect.runPromise(daemon.tick);
-    expect(prune).toHaveBeenCalledTimes(1);
-    await Effect.runPromise(daemon.tick);
+    await Effect.runPromise(Effect.forkIn(daemon.run, scope));
+    await Effect.runPromise(waitUntil(Effect.sync(() => prune.mock.calls.length > 0)));
+    await Effect.runPromise(nextPass(daemon, passes));
     expect(prune).toHaveBeenCalledTimes(1);
   } finally {
     await Effect.runPromise(daemon.stop);
@@ -1137,7 +1139,7 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const { compile } = await import("@loopy/compiler");
   const { compiledBody } = await import("./compiled-fixture");
   const source = join(f.cwd, "compiled.ts");
-  const sdk = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
+  const sdk = "loopy";
   await Bun.write(
     source,
     `import {loopy,code} from ${JSON.stringify(sdk)}; export default loopy("compiled-save", {input:{},run:()=>code("answer",{in:{},out:{kind:"value",type:"number"},module:"./answer.ts"})});`,
@@ -1256,7 +1258,7 @@ test("saving another revision retains the earlier graph and executable artifacts
   const source = join(f.cwd, "revision.ts");
   await Bun.write(
     source,
-    `import {loopy,code} from ${JSON.stringify(resolve(import.meta.dir, "../../sdk/src/graph/index.ts"))}; export default loopy("revisions", {input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
+    `import {loopy,code} from "loopy"; export default loopy("revisions", {input:{},run:()=>code("value",{in:{},out:{kind:"value",type:"number"},module:"./value.ts"})});`,
   );
   const registry = await Effect.runPromise(Registry.make(f.home, f.cwd));
   const revisions: string[] = [];

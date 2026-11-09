@@ -1,8 +1,7 @@
 import { type Diagnostic, errnoCode, errorMessage } from "@loopy/core";
 import { Cause, Data, Effect } from "effect";
-import type { CompileResult } from "./types";
+import type { CompileResult, CompilerDiagnostic, CompilerDiagnosticCode } from "./types";
 
-/** Compiler infrastructure failures are distinct from author diagnostics. */
 export class CompilationError extends Data.TaggedError("CompilationError")<{
   operation: string;
   file: string;
@@ -13,11 +12,27 @@ export class CompilationError extends Data.TaggedError("CompilationError")<{
   }
 }
 
-export class AuthorError extends Data.TaggedError("AuthorError")<{
-  code: "source_error" | "evaluation_failed" | "bundle_failed";
-  file: string;
-  message: string;
+export class AuthorDiagnostics extends Data.TaggedError("AuthorDiagnostics")<{
+  diagnostics: CompilerDiagnostic[];
 }> {}
+
+export function authorFailure(code: CompilerDiagnosticCode, file: string, message: string) {
+  return new AuthorDiagnostics({ diagnostics: [{ code, message, file, line: 1, column: 1 }] });
+}
+
+/** Graph diagnostics without a source position point at the entry module. */
+export function graphDiagnostics(
+  diagnostics: readonly Diagnostic[],
+  file: string,
+): CompilerDiagnostic[] {
+  return diagnostics.map((value) => ({
+    code: value.code,
+    message: value.message,
+    file: value.source?.module ?? file,
+    line: value.source?.line ?? 1,
+    column: value.source?.column ?? 1,
+  }));
+}
 
 export const compilerIO = <A>(operation: string, file: string, run: () => Promise<A>) =>
   Effect.tryPromise({
@@ -25,59 +40,27 @@ export const compilerIO = <A>(operation: string, file: string, run: () => Promis
     catch: (cause) => new CompilationError({ operation, file, cause }),
   });
 
-export class EvaluationError extends Data.TaggedError("EvaluationError")<{
-  diagnostic: Diagnostic;
-}> {
-  override get message() {
-    return this.diagnostic.message;
-  }
-}
-
-/** Missing author dependencies are source diagnostics; other read errors remain infrastructure failures. */
 export const authorSource = <A>(operation: string, file: string, run: () => Promise<A>) =>
   Effect.tryPromise({
     try: run,
     catch: (cause) =>
       errnoCode(cause) === "ENOENT" || errnoCode(cause) === "ENOTDIR"
-        ? new AuthorError({ code: "source_error", file, message: errorMessage(cause) })
+        ? authorFailure("source_error", file, errorMessage(cause))
         : new CompilationError({ operation, file, cause }),
   });
 
-/** Combined failures retain the full original Cause inside CompilationError, with defects and interrupts intact. */
+/** Evaluation and scratch removal can both fail, so a cause with several reasons stays infrastructure. */
 export const recoverDiagnostics = <R>(
-  operation: Effect.Effect<CompileResult, CompilationError | AuthorError | EvaluationError, R>,
+  operation: Effect.Effect<CompileResult, CompilationError | AuthorDiagnostics, R>,
   file: string,
 ): Effect.Effect<CompileResult, CompilationError, R> =>
   operation.pipe(
     Effect.catchCause((cause): Effect.Effect<CompileResult, CompilationError> => {
       const reason = cause.reasons.length === 1 ? cause.reasons[0] : undefined;
-
       const error = reason?._tag === "Fail" ? reason.error : undefined;
 
-      if (error instanceof AuthorError) {
-        return Effect.succeed({
-          ok: false,
-          diagnostics: [
-            { code: error.code, message: error.message, file: error.file, line: 1, column: 1 },
-          ],
-        });
-      }
-
-      if (error instanceof EvaluationError) {
-        const value = error.diagnostic;
-
-        return Effect.succeed({
-          ok: false,
-          diagnostics: [
-            {
-              code: value.code,
-              message: value.message,
-              file: value.source?.module ?? file,
-              line: value.source?.line ?? 1,
-              column: value.source?.column ?? 1,
-            },
-          ],
-        });
+      if (error instanceof AuthorDiagnostics) {
+        return Effect.succeed({ ok: false, diagnostics: error.diagnostics });
       }
 
       return Effect.failCause(

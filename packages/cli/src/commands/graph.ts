@@ -3,8 +3,8 @@ import { compile } from "@loopy/compiler";
 import { type GraphView, graphView, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { request } from "../client";
-import { type CliContext, requireTarget } from "../context";
-import { CliError, cliIO, diagnosticsError } from "../errors";
+import { defineCommand } from "../command";
+import { cliIO, diagnosticsError } from "../errors";
 import { printJson, printLine } from "../output";
 
 function text(graph: GraphView) {
@@ -28,37 +28,43 @@ function text(graph: GraphView) {
     .join("\n");
 }
 
-export function runGraph(context: CliContext) {
-  return Effect.gen(function* () {
-    const target = yield* requireTarget(context, "Name or file");
-    const format = context.values.format ?? "json";
+export const graph = defineCommand({
+  path: ["graph"],
+  summary: "Print a saved graph by name, or compile a file and print its graph",
+  options: {
+    format: {
+      type: "choice",
+      choices: ["json", "text"],
+      default: "json",
+      description: "Output format.",
+    },
+  },
+  positionals: [{ name: "name|file", label: "Name or file" }],
+  run: (cli) =>
+    Effect.gen(function* () {
+      const [target] = cli.args;
+      let view: GraphView;
 
-    if (format !== "json" && format !== "text") {
-      return yield* new CliError({ message: "Use --format json or --format text." });
-    }
+      if (yield* cliIO(() => Bun.file(resolve(cli.cwd, target)).exists())) {
+        const result = yield* compile(resolve(cli.cwd, target));
 
-    let graph: GraphView;
+        if (!result.ok) {
+          return yield* diagnosticsError(result.diagnostics);
+        }
 
-    if (yield* cliIO(() => Bun.file(resolve(context.cwd, target)).exists())) {
-      const result = yield* compile(resolve(context.cwd, target));
-
-      if (!result.ok) {
-        return yield* diagnosticsError(result.diagnostics);
+        view = graphView(result.graph);
+      } else {
+        ({ graph: view } = yield* request(
+          cli,
+          `/loopies/${encodeURIComponent(target)}/graph?workspace=${encodeURIComponent(cli.cwd)}`,
+          routes.graph.response,
+        ));
       }
 
-      graph = graphView(result.graph);
-    } else {
-      ({ graph } = yield* request(
-        context,
-        `/loopies/${encodeURIComponent(target)}/graph?workspace=${encodeURIComponent(context.cwd)}`,
-        routes.graph.response,
-      ));
-    }
-
-    if (format === "text") {
-      printLine(text(graph));
-    } else {
-      printJson(graph);
-    }
-  });
-}
+      if (cli.values.format === "text") {
+        printLine(text(view));
+      } else {
+        printJson(view);
+      }
+    }),
+});

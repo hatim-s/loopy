@@ -1,16 +1,18 @@
 import { expect, test } from "bun:test";
 import type { Executor } from "@loopy/core";
 import { makeDaemon } from "@loopy/runtime/host";
-import { MemoryStore } from "@loopy/runtime/store";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { newRun } from "./fixture";
+import { countPasses, nextPass, waitUntil } from "./fixtures/service-runtime";
+import { MemorySqlStore } from "./store-fixture";
 
-test("six runs respect concurrency two across overlapping ticks", async () => {
+test("six runs respect concurrency two while the loop keeps polling", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const store = new MemoryStore();
+        const store = new MemorySqlStore();
+        const passes = countPasses(store);
         const entered = yield* Deferred.make<void>();
         const gate = yield* Deferred.make<void>();
         const active = new Set<string>();
@@ -41,7 +43,7 @@ test("six runs respect concurrency two across overlapping ticks", async () => {
             }).pipe(Effect.orDie),
         };
 
-        const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) }).graph;
+        const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) });
 
         const daemon = yield* makeDaemon({
           store,
@@ -54,17 +56,21 @@ test("six runs respect concurrency two across overlapping ticks", async () => {
           yield* store.createRun({ ...newRun(), id: String(i) });
         }
 
-        const ticking = yield* Effect.forkChild(daemon.tick);
+        yield* Effect.forkScoped(daemon.run);
         yield* Deferred.await(entered);
-        const overlapping = yield* Effect.forkChild(daemon.tick);
+        // Full passes while both slots are held must not admit a third run.
+        yield* nextPass(daemon, passes);
         expect(peak).toBe(2);
         yield* Deferred.succeed(gate, undefined);
-        expect(yield* Fiber.join(ticking)).toEqual({ fired: 0, activated: 6 });
-        yield* Fiber.join(overlapping);
+        yield* waitUntil(
+          Effect.map(
+            store.queryRuns({ status: "succeeded", limit: 200, now: newRun().createdAt }),
+            (runs) => runs.length === 6,
+          ),
+        );
         expect(peak).toBe(2);
         expect(new Set(calls).size).toBe(6);
         expect(calls).toHaveLength(6);
-        expect(yield* store.listRuns({ status: "succeeded" })).toHaveLength(6);
       }),
     ),
   );
@@ -74,7 +80,7 @@ test("shutdown drains owned work without aborting its receipt and preserves queu
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const store = new MemoryStore();
+        const store = new MemorySqlStore();
         const entered = yield* Deferred.make<void>();
         const gate = yield* Deferred.make<void>();
         let aborted = false;
@@ -101,7 +107,7 @@ test("shutdown drains owned work without aborting its receipt and preserves queu
             }),
         };
 
-        const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) }).graph;
+        const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) });
 
         const daemon = yield* makeDaemon({
           store,

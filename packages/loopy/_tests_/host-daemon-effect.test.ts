@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { makeDaemon } from "@loopy/runtime/host";
-import { MemoryStore } from "@loopy/runtime/store";
 import { loopy } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "./fixture";
+import { MemorySqlStore } from "./store-fixture";
 
 test("daemon wakes for a newly committed run and shuts down owned work", async () => {
   await Effect.runPromise(
@@ -14,7 +14,7 @@ test("daemon wakes for a newly committed run and shuts down owned work", async (
         const prepared = yield* Deferred.make<void>();
         const gate = yield* Deferred.make<void>();
 
-        class RecordingStore extends MemoryStore {
+        class RecordingStore extends MemorySqlStore {
           override dueRuns(at: string) {
             return super.dueRuns(at).pipe(Effect.tap(() => Deferred.succeed(polled, undefined)));
           }
@@ -30,7 +30,7 @@ test("daemon wakes for a newly committed run and shuts down owned work", async (
               Effect.andThen(Deferred.await(gate)),
               Effect.as({
                 executor: new FakeExecutor(),
-                graph: loopy("empty", { input: {}, run: () => 42 }).graph,
+                graph: loopy("empty", { input: {}, run: () => 42 }),
               }),
             ),
           revisionFor: () => Effect.succeed("bundle"),
@@ -47,47 +47,5 @@ test("daemon wakes for a newly committed run and shuts down owned work", async (
         expect((yield* store.getRun("run"))?.status).toBe("succeeded");
       }),
     ).pipe(Effect.provide(TestClock.layer())),
-  );
-});
-
-test("tick admits concurrent runs within its limit", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const store = new MemoryStore();
-        const both = yield* Deferred.make<void>();
-        const gate = yield* Deferred.make<void>();
-        let count = 0;
-
-        const daemon = yield* makeDaemon({
-          store,
-          concurrency: 2,
-          prepare: () =>
-            Effect.gen(function* () {
-              count++;
-
-              if (count === 2) {
-                yield* Deferred.succeed(both, undefined);
-              }
-
-              yield* Deferred.await(gate);
-
-              return {
-                executor: new FakeExecutor(),
-                graph: loopy("empty", { input: {}, run: () => 42 }).graph,
-              };
-            }),
-          revisionFor: () => Effect.succeed("bundle"),
-        });
-
-        yield* store.createRun(newRun());
-        yield* store.createRun({ ...newRun(), id: "second" });
-        const tick = yield* Effect.forkChild(daemon.tick);
-        yield* Deferred.await(both);
-        expect(count).toBe(2);
-        yield* Deferred.succeed(gate, undefined);
-        expect(yield* Fiber.join(tick)).toEqual({ fired: 0, activated: 2 });
-      }),
-    ),
   );
 });

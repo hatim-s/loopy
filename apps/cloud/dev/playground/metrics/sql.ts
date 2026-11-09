@@ -1,103 +1,81 @@
-import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { z } from "zod";
-import { atomic, config, evidenceDirectory, profile, root, state } from "../config";
+import { isDeepStrictEqual } from "node:util";
+import { decodeBoundary } from "@loopy/contract";
+import { Schema } from "effect";
+import { sha256Hex } from "../../shared/hash";
+import { distribution } from "../../shared/stats";
+import { config, evidence, profile, root, state } from "../config";
+import { atomic } from "../files";
+import { decodePhaseName, postloadInventory, readArtifact } from "./artifacts";
 import { lifecycle } from "./lifecycle";
 import { approvedDiagnostic, diagnosticPath } from "./snapshot";
-import { DiagnosticDriver } from "./sql-driver";
+import { DiagnosticReader } from "./sql-driver";
+import { fileSha256, requireRunInventory, runTables, tableCounts } from "./sql-probe";
 import { sqlCases } from "./sql-queries";
-import { distribution } from "./statistics";
 
-const [phase, supplied] = z
-  .tuple([z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), z.string().min(1)])
-  .parse(process.argv.slice(2));
+const phase = decodePhaseName(process.argv[2]);
 
-const path = await diagnosticPath(supplied);
+const supplied = decodeBoundary(Schema.String.check(Schema.isMinLength(1)))(process.argv[3]);
 
-const expectedHash = profile.name
-  ? await approvedDiagnostic(
-      path,
-      resolve(state, "diagnostics/closed-copy.json"),
-      (await config()).batch,
-    )
-  : "0d0ce744814caf442edf3c3fde3e74b129019f7602db4bb393a431cd341697fa";
+const diagnostics = resolve(state, "diagnostics");
 
-const sha256 = async (file: string) =>
-  createHash("sha256")
-    .update(await readFile(file))
-    .digest("hex");
+const path = await diagnosticPath(supplied, diagnostics);
 
-const beforeHash = await sha256(path);
+const beforeHash = await approvedDiagnostic({
+  path,
+  approvalPath: resolve(diagnostics, "closed-copy.json"),
+  batch: (await config()).batch,
+  profile: profile.label,
+});
 
-if (
-  beforeHash !== expectedHash ||
-  (!profile.name && !path.endsWith("/standalone/diagnostic.sqlite"))
-) {
-  throw new Error("Only the root-verified standalone snapshot is approved for final SQL evidence.");
-}
-
+// The queries below copy store and scheduler SQL, so the probe records the sources it mirrors.
 const sources = [
   "packages/runtime/src/store/sqlite/query/runs.ts",
   "packages/runtime/src/store/sqlite/query/feeds.ts",
   "packages/runtime/src/store/sqlite/query/nodes.ts",
-  "packages/runtime/src/store/sqlite/schema.ts",
+  "packages/runtime/src/store/sqlite/schema/fresh.ts",
   "apps/cloud/src/scheduler.ts",
   "apps/cloud/src/sql-driver.ts",
   "apps/cloud/dev/playground/metrics/sql-queries.ts",
 ];
 
-const sourceHashes = await Promise.all(
-  sources.map(async (file) => ({ file, sha256: await sha256(resolve(root, file)) })),
-);
+const hashSources = () =>
+  Promise.all(
+    sources.map(async (file) => ({ file, sha256: await fileSha256(resolve(root, file)) })),
+  );
 
-const pendingSource = await readFile(resolve(root, sources[0] ?? ""), "utf8");
-
-const sourceState = pendingSource.includes("json_each(?)")
-  ? "after-json-each-pagination-edit"
-  : "before-json-each-pagination-edit";
+const sourceHashes = await hashSources();
 
 const sidecarsBefore = await readdir(dirname(path));
 
-const driver = new DiagnosticDriver(path);
+const reader = new DiagnosticReader(path);
 
 let closed = false;
 
 try {
-  const inventory = z
-    .object({ runs: z.array(z.object({ id: z.string(), status: z.string() })) })
-    .parse(
-      await Bun.file(
-        resolve(evidenceDirectory, "playground-performance-postload-inventory.json"),
-      ).json(),
-    );
+  const inventory = await readArtifact(evidence, postloadInventory);
 
-  const actual = driver.db
-    .query<{ id: string; status: string }, []>("SELECT id,status FROM runs ORDER BY id")
-    .all();
+  const actual = requireRunInventory(
+    reader.db,
+    inventory.runs,
+    "Diagnostic run identities differ from post-load API inventory.",
+  );
 
-  const expected = [...inventory.runs].sort((a, b) => a.id.localeCompare(b.id));
-
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error("Diagnostic run identities differ from post-load API inventory.");
-  }
-
-  const integrity = driver.db.query("PRAGMA integrity_check").all();
-  const cases = sqlCases(driver.db);
+  const integrity = reader.db.query("PRAGMA integrity_check").all();
   const results = [];
 
-  for (const item of cases) {
-    driver.operation = item.name;
+  for (const item of sqlCases(reader.db)) {
     const elapsed = [];
     let rows = 0;
     let resultDigest = "";
 
     for (let repeat = 0; repeat < 10; repeat++) {
       const began = performance.now();
-      const result = driver.query(item.sql).all(...item.bindings);
+      const result = reader.all(item.name, item.sql, item.bindings);
       elapsed.push(performance.now() - began);
       rows = result.length;
-      resultDigest = createHash("sha256").update(JSON.stringify(result)).digest("hex");
+      resultDigest = sha256Hex(JSON.stringify(result));
     }
 
     results.push({
@@ -110,23 +88,9 @@ try {
     });
   }
 
-  const counts = [
-    "runs",
-    "node_runs",
-    "node_attempts",
-    "node_scopes",
-    "logs",
-    "events",
-    "waits",
-    "cloud_turns",
-  ].map((table) => ({
-    table,
-    rows:
-      driver.db.query<{ count: number }, []>(`SELECT count(*) AS count FROM ${table}`).get()
-        ?.count ?? 0,
-  }));
+  const counts = tableCounts(reader.db, [...runTables, "cloud_turns"]);
 
-  const schema = driver.db
+  const schema = reader.db
     .query(
       "SELECT type,name,sql FROM sqlite_schema WHERE type IN ('table','index') AND name NOT LIKE '_cf%' AND name NOT LIKE '__cf%' ORDER BY type,name",
     )
@@ -141,7 +105,7 @@ try {
       "user_version",
       "schema_version",
       "foreign_keys",
-    ].map((name) => [name, driver.db.query(`PRAGMA ${name}`).get()]),
+    ].map((name) => [name, reader.db.query(`PRAGMA ${name}`).get()]),
   );
 
   const report = {
@@ -150,18 +114,17 @@ try {
     at: new Date().toISOString(),
     path,
     beforeHash,
-    sourceState,
     sourceHashes,
     integrity,
     inventory: { matched: true, ids: actual.length },
-    sqlite: driver.db.query("SELECT sqlite_version() AS version").get(),
+    sqlite: reader.db.query("SELECT sqlite_version() AS version").get(),
     pragmas,
     schema,
     counts,
-    queries: driver.traces,
-    querySummaries: driver.summary(),
+    queries: reader.traces,
+    querySummaries: reader.summary(),
     results,
-    lifecycle: await lifecycle(driver.db),
+    lifecycle: await lifecycle(reader.db),
     sidecarsBefore,
     limits: [
       "No SqlRunStore constructor,migrations,SQL writes or live/raw/working database access.",
@@ -173,19 +136,16 @@ try {
     ],
   };
 
-  driver.db.close();
+  reader.db.close();
   closed = true;
-  const afterHash = await sha256(path);
+  const afterHash = await fileSha256(path);
 
   if (afterHash !== beforeHash) {
     throw new Error("Read-only diagnostic source hash changed.");
   }
 
-  const afterSources = await Promise.all(
-    sources.map(async (file) => ({ file, sha256: await sha256(resolve(root, file)) })),
-  );
-
-  const output = resolve(evidenceDirectory, `playground-performance-${phase}-sql.json`);
+  const afterSources = await hashSources();
+  const output = resolve(evidence, `playground-performance-${phase}-sql.json`);
 
   if (await Bun.file(output).exists()) {
     throw new Error("SQL evidence exists. Choose a new phase.");
@@ -195,12 +155,12 @@ try {
     ...report,
     afterHash,
     sourceHashesAfter: afterSources,
-    sourceUnchangedDuringProbe: JSON.stringify(afterSources) === JSON.stringify(sourceHashes),
+    sourceUnchangedDuringProbe: isDeepStrictEqual(afterSources, sourceHashes),
     sidecarsAfter: await readdir(dirname(path)),
   });
-  process.stdout.write(`${JSON.stringify({ output, sourceState, counts, results })}\n`);
+  process.stdout.write(`${JSON.stringify({ output, counts, results })}\n`);
 } finally {
   if (!closed) {
-    driver.db.close();
+    reader.db.close();
   }
 }

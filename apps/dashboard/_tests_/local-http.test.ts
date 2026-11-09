@@ -327,17 +327,23 @@ test("three empty EOFs back off for 500, 1000, then 2000 ms and release pause li
 
 test("snapshot HTTP requests stop when their signal is aborted", async () => {
   const cancelled = Promise.withResolvers<void>();
+  const body = Promise.withResolvers<void>();
+
   reply = () =>
     new Response(
       new ReadableStream<Uint8Array>({
+        pull() {
+          body.resolve();
+        },
         cancel() {
           cancelled.resolve();
         },
       }),
     );
+
   const controller = new AbortController();
   const requested = backend.run(run.id, controller.signal);
-  await Bun.sleep(10);
+  await body.promise;
   controller.abort();
   await expect(requested).rejects.toMatchObject({ name: "AbortError" });
   await cancelled.promise;

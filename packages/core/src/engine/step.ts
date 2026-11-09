@@ -1,6 +1,8 @@
-import { errorMessage, type Graph, isNumber, isString } from "..";
+import { errorMessage } from "../errors";
+import type { Graph } from "../graph";
+import { checkOutSchema } from "../record-spec";
+import { outputError } from "./failure";
 import { finish, type Transition, write } from "./node-run";
-import { validateOutput } from "./output";
 import { resolve, sameExecution } from "./resolve";
 import { retryDelayMs, shouldRetry } from "./retry";
 import type { EngineEvent, EngineState } from "./state";
@@ -36,8 +38,10 @@ function completion(
     })),
   );
 
-  const error =
-    event.kind === "execution_failed" ? event.error : validateOutput(event.result.output, node.out);
+  const issue =
+    event.kind === "execution_completed" ? checkOutSchema(event.result.output, node.out) : null;
+
+  const error = event.kind === "execution_failed" ? event.error : issue && outputError(issue);
 
   if (error) {
     if (previous.attempt < previous.maxAttempts && shouldRetry(error, node.retry)) {
@@ -83,37 +87,32 @@ function sampled(
 
   const node = graph.nodes.find((node) => node.id === previous?.key.nodeId);
 
-  if (previous?.status !== "running" || (node?.kind !== "uuid" && node?.kind !== "random")) {
+  if (previous?.status !== "running" || node?.kind !== event.sample.valueKind) {
     return false;
   }
 
-  if (
-    (node.kind === "uuid" &&
-      (!isString(event.value) ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-          event.value,
-        ))) ||
-    (node.kind === "random" &&
-      (!isNumber(event.value) ||
-        !Number.isFinite(event.value) ||
-        event.value < 0 ||
-        event.value >= 1))
-  ) {
-    write(transition, {
-      ...previous,
-      status: "failed",
-      endedAt: event.at,
-      error: { code: "validation", message: `Invalid ${node.kind} sample.` },
-    });
-  } else {
-    write(transition, { ...previous, status: "succeeded", output: event.value, endedAt: event.at });
-  }
+  write(transition, {
+    ...previous,
+    status: "succeeded",
+    output: event.sample.value,
+    endedAt: event.at,
+  });
 
   return true;
 }
 
+// A retrying or rate-limited node keeps the run leased until its retry is due.
 function suspend(transition: Transition, at: string) {
   if (transition.effects.some((effect) => effect.kind === "dispatch" || effect.kind === "sample")) {
+    return;
+  }
+
+  if (
+    transition.state.nodeRuns.some(
+      (run) =>
+        run.status === "running" || run.status === "retrying" || run.status === "rate_limited",
+    )
+  ) {
     return;
   }
 
@@ -121,23 +120,19 @@ function suspend(transition: Transition, at: string) {
     (run) => run.status === "waiting" || run.status === "sleeping",
   );
 
-  const executing = transition.state.nodeRuns.some((run) => run.status === "running");
-
-  if (pending.length === 0 || executing) {
+  if (pending.length === 0) {
     return;
   }
 
-  const deadlines = pending.flatMap((run) =>
-    (run.status === "waiting" || run.status === "sleeping") && run.wakeAt !== null
-      ? [run.wakeAt]
-      : [],
-  );
+  const wakeAt =
+    pending
+      .flatMap((run) =>
+        (run.status === "waiting" || run.status === "sleeping") && run.wakeAt !== null
+          ? [run.wakeAt]
+          : [],
+      )
+      .sort()[0] ?? null;
 
-  const retry = transition.effects
-    .filter((effect) => effect.kind === "schedule_retry")
-    .map((effect) => effect.at);
-
-  const wakeAt = [...deadlines, ...retry].sort()[0] ?? null;
   transition.effects.push({ kind: "suspend_run", wakeAt, at });
 }
 
@@ -175,7 +170,7 @@ export function step(graph: Graph, state: EngineState, event: EngineEvent): Tran
 
     const result = sequence(
       {
-        graph,
+        graph: { graph, nodes: new Map(graph.nodes.map((node) => [node.id, node])) },
         transition,
         at: event.at,
         rehydrate: event.kind === "run_started",

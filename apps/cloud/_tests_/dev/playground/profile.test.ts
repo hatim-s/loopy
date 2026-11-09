@@ -3,10 +3,16 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { decodeBoundary } from "@loopy/contract";
+import { playgroundConfigSchema, withReceiptMode } from "../../../dev/playground/config";
 import { approvedDiagnostic, diagnosticPath } from "../../../dev/playground/metrics/snapshot";
-import { playgroundProfile } from "../../../dev/playground/profile";
+import type { PlaygroundProfile } from "../../../dev/playground/profile";
+import { playgroundProfile, profilePorts } from "../../../dev/playground/profile";
 
 const temporary: string[] = [];
+
+const decodeConfig = (selected: PlaygroundProfile, input: Record<string, string>) =>
+  withReceiptMode(selected, decodeBoundary(playgroundConfigSchema(selected))(input));
 
 afterEach(async () => {
   await Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true })));
@@ -19,33 +25,17 @@ async function freshRoot() {
   return root;
 }
 
-test("architecture isolates roots, every capture directory, ports and child selection", async () => {
+test("the two profiles share no state path, evidence path or port and reject unknown names", async () => {
   const root = await freshRoot();
   const legacy = playgroundProfile(root, undefined);
   const architecture = playgroundProfile(root, "architecture");
 
-  expect(legacy.state).toBe(join(root, ".loopy/playground"));
-  expect(legacy.daemonState).toBe(join(root, ".loopy/playground-daemon"));
-  expect(legacy.evidence).toBe(join(root, ".notes/cloud/evidence"));
-  expect(legacy.apiPort).toBe(15070);
-  expect(legacy.daemonPort).toBe(15170);
-  expect(legacy.image).toBe("loopy-sandbox:bun-1.4.0");
-  expect(legacy.receiptMode).toBe("filesystem");
-  expect(legacy.environment).toEqual({});
-  expect(architecture.state).toBe(join(root, ".loopy/playground-architecture"));
-  expect(architecture.daemonState).toBe(join(root, ".loopy/playground-daemon-architecture"));
-  expect(architecture.repository).toBe(join(architecture.state, "loopies-playground"));
-  expect(architecture.sandboxState).toBe(join(architecture.runtime, ".loopy/cloud/sandbox"));
-  expect(architecture.evidence).toBe(join(legacy.evidence, "architecture"));
-  expect([
-    architecture.apiPort,
-    architecture.sandboxPort,
-    architecture.dashboardPort,
-    architecture.inspectorPort,
-    architecture.daemonPort,
-  ]).toEqual([15270, 15271, 15272, 15273, 15370]);
-  expect(architecture.image).toBe("loopy-sandbox:architecture-bun-1.4.0");
-  expect(architecture.receiptMode).toBe("durable-object");
+  for (const key of ["state", "runtime", "sandboxState", "repository", "evidence"] as const) {
+    expect(architecture[key]).not.toBe(legacy[key]);
+  }
+
+  const ports = [...profilePorts(legacy), ...profilePorts(architecture)];
+  expect(new Set(ports).size).toBe(ports.length);
   expect(playgroundProfile(root, architecture.environment.LOOPY_PLAYGROUND_PROFILE)).toEqual(
     architecture,
   );
@@ -82,62 +72,66 @@ test("diagnostics reject old profiles, directory symlinks, and unapproved or cha
     batch: "fresh-batch",
   };
 
+  const check = {
+    path: canonical,
+    approvalPath,
+    batch: "fresh-batch",
+    profile: "architecture",
+  } as const;
+
   await writeFile(approvalPath, JSON.stringify(approval));
-  expect(await approvedDiagnostic(canonical, approvalPath, "fresh-batch")).toBe(hash);
-  await expect(approvedDiagnostic(canonical, approvalPath, "old-batch")).rejects.toThrow(
+  expect(await approvedDiagnostic(check)).toBe(hash);
+  await expect(approvedDiagnostic({ ...check, batch: "old-batch" })).rejects.toThrow(
+    "snapshot path, batch and hash",
+  );
+  await expect(approvedDiagnostic({ ...check, profile: "default" })).rejects.toThrow(
     "snapshot path, batch and hash",
   );
   await writeFile(path, "changed copy");
-  await expect(approvedDiagnostic(canonical, approvalPath, "fresh-batch")).rejects.toThrow(
-    "snapshot path, batch and hash",
-  );
+  await expect(approvedDiagnostic(check)).rejects.toThrow("snapshot path, batch and hash");
   await writeFile(approvalPath, JSON.stringify({ ...approval, sourceClosed: false }));
-  await expect(approvedDiagnostic(canonical, approvalPath, "fresh-batch")).rejects.toThrow();
+  await expect(approvedDiagnostic(check)).rejects.toThrow();
 });
 
-test("architecture config requires explicit durable mode and a distinct receipt credential", async () => {
-  const { playgroundConfigSchema } = await import("../../../dev/playground/config-schema");
+test("each profile config holds exactly its own credentials and they stay distinct", async () => {
   const root = await freshRoot();
-  const selected = playgroundProfile(root, "architecture");
-  const schema = playgroundConfigSchema(selected);
+  const legacy = playgroundProfile(root, undefined);
+  const architecture = playgroundProfile(root, "architecture");
 
-  const input = {
+  const base = {
     batch: "synthetic-batch",
-    api: selected.api,
-    dashboard: selected.dashboard,
     workspace: "playground",
     token: "a".repeat(64),
     otherToken: "b".repeat(64),
     sandboxToken: "c".repeat(64),
-    receiptsToken: "d".repeat(64),
-    receiptMode: "durable-object",
-    apiConcurrency: 4,
-    runtimeConcurrency: 4,
     createdAt: new Date().toISOString(),
   };
 
-  expect(schema.safeParse(input).success).toBe(true);
+  const durable = {
+    ...base,
+    api: architecture.api,
+    dashboard: architecture.dashboard,
+    receiptsToken: "d".repeat(64),
+  };
 
-  for (const token of [input.token, input.otherToken, input.sandboxToken]) {
-    expect(schema.safeParse({ ...input, receiptsToken: token }).success).toBe(false);
-  }
-
-  for (const receiptMode of [undefined, "filesystem", "r2", "auto"]) {
-    expect(schema.safeParse({ ...input, receiptMode }).success).toBe(false);
-  }
-
-  expect(schema.safeParse({ ...input, receiptsToken: undefined }).success).toBe(false);
-  expect(schema.safeParse({ ...input, api: "http://127.0.0.1:15070" }).success).toBe(false);
-  expect(schema.safeParse({ ...input, runtimeConcurrency: 5 }).success).toBe(false);
-  const legacy = playgroundProfile(root, undefined);
-  const { receiptsToken, receiptMode, ...base } = input;
-  expect(receiptsToken.length).toBe(64);
-  expect(receiptMode).toBe("durable-object");
+  expect(decodeConfig(architecture, durable).receiptMode).toBe("durable-object");
   expect(
-    playgroundConfigSchema(legacy).safeParse({
+    decodeConfig(legacy, { ...base, api: legacy.api, dashboard: legacy.dashboard }).receiptMode,
+  ).toBe("filesystem");
+
+  for (const token of [base.token, base.otherToken, base.sandboxToken]) {
+    expect(() => decodeConfig(architecture, { ...durable, receiptsToken: token })).toThrow();
+  }
+
+  expect(() =>
+    decodeConfig(architecture, {
       ...base,
-      api: legacy.api,
-      dashboard: legacy.dashboard,
-    }).success,
-  ).toBe(true);
+      api: architecture.api,
+      dashboard: architecture.dashboard,
+    }),
+  ).toThrow();
+  expect(() =>
+    decodeConfig(legacy, { ...durable, api: legacy.api, dashboard: legacy.dashboard }),
+  ).toThrow();
+  expect(() => decodeConfig(architecture, { ...durable, api: legacy.api })).toThrow();
 });

@@ -4,11 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./codec": "./src/codec.ts"
+    ".": "./src/index.ts"
   },
   "dependencies": {
-    "effect": "4.1.2",
+    "effect": "catalog:",
     "@loopy/core": "workspace:*"
   }
 }

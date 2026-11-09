@@ -1,5 +1,6 @@
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
-import { type Access, addressToken, useAccess } from "../../lib/connection";
+import { type Access, useAccess } from "../../session/access";
+import { addressToken, adoptToken } from "../../session/boot";
 import { BrandMark } from "../brand-mark";
 
 type Closed = Exclude<Access, "checking" | "open">;
@@ -53,8 +54,7 @@ function Checking() {
   return shown ? <p className="text-muted">Connecting to the Loopy daemon.</p> : null;
 }
 
-/** Takes the token out of a pasted address and boots the page with it, as `loopy ui` would. */
-function AddressForm() {
+function AddressForm({ apiUrl }: { apiUrl: string }) {
   const [address, setAddress] = useState("");
   const [invalid, setInvalid] = useState(false);
   const hint = useId();
@@ -69,9 +69,7 @@ function AddressForm() {
       return;
     }
 
-    // Boot reads the token from the fragment, stores it and strips it from the address bar.
-    history.replaceState(null, "", `#${new URLSearchParams({ token })}`);
-    location.reload();
+    adoptToken(token);
   }
 
   return (
@@ -85,7 +83,7 @@ function AddressForm() {
               setAddress(event.target.value);
               setInvalid(false);
             }}
-            placeholder="http://127.0.0.1:4310/#token=…"
+            placeholder={`${apiUrl}/#token=…`}
             inputMode="url"
             autoComplete="off"
             spellCheck={false}
@@ -107,10 +105,7 @@ function AddressForm() {
   );
 }
 
-/**
- * Shows the dashboard only while the API accepts this page. Otherwise it explains how to get a
- * working address, so a missing or stale token is one message instead of a page of failures.
- */
+// A missing or stale token shows one message instead of a page of failures.
 export function AccessGate(props: { apiUrl: string; retry: () => void; children: ReactNode }) {
   const { apiUrl, retry, children } = props;
   const access = useAccess();
@@ -143,7 +138,7 @@ export function AccessGate(props: { apiUrl: string; retry: () => void; children:
       <p className="mt-3 text-muted">
         It prints an address. Open it, or paste it here to keep using this page.
       </p>
-      <AddressForm />
+      <AddressForm apiUrl={apiUrl} />
       {access === "unreachable" && (
         <button type="button" className="btn mt-6" onClick={retry}>
           Try again

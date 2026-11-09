@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import { makeDaemon } from "@loopy/runtime/host";
-import { MemoryStore } from "@loopy/runtime/store";
 import { loopy, wait } from "@loopy/sdk/graph";
 import { type Cause, Effect, Fiber, Queue } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "./fixture";
+import { waitUntil } from "./fixtures/service-runtime";
+import { MemorySqlStore } from "./store-fixture";
 
 test("daemon leaves an indefinite sleep when a durable approval signal wakes its run", async () => {
   await Effect.runPromise(
@@ -12,12 +13,12 @@ test("daemon leaves an indefinite sleep when a durable approval signal wakes its
       Effect.gen(function* () {
         const now = Date.parse(newRun().createdAt);
         yield* TestClock.setTime(now);
-        const store = new MemoryStore(() => now);
+        const store = new MemorySqlStore();
 
         const graph = loopy("prompt", {
           input: {},
           run: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
-        }).graph;
+        });
 
         yield* store.createRun({ ...newRun(), input: {} });
         const errors: Cause.Cause<unknown>[] = [];
@@ -43,9 +44,10 @@ test("daemon leaves an indefinite sleep when a durable approval signal wakes its
           },
         });
 
-        yield* daemon.tick;
         const running = yield* Effect.forkChild(daemon.run);
-        yield* TestClock.adjust(0);
+        yield* waitUntil(
+          Effect.map(store.getRun("run"), (run) => run?.status === "suspended" && !run.owner),
+        );
         const hook = (yield* store.getWaits("run"))[0];
 
         if (!hook) {

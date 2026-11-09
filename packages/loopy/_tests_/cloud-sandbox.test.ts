@@ -1,37 +1,41 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
-import {
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  realpath,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
+  artifactHelperName,
+  type DockerAttemptPlan,
   decodeBoundary,
+  type ExecutionResult,
   nodeIdSchema,
   type SandboxAttemptRequest,
-  type SandboxExecutionResult,
   sandboxArtifactSchema,
   sandboxAttemptRequestSchema,
+  sandboxErrorSchema,
 } from "@loopy/contract";
-import { CommandExecutionError, canonicalJson } from "@loopy/core";
+import { canonicalJson } from "@loopy/core";
+import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Result, Schema } from "effect";
-import type { ArtifactReader } from "../../../apps/sandbox/src/artifacts";
+import { type ArtifactReader, DockerArtifacts } from "../../../apps/sandbox/src/artifacts";
 import type { Attempts } from "../../../apps/sandbox/src/attempt";
-import { sandboxConfigSchema, validateStateRoot } from "../../../apps/sandbox/src/config";
+import type { AttemptDependenciesFactory } from "../../../apps/sandbox/src/attempt/dependencies";
+import { sandboxConfigSchema } from "../../../apps/sandbox/src/config";
 import { type AttemptBackend, DockerBackend } from "../../../apps/sandbox/src/docker";
-import { filesystemDependencies } from "../../../apps/sandbox/src/filesystem";
+import { DockerClient } from "../../../apps/sandbox/src/docker/client";
+import { ownerOf } from "../../../apps/sandbox/src/docker/identity";
+import { inputHelperName } from "../../../apps/sandbox/src/docker/plan";
+import { filesystemStorage } from "../../../apps/sandbox/src/filesystem";
+import { FilesystemJournal } from "../../../apps/sandbox/src/filesystem/journal";
 import { failure } from "../../../apps/sandbox/src/operations";
 import { type CommandRunner, runCommand } from "../../../apps/sandbox/src/process";
-import { type StartedReceipt, storedReceiptSchema } from "../../../apps/sandbox/src/receipts";
 import { attemptHandler } from "../../../apps/sandbox/src/server";
+import { stateLayout, validateStateRoot } from "../../../apps/sandbox/src/state-root";
 import { attemptRecordSchema } from "../../contract/src/sandbox-journal";
 import { commandSpec } from "./fixtures/executor";
+import {
+  artifactReader as idleArtifactReader,
+  succeedingBackend,
+} from "./fixtures/sandbox-authority";
 import { closeAttemptScopes, openAttempts, openSandbox, run } from "./fixtures/sandbox-run";
 
 const roots: string[] = [];
@@ -40,7 +44,7 @@ const services: Attempts[] = [];
 
 const token = "sandbox-fixture-token-32-characters";
 
-const succeeded: SandboxExecutionResult = { kind: "succeeded", output: { ok: true }, logs: [] };
+const succeeded: ExecutionResult = { kind: "succeeded", output: { ok: true }, logs: [] };
 
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => run(service.close())));
@@ -85,23 +89,32 @@ function request(
   });
 }
 
+function dependencies(
+  config: Awaited<ReturnType<typeof fixture>>,
+  backend: AttemptBackend,
+  artifactReader: ArtifactReader = idleArtifactReader,
+): AttemptDependenciesFactory {
+  return () =>
+    Effect.sync(() => ({ ...filesystemStorage(config.stateRoot), backend, artifactReader }));
+}
+
 async function open(
   config: Awaited<ReturnType<typeof fixture>>,
   backend: AttemptBackend,
   artifactReader?: ArtifactReader,
 ) {
-  const service = await openAttempts(
-    config,
-    filesystemDependencies(config, { backend, artifactReader }),
-  );
+  const service = await openAttempts(config, dependencies(config, backend, artifactReader));
 
   services.push(service);
 
   return service;
 }
 
-// BOUNDARY: HTTP fixtures include malformed JSON objects to exercise request validation.
-function post(body: unknown, authorization = `Bearer ${token}`) {
+function dockerBackend(config: Awaited<ReturnType<typeof fixture>>, runner: CommandRunner) {
+  return new DockerBackend(config, new DockerClient(config, runner));
+}
+
+function post(body: SandboxAttemptRequest, authorization = `Bearer ${token}`) {
   return new Request("http://127.0.0.1/attempts", {
     method: "POST",
     headers: { authorization, "content-type": "application/json" },
@@ -120,25 +133,25 @@ function lookup(value: SandboxAttemptRequest) {
 
 test("authenticated admission fsyncs once, joins duplicate starts, rejects changed content and replays completion", async () => {
   const config = await fixture();
-  const completed = Promise.withResolvers<SandboxExecutionResult>();
+  const completed = Promise.withResolvers<ExecutionResult>();
   let starts = 0;
-  let stored: StartedReceipt | undefined;
+  let stored: DockerAttemptPlan | undefined;
 
   const backend: AttemptBackend = {
-    start: (receipt) =>
+    start: (plan) =>
       Effect.gen(function* () {
         starts += 1;
-        stored = receipt;
+        stored = plan;
 
         const durable = decodeBoundary(attemptRecordSchema)(
           JSON.parse(
             yield* Effect.promise(() =>
-              readFile(join(config.stateRoot, "receipts", `${receipt.id}.json`), "utf8"),
+              readFile(join(stateLayout(config.stateRoot).receipts, `${plan.id}.json`), "utf8"),
             ),
           ),
         );
 
-        expect({ ...durable.plan, kind: "started" }).toEqual(receipt);
+        expect(durable.plan).toEqual(plan);
         expect(durable.session.epoch).toBe(1);
         expect(durable.session.nonce.length).toBeGreaterThan(0);
 
@@ -200,32 +213,53 @@ test("invalid bundles and malformed identities fail before backend effects", asy
 
   const handler = attemptHandler(await open(config, backend), token);
   const value = request();
-  expect((await handler(post({ ...value, bundles: [] }))).status).toBe(400);
+
+  const rejected = async (response: Response) => ({
+    status: response.status,
+    message: decodeBoundary(sandboxErrorSchema)(await response.json()).error.message,
+  });
+
+  expect(await rejected(await handler(post({ ...value, bundles: [] })))).toEqual({
+    status: 400,
+    message: "A required execution bundle is missing.",
+  });
   expect(
-    (await handler(post({ ...value, bundles: [{ hash: value.bundles[0]?.hash, bytes: "eA==" }] })))
-      .status,
-  ).toBe(400);
-  expect((await handler(post({ ...value, attempt: 0 }))).status).toBe(400);
-  expect(
-    (
+    await rejected(
       await handler(
-        new Request("http://localhost/attempts?key=invalid&attempt=1&workspace=w", {
-          headers: { authorization: `Bearer ${token}` },
-        }),
-      )
-    ).status,
-  ).toBe(400);
+        post({ ...value, bundles: [{ hash: value.bundles[0]?.hash ?? "", bytes: "eA==" }] }),
+      ),
+    ),
+  ).toEqual({
+    status: 400,
+    message: "Supply each required bundle once with matching SHA-256 bytes.",
+  });
+  expect((await handler(post({ ...value, attempt: 0 }))).status).toBe(400);
+
+  for (const route of ["attempts", "artifacts"]) {
+    const response = await handler(
+      new Request(`http://localhost/${route}?key=invalid&attempt=1&workspace=w&path=out.txt`, {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+    );
+
+    expect((await rejected(response)).message).toBe(
+      route === "attempts"
+        ? "Supply workspace, JSON execution key and positive attempt."
+        : "Supply an attempt identity and a relative artifact file path.",
+    );
+  }
+
   expect(effects).toBe(0);
 });
 
 test("workspace and attempt identities isolate receipts while run volumes persist between nodes", async () => {
   const config = await fixture();
-  const receipts: StartedReceipt[] = [];
+  const receipts: DockerAttemptPlan[] = [];
 
   const service = await open(config, {
-    start: (receipt) =>
+    start: (plan) =>
       Effect.gen(function* () {
-        receipts.push(receipt);
+        receipts.push(plan);
 
         return succeeded;
       }),
@@ -281,12 +315,16 @@ test("workspace and attempt identities isolate receipts while run volumes persis
 
 test("restart reconciles the saved container and never starts another attempt", async () => {
   const config = await fixture();
-  let saved: StartedReceipt | undefined;
+  let saved: DockerAttemptPlan | undefined;
+  let startedRecord = "";
 
   const first = await open(config, {
-    start: (receipt) =>
+    start: (plan) =>
       Effect.gen(function* () {
-        saved = receipt;
+        saved = plan;
+        startedRecord = yield* Effect.promise(() =>
+          readFile(join(stateLayout(config.stateRoot).receipts, `${plan.id}.json`), "utf8"),
+        );
 
         return succeeded;
       }),
@@ -307,7 +345,7 @@ test("restart reconciles the saved container and never starts another attempt", 
   }
 
   // Restore the durable point that a killed service leaves before committing completion.
-  await writeFile(join(config.stateRoot, "receipts", `${saved.id}.json`), JSON.stringify(saved));
+  await writeFile(join(stateLayout(config.stateRoot).receipts, `${saved.id}.json`), startedRecord);
   const original = saved;
   let recovered = 0;
 
@@ -318,9 +356,9 @@ test("restart reconciles the saved container and never starts another attempt", 
           failure("fixture", new Error("Recovery must not dispatch again.")),
         );
       }),
-    recover: (receipt) =>
+    recover: (plan) =>
       Effect.gen(function* () {
-        expect(receipt).toEqual(original);
+        expect(plan).toEqual(original);
         recovered += 1;
 
         return succeeded;
@@ -335,12 +373,12 @@ test("restart reconciles the saved container and never starts another attempt", 
 
 async function capturedReceipt() {
   const config = await fixture();
-  let saved: StartedReceipt | undefined;
+  let saved: DockerAttemptPlan | undefined;
 
   const service = await open(config, {
-    start: (receipt) =>
+    start: (plan) =>
       Effect.gen(function* () {
-        saved = receipt;
+        saved = plan;
 
         return succeeded;
       }),
@@ -363,7 +401,7 @@ async function capturedReceipt() {
 
 function dockerState(
   config: Awaited<ReturnType<typeof fixture>>,
-  saved: StartedReceipt,
+  saved: DockerAttemptPlan,
   running: boolean,
   exitCode = 0,
 ) {
@@ -371,7 +409,7 @@ function dockerState(
     {
       Config: {
         Labels: {
-          "loopy.sandbox.owner": createHash("sha256").update(config.stateRoot).digest("hex"),
+          "loopy.sandbox.owner": ownerOf(config.stateRoot),
           "loopy.sandbox.request": saved.requestHash,
         },
       },
@@ -409,7 +447,7 @@ test("Docker create enforces isolation and recovery reads the original bounded r
       };
     });
 
-  expect(await run(new DockerBackend(config, runner).start(saved, input))).toEqual(succeeded);
+  expect(await run(dockerBackend(config, runner).start(saved, input))).toEqual(succeeded);
   const create = calls.find((args) => args[3] === "create" && args.includes(saved.container));
   expect(create).toBeDefined();
   expect(create).toContain("--read-only");
@@ -473,7 +511,7 @@ test("Docker timeout kills only the owned worker and missing or killed workers s
         return { stdout: "", stderr: "", exitCode: 0, durationMs: 0 };
       });
 
-    const backend = new DockerBackend(config, runner);
+    const backend = dockerBackend(config, runner);
 
     if (scenario === "wrong-owner") {
       await expect(run(backend.recover(saved))).rejects.toThrow("ownership does not match");
@@ -494,7 +532,7 @@ test("lost Docker start acknowledgement and wait transport failure retain starte
     const config = await fixture();
     config.maxTimeoutMs = 150;
     const fault = Promise.withResolvers<void>();
-    let saved: StartedReceipt | null = null;
+    let saved: DockerAttemptPlan | null = null;
     let running = false;
     let outage = false;
     let starts = 0;
@@ -542,13 +580,13 @@ test("lost Docker start acknowledgement and wait transport failure retain starte
       });
 
     const backend: AttemptBackend = {
-      start: (receipt, input, signal) =>
+      start: (plan, input, signal) =>
         Effect.gen(function* () {
-          saved = receipt;
+          saved = plan;
 
-          return yield* new DockerBackend(config, runner).start(receipt, input, signal);
+          return yield* dockerBackend(config, runner).start(plan, input, signal);
         }),
-      recover: (receipt, signal) => new DockerBackend(config, runner).recover(receipt, signal),
+      recover: (plan, signal) => dockerBackend(config, runner).recover(plan, signal),
     };
 
     const first = await open(config, backend);
@@ -567,7 +605,7 @@ test("lost Docker start acknowledgement and wait transport failure retain starte
     }
 
     await new Promise((resolveWait) =>
-      setTimeout(resolveWait, Math.max(0, persisted.deadline - Date.now() + 5)),
+      setTimeout(resolveWait, Math.max(0, persisted.plan.deadline - Date.now() + 5)),
     );
     const restored = await open(config, backend);
     expect(await run(restored.lookup(input))).toEqual({ kind: "started" });
@@ -596,8 +634,8 @@ function artifactLookup(input: SandboxAttemptRequest, path: string) {
 
 test("artifact export requires its finished receipt and fences same-run admissions", async () => {
   const config = await fixture();
-  const completion = Promise.withResolvers<SandboxExecutionResult>();
-  const secondCompletion = Promise.withResolvers<SandboxExecutionResult>();
+  const completion = Promise.withResolvers<ExecutionResult>();
+  const secondCompletion = Promise.withResolvers<ExecutionResult>();
   const read = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   let exports = 0;
@@ -620,11 +658,11 @@ test("artifact export requires its finished receipt and fences same-run admissio
         }),
     },
     {
-      cleanup: () => Effect.gen(function* () {}),
-      read: (receipt, path) =>
+      cleanup: () => Effect.void,
+      read: (plan, path) =>
         Effect.gen(function* () {
           exports += 1;
-          expect(receipt.volume).toMatch(/^loopy-workspace-[a-f0-9]{64}$/);
+          expect(plan.volume).toMatch(/^loopy-workspace-[a-f0-9]{64}$/);
           read.resolve();
           yield* Effect.promise(() => release.promise);
 
@@ -692,52 +730,15 @@ test("state roots reject symlinks and public binding; live root ownership is exc
   await symlink(config.stateRoot, join(other.stateRoot, "receipts"));
   await expect(validateStateRoot(other)).rejects.toThrow("without symlinks");
 
-  const backend: AttemptBackend = {
-    start: () =>
-      Effect.gen(function* () {
-        return succeeded;
-      }),
-    recover: () =>
-      Effect.gen(function* () {
-        return succeeded;
-      }),
-  };
-
-  await open(config, backend);
-  await expect(openAttempts(config, filesystemDependencies(config, { backend }))).rejects.toThrow(
+  await open(config, succeedingBackend);
+  await expect(openAttempts(config, dependencies(config, succeedingBackend))).rejects.toThrow(
     "Another sandbox service owns",
   );
 });
 
-test("process capture bounds actual bytes and terminates timed-out workers", async () => {
-  await expect(
-    run(
-      runCommand([process.execPath, "-e", "process.stdout.write('x'.repeat(4096))"], {
-        timeoutMs: 1000,
-        maxBytes: 128,
-      }),
-    ),
-  ).rejects.toMatchObject({ reason: "output_limit" });
-  await expect(
-    run(runCommand([process.execPath, "-e", "setTimeout(()=>{},10000)"], { timeoutMs: 20 })),
-  ).rejects.toMatchObject({ reason: "timeout" });
-});
-
 test("loopback server serves health and an authenticated asynchronous attempt", async () => {
   const config = await fixture();
-
-  const backend: AttemptBackend = {
-    start: () =>
-      Effect.gen(function* () {
-        return succeeded;
-      }),
-    recover: () =>
-      Effect.gen(function* () {
-        return succeeded;
-      }),
-  };
-
-  const service = await openSandbox(config, filesystemDependencies(config, { backend }));
+  const service = await openSandbox(config, dependencies(config, succeedingBackend));
 
   try {
     const health = await fetch(new URL("/health", service.server.url));
@@ -768,7 +769,7 @@ test("concurrent restarts reclaim a dead process lock under one startup owner", 
     [
       process.execPath,
       "-e",
-      `import {lockStateRoot} from ${JSON.stringify(resolve(import.meta.dir, "../../../apps/sandbox/src/receipts.ts"))}; await lockStateRoot(${JSON.stringify(config.stateRoot)});`,
+      `import {lockStateRoot} from ${JSON.stringify(resolve(import.meta.dir, "../../../apps/sandbox/src/state-root.ts"))}; await lockStateRoot(${JSON.stringify(config.stateRoot)});`,
     ],
     {
       stdout: "ignore",
@@ -778,20 +779,9 @@ test("concurrent restarts reclaim a dead process lock under one startup owner", 
 
   expect(await child.exited).toBe(0);
 
-  const backend: AttemptBackend = {
-    start: () =>
-      Effect.gen(function* () {
-        return succeeded;
-      }),
-    recover: () =>
-      Effect.gen(function* () {
-        return succeeded;
-      }),
-  };
-
   const results = await Promise.allSettled([
-    openAttempts(config, filesystemDependencies(config, { backend })),
-    openAttempts(config, filesystemDependencies(config, { backend })),
+    openAttempts(config, dependencies(config, succeedingBackend)),
+    openAttempts(config, dependencies(config, succeedingBackend)),
   ]);
 
   expect(results.filter((result) => result.status === "fulfilled").length).toBe(1);
@@ -804,74 +794,41 @@ test("concurrent restarts reclaim a dead process lock under one startup owner", 
   }
 });
 
-// BOUNDARY: Retained receipt JSON is parsed into the current or legacy record.
-function decodeDiskReceipt(value: unknown) {
-  const record = Schema.decodeUnknownResult(attemptRecordSchema, { onExcessProperty: "error" })(
-    value,
-  );
-
-  return Result.isSuccess(record)
-    ? { ...record.success.plan, kind: record.success.kind }
-    : decodeBoundary(storedReceiptSchema)(value);
+function diskReceipts(root: string) {
+  return run(new FilesystemJournal(root).records());
 }
 
-async function diskReceipts(root: string) {
-  return Promise.all(
-    (await readdir(join(root, "receipts")))
-      .filter((name) => name.endsWith(".json"))
-      .map(async (name) =>
-        decodeDiskReceipt(JSON.parse(await readFile(join(root, "receipts", name), "utf8"))),
-      ),
+function docker(config: Awaited<ReturnType<typeof fixture>>, args: string[], timeoutMs = 30_000) {
+  return run(
+    runCommand(["docker", "--context", config.dockerContext, ...args], {
+      cwd: config.worktree,
+      timeoutMs,
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+    }),
   );
 }
 
 async function cleanupDocker(config: Awaited<ReturnType<typeof fixture>>) {
   // Names come only from this fixture's durable receipts, never a daemon-wide listing.
-  const receipts = await diskReceipts(config.stateRoot);
+  const plans = (await diskReceipts(config.stateRoot)).map((record) => record.plan);
 
-  for (const receipt of receipts) {
-    for (const container of [
-      receipt.container,
-      `${receipt.container}-input`,
-      `loopy-artifact-${receipt.id}`,
-    ]) {
-      await run(
-        runCommand(["docker", "--context", config.dockerContext, "rm", "--force", container], {
-          timeoutMs: 30_000,
-          env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
-        }),
-      );
+  for (const plan of plans) {
+    for (const container of [plan.container, inputHelperName(plan), artifactHelperName(plan.id)]) {
+      await docker(config, ["rm", "--force", container]);
     }
   }
 
-  for (const volume of new Set(
-    receipts.flatMap((receipt) => [receipt.volume, receipt.inputVolume]),
-  )) {
-    const output = await run(
-      runCommand(["docker", "--context", config.dockerContext, "volume", "rm", volume], {
-        timeoutMs: 30_000,
-        env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
-      }),
-    );
+  for (const volume of new Set(plans.flatMap((plan) => [plan.volume, plan.inputVolume]))) {
+    expect((await docker(config, ["volume", "rm", volume])).exitCode).toBe(0);
 
-    expect(output.exitCode).toBe(0);
-
-    const remaining = await run(
-      runCommand(
-        [
-          "docker",
-          "--context",
-          config.dockerContext,
-          "volume",
-          "ls",
-          "--filter",
-          `name=^${volume}$`,
-          "--format",
-          "{{.Name}}",
-        ],
-        { timeoutMs: 30_000, env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" } },
-      ),
-    );
+    const remaining = await docker(config, [
+      "volume",
+      "ls",
+      "--filter",
+      `name=^${volume}$`,
+      "--format",
+      "{{.Name}}",
+    ]);
 
     expect(remaining.exitCode).toBe(0);
     expect(remaining.stdout.trim()).toBe("");
@@ -885,8 +842,9 @@ test.skipIf(dockerContext !== "colima-loopy-cloud-phase1")(
   async () => {
     const config = await fixture();
     config.maxTimeoutMs = 2000;
-    const backend = new DockerBackend(config);
-    const service = await open(config, backend);
+    const client = new DockerClient(config);
+    const backend = new DockerBackend(config, client);
+    const service = await open(config, backend, new DockerArtifacts(config, client));
 
     try {
       const value = request(
@@ -910,7 +868,7 @@ test.skipIf(dockerContext !== "colima-loopy-cloud-phase1")(
         throw new Error("Expected a durable container identity.");
       }
 
-      expect(await run(backend.recover({ ...saved, kind: "started" }))).toEqual({
+      expect(await run(backend.recover(saved.plan))).toEqual({
         kind: "succeeded",
         output: { uid: 1000, home: "/workspace" },
         logs: [{ message: "probe", data: {} }],
@@ -1025,8 +983,8 @@ test.skipIf(dockerContext !== "colima-loopy-cloud-phase1")(
       await run(service.start(killed));
 
       const killedReceipt = (await diskReceipts(config.stateRoot)).find(
-        (receipt) => receipt.attempt === 7,
-      );
+        (record) => record.plan.attempt === 7,
+      )?.plan;
 
       if (!killedReceipt) {
         throw new Error("Expected worker identity before container start.");
@@ -1035,22 +993,10 @@ test.skipIf(dockerContext !== "colima-loopy-cloud-phase1")(
       let running = false;
 
       for (let i = 0; i < 50 && !running; i += 1) {
-        const state = await run(
-          runCommand(
-            [
-              "docker",
-              "--context",
-              config.dockerContext,
-              "inspect",
-              "--format",
-              "{{.State.Running}}",
-              killedReceipt.container,
-            ],
-            {
-              timeoutMs: 1000,
-              env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
-            },
-          ),
+        const state = await docker(
+          config,
+          ["inspect", "--format", "{{.State.Running}}", killedReceipt.container],
+          1000,
         );
 
         running = state.exitCode === 0 && state.stdout.trim() === "true";
@@ -1062,12 +1008,7 @@ test.skipIf(dockerContext !== "colima-loopy-cloud-phase1")(
 
       expect(running).toBe(true);
 
-      const terminated = await run(
-        runCommand(["docker", "--context", config.dockerContext, "kill", killedReceipt.container], {
-          timeoutMs: 5000,
-          env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
-        }),
-      );
+      const terminated = await docker(config, ["kill", killedReceipt.container], 5000);
 
       expect(terminated.exitCode).toBe(0);
       await run(service.drain());

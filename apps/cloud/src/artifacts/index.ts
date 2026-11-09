@@ -2,6 +2,7 @@ import type { DurableObjectStorage, R2Bucket } from "@cloudflare/workers-types";
 import {
   type DefinitionSummary,
   decodeBoundary,
+  decodeJson,
   definitionSummary,
   type Graph,
   graphSchema,
@@ -9,6 +10,7 @@ import {
   type SavedLoopy,
   type SourceArtifact,
   sourceArtifactSchema,
+  unavailableSource,
   validateCompiled,
 } from "@loopy/contract";
 import { canonicalJson, revision, validateSlug } from "@loopy/core";
@@ -237,9 +239,9 @@ export class R2ArtifactRegistry implements ArtifactRegistry {
 
       const artifact: SourceArtifact = bytes
         ? yield* sync("decode source", () =>
-            decodeBoundary(sourceArtifactSchema)(JSON.parse(decoder.decode(bytes))),
+            decodeJson(sourceArtifactSchema)(decoder.decode(bytes)),
           )
-        : { version: 1, status: "unavailable", revision: hash, reason: "not_captured" };
+        : unavailableSource(hash, "not_captured");
 
       if (artifact.revision !== hash) {
         return yield* Effect.fail(

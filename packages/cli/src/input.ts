@@ -1,6 +1,13 @@
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { assertJson, isFieldValue, type Json, type RecordSpec, setOwnProperty } from "@loopy/core";
+import {
+  assertJson,
+  type Json,
+  parseFieldText,
+  type RecordSpec,
+  recordFields,
+  setOwnProperty,
+} from "@loopy/core";
 import { Effect } from "effect";
 import type { CliContext } from "./context";
 import { CliError, cliIO, cliSync } from "./errors";
@@ -22,28 +29,22 @@ export const jsonInput = Effect.fn(function* (context: CliContext) {
   });
 });
 
-const coerce = Effect.fn(function* (value: string, kind: RecordSpec[string], key: string) {
-  if (kind === "json" || kind.endsWith("[]")) {
-    const parsed: unknown = yield* Effect.try({
-      try: () => JSON.parse(value),
-      catch: (cause) => new CliError({ message: `Input --${key} must be valid JSON.`, cause }),
-    });
+function coerce(text: string, kind: RecordSpec[string], key: string) {
+  const parsed = parseFieldText(kind, text);
 
-    if (isFieldValue(kind, parsed)) {
-      return parsed;
-    }
-  } else if (kind === "string") {
-    return value;
-  } else if (kind === "number" && value.trim() !== "" && Number.isFinite(Number(value))) {
-    return Number(value);
-  } else if (kind === "boolean" && (value === "true" || value === "false")) {
-    return value === "true";
+  if (parsed.ok) {
+    return Effect.succeed(parsed.value);
   }
 
-  return yield* new CliError({
-    message: `Input --${key} must be a ${kind}. Provide a valid value.`,
-  });
-});
+  return Effect.fail(
+    new CliError({
+      message:
+        parsed.reason === "json"
+          ? `Input --${key} must be valid JSON.`
+          : `Input --${key} must be a ${kind}. Provide a valid value.`,
+    }),
+  );
+}
 
 type NamedInput = Record<string, Json>;
 
@@ -62,13 +63,12 @@ const recordInput = (spec: RecordSpec, context: CliContext) =>
         (prompt) => Effect.sync(() => prompt?.close()),
       );
 
-      for (const [field, kind] of Object.entries(spec)) {
-        const key = field.replace(/\?$/, "");
+      for (const { key, optional, kind } of recordFields(spec)) {
         const supplied = context.namedInput?.[key];
 
         const value =
           supplied ??
-          (!field.endsWith("?") && prompt
+          (!optional && prompt
             ? yield* cliIO((signal) => prompt.question(`${key}: `, { signal }))
             : undefined);
 

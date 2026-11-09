@@ -1,49 +1,68 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { compile } from "@loopy/compiler";
-import { decodeBoundary, putLoopyBodySchema, routes } from "@loopy/contract";
-import { Data, Effect } from "effect";
-import { z } from "zod";
+import { decodeBoundary, encodeBoundary, putLoopyBodySchema, routes } from "@loopy/contract";
+import { Effect, Schema } from "effect";
+import { failure, io } from "../../../sandbox/src/operations";
 import { requireCurrentBaseline } from "./baseline";
 import { PlaygroundClient } from "./client";
-import { atomic, evidenceDirectory, profile, root, state } from "./config";
-import { catalog, prepareRepository, repository } from "./repository";
+import { evidence, profile, state } from "./config";
+import { atomic } from "./files";
+import { gatePath, gateSchema, groupSchema, groups, readSummary, summaryPath } from "./journal";
+import { FIXTURES_PER_GROUP } from "./plan";
+import type { PlaygroundProfile } from "./profile";
+import { catalog, prepareRepository } from "./repository";
 
-export class PreparationError extends Data.TaggedError("PreparationError")<{
-  message: string;
-  cause?: unknown;
-}> {}
+const WORKFLOWS = groups.length * FIXTURES_PER_GROUP;
 
-const io = <A>(operation: string, run: () => PromiseLike<A>) =>
-  Effect.tryPromise({
-    try: run,
-    catch: (cause) => new PreparationError({ message: `Playground ${operation} failed.`, cause }),
-  });
+const sourceReadySchema = Schema.Struct({
+  batch: Schema.String,
+  at: Schema.String,
+  repository: Schema.String,
+  commit: Schema.String,
+  files: Schema.Int,
+  sourceHash: Schema.String,
+  revisions: Schema.Array(
+    Schema.Struct({
+      group: groupSchema,
+      slug: Schema.String,
+      revision: Schema.String,
+      file: Schema.String,
+    }),
+  ).check(Schema.isBetweenLength(WORKFLOWS, WORKFLOWS)),
+});
+
+const sourceReadyPath = (directory: string) => resolve(directory, "source-ready.json");
 
 export function prepare() {
   return Effect.gen(function* () {
-    const client = yield* io("prepare fixture", () => PlaygroundClient.open());
-    const snapshot = yield* io("prepare fixture", () => prepareRepository());
-    const revisions: { group: string; slug: string; revision: string; file: string }[] = [];
+    const operation = "prepare fixture";
+    const client = yield* io(operation, () => PlaygroundClient.open());
+    const snapshot = yield* io(operation, () => prepareRepository());
+    const revisions: (typeof sourceReadySchema.Type)["revisions"][number][] = [];
 
-    for (const group of ["a", "b", "c"] as const) {
-      for (const fixture of yield* io("prepare fixture", () => catalog(group))) {
-        const file = resolve(repository, "fixtures", group, fixture.file);
+    for (const group of groups) {
+      for (const fixture of yield* io(operation, () => catalog(group))) {
+        const file = resolve(profile.repository, "fixtures", group, fixture.file);
         const compiled = yield* compile(file);
 
         if (!compiled.ok) {
           return yield* Effect.fail(
-            new PreparationError({
-              message: `Mock repo fixture ${fixture.slug} failed compilation: ${compiled.diagnostics.map((value) => value.code).join(",")}`,
-            }),
+            failure(
+              operation,
+              undefined,
+              `Mock repo fixture ${fixture.slug} failed compilation: ${compiled.diagnostics.map((value) => value.code).join(",")}`,
+            ),
           );
         }
 
         if (compiled.graph.name !== fixture.slug) {
           return yield* Effect.fail(
-            new PreparationError({
-              message: `Catalog slug ${fixture.slug} differs from compiled graph ${compiled.graph.name}.`,
-            }),
+            failure(
+              operation,
+              undefined,
+              `Catalog slug ${fixture.slug} differs from compiled graph ${compiled.graph.name}.`,
+            ),
           );
         }
 
@@ -59,34 +78,35 @@ export function prepare() {
           replace: true,
         });
 
-        yield* io("prepare fixture", () =>
-          client.json(routes.putLoopy.response, `/loopies/${fixture.slug}`, body, "PUT"),
+        yield* io(operation, () =>
+          client.json(routes.putLoopy.response, `/loopies/${fixture.slug}`, {
+            method: "PUT",
+            body,
+          }),
         );
         revisions.push({ group, slug: fixture.slug, revision: compiled.revision, file });
       }
     }
 
-    yield* io("prepare fixture", () => mkdir(evidenceDirectory, { recursive: true }));
+    yield* io(operation, () => mkdir(evidence, { recursive: true }));
 
-    const evidence = {
+    const ready = encodeBoundary(sourceReadySchema)({
       batch: client.settings.batch,
       at: new Date().toISOString(),
-      repository,
+      repository: profile.repository,
       ...snapshot,
-      sourceHash: (yield* io("prepare fixture", () =>
-        Bun.file(resolve(repository, ".playground-source-sha256")).text(),
+      sourceHash: (yield* io(operation, () =>
+        Bun.file(resolve(profile.repository, ".playground-source-sha256")).text(),
       )).trim(),
       revisions,
-    };
+    });
 
-    yield* io("prepare fixture", () =>
-      atomic(resolve(evidenceDirectory, "playground-driver-source.json"), evidence),
-    );
-    yield* io("prepare fixture", () => atomic(resolve(state, "source-ready.json"), evidence));
+    yield* io(operation, () => atomic(resolve(evidence, "playground-driver-source.json"), ready));
+    yield* io(operation, () => atomic(sourceReadyPath(state), ready));
     console.log(
       JSON.stringify({
         status: "source-ready",
-        repository,
+        repository: profile.repository,
         commit: snapshot.commit,
         workflows: revisions.length,
       }),
@@ -94,62 +114,43 @@ export function prepare() {
   });
 }
 
-interface ArmContext {
-  root: string;
-  state: string;
-  evidenceDirectory: string;
-  profile: typeof profile.name;
-  batch: string;
-}
+export async function arm(input: { profile: PlaygroundProfile; baseline: string; batch: string }) {
+  const { profile: selected, batch } = input;
+  const baseline = resolve(selected.root, input.baseline);
 
-export async function arm(baseline: string, context?: ArmContext) {
-  const selected = context ?? {
-    root,
-    state,
-    evidenceDirectory,
-    profile: profile.name,
-    batch: (await PlaygroundClient.open()).settings.batch,
-  };
+  const source = decodeBoundary(sourceReadySchema)(
+    await Bun.file(sourceReadyPath(selected.state)).json(),
+  );
 
-  const source = z
-    .object({ batch: z.string(), revisions: z.array(z.unknown()).length(15) })
-    .parse(await Bun.file(resolve(selected.state, "source-ready.json")).json());
-
-  if (
-    source.batch !== selected.batch ||
-    !(await Bun.file(resolve(selected.root, baseline)).exists())
-  ) {
+  if (source.batch !== batch || !(await Bun.file(baseline).exists())) {
     throw new Error(
-      "Load requires the current 15-workflow source snapshot and a saved baseline receipt.",
+      `Load requires the current ${WORKFLOWS}-workflow source snapshot and a saved baseline receipt.`,
     );
   }
 
-  if (selected.profile) {
-    await requireCurrentBaseline(
-      resolve(selected.root, baseline),
-      source.batch,
-      selected.evidenceDirectory,
-    );
+  if (selected.name === "architecture") {
+    await requireCurrentBaseline(baseline, source.batch, selected.evidence);
   }
 
-  for (const group of ["a", "b", "c"]) {
-    const preflight = z
-      .object({ status: z.literal("passed"), batch: z.string(), completed: z.literal(1) })
-      .parse(
-        await Bun.file(
-          resolve(selected.evidenceDirectory, `playground-driver-preflight-${group}.json`),
-        ).json(),
-      );
+  for (const group of groups) {
+    const preflight = await readSummary(summaryPath(selected.evidence, "preflight", group));
+
+    if (preflight.status !== "passed" || preflight.completed !== 1) {
+      throw new Error(`Preflight ${group} has not passed. Run it before opening the load gate.`);
+    }
 
     if (preflight.batch !== source.batch) {
       throw new Error("Preflight belongs to another batch.");
     }
   }
 
-  await atomic(resolve(selected.state, "load-enabled.json"), {
-    batch: source.batch,
-    baseline: resolve(selected.root, baseline),
-    enabledAt: new Date().toISOString(),
-  });
+  await atomic(
+    gatePath(selected.state),
+    encodeBoundary(gateSchema)({
+      batch: source.batch,
+      baseline,
+      enabledAt: new Date().toISOString(),
+    }),
+  );
   console.log("Load gate opened for the current batch. Group leads may invoke their own cohort.");
 }

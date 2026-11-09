@@ -1,7 +1,6 @@
 import { OwnershipError, StorageError } from "@loopy/core";
 import { Effect } from "effect";
 
-// These markers are internal. They never cross the Store contract or wire boundary.
 export class StoreInvariantError extends Error {}
 
 export class StoreRejectedError extends Error {}
@@ -27,7 +26,6 @@ const classify = (operation: string, cause: unknown): Effect.Effect<never, Stora
   );
 };
 
-// The callback includes the complete synchronous transaction and publication.
 export function storageOperation<A>(operation: string, body: () => A) {
   return Effect.try({ try: body, catch: (cause) => cause }).pipe(
     Effect.catch(

@@ -1,237 +1,149 @@
-import { nodeRunSchema } from "@loopy/contract";
-import { type ExecutionKey, executionKeyString, type NodeRun, type StoreEffect } from "@loopy/core";
-import { type EventTransaction } from "../event-outbox";
+import { executionKeyString, type NodeRun, type StoreEffect } from "@loopy/core";
 import { checkLogBytes, checkNodeWrite, logRecord } from "../node-write";
-import { ownedStorageOperation, StoreInvariantError, storageOperation } from "../operation";
-import { storedDecoder } from "../row-codec";
-import { earliestWakeAt, normalizeNode, utc } from "../timestamps";
-import { SqliteRuns } from "./runs";
-import { rowToLog, rowToRun, SQL } from "./store-rows";
-import { type LogRow } from "./store-schema";
+import { normalizeNode } from "../timestamps";
+import type { SqlContext, SqlWrite } from "./context";
+import { emit, emitLog } from "./events";
+import { decodeLog, decodeNodeRun } from "./rows";
 
-const decodeNodeRun = storedDecoder(nodeRunSchema, "node_runs");
+export function readNodes(ctx: SqlContext, runId: string): NodeRun[] {
+  return ctx.db
+    .query<{ record: string }, [string]>(
+      "SELECT record FROM node_runs WHERE run_id=? ORDER BY rowid",
+    )
+    .all(runId)
+    .map((row) => decodeNodeRun(row.record));
+}
 
-export class SqliteNodes extends SqliteRuns {
-  protected readNodes(runId: string): NodeRun[] {
-    return this.db
-      .query<{ record: string }, [string]>(
-        "SELECT record FROM node_runs WHERE run_id=? ORDER BY rowid",
-      )
-      .all(runId)
-      .map((row) => decodeNodeRun(row.record));
+export function readNode(ctx: SqlContext, runId: string, key: string): NodeRun | undefined {
+  const row = ctx.db
+    .query<{ record: string }, [string, string]>(
+      "SELECT record FROM node_runs WHERE run_id=? AND execution_key=?",
+    )
+    .get(runId, key);
+
+  return row ? decodeNodeRun(row.record) : undefined;
+}
+
+export function writeNodeRun(write: SqlWrite, runId: string, nodeRun: NodeRun): void {
+  const node = normalizeNode(nodeRun);
+  const key = executionKeyString(node.key);
+  const record = JSON.stringify(node);
+
+  checkNodeWrite(runId, node);
+
+  if (node.status === "running") {
+    write.db.query("UPDATE runs SET next_retry_at=NULL,wake_at=NULL WHERE id=?").run(runId);
   }
 
-  protected readNode(runId: string, key: string): NodeRun | undefined {
-    const row = this.db
-      .query<{ record: string }, [string, string]>(
-        "SELECT record FROM node_runs WHERE run_id=? AND execution_key=?",
-      )
-      .get(runId, key);
+  write.db
+    .query(
+      `INSERT INTO node_runs(run_id,execution_key,attempt,status,started_at,finished_at,output,error,receipt,record,node_id,scope) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(run_id,execution_key) DO UPDATE SET attempt=excluded.attempt,status=excluded.status,started_at=excluded.started_at,finished_at=excluded.finished_at,output=excluded.output,error=excluded.error,receipt=excluded.receipt,record=excluded.record,node_id=excluded.node_id,scope=excluded.scope`,
+    )
+    .run(
+      runId,
+      key,
+      node.attempt,
+      node.status,
+      node.startedAt,
+      "endedAt" in node ? node.endedAt : null,
+      node.status === "succeeded" ? JSON.stringify(node.output) : null,
+      "error" in node ? JSON.stringify(node.error) : null,
+      node.receipt,
+      record,
+      node.key.nodeId,
+      JSON.stringify(node.key.scope),
+    );
+  write.db
+    .query(
+      "INSERT INTO node_attempts VALUES (?,?,?,?) ON CONFLICT(run_id,execution_key,attempt) DO UPDATE SET record=excluded.record",
+    )
+    .run(runId, key, node.attempt, record);
 
-    return row ? decodeNodeRun(row.record) : undefined;
-  }
-
-  getNodeRun(key: ExecutionKey) {
-    return storageOperation("getNodeRun", () => {
-      return this.readNode(key.runId, executionKeyString(key));
-    });
-  }
-
-  getNodeRuns(runId: string) {
-    return storageOperation("getNodeRuns", () => {
-      return this.readNodes(runId);
-    });
-  }
-
-  apply({ runId, token, effects }: { runId: string; token: string; effects: StoreEffect[] }) {
-    return ownedStorageOperation("apply", () => {
-      this.commit((txn) => {
-        const run = this.owned(runId, token);
-        this.requireRunning(run);
-        // A stale batch may clear the signal wake before it reaches its suspend effect.
-        const wakeAtBeforeApply = run.wake_at;
-
-        for (const effect of effects) {
-          this.applyEffect(
-            txn,
-            runId,
-            effect.kind === "suspend_run"
-              ? { ...effect, wakeAt: earliestWakeAt(wakeAtBeforeApply, effect.wakeAt) }
-              : effect,
-          );
-        }
-      });
-    });
-  }
-
-  protected applyEffect(txn: EventTransaction, runId: string, effect: StoreEffect): void {
-    switch (effect.kind) {
-      case "write_node_run": {
-        const node = normalizeNode(effect.nodeRun);
-
-        checkNodeWrite(runId, node);
-
-        if (node.status === "running") {
-          this.db.query("UPDATE runs SET next_retry_at=NULL,wake_at=NULL WHERE id=?").run(runId);
-        }
-
-        this.db
-          .query(SQL.putNode)
-          .run(
-            runId,
-            executionKeyString(node.key),
-            node.attempt,
-            node.status,
-            node.startedAt,
-            "endedAt" in node ? node.endedAt : null,
-            node.status === "succeeded" ? JSON.stringify(node.output) : null,
-            "error" in node ? JSON.stringify(node.error) : null,
-            node.receipt,
-            JSON.stringify(node),
-            node.key.nodeId,
-            JSON.stringify(node.key.scope),
-          );
-        this.db
-          .query(
-            "INSERT INTO node_attempts VALUES (?,?,?,?) ON CONFLICT(run_id,execution_key,attempt) DO UPDATE SET record=excluded.record",
-          )
-          .run(runId, executionKeyString(node.key), node.attempt, JSON.stringify(node));
-
-        for (const [depth, scope] of node.key.scope.entries()) {
-          this.db
-            .query(
-              "INSERT INTO node_scopes VALUES (?,?,?,?,?,?) ON CONFLICT(run_id,execution_key,map_node,parent_scope) DO UPDATE SET status=excluded.status",
-            )
-            .run(
-              runId,
-              executionKeyString(node.key),
-              scope.nodeId,
-              JSON.stringify(node.key.scope.slice(0, depth)),
-              scope.index,
-              node.status,
-            );
-        }
-
-        this.emit(txn, { entity: "node", kind: node.status, runId, record: node });
-        break;
-      }
-
-      case "finish_run": {
-        const outcome = effect.outcome;
-        this.db
-          .query(SQL.finish)
-          .run(
-            outcome.status,
-            outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
-            outcome.status === "failed" ? outcome.error : null,
-            utc(effect.at),
-            runId,
-            this.requireRow(runId).owner_token,
-          );
-        this.emitRun(txn, runId, "finished");
-        break;
-      }
-
-      case "schedule_retry": {
-        this.db
-          .query("UPDATE runs SET next_retry_at=?,wake_at=?,updated_at=? WHERE id=?")
-          .run(utc(effect.at), utc(effect.at), this.timestamp(), runId);
-        break;
-      }
-
-      case "write_log": {
-        if (effect.executionKey.runId !== runId) {
-          throw new StoreInvariantError("Log belongs to another run.");
-        }
-
-        this.writeLog(txn, effect);
-        break;
-      }
-    }
-  }
-
-  protected writeLog(
-    txn: EventTransaction,
-    effect: Extract<StoreEffect, { kind: "write_log" }>,
-  ): void {
-    const runId = effect.executionKey.runId;
-    const key = executionKeyString(effect.executionKey);
-
-    const seq =
-      this.db
-        .query<{ seq: number }, [string]>(
-          "SELECT COALESCE(MAX(seq),0)+1 AS seq FROM logs WHERE run_id=?",
-        )
-        .get(runId)?.seq ?? 1;
-
-    const index =
-      this.db
-        .query<{ idx: number }, [string, number]>(
-          "SELECT COALESCE(MAX(log_index),-1)+1 AS idx FROM logs WHERE execution_key=? AND attempt=?",
-        )
-        .get(key, effect.attempt)?.idx ?? 0;
-
-    const previousBytes =
-      this.db
-        .query<{ bytes: number }, [string, number]>(
-          "SELECT bytes FROM log_attempt_usage WHERE execution_key=? AND attempt=?",
-        )
-        .get(key, effect.attempt)?.bytes ?? 0;
-
-    const record = logRecord({ seq, index }, effect);
-    const bytes = checkLogBytes(previousBytes, record);
-    this.db
+  for (const [depth, scope] of node.key.scope.entries()) {
+    write.db
       .query(
-        "INSERT INTO log_attempt_usage VALUES (?,?,?) ON CONFLICT(execution_key,attempt) DO UPDATE SET bytes=excluded.bytes",
+        "INSERT INTO node_scopes VALUES (?,?,?,?,?,?) ON CONFLICT(run_id,execution_key,map_node,parent_scope) DO UPDATE SET status=excluded.status",
       )
-      .run(key, effect.attempt, bytes);
-    this.db
-      .query(SQL.appendLog)
       .run(
         runId,
         key,
-        effect.attempt,
-        index,
-        seq,
-        JSON.stringify(record),
-        effect.executionKey.nodeId,
-        record.at,
-        record.level,
-        record.message,
-        record.data === undefined
-          ? 0
-          : new TextEncoder().encode(JSON.stringify(record.data)).byteLength,
+        scope.nodeId,
+        JSON.stringify(node.key.scope.slice(0, depth)),
+        scope.index,
+        node.status,
       );
-    this.emit(txn, { entity: "log", kind: "written", runId: record.runId, record });
   }
 
-  getLogs(runId: string, after = 0, limit = 200) {
-    return storageOperation("getLogs", () => {
-      return this.db
-        .query<LogRow, [string, number, number]>(`${SQL.logs} LIMIT ?`)
-        .all(runId, after, Math.min(limit, 200))
-        .map(rowToLog);
-    });
-  }
+  emit(write, { entity: "node", kind: node.status, runId, record: node });
+}
 
-  snapshotRun(id: string) {
-    return storageOperation("snapshotRun", () => {
-      return this.db.transaction(() => {
-        const row = this.row(id);
+export function writeLog(write: SqlWrite, effect: Extract<StoreEffect, { kind: "write_log" }>) {
+  const runId = effect.executionKey.runId;
+  const key = executionKeyString(effect.executionKey);
 
-        if (!row) {
-          return undefined;
-        }
+  const seq =
+    write.db
+      .query<{ seq: number }, [string]>(
+        "SELECT COALESCE(MAX(seq),0)+1 AS seq FROM logs WHERE run_id=?",
+      )
+      .get(runId)?.seq ?? 1;
 
-        return {
-          run: rowToRun(row),
-          nodeRuns: this.readNodes(id),
-          steps: [],
-          logs: this.db.query<LogRow, [string, number]>(SQL.logs).all(id, 0).map(rowToLog),
-          hooks: this.readHooks(id),
-          ...this.readEventCursor(),
-        };
-      }, "deferred");
-    });
-  }
+  const index =
+    write.db
+      .query<{ idx: number }, [string, number]>(
+        "SELECT COALESCE(MAX(log_index),-1)+1 AS idx FROM logs WHERE execution_key=? AND attempt=?",
+      )
+      .get(key, effect.attempt)?.idx ?? 0;
+
+  const previousBytes =
+    write.db
+      .query<{ bytes: number }, [string, number]>(
+        "SELECT bytes FROM log_attempt_usage WHERE execution_key=? AND attempt=?",
+      )
+      .get(key, effect.attempt)?.bytes ?? 0;
+
+  const record = logRecord({ seq, index }, effect);
+  const bytes = checkLogBytes(previousBytes, record);
+  write.db
+    .query(
+      "INSERT INTO log_attempt_usage VALUES (?,?,?) ON CONFLICT(execution_key,attempt) DO UPDATE SET bytes=excluded.bytes",
+    )
+    .run(key, effect.attempt, bytes);
+  write.db
+    .query(
+      "INSERT INTO logs(run_id,execution_key,attempt,log_index,seq,record,node_id,at,level,message,data_bytes) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      runId,
+      key,
+      effect.attempt,
+      index,
+      seq,
+      JSON.stringify(record),
+      effect.executionKey.nodeId,
+      record.at,
+      record.level,
+      record.message,
+      record.data === undefined
+        ? 0
+        : new TextEncoder().encode(JSON.stringify(record.data)).byteLength,
+    );
+  emitLog(write, record, effect.executionKey.nodeId);
+}
+
+export function readLogs(ctx: SqlContext, runId: string, after: number, limit: number) {
+  return ctx.db
+    .query<{ record: string }, [string, number, number]>(
+      "SELECT record FROM logs WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?",
+    )
+    .all(runId, after, limit)
+    .map((row) => decodeLog(row.record));
+}
+
+export function readLog(ctx: SqlContext, id: number) {
+  const row = ctx.db
+    .query<{ record: string }, [number]>("SELECT record FROM logs WHERE id=?")
+    .get(id);
+
+  return row ? { id, log: decodeLog(row.record) } : undefined;
 }

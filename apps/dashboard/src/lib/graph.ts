@@ -2,18 +2,16 @@ import {
   executionKeyString,
   type GraphView,
   isTerminalRun,
-  type LogRecord,
-  type NodeRunView,
+  type NodeRun,
   type RunStatus,
 } from "@loopy/contract";
 import { kindDetail } from "./graph-text";
+import { byUrgency, isInFlight, type NodeRunStatus } from "./status";
 import type { ScopeTuple } from "./view-models";
 
-type GraphNode = GraphView["nodes"][number];
+export type GraphNode = GraphView["nodes"][number];
 
 type GraphEdge = GraphView["edges"][number];
-
-export type NodeRunStatus = NodeRunView["status"];
 
 /**
  * What the graph knows about one node. `definition` has no run to compare against. An idle
@@ -54,10 +52,12 @@ const ROLE = {
 export type GraphNodeModel = {
   id: GraphNode["id"];
   node: GraphNode;
+  /** The maps whose scopes hold this node, outermost first. A non-empty list runs per item. */
+  maps: GraphNode["id"][];
   role: NodeRole;
   title: string;
   detail: string | null;
-  executions: NodeRunView[];
+  executions: NodeRun[];
   state: NodeState;
 };
 
@@ -67,7 +67,6 @@ export type GraphEdgeModel = {
   to: GraphEdge["to"];
   kind: GraphEdge["kind"];
   label: string | null;
-  /** The run moved along this edge, as far as its records show. See `tookNext`. */
   taken: boolean;
 };
 
@@ -78,24 +77,10 @@ export type GraphModel = {
   nodes: GraphNodeModel[];
   edges: GraphEdgeModel[];
   /** Records whose node is absent from the graph, which means the graph is not the pinned one. */
-  orphans: NodeRunView[];
+  orphans: NodeRun[];
 };
 
-// The lowest rank wins, so a node with many executions shows its most urgent one.
-const URGENCY = {
-  failed: 0,
-  running: 1,
-  retrying: 2,
-  rate_limited: 3,
-  waiting: 4,
-  sleeping: 5,
-  queued: 6,
-  cancelled: 7,
-  succeeded: 8,
-  skipped: 9,
-} satisfies Record<NodeRunStatus, number>;
-
-function nodeState(executions: NodeRunView[], run: RunStatus | null, complete: boolean): NodeState {
+function nodeState(executions: NodeRun[], run: RunStatus | null, complete: boolean): NodeState {
   if (run === null) {
     return { kind: "definition" };
   }
@@ -115,13 +100,13 @@ function nodeState(executions: NodeRunView[], run: RunStatus | null, complete: b
 
   for (const execution of rest) {
     counts[execution.status] = (counts[execution.status] ?? 0) + 1;
-    status = URGENCY[execution.status] < URGENCY[status] ? execution.status : status;
+    status = byUrgency(execution.status, status) < 0 ? execution.status : status;
   }
 
   return { kind: "ran", status, counts };
 }
 
-function scopeId(execution: NodeRunView): string {
+function scopeId(execution: NodeRun): string {
   return JSON.stringify(execution.key.scope);
 }
 
@@ -131,7 +116,7 @@ function scopeId(execution: NodeRunView): string {
  * only `next` edges, which makes that exact for it. Control edges stay unmarked until branch,
  * switch and scope nodes record the arm they chose.
  */
-function tookNext(edge: GraphEdge, byNode: Map<string, NodeRunView[]>): boolean {
+function tookNext(edge: GraphEdge, byNode: Map<string, NodeRun[]>): boolean {
   if (edge.kind !== "next") {
     return false;
   }
@@ -147,7 +132,7 @@ function tookNext(edge: GraphEdge, byNode: Map<string, NodeRunView[]>): boolean 
   );
 }
 
-/** Sequence and join edges say nothing a reader needs; control edges name the arm they enter. */
+// Sequence and join edges say nothing a reader needs; control edges name the arm they enter.
 function edgeLabel(edge: GraphEdge): string | null {
   switch (edge.kind) {
     case "next":
@@ -165,17 +150,14 @@ function edgeLabel(edge: GraphEdge): string | null {
   }
 }
 
-/**
- * Joins a graph with the node runs recorded against it. Pass `run: null` to draw the
- * definition alone. Executions keep the order the snapshot holds them in.
- */
+/** Pass `run: null` to draw the definition alone. Executions keep the snapshot's order. */
 export function graphModel(
   graph: GraphView,
   run: {
     status: RunStatus;
-    nodeRuns: NodeRunView[];
+    nodeRuns: NodeRun[];
     coverage: ExecutionCoverage[];
-    selectedExecutions?: NodeRunView[];
+    selectedExecutions?: NodeRun[];
   } | null,
 ): GraphModel {
   const records = new Map(
@@ -186,7 +168,7 @@ export function graphModel(
     records.set(executionKeyString(execution.key), execution);
   }
 
-  const byNode = new Map<string, NodeRunView[]>();
+  const byNode = new Map<string, NodeRun[]>();
 
   for (const execution of records.values()) {
     byNode.set(execution.key.nodeId, [...(byNode.get(execution.key.nodeId) ?? []), execution]);
@@ -202,7 +184,7 @@ export function graphModel(
 
   const nodes = graph.nodes.map((node): GraphNodeModel => {
     const executions = byNode.get(node.id) ?? [];
-    const maps: string[] = [];
+    const maps: GraphNode["id"][] = [];
     let parent = node.scope === null ? undefined : definitions.get(node.scope);
 
     while (parent) {
@@ -224,6 +206,7 @@ export function graphModel(
     return {
       id: node.id,
       node,
+      maps,
       role:
         node.kind === "join" && node.scope === null && leaves.has(node.id)
           ? "end"
@@ -252,20 +235,6 @@ export function graphModel(
   };
 }
 
-const IN_FLIGHT = new Set<NodeRunStatus>([
-  "running",
-  "retrying",
-  "rate_limited",
-  "waiting",
-  "sleeping",
-  "queued",
-]);
-
-/** Work that has started and not settled: running, retrying, or held for a person or a clock. */
-export function isInFlight(status: NodeRunStatus): boolean {
-  return IN_FLIGHT.has(status);
-}
-
 /**
  * The nodes to frame first when the whole graph is too big to read at once: where the run is
  * now, else where it failed, else the entry, so a reader lands on what matters. A control node
@@ -281,38 +250,4 @@ export function focusNodes(model: GraphModel, entry: string): string[] {
   const [first] = [inner, active, failed].filter((nodes) => nodes.length > 0);
 
   return first === undefined ? [entry] : first.map((node) => node.id);
-}
-
-/** Where an execution sits inside maps and other scopes, or `null` at the top level. */
-export function scopeText(execution: NodeRunView): string | null {
-  return execution.key.scope.length === 0
-    ? null
-    : execution.key.scope.map(({ nodeId, index }) => `${nodeId}[${index}]`).join(" / ");
-}
-
-export type AttemptLogs = { attempt: number; logs: LogRecord[] };
-
-/**
- * Logs written by one execution, grouped by the attempt that wrote them in write order. The
- * store keeps one record per execution key, so earlier attempts survive only in their logs.
- */
-export function executionLogs(logs: LogRecord[], execution: NodeRunView): AttemptLogs[] {
-  const key = executionKeyString(execution.key);
-  const groups: AttemptLogs[] = [];
-
-  for (const log of logs) {
-    if (log.position.kind !== "node" || log.position.executionKey !== key) {
-      continue;
-    }
-
-    const last = groups.at(-1);
-
-    if (last?.attempt === log.position.attempt) {
-      last.logs.push(log);
-    } else {
-      groups.push({ attempt: log.position.attempt, logs: [log] });
-    }
-  }
-
-  return groups;
 }

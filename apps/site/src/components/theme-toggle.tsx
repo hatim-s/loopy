@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
-import { applyTheme, currentTheme, type Theme } from "../lib/theme";
+import { useState } from "react";
+import { applyTheme, currentTheme } from "../lib/theme";
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark");
-  useEffect(() => setTheme(currentTheme()), []);
-  const next: Theme = theme === "dark" ? "light" : "dark";
+  const [theme, setTheme] = useState(currentTheme);
+  const next = theme === "dark" ? "light" : "dark";
 
   const flip = () => {
     applyTheme(next);

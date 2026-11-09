@@ -1,5 +1,6 @@
-import { Effect, Schema, SchemaGetter } from "effect";
-import { queryNumber, struct } from "./codec";
+import { jsonSchema, logRecordSchema, PAGE_LIMIT, struct } from "@loopy/core";
+import { Schema, SchemaGetter } from "effect";
+import { pageLimit, queryCounter, queryNumber } from "./codec";
 import { putLoopyBodySchema } from "./compiled-loopy";
 import {
   eventHistoryPageSchema,
@@ -21,8 +22,6 @@ import {
   scopesQuerySchema,
 } from "./dashboard";
 import { graphRevisionViewSchema, graphViewSchema } from "./graph";
-import { jsonSchema } from "./json";
-import { logRecordSchema } from "./records";
 import { sourceArtifactSchema } from "./source-artifact";
 import {
   cursorViewSchema,
@@ -51,7 +50,7 @@ export const ERROR_CODES = [
   "invalid_timezone",
 ] as const;
 
-export const errorCodeSchema = Schema.Literals(ERROR_CODES);
+const errorCodeSchema = Schema.Literals(ERROR_CODES);
 
 export type ErrorCode = Schema.Schema.Type<typeof errorCodeSchema>;
 
@@ -99,11 +98,7 @@ export const runsQuerySchema = struct({
       ),
     ]),
   ),
-  limit: queryNumber
-    .check(Schema.isInt())
-    .check(Schema.isGreaterThan(0))
-    .check(Schema.isLessThanOrEqualTo(200))
-    .pipe(Schema.withDecodingDefault(Effect.succeed(50))),
+  limit: pageLimit(50),
   before: Schema.optional(
     Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)),
   ),
@@ -111,8 +106,7 @@ export const runsQuerySchema = struct({
 
 export type RunsQuery = Schema.Codec.Encoded<typeof runsQuerySchema>;
 
-/** The ID breaks timestamp ties so every run remains reachable. */
-
+// The ID breaks timestamp ties so every run remains reachable.
 export function encodeRunCursor(run: { createdAt: string; id: string }): string {
   return `${run.createdAt}|${run.id}`;
 }
@@ -123,26 +117,19 @@ export function decodeRunCursor(cursor: NonNullable<RunsQuery["before"]>) {
   return { createdAt: cursor.slice(0, separator), id: cursor.slice(separator + 1) };
 }
 
-export const logsQuerySchema = struct({
-  limit: queryNumber
-    .check(Schema.isInt())
-    .check(Schema.isGreaterThan(0))
-    .check(Schema.isLessThanOrEqualTo(200))
-    .pipe(Schema.withDecodingDefault(Effect.succeed(200))),
-  after: Schema.optional(queryNumber.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))),
+const logsQuerySchema = struct({
+  limit: pageLimit(PAGE_LIMIT),
+  after: Schema.optional(queryCounter),
 });
 
-export const eventsQuerySchema = struct({
-  after: queryNumber.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
-  epoch: Schema.String,
-});
+const eventsQuerySchema = struct({ after: queryCounter, epoch: Schema.String });
 
-export const startRunBodySchema = struct({
+const startRunBodySchema = struct({
   input: jsonSchema,
   workspace: Schema.optional(Schema.String),
 });
 
-export const resolveHookBodySchema = struct({ payload: jsonSchema });
+const resolveHookBodySchema = struct({ payload: jsonSchema });
 
 export const putScheduleBodySchema = struct({
   cron: Schema.optional(Schema.String),

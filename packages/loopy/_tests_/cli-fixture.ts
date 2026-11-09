@@ -12,7 +12,7 @@ export const roots: string[] = [];
 
 export const CLI = resolve(import.meta.dir, "../../cli/src/index.ts");
 
-export const SDK = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
+export const SDK = "loopy";
 
 export function fixture(name: string, definition: string) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loopy-cli-sdk-")));
@@ -114,8 +114,8 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
           executor: new LocalExecutor({
             home: f.home,
             workspace: f.cwd,
-            mode: saved.mode,
-            secrets: saved.secrets,
+            mode: saved.graph.meta.mode,
+            secrets: saved.graph.meta.secrets,
             bundlePath: (hash) => registry.bundlePath(hash),
           }),
         });

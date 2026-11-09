@@ -8,10 +8,7 @@ export type FrameNode = Node<
   "frame"
 >;
 
-/**
- * The area behind a control node and its scope, or behind one subgraph call. Scope frames carry
- * no caption since their control node names them; a subgraph frame names the subgraph.
- */
+// Scope frames carry no caption since their control node names them.
 export function GraphFrame(props: NodeProps<FrameNode>) {
   const { group, ownerKind } = props.data;
 

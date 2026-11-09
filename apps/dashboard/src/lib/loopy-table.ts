@@ -1,4 +1,5 @@
 import type { LoopyView, RunStatus } from "@loopy/contract";
+import { countTotal } from "./format";
 import type { LoopyRow } from "./view-models";
 
 export const LOOPY_FILTERS = ["all", "scheduled", "failing", "active"] as const;
@@ -9,15 +10,10 @@ export const LOOPY_SORTS = ["attention", "name", "success", "runs", "next"] as c
 
 export type LoopySort = (typeof LOOPY_SORTS)[number];
 
-/** Finished runs that succeeded, or null when none finished. In-flight runs do not count. */
 export function successRate(counts: LoopyView["counts"]): number | null {
   const finished = counts.succeeded + counts.failed + counts.cancelled;
 
   return finished === 0 ? null : counts.succeeded / finished;
-}
-
-function total(loopy: LoopyRow): number {
-  return Object.values(loopy.counts).reduce((sum, count) => sum + count, 0);
 }
 
 const MATCH = {
@@ -49,7 +45,7 @@ const COMPARE = {
     (b.lastRun?.createdAt ?? "").localeCompare(a.lastRun?.createdAt ?? ""),
   name: (a, b) => a.slug.localeCompare(b.slug),
   success: (a, b) => (successRate(a.counts) ?? -1) - (successRate(b.counts) ?? -1),
-  runs: (a, b) => total(a) - total(b),
+  runs: (a, b) => countTotal(a.counts) - countTotal(b.counts),
   next: (a, b) => {
     const left = nextFire(a);
     const right = nextFire(b);

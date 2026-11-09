@@ -1,74 +1,31 @@
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
-import { decodeBoundary } from "@loopy/contract";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BackendError, type LoopyBackend } from "./backend/backend";
-import { backendConfigSchema } from "./backend/config";
+import { BackendError } from "./backend/backend";
 import { localHttpBackend } from "./backend/local-http";
 import { AccessGate } from "./components/shell/access-gate";
-import {
-  addressToken,
-  browserConnection,
-  checkAccess,
-  closeOnUnauthorized,
-} from "./lib/connection";
 import { routeTree } from "./routeTree.gen";
+import { checkAccess, closeOnUnauthorized } from "./session/access";
+import { bootSession, reloadOnNewAddress } from "./session/boot";
 import "./style.css";
 
-type Session = {
-  backend: LoopyBackend;
-  /** Absent for the fake backend, which has no token to check. */
-  gate?: { apiUrl: string; check: () => void };
-};
+reloadOnNewAddress();
 
-async function createSession(): Promise<Session> {
-  const connection = browserConnection({
-    baseUrl: import.meta.env.VITE_API_BASE_URL ?? window.location.origin,
-    pageUrl: window.location.href,
-    storage: () => sessionStorage,
-    replaceUrl: (url) => history.replaceState(null, "", url),
-  });
-
-  const mode = import.meta.env.VITE_BACKEND ?? "http";
-
-  const config = decodeBoundary(backendConfigSchema)(
-    mode === "http" ? { mode, baseUrl: import.meta.env.VITE_API_BASE_URL } : { mode },
-  );
-
-  if (config.mode === "fake") {
-    const [{ fakeBackend }, { demoScript }] = await Promise.all([
-      import("./backend/fake"),
-      import("./backend/demo"),
-    ]);
-
-    return { backend: fakeBackend(demoScript()) };
-  }
-
-  const backend = localHttpBackend(connection);
-
-  return {
-    backend,
-    gate: {
-      apiUrl: connection.baseUrl,
-      check: () => {
-        void checkAccess(backend, connection.token);
-      },
-    },
-  };
-}
-
-// Pasting a fresh `loopy ui` address over this page only changes the fragment, which does not
-// reload, so reload here and let boot pick up the new token.
-window.addEventListener("hashchange", () => {
-  if (addressToken(new URL(window.location.href)) !== null) {
-    window.location.reload();
-  }
+const session = bootSession({
+  baseUrl: import.meta.env.VITE_API_BASE_URL ?? window.location.origin,
+  pageUrl: window.location.href,
+  storage: () => sessionStorage,
+  replaceUrl: (url) => history.replaceState(null, "", url),
 });
 
-const session = await createSession();
+const backend = localHttpBackend(session);
+
+const checkSession = () => {
+  void checkAccess(backend, session.token);
+};
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({ onError: closeOnUnauthorized }),
@@ -84,7 +41,7 @@ const queryClient = new QueryClient({
 
 const router = createRouter({
   routeTree,
-  context: { backend: session.backend, queryClient },
+  context: { backend },
   defaultPreload: "intent",
   defaultPreloadStaleTime: 0,
   scrollRestoration: true,
@@ -102,22 +59,14 @@ if (!root) {
   throw new Error("The dashboard root element is missing from index.html.");
 }
 
-const app = (
-  <QueryClientProvider client={queryClient}>
-    <RouterProvider router={router} />
-  </QueryClientProvider>
-);
-
-session.gate?.check();
+checkSession();
 
 createRoot(root).render(
   <StrictMode>
-    {session.gate ? (
-      <AccessGate apiUrl={session.gate.apiUrl} retry={session.gate.check}>
-        {app}
-      </AccessGate>
-    ) : (
-      app
-    )}
+    <AccessGate apiUrl={session.baseUrl} retry={checkSession}>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </AccessGate>
   </StrictMode>,
 );

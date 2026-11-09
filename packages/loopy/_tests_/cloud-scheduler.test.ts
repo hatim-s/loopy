@@ -5,6 +5,7 @@ import {
   executionKeyString,
   type Graph,
   type Json,
+  PAGE_LIMIT,
   type Receipt,
   revision,
   StorageError,
@@ -139,14 +140,12 @@ class Registry implements Pick<R2ArtifactRegistry, "get" | "revisionGraph"> {
     const hash = await revision(graph);
     this.graphs.set(hash, graph);
     this.current.set(graph.name, {
-      version: 2,
+      version: 3,
       slug: graph.name,
       graph,
       revision: hash,
       source: "/fixture.ts",
       savedAt: new Date().toISOString(),
-      ...graph.meta,
-      input: graph.input,
       bundles: [],
     });
 
@@ -202,7 +201,7 @@ class Provider implements DurableExecutionProvider {
     return Effect.gen({ self: this }, function* () {
       const id = `${executionKeyString(key)}/${attempt}`;
       this.starts.push(id);
-      this.runningCounts.push((yield* this.store.listRuns({ status: "running" })).length);
+      this.runningCounts.push(yield* this.store.runningCount());
       this.receipts.set(id, this.result);
 
       return this.result;
@@ -234,7 +233,7 @@ function work(label = "work") {
 }
 
 function graph(name: string, run: Parameters<typeof loopy>[1]["run"] = () => work()) {
-  const graph = loopy(name, { input: {}, run }).graph;
+  const graph = loopy(name, { input: {}, run });
 
   for (const node of graph.nodes) {
     if (node.kind === "code") {
@@ -251,7 +250,6 @@ function fixture(concurrency = 3) {
   drivers.push(db);
 
   const store = new InterruptedStore(db, {
-    now: () => Date.now(),
     leaseMs: 10_000,
     owner: { identity: { pid: null, host: "fixture" }, isAlive: () => false },
   });
@@ -271,6 +269,10 @@ function fixture(concurrency = 3) {
     provider,
     scheduler,
     at: (ms: number) => setSystemTime(base + ms),
+    runs: (slug: string) =>
+      Effect.runPromise(
+        store.queryRuns({ slug, limit: PAGE_LIMIT, now: new Date().toISOString() }),
+      ),
     async run(id: string, graph: Graph, input: Json = {}) {
       await Effect.runPromise(
         store.createRun({
@@ -485,9 +487,7 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   await Effect.runPromise(f.scheduler().tick());
   expect((await Effect.runPromise(f.store.getRun("running")))?.status).toBe("succeeded");
   expect((await Effect.runPromise(f.store.getRun("queued")))?.status).toBe("running");
-  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toMatchObject([
-    { status: "running" },
-  ]);
+  expect(await f.runs("healthy")).toMatchObject([{ status: "running" }]);
   expect(
     (await Effect.runPromise(f.store.listSchedules())).find((s) => s.slug === "invalid")?.enabled,
   ).toBe(false);
@@ -508,7 +508,7 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   expect(retry?.next_at).toBe(new Date(base + 5500).toISOString());
   expect(retry?.error).toStartWith("Could not get. Registry unavailable.");
   expect(retry?.error.length).toBe(1000);
-  expect(await Effect.runPromise(f.store.listRuns({ slug: "missing" }))).toEqual([]);
+  expect(await f.runs("missing")).toEqual([]);
   expect(
     (await Effect.runPromise(f.store.listSchedules())).find((s) => s.slug === "missing")?.enabled,
   ).toBe(true);
@@ -530,19 +530,15 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   const restoredRevision = await f.registry.save(restored);
   f.at(5500);
   await Effect.runPromise(f.scheduler().tick());
-  expect(await Effect.runPromise(f.store.listRuns({ slug: "transient" }))).toHaveLength(1);
-  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toHaveLength(1);
+  expect(await f.runs("transient")).toHaveLength(1);
+  expect(await f.runs("healthy")).toHaveLength(1);
   expect(f.db.query("SELECT * FROM cloud_schedule_turns").all()).toEqual([]);
-  expect((await Effect.runPromise(f.store.listRuns({ slug: "transient" })))[0]?.status).toBe(
-    "running",
-  );
-  expect(await Effect.runPromise(f.store.listRuns({ slug: "missing" }))).toMatchObject([
+  expect((await f.runs("transient"))[0]?.status).toBe("running");
+  expect(await f.runs("missing")).toMatchObject([
     { status: "running", revision: restoredRevision },
   ]);
   await f.registry.save(graph("missing", () => work("later")));
-  expect((await Effect.runPromise(f.store.listRuns({ slug: "missing" })))[0]?.revision).toBe(
-    restoredRevision,
-  );
+  expect((await f.runs("missing"))[0]?.revision).toBe(restoredRevision);
 });
 
 for (const failure of ["before", "after"] as const) {
@@ -552,12 +548,8 @@ for (const failure of ["before", "after"] as const) {
     await f.schedule(graph("healthy"));
     f.store.fireFailures.set("broken", failure);
     await Effect.runPromise(f.scheduler().tick());
-    expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toMatchObject([
-      { status: "running" },
-    ]);
-    expect(await Effect.runPromise(f.store.listRuns({ slug: "broken" }))).toHaveLength(
-      failure === "before" ? 0 : 1,
-    );
+    expect(await f.runs("healthy")).toMatchObject([{ status: "running" }]);
+    expect(await f.runs("broken")).toHaveLength(failure === "before" ? 0 : 1);
     expect(f.db.query("SELECT error FROM cloud_schedule_turns").get()).toEqual({
       error:
         failure === "before"
@@ -571,8 +563,8 @@ for (const failure of ["before", "after"] as const) {
     expect(f.storage.alarm).toBe(base + (failure === "before" ? 5000 : 60_000));
     f.at(5000);
     await Effect.runPromise(f.scheduler().tick());
-    expect(await Effect.runPromise(f.store.listRuns({ slug: "broken" }))).toHaveLength(1);
-    expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toHaveLength(1);
+    expect(await f.runs("broken")).toHaveLength(1);
+    expect(await f.runs("healthy")).toHaveLength(1);
   });
 }
 
@@ -589,13 +581,11 @@ test("a full failing schedule batch yields to later schedules on the next alarm"
   await f.run("queued", graph("queued"));
   await Effect.runPromise(f.scheduler().tick());
   expect((await Effect.runPromise(f.store.getRun("queued")))?.status).toBe("running");
-  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toEqual([]);
+  expect(await f.runs("healthy")).toEqual([]);
   expect(f.storage.alarm).toBe(base + 50);
   f.at(50);
   await Effect.runPromise(f.scheduler().tick());
-  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy" }))).toMatchObject([
-    { status: "running" },
-  ]);
+  expect(await f.runs("healthy")).toMatchObject([{ status: "running" }]);
   expect(f.registry.reads.get("broken-00")).toBe(1);
   expect(f.storage.alarm).toBe(base + 500);
 });
@@ -620,7 +610,7 @@ test("scheduler isolates provider and schedule defects and retains recovery alar
   f.registry.get = (slug) =>
     slug === "broken-schedule" ? Effect.die(new Error("schedule defect")) : get(slug);
   await Effect.runPromise(f.scheduler().tick());
-  expect(await Effect.runPromise(f.store.listRuns({ slug: "healthy-schedule" }))).toHaveLength(1);
+  expect(await f.runs("healthy-schedule")).toHaveLength(1);
   expect(
     f.db.query("SELECT error FROM cloud_schedule_turns WHERE slug='broken-schedule'").get(),
   ).toMatchObject({ error: "schedule defect" });

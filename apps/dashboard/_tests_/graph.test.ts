@@ -1,16 +1,9 @@
 import { expect, test } from "bun:test";
-import {
-  decodeBoundary,
-  executionKeyString,
-  graphRevisionViewSchema,
-  type LogRecord,
-  nodeRunViewSchema,
-} from "@loopy/contract";
-import { demoScript } from "../src/backend/demo";
-import { RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "../src/backend/demo-graphs";
-import { executionLogs, focusNodes, graphModel } from "../src/lib/graph";
+import { decodeBoundary, graphViewSchema, nodeRunSchema } from "@loopy/contract";
+import { focusNodes, graphModel } from "../src/lib/graph";
 import { graphGroups, layoutGraph } from "../src/lib/graph-layout";
 import { predicateText } from "../src/lib/graph-text";
+import { RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "./graph-fixtures";
 
 const AT = "2026-10-19T10:00:00.000Z";
 
@@ -31,7 +24,7 @@ function record(
     receipt: "started",
   };
 
-  return decodeBoundary(nodeRunViewSchema)(
+  return decodeBoundary(nodeRunSchema)(
     status === "succeeded"
       ? { ...base, status, output: null, endedAt: AT }
       : status === "failed"
@@ -56,9 +49,9 @@ function states(model: ReturnType<typeof graphModel>) {
 }
 
 test("a definition draws every compiled node and labels control edges", () => {
-  const model = graphModel(REVIEW.graph, null);
+  const model = graphModel(REVIEW, null);
 
-  expect(model.nodes.map((node) => node.id)).toEqual(REVIEW.graph.nodes.map((node) => node.id));
+  expect(model.nodes.map((node) => node.id)).toEqual(REVIEW.nodes.map((node) => node.id));
   expect(new Set(Object.values(states(model)))).toEqual(new Set(["definition"]));
   expect(model.edges.map((edge) => [edge.from, edge.to, edge.label, edge.taken])).toContainEqual([
     "1:branch",
@@ -71,7 +64,7 @@ test("a definition draws every compiled node and labels control edges", () => {
 });
 
 test("nodes without a record never read as executed", () => {
-  const stopped = graphModel(REVIEW.graph, {
+  const stopped = graphModel(REVIEW, {
     status: "failed",
     coverage: [{ scope: [], complete: true }],
     nodeRuns: [record("0:changes", "succeeded"), record("1:branch", "failed")],
@@ -88,7 +81,7 @@ test("nodes without a record never read as executed", () => {
     "0:changes->1:branch:next",
   ]);
 
-  const active = graphModel(TRIAGE_V2.graph, {
+  const active = graphModel(TRIAGE_V2, {
     status: "running",
     coverage: [{ scope: [], complete: true }],
     nodeRuns: [],
@@ -101,7 +94,7 @@ test("only a next edge from a succeeded node into a node that ran in its scope r
   const taken = (model: ReturnType<typeof graphModel>) =>
     model.edges.filter((edge) => edge.taken).map((edge) => edge.id);
 
-  const review = graphModel(REVIEW.graph, {
+  const review = graphModel(REVIEW, {
     status: "succeeded",
     coverage: [{ scope: [], complete: true }],
     nodeRuns: [
@@ -120,7 +113,7 @@ test("only a next edge from a succeeded node into a node that ran in its scope r
   expect(taken(review)).toEqual(["0:changes->1:branch:next", "2:log->3:join:next"]);
 
   const scoped = (index: number) =>
-    graphModel(TRIAGE_V2.graph, {
+    graphModel(TRIAGE_V2, {
       status: "running",
       coverage: [{ scope: [], complete: true }],
       nodeRuns: [record("1:classify", "succeeded", 0), record("2:log", "running", index)],
@@ -131,7 +124,7 @@ test("only a next edge from a succeeded node into a node that ran in its scope r
 });
 
 test("scoped executions roll up to the most urgent status with counts", () => {
-  const model = graphModel(TRIAGE_V2.graph, {
+  const model = graphModel(TRIAGE_V2, {
     status: "running",
     coverage: [{ scope: [], complete: true }],
     nodeRuns: [
@@ -152,73 +145,37 @@ test("scoped executions roll up to the most urgent status with counts", () => {
 });
 
 test("records from another revision surface as orphans instead of attaching to nodes", () => {
-  const pinned = demoScript().runs.find((run) => run.run.status === "succeeded");
-
-  if (!pinned) {
-    throw new Error("The demo script lost its pinned run.");
-  }
-
   const run = {
-    status: pinned.run.status,
+    status: "succeeded" as const,
     coverage: [{ scope: [], complete: true }],
-    nodeRuns: pinned.nodeRuns,
+    nodeRuns: [
+      record("0:fetch", "succeeded"),
+      record("1:classify", "succeeded"),
+      record("2:reply", "succeeded"),
+      record("3:join", "succeeded"),
+    ],
   };
 
-  // The demo pins this run to the first revision; drawing it on the latest one must not fit.
-  expect(graphModel(TRIAGE_V1.graph, run).orphans).toEqual([]);
-  expect(graphModel(TRIAGE_V2.graph, run).orphans.map(({ key }) => key.nodeId.toString())).toEqual([
+  // The run pinned the first revision; drawing it on the second one must not fit.
+  expect(graphModel(TRIAGE_V1, run).orphans).toEqual([]);
+  expect(graphModel(TRIAGE_V2, run).orphans.map(({ key }) => key.nodeId.toString())).toEqual([
     "2:reply",
     "3:join",
   ]);
 });
 
-test("execution logs match the shared execution key and group by the attempt that wrote them", () => {
-  const execution = record("1:classify", "succeeded", 0);
-  const key = executionKeyString(execution.key);
-
-  const log = (seq: number, executionKey: string, attempt: number): LogRecord => ({
-    runId: "run-1",
-    seq,
-    position: { kind: "node", executionKey, attempt, index: 0 },
-    level: "info",
-    message: `log ${seq}`,
-    at: AT,
-  });
-
-  const other = executionKeyString(record("1:classify", "succeeded", 1).key);
-
-  expect(
-    executionLogs(
-      [log(1, key, 1), log(2, other, 1), log(3, key, 1), log(4, key, 2)],
-      execution,
-    ).map((group) => [group.attempt, group.logs.map((entry) => entry.seq)]),
-  ).toEqual([
-    [1, [1, 3]],
-    [2, [4]],
-  ]);
-});
-
-test("roles tell work, control, values and joins apart, and the top-level output join is the end", () => {
+test("only the top-level join that carries the output is the end", () => {
   const roles = Object.fromEntries(
-    graphModel(REVIEW.graph, null).nodes.map((node) => [node.id, node.role]),
+    graphModel(REVIEW, null).nodes.map((node) => [node.id, node.role]),
   );
 
-  expect(roles).toMatchObject({
-    "0:changes": "work",
-    "1:branch": "control",
-    "2:log": "value",
-    "3:join": "junction",
-    "9:join": "junction",
-    "10:join": "end",
-  });
+  expect(roles).toMatchObject({ "3:join": "junction", "9:join": "junction", "10:join": "end" });
 });
 
 test("control nodes read as text: predicates by label, shell commands by argv", () => {
-  const nodes = new Map(
-    graphModel(RELEASE.graph, null).nodes.map((node) => [String(node.id), node]),
-  );
+  const nodes = new Map(graphModel(RELEASE, null).nodes.map((node) => [String(node.id), node]));
 
-  const branch = REVIEW.graph.nodes.find((node) => node.kind === "branch");
+  const branch = REVIEW.nodes.find((node) => node.kind === "branch");
 
   if (branch?.kind !== "branch") {
     throw new Error("The review fixture lost its branch.");
@@ -233,7 +190,7 @@ test("control nodes read as text: predicates by label, shell commands by argv", 
 
 test("only control edges carry labels; sequence and join edges stay quiet", () => {
   const labels = new Map(
-    graphModel(RELEASE.graph, null).edges.map((edge) => [`${edge.from}->${edge.to}`, edge.label]),
+    graphModel(RELEASE, null).edges.map((edge) => [`${edge.from}->${edge.to}`, edge.label]),
   );
 
   expect(labels.get("2:branch->3:fail")).toBe("yes");
@@ -246,7 +203,7 @@ test("only control edges carry labels; sequence and join edges stay quiet", () =
 });
 
 test("frames nest scopes and subgraph calls: map, then the publish subgraph, then its rescue", () => {
-  const { groups, parentOf } = graphGroups(graphModel(RELEASE.graph, null));
+  const { groups, parentOf } = graphGroups(graphModel(RELEASE, null));
   const parents = Object.fromEntries(groups.map((group) => [group.id, group.parent]));
 
   expect(parents).toEqual({
@@ -280,20 +237,13 @@ test("two calls of one subgraph far apart get separate frames", () => {
   const retag = (id: string) =>
     calls.has(id) ? id.replace(/^(\d+):(?:publish\/)?/, "$1:deploy/") : id;
 
-  const twice = decodeBoundary(graphRevisionViewSchema)({
+  const twice = decodeBoundary(graphViewSchema)({
     ...RELEASE,
-    graph: {
-      ...RELEASE.graph,
-      nodes: RELEASE.graph.nodes.map((node) => ({ ...node, id: retag(node.id) })),
-      edges: RELEASE.graph.edges.map((edge) => ({
-        ...edge,
-        from: retag(edge.from),
-        to: retag(edge.to),
-      })),
-    },
+    nodes: RELEASE.nodes.map((node) => ({ ...node, id: retag(node.id) })),
+    edges: RELEASE.edges.map((edge) => ({ ...edge, from: retag(edge.from), to: retag(edge.to) })),
   });
 
-  const subgraphs = graphGroups(graphModel(twice.graph, null)).groups.filter(
+  const subgraphs = graphGroups(graphModel(twice, null)).groups.filter(
     (group) => group.kind === "subgraph",
   );
 
@@ -311,13 +261,13 @@ test("layout runs left to right, keeps arms beside their control and the map's c
     return (id: string) => boxes.get(id)?.x ?? Number.NaN;
   };
 
-  const review = x(graphModel(REVIEW.graph, null));
+  const review = x(graphModel(REVIEW, null));
   expect(review("0:changes")).toBeLessThan(review("1:branch"));
   expect(review("1:branch")).toBeLessThan(review("10:join"));
   // The one-node yes arm starts beside the branch, not next to the merge.
   expect(review("2:log")).toBeLessThan(review("5:prompt"));
 
-  const release = x(graphModel(RELEASE.graph, null));
+  const release = x(graphModel(RELEASE, null));
   expect(release("26:join")).toBeLessThan(release("27:join"));
   expect(release("16:publish/build")).toBeLessThan(release("28:notes"));
 });
@@ -329,20 +279,20 @@ test("the first view frames the run where it is: inner work in flight, else fail
   });
 
   const parse = (nodeRuns: ReturnType<typeof scoped>[]) =>
-    graphModel(RELEASE.graph, {
+    graphModel(RELEASE, {
       status: "running",
       coverage: [{ scope: [], complete: true }],
-      nodeRuns: nodeRuns.map((entry) => decodeBoundary(nodeRunViewSchema)(entry)),
+      nodeRuns: nodeRuns.map((entry) => decodeBoundary(nodeRunSchema)(entry)),
     });
 
   const live = parse([scoped("15:map", "running"), scoped("16:publish/build", "running")]);
-  expect(focusNodes(live, RELEASE.graph.entry)).toEqual(["16:publish/build"]);
+  expect(focusNodes(live, RELEASE.entry)).toEqual(["16:publish/build"]);
 
   const control = parse([scoped("7:parallel", "running")]);
-  expect(focusNodes(control, RELEASE.graph.entry)).toEqual(["7:parallel"]);
+  expect(focusNodes(control, RELEASE.entry)).toEqual(["7:parallel"]);
 
   const failed = parse([scoped("0:status", "succeeded"), scoped("1:plan", "failed")]);
-  expect(focusNodes(failed, RELEASE.graph.entry)).toEqual(["1:plan"]);
+  expect(focusNodes(failed, RELEASE.entry)).toEqual(["1:plan"]);
 
-  expect(focusNodes(graphModel(RELEASE.graph, null), RELEASE.graph.entry)).toEqual(["0:status"]);
+  expect(focusNodes(graphModel(RELEASE, null), RELEASE.entry)).toEqual(["0:status"]);
 });

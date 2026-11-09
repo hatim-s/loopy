@@ -7,7 +7,7 @@ export async function compiledBody(
   path: string,
   meta: Partial<PutLoopyBody["graph"]["meta"]> & Partial<PutLoopyBody["source"]> = {},
 ): Promise<PutLoopyBody> {
-  const { graph } = loopy(name, { input: {}, run: () => null });
+  const graph = loopy(name, { input: {}, run: () => null });
 
   graph.meta = {
     description: meta.description ?? null,

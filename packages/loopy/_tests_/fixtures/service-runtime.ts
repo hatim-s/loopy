@@ -1,7 +1,9 @@
 import { afterEach } from "bun:test";
+import type { Store } from "@loopy/core";
 import { type DaemonOptions, makeDaemon } from "@loopy/runtime/host";
 import { makeSqliteRunStore, openRunStore } from "@loopy/runtime/store";
 import { Clock, Effect, Exit, Scope } from "effect";
+import { fixedClock } from "../store-fixture";
 
 const scopes: Scope.Closeable[] = [];
 
@@ -21,29 +23,68 @@ export function fixtureScope() {
 export const fixtureStore = (home: string) =>
   Effect.runPromise(openRunStore(home).pipe(Effect.provideService(Scope.Scope, fixtureScope())));
 
-export const fixtureSqlite = (file: string, now = Date.now) =>
+export const fixtureSqlite = (file: string) =>
   Effect.runPromise(
-    makeSqliteRunStore(file, now).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
+    makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
   );
 
+// A real-time pause, so polling also makes progress while a TestClock holds Effect time still.
+const pause = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 1)));
+
+export const waitUntil = <E, R>(check: Effect.Effect<boolean, E, R>, attempts = 5000) =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (yield* check) {
+        return;
+      }
+
+      yield* pause;
+    }
+
+    return yield* Effect.die(new Error("The awaited store state never settled."));
+  });
+
+/** Each daemon pass fires due schedules and then reads due runs, so dueRuns calls count passes. */
+export function countPasses(store: Pick<Store, "dueRuns">) {
+  let passes = 0;
+  const dueRuns = store.dueRuns.bind(store);
+
+  store.dueRuns = (now) =>
+    dueRuns(now).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          passes++;
+        }),
+      ),
+    );
+
+  return () => passes;
+}
+
+// The first wake may land in a pass that began earlier, so two passes prove one started after the call.
+export const nextPass = (daemon: { wake: Effect.Effect<void> }, passes: () => number) =>
+  Effect.gen(function* () {
+    const before = passes();
+
+    for (const target of [before + 1, before + 2]) {
+      yield* daemon.wake;
+      yield* waitUntil(Effect.sync(() => passes() >= target));
+    }
+  });
+
+/** Starts the daemon loop under the service clock. The fixture scope stops it after the test. */
 export function fixtureDaemon(options: DaemonOptions & { clock: { now(): number } }) {
+  const passes = countPasses(options.store);
+
   return Effect.runPromise(
     Effect.gen(function* () {
-      const platform = yield* Clock.Clock;
-
-      const clock: Clock.Clock = {
-        sleep: (duration) => platform.sleep(duration),
-        currentTimeNanosUnsafe: () => platform.currentTimeNanosUnsafe(),
-        currentTimeNanos: platform.currentTimeNanos,
-        monotonicTimeNanosUnsafe: () => platform.monotonicTimeNanosUnsafe(),
-        monotonicTimeNanos: platform.monotonicTimeNanos,
-        currentTimeMillisUnsafe: options.clock.now,
-        currentTimeMillis: Effect.sync(options.clock.now),
-      };
-
       const daemon = yield* makeDaemon(options);
+      yield* Effect.forkScoped(daemon.run);
 
-      return { ...daemon, tick: daemon.tick.pipe(Effect.provideService(Clock.Clock, clock)) };
-    }).pipe(Effect.provideService(Scope.Scope, fixtureScope())),
+      return { ...daemon, passes, pass: nextPass(daemon, passes) };
+    }).pipe(
+      Effect.provideService(Clock.Clock, fixedClock(options.clock.now)),
+      Effect.provideService(Scope.Scope, fixtureScope()),
+    ),
   );
 }

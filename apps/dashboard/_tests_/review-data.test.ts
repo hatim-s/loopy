@@ -10,7 +10,7 @@ import { keys } from "../src/lib/keys";
 import { toggleSchedule } from "../src/lib/mutations";
 import { workspaceLoopiesQuery } from "../src/lib/queries";
 import { runMarks } from "../src/lib/run-marks";
-import { applyScheduleView, removeScheduleView } from "../src/lib/stream";
+import { applyScheduleView, removeScheduleView } from "../src/lib/stream/schedules";
 import { reviewDataFixture } from "./review-data-fixture";
 
 const cleanups: (() => void | Promise<void>)[] = [];
@@ -117,7 +117,6 @@ test("201 root and 51 item executions remain unknown outside bounded pages and r
 
   const marks = runMarks({
     model,
-    perItem: new Set(),
     itemOpen: true,
     scopes: [],
     now: Date.now(),
@@ -151,7 +150,6 @@ test("201 root and 51 item executions remain unknown outside bounded pages and r
     expect(
       runMarks({
         model: selected,
-        perItem: new Set(),
         itemOpen: true,
         scopes: [],
         now: Date.now(),

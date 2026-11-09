@@ -12,14 +12,15 @@ Local changes:
 - `createOnce` becomes ESLint `create`, allocating state per file.
 - Oxlint byte offsets become ESLint `range` offsets.
 - The flat config enables every generic rule at error severity and ignores
-  the vendored plugin and agent tooling.
+  the vendored plugin.
 
-Effect rules are not enabled because these projects do not directly depend on Effect.
+The upstream Effect rules are not ported. This repository uses Effect, and its
+Effect checks come from `@effect/language-service` diagnostics in `typecheck`.
 Oxlint's native `oxc/no-accumulating-spread` is not part of this ESLint plugin.
 Source findings are fixed, with individual documented exceptions for validators of untrusted input.
 
-Validation: all 18 upstream generic RuleTester suites pass under ESLint 9.39.5
-and TypeScript ESLint 8.66.0 after adapting their runner and parser.
+Validation: all 18 upstream generic RuleTester suites pass under TypeScript
+ESLint 8.66.0 after adapting their runner and parser.
 
 ## Linter migration
 
@@ -30,8 +31,8 @@ Cognitive complexity uses SonarJS; filenames and Node imports use Unicorn.
 Type-only exports and thrown errors use TypeScript ESLint typed rules.
 The two engines do not have identical recommended presets.
 
-The adapted upstream suites are in `_tests_/`. Run them with
-`node tools/anti-slop/_tests_/run.mjs`. They also pass under ESLint 10.8.1.
+The adapted upstream suites are in `_tests_/`, and `bun run lint` runs them
+with `node tools/anti-slop/_tests_/run.mjs` under ESLint 10.8.1.
 
 Boundary predicates and assertion functions may use runtime `typeof` via
 the upstream `allowInTypeGuards: true` option. Ad hoc narrowing remains an error.

@@ -1,0 +1,7 @@
+*
+!package.json
+!bun.lock
+!packages/*/package.json
+!packages/*/src
+!apps/*/package.json
+!apps/sandbox/src

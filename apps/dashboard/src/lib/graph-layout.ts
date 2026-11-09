@@ -1,10 +1,13 @@
 import dagre from "@dagrejs/dagre";
 import type { GraphModel, GraphNodeModel, NodeRole } from "./graph";
+import { nodeIdParts } from "./node-id";
 
 type Size = { width: number; height: number };
 
-/** Room kept clear around the graph when it is framed, as CSS pixel lengths. */
-export type FitPadding = Record<"top" | "right" | "bottom" | "left", `${number}px`>;
+type FitPadding = Record<"top" | "right" | "bottom" | "left", `${number}px`>;
+
+// The bottom edge leaves room for the view controls.
+export const FIT_PADDING: FitPadding = { top: "24px", right: "24px", bottom: "64px", left: "24px" };
 
 /** Node boxes have fixed sizes per role so layout runs before React measures anything. */
 export const NODE_SIZE = {
@@ -33,28 +36,17 @@ export type Box = Point & Size;
 export type GraphGroup = {
   id: string;
   kind: "scope" | "subgraph";
-  /** The control node id for a scope, the subgraph path for a subgraph. */
   owner: string;
   parent: string | null;
   depth: number;
 };
 
 export type GraphLayout = {
-  /** The whole drawing, margins included. */
   size: Size;
   nodes: Map<string, Box>;
   groups: (GraphGroup & { box: Box })[];
-  /** Polyline routes from dagre, in flow coordinates, with a label anchor where one fits. */
   edges: Map<string, { points: Point[]; label: Point | null }>;
 };
-
-// The builder allocates ids as `<order>:<subgraph path>/<label>`, so the path before the last
-// slash names the subgraph call a node came from. Top-level nodes have an empty path.
-function subgraphPath(id: string): string {
-  const name = id.slice(id.indexOf(":") + 1);
-
-  return name.includes("/") ? name.slice(0, name.lastIndexOf("/")) : "";
-}
 
 function parentPaths(path: string, outer: string): string[] {
   const parts = path.split("/");
@@ -81,8 +73,8 @@ export function graphGroups(model: GraphModel) {
 
   const outerOf = (node: GraphNodeModel, index: number): string | null => {
     const scope = node.node.scope === null ? null : `scope:${node.node.scope}`;
-    const outer = node.node.scope === null ? "" : subgraphPath(node.node.scope);
-    const path = subgraphPath(node.id);
+    const outer = node.node.scope === null ? "" : nodeIdParts(node.node.scope).path;
+    const path = nodeIdParts(node.id).path;
 
     if (path === outer || !path.startsWith(outer)) {
       return scope;
@@ -105,7 +97,7 @@ export function graphGroups(model: GraphModel) {
   };
 
   model.nodes.forEach((node, index) => {
-    const path = subgraphPath(node.id);
+    const path = nodeIdParts(node.id).path;
 
     for (const step of open.keys()) {
       if (path !== step && !path.startsWith(`${step}/`)) {

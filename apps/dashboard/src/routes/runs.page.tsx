@@ -1,27 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
+import { LoopySelect } from "../components/loopy-select";
 import { RunTable } from "../components/runs/run-table";
 import { Load, Note } from "../components/ui/load";
 import { PagerFoot } from "../components/ui/pager";
 import { Segmented } from "../components/ui/segmented";
 import { useClock } from "../lib/clock";
+import { useRunPages } from "../lib/pages";
+import { PERIODS } from "../lib/period";
 import { searchField } from "../lib/search";
-import { useLoopyRows, useRunPages } from "../lib/ui-data";
-import { PERIODS, type RunListFilters } from "../lib/view-models";
+import { statusWord } from "../lib/status";
+import type { RunListFilters } from "../lib/view-models";
 
 /** Awaiting is a suspended run held on a hook; it reads as its own status here. */
 const STATUS_TABS = ["all", "failed", "awaiting", "running", "succeeded", "cancelled"] as const;
 
 type StatusTab = (typeof STATUS_TABS)[number];
-
-const TAB_LABEL = {
-  all: "All",
-  failed: "Failed",
-  awaiting: "Awaiting",
-  running: "Running",
-  succeeded: "Succeeded",
-  cancelled: "Cancelled",
-} satisfies Record<StatusTab, string>;
 
 const PERIOD_TABS = ["all", ...PERIODS] as const;
 
@@ -66,7 +60,7 @@ function RunsTable({ filters }: { filters: RunListFilters }) {
               busy={fetching}
             />
           )}
-          <PagerFoot pager={pager} page={page} noun="runs">
+          <PagerFoot pager={pager} noun="runs">
             Newest first
           </PagerFoot>
         </>
@@ -78,7 +72,6 @@ function RunsTable({ filters }: { filters: RunListFilters }) {
 function RunsPage() {
   const { status = "all", slug, period } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const loopies = useLoopyRows();
   const filters: RunListFilters = { ...TAB_FILTER[status], slug, period };
 
   return (
@@ -94,7 +87,10 @@ function RunsPage() {
           <Segmented
             label="Status"
             value={status}
-            options={STATUS_TABS.map((value) => ({ value, label: TAB_LABEL[value] }))}
+            options={STATUS_TABS.map((value) => ({
+              value,
+              label: value === "all" ? "All" : statusWord(value),
+            }))}
             onChange={(value) =>
               void navigate({
                 search: (prev) => ({ ...prev, status: value === "all" ? undefined : value }),
@@ -102,24 +98,10 @@ function RunsPage() {
             }
           />
           <span className="flex-1" />
-          <select
-            className="field"
-            aria-label="Loopy"
-            value={slug ?? ""}
-            onChange={(event) =>
-              void navigate({
-                search: (prev) => ({ ...prev, slug: event.target.value || undefined }),
-              })
-            }
-          >
-            <option value="">All loopies</option>
-            {loopies.state === "ready" &&
-              loopies.data.map((loopy) => (
-                <option key={`${loopy.workspace}:${loopy.slug}`} value={loopy.slug}>
-                  {loopy.slug}
-                </option>
-              ))}
-          </select>
+          <LoopySelect
+            value={slug}
+            onChange={(next) => void navigate({ search: (prev) => ({ ...prev, slug: next }) })}
+          />
           <Segmented
             label="Created within"
             value={period ?? "all"}
@@ -134,7 +116,7 @@ function RunsPage() {
             }
           />
         </div>
-        <RunsTable key={JSON.stringify(filters)} filters={filters} />
+        <RunsTable filters={filters} />
       </section>
     </div>
   );

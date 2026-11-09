@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   artifactHelperName,
   type DockerAttemptPlan,
@@ -6,24 +5,21 @@ import {
   type SandboxArtifact,
   sandboxArtifactReadSchema,
 } from "@loopy/contract";
-import type { CommandExecutionError } from "@loopy/core";
+import type { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Schema } from "effect";
-import { ArtifactError } from "./artifact-error";
+import { verifiedBytes } from "./bytes";
 import type { SandboxConfig } from "./config";
-import { DockerClient } from "./docker/client";
+import type { DockerClient } from "./docker/client";
+import { artifactContainerArgs } from "./docker/plan";
 import type { SandboxOperationError } from "./operations";
 import { checked, failure } from "./operations";
-import { type CommandRunner, runCommand } from "./process";
+import { SandboxRequestError } from "./request-error";
+
+type ArtifactFailure = SandboxOperationError | CommandExecutionError | SandboxRequestError;
 
 export interface ArtifactReader {
-  cleanup(
-    receipt: DockerAttemptPlan,
-    helper: string,
-  ): Effect.Effect<void, SandboxOperationError | CommandExecutionError | ArtifactError>;
-  read(
-    receipt: DockerAttemptPlan,
-    path: string,
-  ): Effect.Effect<SandboxArtifact, SandboxOperationError | CommandExecutionError | ArtifactError>;
+  cleanup(plan: DockerAttemptPlan): Effect.Effect<void, ArtifactFailure>;
+  read(plan: DockerAttemptPlan, path: string): Effect.Effect<SandboxArtifact, ArtifactFailure>;
 }
 
 const mountedContainersSchema = Schema.Array(
@@ -43,61 +39,33 @@ const helperSchema = Schema.Array(
 export class DockerArtifacts implements ArtifactReader {
   constructor(
     private readonly config: SandboxConfig,
-    private readonly runner: CommandRunner = runCommand,
+    private readonly docker: DockerClient,
   ) {}
 
-  private removeHelper(client: DockerClient, receipt: DockerAttemptPlan, container: string) {
+  cleanup(plan: DockerAttemptPlan) {
     return Effect.gen({ self: this }, function* () {
-      const listed = yield* client.required([
-        "container",
-        "ls",
-        "--all",
-        "--filter",
-        `name=^/${container}$`,
-        "--format",
-        "{{.Names}}",
-      ]);
+      const docker = this.docker;
+      const helper = artifactHelperName(plan.id);
 
-      if (listed.stdout.trim() === "") {
+      if (!(yield* docker.exists(helper))) {
         return;
       }
 
-      if (listed.stdout.trim() !== container) {
-        return yield* Effect.fail(
-          failure("artifacts", new Error("Artifact helper identity does not match its receipt.")),
-        );
-      }
-
-      const inspected = yield* client.required(["container", "inspect", container]);
+      const inspected = yield* docker.required(["container", "inspect", helper]);
 
       const labels = (yield* checked("helper labels", () =>
         Schema.decodeUnknownSync(helperSchema)(JSON.parse(inspected.stdout)),
       ))[0]?.Config.Labels;
 
-      if (
-        !labels ||
-        labels["loopy.sandbox.owner"] !== client.owner ||
-        labels["loopy.sandbox.request"] !== receipt.requestHash ||
-        labels["loopy.sandbox.role"] !== "artifact"
-      ) {
+      if (!labels || !docker.owns(labels, plan.requestHash, "artifact")) {
         return yield* Effect.fail(
           failure("artifacts", new Error("Artifact helper ownership does not match its receipt.")),
         );
       }
 
-      yield* client.required(["rm", "--force", container]);
+      yield* docker.required(["rm", "--force", helper]);
 
-      const remaining = yield* client.required([
-        "container",
-        "ls",
-        "--all",
-        "--filter",
-        `name=^/${container}$`,
-        "--format",
-        "{{.Names}}",
-      ]);
-
-      if (remaining.stdout.trim() !== "") {
+      if (yield* docker.exists(helper)) {
         return yield* Effect.fail(
           failure("artifacts", new Error("Artifact helper removal is not yet confirmed.")),
         );
@@ -105,36 +73,24 @@ export class DockerArtifacts implements ArtifactReader {
     });
   }
 
-  cleanup(receipt: DockerAttemptPlan, helper: string) {
+  private assertIdle(plan: DockerAttemptPlan) {
     return Effect.gen({ self: this }, function* () {
-      if (helper !== artifactHelperName(receipt.id)) {
-        return yield* Effect.fail(
-          failure("artifacts", new Error("Artifact helper identity does not match its receipt.")),
-        );
-      }
-
-      yield* this.removeHelper(new DockerClient(this.config, this.runner), receipt, helper);
-    });
-  }
-
-  read(receipt: DockerAttemptPlan, path: string) {
-    return Effect.gen({ self: this }, function* () {
-      const client = new DockerClient(this.config, this.runner);
-      const volume = yield* client.call(["volume", "inspect", receipt.volume]);
+      const docker = this.docker;
+      const volume = yield* docker.call(["volume", "inspect", plan.volume]);
 
       if (volume.exitCode !== 0) {
-        const listed = yield* client.required([
+        const listed = yield* docker.required([
           "volume",
           "ls",
           "--filter",
-          `name=^${receipt.volume}$`,
+          `name=^${plan.volume}$`,
           "--format",
           "{{.Name}}",
         ]);
 
         if (listed.stdout.trim() === "") {
           return yield* Effect.fail(
-            new ArtifactError("not_found", "Artifact workspace volume was not found."),
+            new SandboxRequestError("not_found", "Artifact workspace volume was not found."),
           );
         }
 
@@ -143,12 +99,12 @@ export class DockerArtifacts implements ArtifactReader {
         );
       }
 
-      const mounted = yield* client.required([
+      const mounted = yield* docker.required([
         "container",
         "ls",
         "--all",
         "--filter",
-        `volume=${receipt.volume}`,
+        `volume=${plan.volume}`,
         "--format",
         "{{.ID}}",
       ]);
@@ -161,79 +117,49 @@ export class DockerArtifacts implements ArtifactReader {
         );
       }
 
-      if (ids.length > 0) {
-        const states = yield* client.required(["container", "inspect", ...ids]);
-
-        if (
-          (yield* checked("mounted containers", () =>
-            Schema.decodeUnknownSync(mountedContainersSchema)(JSON.parse(states.stdout)),
-          )).some(
-            (container) =>
-              container.State.Running || container.State.Restarting || container.State.Paused,
-          )
-        ) {
-          return yield* Effect.fail(
-            new ArtifactError(
-              "conflict",
-              "Workspace still has an active worker. Export after the run is terminal.",
-            ),
-          );
-        }
+      if (ids.length === 0) {
+        return;
       }
 
-      const container = artifactHelperName(receipt.id);
-      yield* this.removeHelper(client, receipt, container);
+      const states = yield* docker.required(["container", "inspect", ...ids]);
+
+      const active = (yield* checked("mounted containers", () =>
+        Schema.decodeUnknownSync(mountedContainersSchema)(JSON.parse(states.stdout)),
+      )).some(({ State }) => State.Running || State.Restarting || State.Paused);
+
+      if (active) {
+        return yield* Effect.fail(
+          new SandboxRequestError(
+            "conflict",
+            "Workspace still has an active worker. Export after the run is terminal.",
+          ),
+        );
+      }
+    });
+  }
+
+  read(plan: DockerAttemptPlan, path: string) {
+    return Effect.gen({ self: this }, function* () {
+      const docker = this.docker;
+      yield* this.assertIdle(plan);
+      yield* this.cleanup(plan);
+      const helper = artifactHelperName(plan.id);
 
       return yield* Effect.acquireUseRelease(
         Effect.void,
         () =>
           Effect.gen({ self: this }, function* () {
-            yield* client.required([
-              "create",
-              "--name",
-              container,
-              "--label",
-              `loopy.sandbox.owner=${client.owner}`,
-              "--label",
-              `loopy.sandbox.request=${receipt.requestHash}`,
-              "--label",
-              "loopy.sandbox.role=artifact",
-              "--network",
-              "none",
-              "--user",
-              "1000:1000",
-              "--cap-drop",
-              "ALL",
-              "--security-opt",
-              "no-new-privileges:true",
-              "--read-only",
-              "--tmpfs",
-              "/tmp:rw,noexec,nosuid,size=16m,mode=1777",
-              "--memory",
-              "128m",
-              "--memory-swap",
-              "128m",
-              "--cpus",
-              "0.5",
-              "--pids-limit",
-              "32",
-              "--ulimit",
-              "nofile=128:128",
-              "--init",
-              "--log-driver",
-              "none",
-              "--mount",
-              `type=volume,source=${receipt.volume},target=/workspace,readonly,volume-nocopy`,
-              "--workdir",
-              "/workspace",
-              "--entrypoint",
-              "bun",
-              this.config.image,
-              "/opt/loopy/artifact-worker.js",
-              path,
-            ]);
+            yield* docker.required(
+              artifactContainerArgs(
+                this.config,
+                plan,
+                helper,
+                docker.labels(plan.requestHash, "artifact"),
+                path,
+              ),
+            );
 
-            const output = yield* client.required(["start", "--attach", container], {
+            const output = yield* docker.required(["start", "--attach", helper], {
               timeoutMs: 10_000,
               maxBytes: 1_500_000,
             });
@@ -244,17 +170,16 @@ export class DockerArtifacts implements ArtifactReader {
 
             if (response.kind === "error") {
               return yield* Effect.fail(
-                new ArtifactError(response.error.code, response.error.message),
+                new SandboxRequestError(response.error.code, response.error.message),
               );
             }
 
-            const bytes = Buffer.from(response.artifact.bytes, "base64");
+            const bytes = verifiedBytes(response.artifact.bytes, response.artifact.sha256);
 
             if (
               response.artifact.path !== path ||
-              bytes.toString("base64") !== response.artifact.bytes ||
-              bytes.byteLength !== response.artifact.size ||
-              createHash("sha256").update(bytes).digest("hex") !== response.artifact.sha256
+              bytes === null ||
+              bytes.byteLength !== response.artifact.size
             ) {
               return yield* Effect.fail(
                 failure("artifacts", new Error("Artifact reader returned inconsistent bytes.")),
@@ -263,10 +188,7 @@ export class DockerArtifacts implements ArtifactReader {
 
             return response.artifact;
           }),
-        () =>
-          Effect.gen({ self: this }, function* () {
-            yield* this.removeHelper(client, receipt, container);
-          }),
+        () => this.cleanup(plan),
       );
     });
   }

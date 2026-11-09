@@ -18,14 +18,9 @@ type ServiceOptions = {
 
 type InstallOptions = ServiceOptions & {
   home: string;
-  executable: string;
-  args?: string[];
+  /** The complete service argv; the first entry is the absolute executable. */
+  command: readonly [string, ...string[]];
   path?: string;
-};
-
-export type DaemonStatus = {
-  state: "running" | "stopped" | "not-installed";
-  pid?: number;
 };
 
 const service = Effect.fn(function* (options: ServiceOptions) {
@@ -101,7 +96,7 @@ function startService(target: Service) {
 }
 
 const validateInstall = Effect.fn(function* (options: InstallOptions, path: string) {
-  if (!isAbsolute(options.home) || !isAbsolute(options.executable)) {
+  if (!isAbsolute(options.home) || !isAbsolute(options.command[0])) {
     return yield* Effect.fail(
       new DaemonInstallError({
         message:
@@ -110,11 +105,7 @@ const validateInstall = Effect.fn(function* (options: InstallOptions, path: stri
     );
   }
 
-  if (
-    [options.home, options.executable, ...(options.args ?? []), path].some((value) =>
-      /[\0\r\n]/.test(value),
-    )
-  ) {
+  if ([options.home, ...options.command, path].some((value) => /[\0\r\n]/.test(value))) {
     return yield* Effect.fail(
       new DaemonInstallError({
         message:
@@ -130,22 +121,13 @@ export function installDaemon(options: InstallOptions) {
     const path = options.path ?? process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin";
     yield* validateInstall(options, path);
 
-    const command = [
-      options.executable,
-      ...(options.args ?? []),
-      "daemon",
-      "run",
-      "--home",
-      options.home,
-    ];
-
     // Create the log directory through the same file seam without truncating existing logs.
     yield* target.operations.writeFile(join(options.home, "logs/.daemon"), "");
 
     const content =
       target.platform === "darwin"
-        ? daemonPlist(options.home, command, path)
-        : daemonUnit(options.home, command, path);
+        ? daemonPlist(options.home, options.command, path)
+        : daemonUnit(options.home, options.command, path);
 
     yield* target.operations.writeFile(target.file, content);
     yield* startService(target);
@@ -203,83 +185,5 @@ export function uninstallDaemon(options: ServiceOptions = {}) {
     if (target.platform === "linux") {
       yield* checked(target, ["systemctl", "--user", "daemon-reload"]);
     }
-  });
-}
-
-function status(state: DaemonStatus["state"], output: string): DaemonStatus {
-  const pid = Number(/(?:pid\s*=\s*|MainPID=)(\d+)/.exec(output)?.[1]);
-
-  if (state === "running" && pid > 0) {
-    return { state, pid };
-  }
-
-  return { state };
-}
-
-export function daemonStatus(options: ServiceOptions = {}) {
-  return Effect.gen(function* () {
-    const target = yield* service(options);
-
-    if (target.platform === "darwin") {
-      const result = yield* target.operations.exec(["launchctl", "print", target.target]);
-
-      if (result.code === 113) {
-        return {
-          state: (yield* target.operations.exists(target.file))
-            ? ("stopped" as const)
-            : ("not-installed" as const),
-        };
-      }
-
-      if (result.code !== 0) {
-        return yield* Effect.fail(
-          new DaemonInstallError({
-            message:
-              "Cannot inspect the daemon. Check launchctl print for your user session and retry.",
-          }),
-        );
-      }
-
-      return status(/state = running\b/.test(result.stdout) ? "running" : "stopped", result.stdout);
-    }
-
-    return yield* linuxStatus(target);
-  });
-}
-
-function linuxStatus(target: Service) {
-  return Effect.gen(function* () {
-    const name = "loopy-daemon.service";
-    const active = yield* target.operations.exec(["systemctl", "--user", "is-active", name]);
-
-    const info = yield* target.operations.exec([
-      "systemctl",
-      "--user",
-      "show",
-      "-p",
-      "MainPID",
-      "-p",
-      "LoadState",
-      name,
-    ]);
-
-    if (/^LoadState=not-found$/m.test(info.stdout)) {
-      return { state: "not-installed" as const };
-    }
-
-    if (
-      info.code !== 0 ||
-      !/^LoadState=loaded$/m.test(info.stdout) ||
-      ![0, 3].includes(active.code)
-    ) {
-      return yield* Effect.fail(
-        new DaemonInstallError({
-          message:
-            "Cannot inspect the daemon. Check systemctl --user status loopy-daemon.service and retry.",
-        }),
-      );
-    }
-
-    return status(active.stdout.trim() === "active" ? "running" : "stopped", info.stdout);
   });
 }

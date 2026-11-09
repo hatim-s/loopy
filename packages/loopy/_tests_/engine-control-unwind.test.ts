@@ -31,7 +31,7 @@ test("map failure settles started item cleanup before outer cleanup and never st
           ),
         () => sh(["outer-cleanup"]),
       ),
-  }).graph;
+  });
 
   const first = start(graph, { items: ["a", "b", "never"] });
   const [a, b] = dispatches(first.effects);
@@ -94,7 +94,7 @@ test("suspended map cancellation unwinds each started item and survives cleanup 
           ),
         () => sh(["outer-cleanup"]),
       ),
-  }).graph;
+  });
 
   const first = start(graph, { items: ["a", "b", "never"] });
   const cancelled = step(graph, first.state, { kind: "cancel_requested", at });
@@ -131,7 +131,7 @@ test("cleanup failure takes precedence and rescue catches failures from immediat
           ),
         (error) => error.get("message"),
       ),
-  }).graph;
+  });
 
   const result = start(graph);
   expect(result.state.phase).toMatchObject({
@@ -143,7 +143,7 @@ test("cleanup failure takes precedence and rescue catches failures from immediat
   ).toContain("body failed");
 });
 
-test("a retry and an indefinite wait suspend until the retry deadline", () => {
+test("a retry beside an indefinite wait keeps the run leased until the retry deadline", () => {
   const graph = loopy("retry-wait", {
     input: {},
     run: () =>
@@ -151,7 +151,7 @@ test("a retry and an indefinite wait suspend until the retry deadline", () => {
         execution: () => sh(["retry"]),
         approval: () => wait("approve", { payload: { kind: "value", type: "boolean" } }),
       }),
-  }).graph;
+  });
 
   const first = start(graph);
   const dispatch = dispatches(first.effects)[0];
@@ -161,11 +161,8 @@ test("a retry and an indefinite wait suspend until the retry deadline", () => {
   }
 
   const result = failed(graph, first.state, dispatch.executionKey);
-  expect(result.effects).toContainEqual({
-    kind: "suspend_run",
-    wakeAt: "2026-10-20T00:00:01.000Z",
-    at,
-  });
+  expect(result.effects).toContainEqual({ kind: "schedule_retry", at: "2026-10-20T00:00:01.000Z" });
+  expect(result.effects.some((effect) => effect.kind === "suspend_run")).toBe(false);
 
   const resumed = step(graph, initialState("run", {}, result.state.nodeRuns), {
     kind: "run_started",
@@ -191,7 +188,7 @@ test("sleep deadline advances its parallel branch while an executable sibling re
           return "awake";
         },
       }),
-  }).graph;
+  });
 
   const first = start(graph);
   const dispatch = dispatches(first.effects)[0];

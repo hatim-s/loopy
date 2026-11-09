@@ -1,4 +1,7 @@
-import { durationMs, type ExecutionSpec, isStringArray, type Node } from "..";
+import { durationMs } from "../duration";
+import type { ExecutionSpec } from "../executor";
+import type { Node } from "../graph/nodes";
+import { isStringArray } from "../validation";
 import { ROOT_CONTEXT, resolve, resolveValues } from "./resolve";
 import type { EngineState } from "./state";
 

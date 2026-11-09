@@ -4,7 +4,7 @@ import { Schema } from "effect";
 import { useState } from "react";
 import { ErrorBanner } from "../components/error-banner";
 import { ScheduleForm } from "../components/schedules/form";
-import { ScheduleRow } from "../components/schedules/row";
+import { ScheduleHead, ScheduleRow } from "../components/schedules/row";
 import { Load, Note } from "../components/ui/load";
 import { Segmented } from "../components/ui/segmented";
 import { useClock } from "../lib/clock";
@@ -243,23 +243,7 @@ function SchedulesPage() {
                   ) : (
                     <div className="table-scroll">
                       <table className="data">
-                        <thead>
-                          <tr>
-                            <th scope="col">Loopy</th>
-                            <th scope="col">Schedule</th>
-                            <th scope="col" className="w-36">
-                              Next fire
-                            </th>
-                            <th scope="col">Last fire</th>
-                            <th scope="col">Input</th>
-                            <th scope="col" className="w-36">
-                              State
-                            </th>
-                            <th scope="col" className="w-40">
-                              <span className="sr-only">Actions</span>
-                            </th>
-                          </tr>
-                        </thead>
+                        <ScheduleHead />
                         <tbody>
                           {rows.map((schedule) => (
                             <ScheduleRow

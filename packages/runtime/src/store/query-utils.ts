@@ -1,31 +1,9 @@
-import {
-  emptyRunCounts,
-  executionKeyString,
-  type FeedPage,
-  type NodePage,
-  type NodeRun,
-  type Overview,
-  type OverviewQuery,
-  type RunFilter,
-  type RunRecord,
-} from "@loopy/core";
+import { emptyRunCounts, type OverviewQuery, type OverviewView } from "@loopy/contract";
 import { StoreRejectedError } from "./operation";
 
 export const FEED_SCAN_LIMIT = 2000;
 
-export const PREVIEW_BYTES = 16_384;
-
-export function matchesRun(run: RunRecord, filter: RunFilter): boolean {
-  return (
-    (filter.slug === undefined || run.slug === filter.slug) &&
-    (filter.workspace === undefined || run.workspace === filter.workspace) &&
-    (filter.status === undefined || run.status === filter.status) &&
-    (filter.from === undefined || run.createdAt >= filter.from) &&
-    (filter.to === undefined || run.createdAt < filter.to)
-  );
-}
-
-export function overviewBuckets(query: OverviewQuery): Overview {
+export function overviewBuckets(query: OverviewQuery): OverviewView {
   const count = Math.ceil(
     (Date.parse(query.to) - Date.parse(query.from)) / (query.bucketSeconds * 1000),
   );
@@ -46,37 +24,6 @@ export function overviewBuckets(query: OverviewQuery): Overview {
   };
 }
 
-export function nodePage(items: NodeRun[], limit: number, more: boolean): NodePage {
-  const truncatedOutputs: Record<string, number> = {};
-
-  const selected = items.slice(0, limit).map((node) => {
-    const preview = { ...node };
-    delete preview.inputView;
-
-    if (node.status !== "succeeded") {
-      return preview;
-    }
-
-    const bytes = new TextEncoder().encode(JSON.stringify(node.output)).byteLength;
-
-    if (bytes <= PREVIEW_BYTES) {
-      return preview;
-    }
-
-    truncatedOutputs[executionKeyString(node.key)] = bytes;
-
-    return { ...preview, output: null };
-  });
-
-  const last = selected.at(-1);
-
-  return {
-    items: selected,
-    next: more && last ? executionKeyString(last.key) : null,
-    truncatedOutputs,
-  };
-}
-
 export function scanPage<T>(options: {
   candidates: T[];
   limit: number;
@@ -84,7 +31,7 @@ export function scanPage<T>(options: {
   matches: (row: T) => boolean;
   oldest: number | null;
   newest: number | null;
-}): FeedPage<T> {
+}) {
   const items: T[] = [];
   let scanned = 0;
   let last: number | null = null;

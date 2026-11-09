@@ -1,15 +1,12 @@
 import type { HookRecord } from "@loopy/contract";
 import { timestamp } from "../../lib/format";
 import type { GraphModel } from "../../lib/graph";
-import type { NodeMark } from "../code/code-view";
+import type { NodeMark } from "../../lib/run-marks";
 import { KindGlyph } from "../graph/kind-glyph";
 import { JsonPreview } from "../json-preview";
 import { StatusGlyph } from "../ui/status";
 
-/**
- * The side panel before a node is chosen: every node in graph order with what the run did
- * there, so a reader can jump to it. Junctions are left out; they carry no work.
- */
+// Junctions are left out; they carry no work.
 export function RunGuide(props: {
   model: GraphModel;
   marks: ReadonlyMap<string, NodeMark>;

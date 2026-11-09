@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { coerceInput, initialValues, inputFields, parseJsonInput } from "../src/lib/input-form";
+import { recordFields } from "@loopy/contract";
+import { coerceInput, initialValues, parseJsonInput } from "../src/lib/input-form";
 
-const fields = inputFields({
+const fields = recordFields({
   name: "string",
   "count?": "number",
   loud: "boolean",

@@ -3,9 +3,9 @@ import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-q
 import type { LoopyBackend } from "../backend/backend";
 import { useBackend } from "../router-context";
 import { keys } from "./keys";
-import { applyRunView, applyScheduleView, removeScheduleView } from "./stream";
+import { applyRunView } from "./stream/run-lists";
+import { applyScheduleView, removeScheduleView } from "./stream/schedules";
 
-/** A mutation that returns a run. The returned run is shown at once; the stream follows. */
 export function useRunMutation<Variables = void>(
   action: (backend: LoopyBackend, variables: Variables) => Promise<RunView>,
 ) {
@@ -35,7 +35,7 @@ export function useSaveSchedule(slug: string, workspace: string) {
 /** Identity guards keep a failed request from overwriting stream writes to the same row. */
 export async function toggleSchedule(
   client: QueryClient,
-  backend: LoopyBackend,
+  backend: Pick<LoopyBackend, "setScheduleEnabled">,
   change: { slug: string; workspace: string; enabled: boolean },
 ) {
   const { slug, workspace, enabled } = change;

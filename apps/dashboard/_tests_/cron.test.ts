@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { describeCron } from "../src/lib/cron";
+import { describeCron } from "@loopy/contract";
 
 test("common cron patterns read as plain sentences", () => {
   expect(describeCron("*/5 * * * *")).toBe("Every 5 minutes");
@@ -36,11 +36,9 @@ test("rarer or malformed expressions have no reading", () => {
     "0 9 * * 5-1",
     "*/5 9 * * mon",
     "0 */2 1 * *",
+    "99 25 * * *",
+    "*/59 * * * *",
   ]) {
     expect(describeCron(expression)).toBeUndefined();
   }
-});
-
-test.each(["99 25 * * *", "*/59 * * * *"])("%s has no exact plain reading", (expression) => {
-  expect(describeCron(expression)).toBeUndefined();
 });

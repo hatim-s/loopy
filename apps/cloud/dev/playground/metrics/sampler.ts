@@ -1,23 +1,39 @@
 import { encodeRunCursor, type RunView, routes } from "@loopy/contract";
 import { executionKeyString } from "@loopy/core";
+import type { Schema } from "effect";
+import type { Capture } from "./artifacts";
 import { createMeasure } from "./request";
 import { resources } from "./resources";
 import { type Sample, summarize } from "./statistics";
 
 type Request = (path: string, signal: AbortSignal) => Promise<Response>;
 
-type ApiEvidence = {
-  scope: string;
-  phase: string;
-  startedAt: string;
-  updatedAt: string;
-  elapsedMs: number;
-  targetRequestsPerSecond: number;
-  samples: Sample[];
-  summaries: ReturnType<typeof summarize>;
-  resources: Awaited<ReturnType<typeof resources>>[];
-  limits: string[];
-};
+// Per-run detail requests are conditional and cannot be required before the first workload.
+export const baselineEndpoints = [
+  "runs.latest",
+  "loopies.counts",
+  "runs.waiting",
+  "runs.failed",
+  "overview.counts",
+  "logs.latest",
+  "events.latest",
+  "daemon",
+  "runs.page2",
+  "runs.slug",
+  "logs.text",
+  "events.run-filter",
+  "logs.page2",
+  "events.page2",
+] as const;
+
+type Endpoint =
+  | (typeof baselineEndpoints)[number]
+  | "run.snapshot"
+  | "run.payload"
+  | "execution.page"
+  | "execution.detail";
+
+type ApiEvidence = Omit<Capture, "api" | "dashboard" | "batch" | "workspace" | "workloadControls">;
 
 export async function sampleApi(options: {
   phase: string;
@@ -46,7 +62,14 @@ export async function sampleApi(options: {
   const windowStart = new Date(Date.now() - 24 * 3600_000).toISOString();
   const windowEnd = new Date(Date.now() + 3600_000).toISOString();
 
-  const measure = createMeasure(options.request, samples);
+  const measureAny = createMeasure(options.request, samples);
+
+  const measure = <T>(
+    endpoint: Endpoint,
+    path: string,
+    schema: Schema.Codec<T, unknown, never, never>,
+    observe?: (value: T) => Sample["observation"],
+  ) => measureAny(endpoint, path, schema, observe);
 
   const plan = [
     () =>
@@ -208,7 +231,7 @@ export async function sampleApi(options: {
 
   async function save() {
     await options.save({
-      scope: "local-playground-read-only-api",
+      scope: "local-playground-read-only-api" as const,
       phase: options.phase,
       startedAt,
       updatedAt: new Date().toISOString(),

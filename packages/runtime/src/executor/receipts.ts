@@ -10,7 +10,7 @@ import {
   rm,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { executionKeySchema, sandboxExecutionResultSchema } from "@loopy/contract";
+import { decodeJson, executionKeySchema, executionResultSchema } from "@loopy/contract";
 import {
   type ExecutionKey,
   type ExecutionResult,
@@ -41,7 +41,7 @@ export const receiptSchema = Schema.Union([
   Schema.Struct({
     ...identity,
     kind: Schema.Literal("finished"),
-    result: sandboxExecutionResultSchema,
+    result: executionResultSchema,
   }),
 ]);
 
@@ -133,7 +133,7 @@ export class FilesystemReceipts {
     }
 
     const receipt = yield* Effect.try({
-      try: () => Schema.decodeUnknownSync(receiptSchema)(JSON.parse(text)),
+      try: () => decodeJson(receiptSchema)(text),
       catch: (cause) => new ExecutorError({ operation: "receipt", cause }),
     });
 

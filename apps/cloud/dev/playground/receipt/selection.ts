@@ -1,5 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { HttpSandboxAuthority } from "../../../../sandbox/src/http-authority";
+import { type Config, profile } from "../config";
 
 // The caller holds the bridge root lock before selecting a new authority.
 export async function requireFreshDurableRoot(root: string) {
@@ -10,4 +12,12 @@ export async function requireFreshDurableRoot(root: string) {
       );
     }
   }
+}
+
+export function receiptAuthority(settings: Extract<Config, { receiptMode: "durable-object" }>) {
+  return new HttpSandboxAuthority({
+    url: profile.api,
+    token: settings.receiptsToken,
+    namespace: profile.batchPrefix,
+  });
 }

@@ -1,114 +1,161 @@
 import { realpath } from "node:fs/promises";
-import { resolve } from "node:path";
 import {
   DEFAULT_PORT,
   installDaemon,
   localDaemon,
+  openRunStore,
   readDaemonFile,
   uninstallDaemon,
 } from "@loopy/runtime/local";
 import { Cause, Deferred, Effect } from "effect";
-import { type CliContext, requireTarget } from "../context";
-import { CliError, cliIO, cliSync } from "../errors";
+import { defineCommand, type Options } from "../command";
+import type { Context } from "../context";
+import { DASHBOARD_ASSETS, daemonCommand } from "../entry";
+import { cliIO, cliSync } from "../errors";
 import { printJson, printLine, report } from "../output";
-import { onTermination } from "../signals";
-import { withRunStore } from "../store";
 
-export const runDaemon = Effect.fn(function* (context: CliContext) {
-  const action = yield* requireTarget(context, "Daemon action");
+export const DAEMON_OPTIONS = {
+  concurrency: {
+    type: "integer",
+    value: "n",
+    min: 1,
+    default: 4,
+    description: "Runs executed at the same time.",
+  },
+  port: {
+    type: "integer",
+    value: "port",
+    min: 0,
+    max: 65535,
+    default: DEFAULT_PORT,
+    description: "Dashboard and API port; 0 picks a free port.",
+  },
+  "lease-ms": {
+    type: "integer",
+    value: "ms",
+    min: 1000,
+    description: "Run ownership lease in milliseconds (store default 60000).",
+  },
+} as const satisfies Options;
 
-  if (action === "install") {
-    yield* installService(context);
-    report("Installed the daemon service. Use loopy daemon status to inspect it.");
-  } else if (action === "uninstall") {
-    yield* uninstallDaemon();
-    report("Uninstalled the daemon service.");
-  } else if (action === "status") {
-    printJson((yield* cliSync(() => readDaemonFile(context.home))) ?? { state: "stopped" });
-  } else if (action === "run") {
-    yield* runForeground(context, reportAddress);
-  } else {
-    return yield* new CliError({
-      message: "Unknown daemon action. Use loopy daemon run, install, uninstall or status.",
-    });
-  }
-});
+type ForegroundOptions = Pick<Context, "home" | "cwd"> & {
+  port: number;
+  concurrency: number;
+  leaseMs: number | undefined;
+};
 
-const installService = Effect.fn(function* (context: CliContext) {
-  const { port, concurrency } = yield* daemonFlags(context);
-  const entry = process.argv[1];
-
-  if (!entry) {
-    return yield* new CliError({
-      message: "Cannot resolve the CLI entry. Run loopy daemon install from the installed CLI.",
-    });
-  }
-
-  yield* installDaemon({
-    home: context.home,
-    executable: yield* cliIO(() => realpath(process.execPath)),
-    args: [
-      yield* cliIO(() => realpath(resolve(entry))),
-      "--concurrency",
-      String(concurrency),
-      "--port",
-      String(port),
-    ],
-  });
-});
-
-function reportAddress(url: string) {
-  printLine(new URL(url).origin);
-  printLine("Run loopy ui to open the dashboard.");
-}
+const TERMINATION_SIGNALS = ["SIGINT", "SIGTERM"] as const;
 
 export const runForeground = Effect.fn(function* (
-  context: CliContext,
+  options: ForegroundOptions,
   onStarted: (url: string) => void,
 ) {
-  const flags = yield* daemonFlags(context);
-  yield* withRunStore(context, (store) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const terminated = yield* Deferred.make<void>();
-        yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            onTermination(() => {
-              Deferred.doneUnsafe(terminated, Effect.void);
-            }),
-          ),
-          (cleanup) => Effect.sync(cleanup),
-        );
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      // Only daemon control opens the database; data commands use HTTP.
+      const store = yield* openRunStore(options.home, { leaseMs: options.leaseMs });
+      const terminated = yield* Deferred.make<void>();
 
-        const daemon = yield* localDaemon({
-          ...context,
-          store,
-          ...flags,
-          onError: (cause, run) => report(`${run ? `Run ${run.id}: ` : ""}${Cause.pretty(cause)}`),
-        });
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const terminate = () => Deferred.doneUnsafe(terminated, Effect.void);
 
-        onStarted(yield* daemon.start);
-        yield* Effect.raceFirst(daemon.run, Deferred.await(terminated));
-      }),
-    ),
+          for (const signal of TERMINATION_SIGNALS) {
+            process.once(signal, terminate);
+          }
+
+          return terminate;
+        }),
+        (terminate) =>
+          Effect.sync(() => {
+            for (const signal of TERMINATION_SIGNALS) {
+              process.removeListener(signal, terminate);
+            }
+          }),
+      );
+
+      const daemon = yield* localDaemon({
+        home: options.home,
+        cwd: options.cwd,
+        store,
+        port: options.port,
+        concurrency: options.concurrency,
+        assets: DASHBOARD_ASSETS,
+        onError: (cause, run) => report(`${run ? `Run ${run.id}: ` : ""}${Cause.pretty(cause)}`),
+      });
+
+      onStarted(yield* daemon.start);
+      yield* Effect.raceFirst(daemon.run, Deferred.await(terminated));
+    }),
   );
 });
 
-const daemonFlags = Effect.fn(function* (context: CliContext) {
-  const port = context.values.port === undefined ? DEFAULT_PORT : Number(context.values.port);
+export const daemonRun = defineCommand({
+  path: ["daemon", "run"],
+  summary: "Run the foreground daemon",
+  options: DAEMON_OPTIONS,
+  positionals: [],
+  run: (cli) =>
+    runForeground(
+      {
+        home: cli.home,
+        cwd: cli.cwd,
+        port: cli.values.port,
+        concurrency: cli.values.concurrency,
+        leaseMs: cli.values["lease-ms"],
+      },
+      (url) => {
+        printLine(new URL(url).origin);
+        printLine("Run loopy ui to open the dashboard.");
+      },
+    ),
+});
 
-  const concurrency =
-    context.values.concurrency === undefined ? 4 : Number(context.values.concurrency);
+export const daemonInstall = defineCommand({
+  path: ["daemon", "install"],
+  summary: "Install and start the user service",
+  options: DAEMON_OPTIONS,
+  positionals: [],
+  run: (cli) =>
+    Effect.gen(function* () {
+      const [executable, entry, ...args] = daemonCommand({
+        home: cli.home,
+        port: cli.values.port,
+        concurrency: cli.values.concurrency,
+        leaseMs: cli.values["lease-ms"],
+      });
 
-  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
-    return yield* new CliError({
-      message: "Daemon concurrency must be a positive integer. Supply at least one worker.",
-    });
-  }
+      yield* installDaemon({
+        home: cli.home,
+        command: [
+          yield* cliIO(() => realpath(executable)),
+          yield* cliIO(() => realpath(entry)),
+          ...args,
+        ],
+      });
+      report("Installed the daemon service. Use loopy daemon status to inspect it.");
+    }),
+});
 
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    return yield* new CliError({ message: "Port must be an integer from 0 to 65535." });
-  }
+export const daemonUninstall = defineCommand({
+  path: ["daemon", "uninstall"],
+  summary: "Remove the user service",
+  options: {},
+  positionals: [],
+  run: () =>
+    Effect.gen(function* () {
+      yield* uninstallDaemon();
+      report("Uninstalled the daemon service.");
+    }),
+});
 
-  return { port, concurrency };
+export const daemonStatus = defineCommand({
+  path: ["daemon", "status"],
+  summary: "Show daemon.json PID, port, token and start time",
+  options: {},
+  positionals: [],
+  run: (cli) =>
+    Effect.gen(function* () {
+      printJson((yield* cliSync(() => readDaemonFile(cli.home))) ?? { state: "stopped" });
+    }),
 });

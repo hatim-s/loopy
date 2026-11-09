@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { nodeIdSchema } from "@loopy/contract";
+import { type DashboardReader, nodeIdSchema } from "@loopy/contract";
 import {
   type NodeRun,
   OwnershipError,
@@ -11,7 +11,9 @@ import { Effect, Schema } from "effect";
 import { newRun } from "./fixture";
 import { storeRecordContract } from "./store-record-contract";
 
-type StoreFactory = (options?: { now?: () => number; leaseMs?: number }) => Store | Promise<Store>;
+type ContractStore = Store & DashboardReader;
+
+type StoreFactory = (options?: { leaseMs?: number }) => ContractStore | Promise<ContractStore>;
 
 const OUTCOMES: RunOutcome[] = [
   { status: "succeeded", output: 42 },
@@ -31,6 +33,19 @@ function runningNode(): NodeRun {
 }
 
 const LOG = { at: newRun().createdAt };
+
+const allRuns = (store: ContractStore) =>
+  Effect.runPromise(store.queryRuns({ limit: 200, now: LOG.at }));
+
+const suspend = (store: ContractStore, token: string, wakeAt: string | null = null) =>
+  Effect.runPromise(
+    store.apply({ runId: "run", token, effects: [{ kind: "suspend_run", wakeAt, at: LOG.at }] }),
+  );
+
+const finish = (store: ContractStore, token: string, outcome: RunOutcome) =>
+  Effect.runPromise(
+    store.apply({ runId: "run", token, effects: [{ kind: "finish_run", outcome, at: LOG.at }] }),
+  );
 
 async function fixture(makeStore: StoreFactory) {
   const store = await makeStore();
@@ -94,7 +109,7 @@ function scheduleFires(makeStore: StoreFactory): void {
         Effect.runPromise(store.fireSchedule({ ...fire, run: { ...run, id: "duplicate" } })),
       ]),
     ).toEqual([true, false]);
-    expect(await Effect.runPromise(store.listRuns())).toEqual([run]);
+    expect(await allRuns(store)).toEqual([run]);
     run.input = "changed";
     expect((await Effect.runPromise(store.getRun("run")))?.input).toEqual(SCHEDULE.input);
     expect(await Effect.runPromise(store.listSchedules())).toEqual([
@@ -112,7 +127,7 @@ function scheduleFires(makeStore: StoreFactory): void {
         }),
       ),
     ).toBe(true);
-    expect(await Effect.runPromise(store.listRuns())).toHaveLength(2);
+    expect(await allRuns(store)).toHaveLength(2);
   });
 }
 
@@ -131,7 +146,7 @@ function scheduleFireFailures(makeStore: StoreFactory): void {
       ),
     ).rejects.toThrow("Run 'run' already exists. Use a new run ID.");
     expect(await Effect.runPromise(store.listSchedules())).toEqual([SCHEDULE]);
-    expect(await Effect.runPromise(store.listRuns())).toEqual([newRun()]);
+    expect(await allRuns(store)).toEqual([newRun()]);
     await Effect.runPromise(store.deleteSchedule(SCHEDULE.workspace, "test"));
     await expect(
       Effect.runPromise(
@@ -162,7 +177,7 @@ function scheduleRevisions(makeStore: StoreFactory): void {
     expect(
       await Effect.runPromise(store.fireSchedule({ ...original, fireKey: "stale", run: newRun() })),
     ).toBe(false);
-    expect(await Effect.runPromise(store.listRuns())).toEqual([]);
+    expect(await allRuns(store)).toEqual([]);
     expect(await Effect.runPromise(store.listSchedules())).toEqual([replacement]);
     expect(await Effect.runPromise(store.events(0, 100))).toEqual(before);
   });
@@ -245,7 +260,7 @@ function scheduleToggles(makeStore: StoreFactory): void {
         store.fireSchedule({ ...fire, version: disabled.version, fireKey: "disabled" }),
       ),
     ).toBe(false);
-    expect(await Effect.runPromise(store.listRuns())).toHaveLength(1);
+    expect(await allRuns(store)).toHaveLength(1);
     expect(await Effect.runPromise(store.events(0, 100))).toEqual(before);
 
     const enabled = await Effect.runPromise(
@@ -332,7 +347,7 @@ function eventCursors(makeStore: StoreFactory): void {
     const current = await Effect.runPromise(store.eventCursor());
     expect(current).toEqual({ cursor: 2, epoch: initial.epoch });
     expect((await Effect.runPromise(store.events(0, 100))).at(-1)?.sequence).toBe(current.cursor);
-    expect(await Effect.runPromise(store.snapshotRun("run"))).toMatchObject(current);
+    expect(await Effect.runPromise(store.dashboardSnapshot("run"))).toMatchObject(current);
     expect(await Effect.runPromise(store.pruneEvents("2100-01-01T00:00:00.000Z"))).toBe(2);
     expect(await Effect.runPromise(store.events(0, 100))).toEqual([]);
     expect(await Effect.runPromise(store.eventCursor())).toEqual(current);
@@ -354,13 +369,11 @@ function stateMachine(makeStore: StoreFactory): void {
     await expect(Effect.runPromise(store.claim("run", "other"))).rejects.toBeInstanceOf(
       OwnershipError,
     );
-    await Effect.runPromise(store.suspend("run", "owner", LOG.at));
-    await expect(Effect.runPromise(store.suspend("run", "owner"))).rejects.toThrow(
+    await suspend(store, "owner", LOG.at);
+    await expect(suspend(store, "owner")).rejects.toThrow("cannot transition from 'suspended'");
+    await expect(finish(store, "owner", { status: "succeeded", output: 42 })).rejects.toThrow(
       "cannot transition from 'suspended'",
     );
-    await expect(
-      Effect.runPromise(store.finishRun("run", "owner", { status: "succeeded", output: 42 })),
-    ).rejects.toThrow("cannot transition from 'suspended'");
     await Effect.runPromise(store.release("run", "owner"));
     expect((await Effect.runPromise(store.getRun("run")))?.owner).toBeUndefined();
     expect((await Effect.runPromise(store.claim("run", "next"))).status).toBe("running");
@@ -391,11 +404,11 @@ function terminalTransitions(makeStore: StoreFactory): void {
     test(`terminal ${outcome.status} cannot be overwritten or suspended`, async () => {
       const store = await fixture(makeStore);
       await Effect.runPromise(store.claim("run", "owner"));
-      await Effect.runPromise(store.finishRun("run", "owner", outcome));
-      await expect(Effect.runPromise(store.finishRun("run", "owner", outcome))).rejects.toThrow(
+      await finish(store, "owner", outcome);
+      await expect(finish(store, "owner", outcome)).rejects.toThrow(
         `cannot transition from '${outcome.status}'`,
       );
-      await expect(Effect.runPromise(store.suspend("run", "owner"))).rejects.toThrow(
+      await expect(suspend(store, "owner")).rejects.toThrow(
         `cannot transition from '${outcome.status}'`,
       );
       expect(await Effect.runPromise(store.getRun("run"))).toMatchObject(outcome);
@@ -411,7 +424,7 @@ function ownershipFencing(makeStore: StoreFactory): void {
   test("ownership fences stale writes and heartbeat reports lost ownership", async () => {
     const store = await fixture(makeStore);
     await Effect.runPromise(store.claim("run", "old"));
-    await Effect.runPromise(store.suspend("run", "old"));
+    await suspend(store, "old");
     await Effect.runPromise(store.release("run", "old"));
     await Effect.runPromise(store.claim("run", "new"));
     expect(await Effect.runPromise(store.heartbeat("run", "old"))).toBe(false);
@@ -419,8 +432,7 @@ function ownershipFencing(makeStore: StoreFactory): void {
     const node = runningNode();
 
     const writes = [
-      () => Effect.runPromise(store.suspend("run", "old")),
-      () => Effect.runPromise(store.finishRun("run", "old", { status: "cancelled" })),
+      () => suspend(store, "old"),
       () => Effect.runPromise(store.release("run", "old")),
       () =>
         Effect.runPromise(
@@ -476,11 +488,11 @@ function dueRuns(makeStore: StoreFactory): void {
     expect((await Effect.runPromise(store.dueRuns(LOG.at))).map((run) => run.id)).toEqual(["run"]);
     await Effect.runPromise(store.claim("run", "owner"));
     expect(await Effect.runPromise(store.dueRuns(LOG.at))).toEqual([]);
-    await Effect.runPromise(store.suspend("run", "owner"));
+    await suspend(store, "owner");
     await Effect.runPromise(store.release("run", "owner"));
     expect(await Effect.runPromise(store.dueRuns(LOG.at))).toEqual([]);
     await Effect.runPromise(store.claim("run", "owner"));
-    await Effect.runPromise(store.suspend("run", "owner", "2026-10-16T01:00:00.000Z"));
+    await suspend(store, "owner", "2026-10-16T01:00:00.000Z");
     await Effect.runPromise(store.release("run", "owner"));
     expect(await Effect.runPromise(store.dueRuns(LOG.at))).toEqual([]);
     expect(
@@ -515,9 +527,7 @@ export function storeContract(name: string, makeStore: StoreFactory): void {
       const cursor = await Effect.runPromise(store.eventCursor());
       expect(await Effect.runPromise(store.wakeRun("run", LOG.at))).toBe("owned_elsewhere");
       expect(await Effect.runPromise(store.eventCursor())).toEqual(cursor);
-      await Effect.runPromise(
-        store.finishRun("run", "owner", { status: "succeeded", output: null }),
-      );
+      await finish(store, "owner", { status: "succeeded", output: null });
       await Effect.runPromise(store.release("run", "owner"));
       expect(await Effect.runPromise(store.wakeRun("run", LOG.at))).toBe("not_claimable");
     });

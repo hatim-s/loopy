@@ -223,7 +223,7 @@ for (const retryOnExit of [false, true]) {
     const graph = loopy("exit-policy", {
       input: {},
       run: () => sh(["false"], { retry: { attempts: 3, retryOnExit } }),
-    }).graph;
+    });
 
     const started = step(graph, initialState("run", {}), { kind: "run_started", at });
     const dispatch = started.effects.find((effect) => effect.kind === "dispatch");

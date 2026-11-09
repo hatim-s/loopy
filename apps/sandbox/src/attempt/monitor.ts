@@ -1,6 +1,6 @@
-import type { SandboxExecutionResult } from "@loopy/contract";
+import type { ExecutionResult } from "@loopy/contract";
 import { type AttemptRecord, AuthorityError, type AuthoritySession } from "@loopy/contract";
-import { Effect, FiberMap, Result } from "effect";
+import { Effect, FiberMap } from "effect";
 import type { AttemptBackend } from "../docker";
 import type { ResultsFor, SandboxAttemptAuthority, SandboxFailure } from "../operations";
 import { boundedResult } from "../result";
@@ -22,14 +22,13 @@ export class AttemptMonitors {
   }
   launch(
     record: Extract<AttemptRecord, { kind: "started" }>,
-    perform: () => Effect.Effect<SandboxExecutionResult, SandboxFailure>,
+    perform: () => Effect.Effect<ExecutionResult, SandboxFailure>,
   ) {
     return Effect.gen({ self: this }, function* () {
-      if (this.has(record.plan.id) || this.options.stopping.stopped) {
+      if (this.options.stopping.stopped) {
         return;
       }
 
-      // The service scope owns reconciliation after the admitting request disconnects.
       yield* FiberMap.run(this.options.active, record.plan.id, this.monitor(record, perform), {
         onlyIfMissing: true,
       });
@@ -37,52 +36,46 @@ export class AttemptMonitors {
   }
   private monitor(
     record: Extract<AttemptRecord, { kind: "started" }>,
-    perform: () => Effect.Effect<SandboxExecutionResult, SandboxFailure>,
+    perform: () => Effect.Effect<ExecutionResult, SandboxFailure>,
   ) {
-    return Effect.gen({ self: this }, function* () {
-      const { authority, backend, resultsFor, stopping, session } = this.options;
-      const signal = stopping.signal;
-      const receipt = { ...record.plan, kind: "started" } as const;
-      let observed: SandboxExecutionResult | null = null;
-      let reconcile = perform;
-      let backoff = 100;
+    const { authority, backend, resultsFor, stopping, session } = this.options;
+    let observed: ExecutionResult | null = null;
+    let reconcile = perform;
 
-      while (!stopping.stopped) {
-        const attempt = yield* Effect.gen(function* () {
-          observed ??= boundedResult(yield* reconcile());
+    const publish = Effect.gen(function* () {
+      observed ??= boundedResult(yield* reconcile());
 
-          if (stopping.stopped) {
-            return;
-          }
-
-          const result = yield* resultsFor(record.plan.workspace).put(observed);
-
-          if (stopping.stopped) {
-            return;
-          }
-
-          const completed = yield* authority.complete({
-            session,
-            id: record.plan.id,
-            requestHash: record.plan.requestHash,
-            result,
-          });
-
-          if (completed.kind === "rejected") {
-            return yield* Effect.fail(new AuthorityError(completed.code));
-          }
-        }).pipe(Effect.result);
-
-        if (Result.isSuccess(attempt)) {
-          return;
-        }
-
-        // Never reissue start, even when its acknowledgement was lost.
-        reconcile = () => backend.recover(receipt, signal);
-        yield* stopping.pause(backoff);
-        backoff = Math.min(backoff * 2, 5000);
+      if (stopping.stopped) {
+        return;
       }
-    });
+
+      const result = yield* resultsFor(record.plan.workspace).put(observed);
+
+      if (stopping.stopped) {
+        return;
+      }
+
+      const completed = yield* authority.complete({
+        session,
+        id: record.plan.id,
+        requestHash: record.plan.requestHash,
+        result,
+      });
+
+      if (completed.kind === "rejected") {
+        return yield* Effect.fail(new AuthorityError(completed.code));
+      }
+    }).pipe(
+      Effect.tapError(() =>
+        Effect.sync(() => {
+          // Never reissue start, even when its acknowledgement was lost.
+          reconcile = () => backend.recover(record.plan, stopping.signal);
+        }),
+      ),
+    );
+
+    // Stopping leaves the receipt started for the next process to reconcile.
+    return stopping.retry(publish).pipe(Effect.catch(() => Effect.void));
   }
 
   drain() {

@@ -8,18 +8,12 @@ const encoder = new TextEncoder();
 
 export function artifactEntry(row: Publication, graph: Graph): SavedLoopy {
   return {
-    version: 2,
+    version: 3,
     slug: row.slug,
     graph,
     revision: row.revision,
     source: row.source,
     savedAt: row.saved_at,
-    scope: graph.meta.scope,
-    description: graph.meta.description,
-    input: graph.input,
-    schedule: graph.meta.schedule,
-    mode: graph.meta.mode,
-    secrets: graph.meta.secrets,
     bundles: graphBundles(graph),
   };
 }

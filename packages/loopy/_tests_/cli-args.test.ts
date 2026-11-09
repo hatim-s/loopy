@@ -1,8 +1,24 @@
 import { expect, test } from "bun:test";
-import { parseCliArgs } from "../../cli/src/args";
+import { Effect } from "effect";
+import { parseCommandLine } from "../../cli/src/parse";
+import { COMMANDS } from "../../cli/src/table";
+
+function parse(args: string[]) {
+  const parsed = Effect.runSync(parseCommandLine(COMMANDS, args));
+
+  if (parsed.kind !== "command") {
+    throw new Error(`Expected a command for ${args.join(" ")}.`);
+  }
+
+  return parsed;
+}
+
+function failure(args: string[]) {
+  return Effect.runSync(Effect.flip(parseCommandLine(COMMANDS, args))).message;
+}
 
 test("named input preserves strings, equals signs, empty values, and own properties", () => {
-  const parsed = parseCliArgs([
+  const parsed = parse([
     "run",
     "example",
     "--message",
@@ -16,47 +32,65 @@ test("named input preserves strings, equals signs, empty values, and own propert
     "--url=a=b",
   ]);
 
-  expect(parsed.namedInput).toEqual(
+  expect(parsed.arguments.positionals).toEqual(["example"]);
+  expect(parsed.arguments.namedInput).toEqual(
     JSON.parse(
       '{"message":"hello world","code":"001","empty":"","negative":"-2","dash":"--text","__proto__":"safe","url":"a=b"}',
     ),
   );
 });
 
-test("reserved options stay separate and separator allows colliding input keys", () => {
-  const parsed = parseCliArgs([
+test("global and command options may precede the command and -- allows colliding input keys", () => {
+  const parsed = parse([
     "--home",
     "/tmp/run",
-    "run",
-    "x",
     "--lease-ms",
     "2000",
-    "--",
-    "--full",
-    "false",
-    "--input",
-    "text",
+    "daemon",
+    "run",
+    "--port",
+    "0",
   ]);
 
-  expect(parsed.values["lease-ms"]).toBe("2000");
-  expect(parsed.namedInput).toEqual({ full: "false", input: "text" });
-  expect(parseCliArgs(["types", "tool", "--", "--help"]).positionals).toEqual([
-    "types",
+  expect(parsed.command.path).toEqual(["daemon", "run"]);
+  expect(parsed.globals.home).toBe("/tmp/run");
+  expect(parsed.arguments.values.get("lease-ms")).toBe("2000");
+  expect(
+    parse(["run", "x", "--", "--full", "false", "--input", "text"]).arguments.namedInput,
+  ).toEqual({ full: "false", input: "text" });
+  expect(parse(["types", "tool", "--", "--help"]).arguments.positionals).toEqual([
     "tool",
     "--help",
   ]);
 });
 
-test("ambiguous or incomplete inputs fail before execution", () => {
-  for (const args of [
-    ["run", "x", "--key"],
-    ["run", "x", "--key", "--full"],
-    ["run", "x", "--key=a", "--key=b"],
-    ["run", "x", "--input-file", "a.json", "--input-json", "{}"],
-    ["run", "x", "--input-json", "{}", "--key=a"],
-    ["resume", "id", "--args", "a.json"],
-    ["list", "--typo", "x"],
-  ]) {
-    expect(() => parseCliArgs(args)).toThrow();
+test("help and a bare invocation print usage instead of running", () => {
+  expect(Effect.runSync(parseCommandLine(COMMANDS, []))).toMatchObject({ kind: "usage" });
+  expect(Effect.runSync(parseCommandLine(COMMANDS, ["logs", "-h"]))).toMatchObject({
+    kind: "usage",
+    command: { path: ["logs"] },
+  });
+  expect(parse(["run", "x", "--key", "-h"]).arguments.namedInput).toEqual({ key: "-h" });
+});
+
+test("ambiguous, incomplete or unknown arguments fail before execution", () => {
+  for (const [args, message] of [
+    [["run", "x", "--key"], "Loopy input --key requires a value."],
+    [["run", "x", "--key", "--full"], "Loopy input --key requires a value."],
+    [["run", "x", "--key=a", "--key=b"], "Loopy input --key was provided more than once."],
+    [["run", "x", "--", "value"], "Expected a loopy input flag, received 'value'."],
+    [["resume", "id", "--args", "a.json"], "Unknown option '--args' for loopy resume."],
+    [["list", "--typo", "x"], "Unknown option '--typo' for loopy list."],
+    [["run", "x", "-k"], "Unknown option '-k' for loopy run."],
+    [["graph", "x", "--format"], "Option --format requires a value."],
+    [["logs", "id", "--follow=yes"], "Option --follow does not take a value."],
+    [["deploy"], "Unknown command 'deploy'. Run loopy --help."],
+    [["daemon"], "Choose a daemon action. Use loopy daemon run, install, uninstall or status."],
+    [
+      ["secrets", "rotate"],
+      "Unknown secrets action 'rotate'. Use loopy secrets set, list or remove.",
+    ],
+  ] as const) {
+    expect(failure([...args])).toStartWith(message);
   }
 });

@@ -1,11 +1,9 @@
-import { executionKeySchema, jsonSchema, nodeSchema } from "@loopy/contract";
-import { EXECUTION_MODES } from "@loopy/core";
+import { decodeBoundary } from "@loopy/contract";
+import { EXECUTION_MODES, executionKeySchema, executionSpecSchema } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { ExecutionWorker } from "./execution";
 import { FilesystemReceipts, filesystemReceiptsDescriptorSchema } from "./receipts";
 import { encodeWorkerFailure } from "./response";
-
-const dictionary = Schema.Record(Schema.String, jsonSchema);
 
 const requestSchema = Schema.Struct({
   options: Schema.Struct({
@@ -18,29 +16,10 @@ const requestSchema = Schema.Struct({
   }),
   key: executionKeySchema,
   attempt: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
-  spec: Schema.Union([
-    Schema.Struct({
-      kind: Schema.Literal("code"),
-      bundleHash: Schema.String,
-      input: dictionary,
-      timeoutMs: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
-    }),
-    Schema.Struct({
-      kind: Schema.Literal("command"),
-      node: nodeSchema,
-      argv: Schema.mutable(Schema.Array(Schema.String)),
-      flags: dictionary,
-      cwd: Schema.NullOr(Schema.String),
-      env: Schema.Record(Schema.String, Schema.String),
-      stdin: Schema.NullOr(Schema.String),
-      parse: Schema.NullOr(Schema.Struct({ bundleHash: Schema.String, input: dictionary })),
-    }),
-  ]),
+  spec: executionSpecSchema,
 });
 
-const request = Schema.decodeUnknownSync(requestSchema)(await Bun.stdin.json(), {
-  onExcessProperty: "error",
-});
+const request = decodeBoundary(requestSchema)(await Bun.stdin.json());
 
 const controller = new AbortController();
 
@@ -66,17 +45,7 @@ const executor = new ExecutionWorker({
   },
 });
 
-const execute =
-  request.spec.kind === "code"
-    ? executor.execute(request.key, request.attempt, request.spec, controller.signal)
-    : request.spec.node.kind === "command"
-      ? executor.execute(
-          request.key,
-          request.attempt,
-          { ...request.spec, node: request.spec.node },
-          controller.signal,
-        )
-      : Effect.die(new Error("Execution requires a command node."));
+const execute = executor.execute(request.key, request.attempt, request.spec, controller.signal);
 
 await Effect.runPromise(
   execute.pipe(

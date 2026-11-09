@@ -1,10 +1,10 @@
 import type { GraphRevisionView } from "@loopy/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Schema } from "effect";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { SourcePane } from "../components/code/source-pane";
 import { GraphPane } from "../components/graph/pane";
-import { NodePanel } from "../components/run/node-panel";
+import { NodeDetails } from "../components/run/node-panel";
 import { RunTable } from "../components/runs/run-table";
 import { CronReading, FireTime } from "../components/schedules/text";
 import { StartRunForm } from "../components/start-run-form";
@@ -14,9 +14,11 @@ import { PagerFoot } from "../components/ui/pager";
 import { useClock } from "../lib/clock";
 import { graphModel } from "../lib/graph";
 import { layoutGraph } from "../lib/graph-layout";
+import { useNodeSelection } from "../lib/node-selection";
+import { useRunPages } from "../lib/pages";
 import { definitionMarks } from "../lib/run-marks";
 import { searchField } from "../lib/search";
-import { useLoopyGraph, useLoopyRows, useLoopySource, useRunPages } from "../lib/ui-data";
+import { useLoopyGraph, useLoopyRows, useLoopySource } from "../lib/ui-data";
 import type { LoopyRow } from "../lib/view-models";
 
 const PANES = ["both", "code", "graph"] as const;
@@ -51,30 +53,15 @@ function Definition({ loopy, graph }: { loopy: LoopyRow; graph: GraphRevisionVie
   const marks = useMemo(() => definitionMarks(model), [model]);
   const inspected = model.nodes.find((node) => node.id === selected);
 
-  const select = (id: string | null) =>
-    void navigate({ search: (prev) => ({ ...prev, node: id ?? undefined }), replace: true });
+  const select = useNodeSelection(selected, (node) =>
+    navigate({ search: (prev) => ({ ...prev, node }), replace: true }),
+  );
 
   const setPanes = (next: (typeof PANES)[number]) =>
     void navigate({
       search: (prev) => ({ ...prev, panes: next === "both" ? undefined : next }),
       replace: true,
     });
-
-  useEffect(() => {
-    if (selected === null) {
-      return;
-    }
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) {
-        select(null);
-      }
-    };
-
-    document.addEventListener("keydown", onKey);
-
-    return () => document.removeEventListener("keydown", onKey);
-  });
 
   const showCode = panes !== "graph";
   const showGraph = panes !== "code";
@@ -133,17 +120,7 @@ function Definition({ loopy, graph }: { loopy: LoopyRow; graph: GraphRevisionVie
       </div>
       {inspected && (
         <div className="panel flex max-h-[clamp(420px,calc(100dvh-var(--head-h)-200px),720px)] min-h-0 flex-col overflow-hidden">
-          <NodePanel
-            runId={null}
-            node={inspected}
-            scope={null}
-            place={{ kind: "none" }}
-            openItem={null}
-            onOpenItem={() => undefined}
-            onSelectMap={() => undefined}
-            onClose={() => select(null)}
-            now={0}
-          />
+          <NodeDetails node={inspected} onClose={() => select(null)} />
         </div>
       )}
     </div>
@@ -172,7 +149,7 @@ function LoopyRuns({ slug }: { slug: string }) {
             ) : (
               <RunTable runs={page.rows} now={now} withLoopy={false} busy={fetching} />
             )}
-            <PagerFoot pager={pager} page={page} noun="runs">
+            <PagerFoot pager={pager} noun="runs">
               Newest first
             </PagerFoot>
           </>

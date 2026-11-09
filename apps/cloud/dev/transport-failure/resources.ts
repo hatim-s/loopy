@@ -1,42 +1,39 @@
-import { createHash } from "node:crypto";
 import { access, mkdir, mkdtemp, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
-import { Effect } from "effect";
-import { z } from "zod";
+import { errnoCode } from "@loopy/core";
+import { Effect, Schema } from "effect";
 import { sandboxConfigSchema } from "../../../sandbox/src/config";
 import { runCommand } from "../../../sandbox/src/process";
-import type { StoredReceipt } from "../../../sandbox/src/receipts";
 import { filesystemReceipt } from "../filesystem-receipt";
-import { FixtureError, fixtureIO } from "../fixture-effect";
-import { assert, equal } from "../journey/client";
+import { assert, equal } from "../shared/assert";
+import { sha256Hex } from "../shared/hash";
+import { untilEffect } from "../shared/poll";
+import { DOCKER_CONTEXT, root, SANDBOX_IMAGE } from "../stack/constants";
+import { FixtureError, fixtureIO } from "./fixture-effect";
 
-export const root = resolve(import.meta.dir, "../../../..");
-
-export const context = "colima-loopy-cloud-phase1";
-
-export const image = "loopy-sandbox:bun-1.4.0";
-
-export const environment = {
+const environment = {
   PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
   HOME: process.env.HOME ?? root,
   LANG: "C.UTF-8",
 };
 
-export function command(argv: string[]) {
-  return runCommand(argv, { env: environment, timeoutMs: 30_000, maxBytes: 128 * 1024 });
+type StoredReceipt = Effect.Success<ReturnType<typeof filesystemReceipt>>;
+
+export function command(argv: [string, ...string[]]) {
+  return runCommand(argv, { cwd: root, env: environment, timeoutMs: 30_000, maxBytes: 128 * 1024 });
 }
 
 export function docker(args: string[]) {
   return Effect.gen(function* () {
-    const output = yield* command(["docker", "--context", context, ...args]);
+    const output = yield* command(["docker", "--context", DOCKER_CONTEXT, ...args]);
     assert(output.exitCode === 0, "docker_command_failed", { operation: args[0] ?? "" });
 
     return output.stdout;
   });
 }
 
-export function fixture() {
+export function fixture(maxTimeoutMs: number) {
   return Effect.gen(function* () {
     const base = resolve(root, ".loopy/cloud-transport");
     yield* fixtureIO("filesystem", () => mkdir(base, { recursive: true, mode: 0o700 }));
@@ -48,18 +45,17 @@ export function fixture() {
       worktree,
       stateRoot: resolve(worktree, ".loopy/cloud/sandbox"),
       token: "transport-test-fixture-token-32-characters",
-      dockerContext: context,
-      image,
+      dockerContext: DOCKER_CONTEXT,
+      image: SANDBOX_IMAGE,
       port: 0,
-      maxTimeoutMs: 20_000,
+      maxTimeoutMs,
     });
   });
 }
 
 export type Config = Effect.Success<ReturnType<typeof fixture>>;
 
-export const ownerOf = (config: Config) =>
-  createHash("sha256").update(config.stateRoot).digest("hex");
+export const ownerOf = (config: Config) => sha256Hex(config.stateRoot);
 
 export function receipts(config: Config) {
   return Effect.gen(function* () {
@@ -86,22 +82,27 @@ export function oneReceipt(config: Config) {
   });
 }
 
-const containerSchema = z
-  .array(
-    z.object({
-      Id: z.string(),
-      Name: z.string(),
-      Config: z.object({ Labels: z.record(z.string(), z.string()) }),
-      State: z.object({ Running: z.boolean(), StartedAt: z.string(), FinishedAt: z.string() }),
-      Mounts: z.array(z.object({ Type: z.string(), Name: z.string().optional() })),
+const containerSchema = Schema.Tuple([
+  Schema.Struct({
+    Id: Schema.String,
+    Name: Schema.String,
+    Config: Schema.Struct({ Labels: Schema.Record(Schema.String, Schema.String) }),
+    State: Schema.Struct({
+      Running: Schema.Boolean,
+      StartedAt: Schema.String,
+      FinishedAt: Schema.String,
     }),
-  )
-  .length(1);
+    Mounts: Schema.Array(
+      Schema.Struct({ Type: Schema.String, Name: Schema.optional(Schema.String) }),
+    ),
+  }),
+]);
+
+const decodeContainer = Schema.decodeUnknownSync(containerSchema);
 
 export function ownedContainer(config: Config, receipt: StoredReceipt, name = receipt.container) {
   return Effect.gen(function* () {
-    const row = containerSchema.parse(JSON.parse(yield* docker(["container", "inspect", name])))[0];
-    assert(row, "container_missing");
+    const [row] = decodeContainer(JSON.parse(yield* docker(["container", "inspect", name])));
     equal(row.Name, `/${name}`, "container_name_mismatch");
     equal(row.Config.Labels["loopy.sandbox.owner"], ownerOf(config), "container_owner_mismatch");
     equal(
@@ -115,26 +116,15 @@ export function ownedContainer(config: Config, receipt: StoredReceipt, name = re
 }
 
 export function until<T, E, R>(read: () => Effect.Effect<T, E, R>, accepts: (value: T) => boolean) {
-  return Effect.gen(function* () {
-    const deadline = Date.now() + 10_000;
-
-    while (Date.now() < deadline) {
-      const value = yield* read();
-
-      if (accepts(value)) {
-        return value;
-      }
-
-      yield* Effect.sleep(50);
-    }
-
-    return yield* Effect.fail(
+  return untilEffect(read, accepts, {
+    timeoutMs: 10_000,
+    intervalMs: 50,
+    timeout: () =>
       new FixtureError({
         operation: "observation",
         cause: undefined,
         message: "Transport fixture observation timed out.",
       }),
-    );
   });
 }
 
@@ -143,7 +133,7 @@ export function marker(receipt: StoredReceipt) {
     const output = yield* command([
       "docker",
       "--context",
-      context,
+      DOCKER_CONTEXT,
       "exec",
       receipt.container,
       "cat",
@@ -245,16 +235,19 @@ export function cleanup(config: Config) {
     );
 
     for (const name of ["service.lock", "service-start.lock"]) {
-      let exists = true;
-      yield* fixtureIO("filesystem", () =>
-        access(resolve(config.stateRoot, name)).catch((cause: unknown) => {
-          if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
-            throw cause;
-          }
+      const exists = yield* fixtureIO("filesystem", () =>
+        access(resolve(config.stateRoot, name)).then(
+          () => true,
+          (cause: unknown) => {
+            if (errnoCode(cause) !== "ENOENT") {
+              throw cause;
+            }
 
-          exists = false;
-        }),
+            return false;
+          },
+        ),
       );
+
       assert(!exists, "service_lock_remains");
     }
 

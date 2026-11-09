@@ -8,9 +8,9 @@ import {
   Panel,
   ReactFlow,
 } from "@xyflow/react";
-import { memo, type ReactNode, useCallback, useId, useMemo, useState } from "react";
+import { memo, useCallback, useId, useMemo, useState } from "react";
 import type { GraphModel } from "../../lib/graph";
-import { type FitPadding, type GraphLayout, nodeSize } from "../../lib/graph-layout";
+import { FIT_PADDING, type GraphLayout, nodeSize } from "../../lib/graph-layout";
 import { GraphMinimap, ViewControls } from "./controls";
 import { type FlowEdge, TrackEdge } from "./edge";
 import { type FrameNode, GraphFrame } from "./frame";
@@ -37,9 +37,10 @@ const FOCUS_ZOOM = 0.9;
 function firstView(
   layout: GraphLayout,
   focus: string[],
-  padding: FitPadding,
   pane: { width: number; height: number },
 ): FitViewOptions {
+  const padding = FIT_PADDING;
+
   const room = {
     width: pane.width - Number.parseFloat(padding.left) - Number.parseFloat(padding.right),
     height: pane.height - Number.parseFloat(padding.top) - Number.parseFloat(padding.bottom),
@@ -107,18 +108,10 @@ type GraphCanvasProps = {
   model: GraphModel;
   /** Laid out from the graph alone, so live status updates never move a node. */
   layout: GraphLayout;
-  /** What to frame first when the whole graph cannot be read at once. */
   focus: string[];
   selected: string | null;
   onSelect: (id: string | null) => void;
-  /** Room kept clear on each side when the graph is framed. */
-  padding: FitPadding;
-  /** The pane's size when the canvas mounts, which decides the first view. */
   pane: { width: number; height: number };
-  /** The minimap gives way while the inspector holds the right edge. */
-  minimapAllowed: boolean;
-  /** Read-outs drawn into the control strip, before the zoom buttons. */
-  readout: ReactNode;
 };
 
 /**
@@ -126,12 +119,11 @@ type GraphCanvasProps = {
  * revision: `fitView` frames the graph only on mount, so live updates keep the user's pan.
  */
 export const GraphCanvas = memo(function GraphCanvas(props: GraphCanvasProps) {
-  const { model, layout, focus, selected, onSelect, padding, pane, minimapAllowed, readout } =
-    props;
+  const { model, layout, focus, selected, onSelect, pane } = props;
 
   const help = useId();
   // Decided once on mount, so live updates and panel toggles never move the user's view.
-  const [initial] = useState(() => firstView(layout, focus, padding, pane));
+  const [initial] = useState(() => firstView(layout, focus, pane));
   const [minimap, setMinimap] = useState(model.nodes.length >= MINIMAP_FROM);
 
   const nodes = useMemo(
@@ -201,11 +193,9 @@ export const GraphCanvas = memo(function GraphCanvas(props: GraphCanvasProps) {
         colorMode="system"
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} />
-        {minimap && minimapAllowed && <GraphMinimap layout={layout} />}
+        {minimap && <GraphMinimap layout={layout} />}
         <Panel position="bottom-right" className="loopy-view">
-          <ViewControls padding={padding} minimap={minimap} onMinimap={setMinimap}>
-            {readout}
-          </ViewControls>
+          <ViewControls minimap={minimap} onMinimap={setMinimap} />
         </Panel>
       </ReactFlow>
     </div>

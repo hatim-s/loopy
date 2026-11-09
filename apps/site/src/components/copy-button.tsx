@@ -1,34 +1,33 @@
 import { useEffect, useState } from "react";
 
+const LABEL = { idle: "Copy", copied: "Copied", failed: "Copy failed" } as const;
+
 export function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<keyof typeof LABEL>("idle");
   useEffect(() => {
-    if (!copied) {
+    if (state === "idle") {
       return;
     }
 
-    const id = setTimeout(() => setCopied(false), 1600);
+    const id = setTimeout(() => setState("idle"), 1600);
 
     return () => clearTimeout(id);
-  }, [copied]);
+  }, [state]);
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const ta = Object.assign(document.createElement("textarea"), { value: text });
-      document.body.append(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-    }
-
-    setCopied(true);
-  };
+  const copy = () =>
+    navigator.clipboard.writeText(text).then(
+      () => setState("copied"),
+      () => setState("failed"),
+    );
 
   return (
-    <button className="copy" type="button" onClick={copy} data-copied={copied ? "" : undefined}>
-      {copied ? "Copied" : "Copy"}
+    <button
+      className="copy"
+      type="button"
+      onClick={copy}
+      data-copied={state === "copied" ? "" : undefined}
+    >
+      {LABEL[state]}
     </button>
   );
 }

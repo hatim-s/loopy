@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import {
   decodeBoundary,
@@ -17,7 +17,7 @@ import { compiledBody } from "./compiled-fixture";
 
 const roots: string[] = [];
 
-const sdk = resolve(import.meta.dir, "../../sdk/src/graph/index.ts");
+const sdk = "loopy";
 
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-source-")));
@@ -116,7 +116,7 @@ test("old registry metadata never gains today's source for an existing revision"
   expect(await Effect.runPromise(registry.revisionSource("legacy", body.revision))).toEqual(
     unavailable,
   );
-  expect((await Effect.runPromise(registry.get("legacy"))).version).toBe(2);
+  expect((await Effect.runPromise(registry.get("legacy"))).version).toBe(3);
 });
 
 test("source lookup rejects traversal and never opens source metadata paths", async () => {

@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { defineCommand, loopy, sh } from "@loopy/sdk/graph";
-import { base64Descriptor } from "../../sdk/src/shell/text/format";
+import { defineCommand, loopy, sh, text } from "@loopy/sdk/graph";
 import { capture } from "./fixtures/command-capture";
 
 const probe = defineCommand({
@@ -33,30 +32,26 @@ test("graph command descriptors retain enum, numeric, repeated and positional ar
   ]);
 });
 
-test("JavaScript flag values fail validation before author execution", () => {
-  // @ts-expect-error JavaScript callers can supply unknown flags.
-  const unknown = capture(() => probe({ args: ["source", "target"], flags: { typo: true } }));
-  // @ts-expect-error JavaScript callers can supply unsupported enum values.
-  const choice = capture(() => probe({ args: ["source", "target"], flags: { mode: "quick" } }));
-  // @ts-expect-error JavaScript callers can supply wrong flag types.
-  const type = capture(() => probe({ args: ["source", "target"], flags: { count: "3" } }));
-  expect(unknown.result).toEqual({
-    status: "failed",
-    error: "Unknown flag 'typo'. Use an allowed flag: mode, count, quiet, include.",
+test("JavaScript flag values fail when the graph is built, while references wait for execution", () => {
+  const build = (flags: Record<string, string | boolean>) => () =>
+    loopy("test", { input: {}, run: () => probe({ args: ["source", "target"], flags }) });
+
+  expect(build({ typo: true })).toThrow(
+    "Unknown flag 'typo'. Use an allowed flag: mode, count, quiet, include.",
+  );
+  expect(build({ mode: "quick" })).toThrow(
+    "Flag '--mode' must be one of: fast, safe. Choose an allowed value.",
+  );
+  expect(build({ count: "3" })).toThrow(
+    "Flag '-n' requires a number value. Supply the declared flag type.",
+  );
+
+  const graph = loopy("deferred", {
+    input: { count: "number" },
+    run: ({ input }) => probe({ args: ["source", "target"], flags: { count: input.get("count") } }),
   });
-  expect(choice.result).toEqual({
-    status: "failed",
-    error: "Flag '--mode' must be one of: fast, safe. Choose an allowed value.",
-  });
-  expect(type.result).toEqual({
-    status: "failed",
-    error: "Flag '-n' requires a number value. Supply the declared flag type.",
-  });
-  expect([unknown.executor.calls, choice.executor.calls, type.executor.calls]).toEqual([
-    [],
-    [],
-    [],
-  ]);
+
+  expect(graph.nodes[0]).toMatchObject({ flags: { count: { ref: "input", path: ["count"] } } });
 });
 
 test("platform variants merge and preserve unchanged flags in the recorded descriptor", () => {
@@ -73,9 +68,8 @@ test("platform variants merge and preserve unchanged flags in the recorded descr
   expect(f.executor.calls[0]?.args).toEqual(
     process.platform === "linux" ? ["--format=%s", "-L"] : ["-f", "%s", "-L"],
   );
-  const base64 = defineCommand(base64Descriptor);
   expect(
-    capture(() => base64({ flags: { input: "input", decode: true } })).executor.calls[0]?.args,
+    capture(() => text.base64({ flags: { input: "input", decode: true } })).executor.calls[0]?.args,
   ).toEqual(process.platform === "darwin" ? ["-D", "-i", "input"] : ["-d", "input"]);
 });
 

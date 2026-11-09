@@ -1,7 +1,15 @@
 import { basename } from "node:path";
-import { type SourceArtifact, sourceArtifactSchema } from "@loopy/contract";
+import {
+  boundaryOptions,
+  MAX_SOURCE_BYTES,
+  MAX_SOURCE_RANGES,
+  type SourceArtifact,
+  sourceArtifactSchema,
+  unavailableSource,
+} from "@loopy/contract";
 import type { Graph } from "@loopy/core";
 import { Schema } from "effect";
+import { position } from "./diagnostic";
 import type { AuthorModule } from "./types";
 
 export function captureSource(
@@ -31,13 +39,13 @@ export function captureSource(
       {
         nodeId: node.id,
         fileId: match.fileId,
-        startLine: match.module.source.slice(0, match.start).split("\n").length,
-        endLine: match.module.source.slice(0, match.end - 1).split("\n").length,
+        startLine: position(match.module.source, match.start).line,
+        endLine: position(match.module.source, match.end - 1).line,
       },
     ];
   });
 
-  const result = Schema.decodeUnknownResult(sourceArtifactSchema, { onExcessProperty: "error" })({
+  const artifact = {
     version: 1,
     status: "available",
     revision,
@@ -47,9 +55,17 @@ export function captureSource(
       content: module.source,
     })),
     ranges,
-  });
+  };
 
-  return result._tag === "Success"
-    ? result.success
-    : { version: 1, status: "unavailable", revision, reason: "too_large" };
+  const result = Schema.decodeUnknownResult(sourceArtifactSchema, boundaryOptions)(artifact);
+
+  if (result._tag === "Success") {
+    return result.success;
+  }
+
+  const tooLarge =
+    ranges.length > MAX_SOURCE_RANGES ||
+    new TextEncoder().encode(JSON.stringify(artifact)).length > MAX_SOURCE_BYTES * 2;
+
+  return unavailableSource(revision, tooLarge ? "too_large" : "not_captured");
 }

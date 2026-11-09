@@ -7,14 +7,5 @@
     "declarationDir": "dist/types",
     "rootDir": "..",
     "outDir": "dist"
-  },
-  "include": [
-    "src",
-    "../core/src",
-    "../contract/src",
-    "../sdk/src",
-    "../runtime/src",
-    "../compiler/src",
-    "../cli/src"
-  ]
+  }
 }

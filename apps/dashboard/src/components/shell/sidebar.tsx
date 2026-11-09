@@ -1,10 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { useLoopyRows, useRunPages, useScheduleOverview } from "../../lib/ui-data";
+import { useLoopyRows, useScheduleOverview } from "../../lib/ui-data";
+import { pageCount, useAwaitingRuns } from "../../lib/waiting";
 import { BrandMark } from "../brand-mark";
-import { Icon, type IconName } from "../ui/icon";
-
-// The awaiting count reads one page; past it the sidebar says "20+" rather than guess.
-const AWAITING_PAGE = 20;
+import { Icon } from "../ui/icon";
+import { NAV, type NavItem, type NavPath } from "./nav";
 
 function Count({ value, warn = false }: { value: string | null; warn?: boolean }) {
   return value === null ? null : (
@@ -16,15 +15,18 @@ function Count({ value, warn = false }: { value: string | null; warn?: boolean }
   );
 }
 
-function NavItem(props: {
-  to: "/" | "/loopies" | "/runs" | "/observability" | "/schedules";
-  icon: IconName;
-  label: string;
-  count?: string | null;
-  warn?: boolean;
+function NavLink(props: {
+  item: NavItem;
+  count: string | null;
+  warn: boolean;
   onNavigate: () => void;
 }) {
-  const { to, icon, label, count = null, warn, onNavigate } = props;
+  const {
+    item: { to, icon, label },
+    count,
+    warn,
+    onNavigate,
+  } = props;
 
   return (
     <Link
@@ -41,19 +43,20 @@ function NavItem(props: {
   );
 }
 
-/**
- * Navigation with live counts. Below 1280px it narrows to an icon rail; below 768px it hides
- * behind the top bar's menu button and opens as a drawer.
- */
+/** Below 1280px it narrows to an icon rail; below 768px it opens as a drawer. */
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const loopies = useLoopyRows();
   const schedules = useScheduleOverview();
-  const awaiting = useRunPages({ status: "suspended", waiting: true }, AWAITING_PAGE);
+  const awaiting = useAwaitingRuns();
 
   const awaitingCount =
-    awaiting.state === "ready" && awaiting.data.rows.length > 0
-      ? `${awaiting.data.rows.length}${awaiting.data.hasNext ? "+" : ""}`
-      : null;
+    awaiting.state === "ready" && awaiting.data.rows.length > 0 ? pageCount(awaiting.data) : null;
+
+  const counts: Partial<Record<NavPath, string | null>> = {
+    "/loopies": loopies.state === "ready" ? String(loopies.data.length) : null,
+    "/runs": awaitingCount,
+    "/schedules": schedules.state === "ready" ? String(schedules.data.active) : null,
+  };
 
   return (
     <>
@@ -77,30 +80,15 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           <span className="max-xl:sr-only max-md:not-sr-only">loopy</span>
         </Link>
         <nav aria-label="Primary" className="grid gap-0.5 px-2.5 py-1">
-          <NavItem to="/" icon="overview" label="Overview" onNavigate={onClose} />
-          <NavItem
-            to="/loopies"
-            icon="loopies"
-            label="Loopies"
-            count={loopies.state === "ready" ? String(loopies.data.length) : null}
-            onNavigate={onClose}
-          />
-          <NavItem
-            to="/runs"
-            icon="runs"
-            label="Runs"
-            count={awaitingCount}
-            warn
-            onNavigate={onClose}
-          />
-          <NavItem to="/observability" icon="logs" label="Logs and events" onNavigate={onClose} />
-          <NavItem
-            to="/schedules"
-            icon="schedules"
-            label="Schedules"
-            count={schedules.state === "ready" ? String(schedules.data.active) : null}
-            onNavigate={onClose}
-          />
+          {NAV.map((item) => (
+            <NavLink
+              key={item.to}
+              item={item}
+              count={counts[item.to] ?? null}
+              warn={item.to === "/runs"}
+              onNavigate={onClose}
+            />
+          ))}
         </nav>
         {awaitingCount !== null && (
           <p className="mt-auto border-t border-line px-[18px] py-3 text-xs text-muted max-xl:hidden max-md:block">

@@ -186,7 +186,6 @@ export const localDaemon = (options: DaemonOptions) =>
       concurrency: options.concurrency,
       start,
       stop,
-      tick: daemon.tick,
       wake: daemon.wake,
       run: Effect.andThen(start, daemon.run),
     };

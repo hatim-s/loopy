@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { focusNodes, type GraphModel } from "../../lib/graph";
-import type { FitPadding, GraphLayout } from "../../lib/graph-layout";
+import type { GraphLayout } from "../../lib/graph-layout";
 import { GraphCanvas } from "./canvas";
-
-const PADDING: FitPadding = { top: "24px", right: "24px", bottom: "64px", left: "24px" };
 
 /**
  * The graph inside a page pane. It measures the pane before mounting the canvas, because the
@@ -56,10 +54,7 @@ export function GraphPane(props: {
           focus={focus}
           selected={selected}
           onSelect={onSelect}
-          padding={PADDING}
           pane={pane}
-          minimapAllowed
-          readout={null}
         />
       )}
       {model.nodes.length === 0 && (

@@ -1,50 +1,33 @@
 import { realpath } from "node:fs/promises";
-import { resolve, sep } from "node:path";
-import { z } from "zod";
-import { sampleSchema } from "./metrics/statistics";
+import { decodeBoundary } from "@loopy/contract";
+import { within } from "../../../../packages/runtime/src/local/sandbox/paths";
+import { captureSchema } from "./metrics/artifacts";
+import { baselineEndpoints } from "./metrics/sampler";
+import { CONCURRENCY } from "./plan";
 
-// Per-run detail requests are conditional and cannot be required before the first workload.
-export const baselineEndpoints = [
-  "runs.latest",
-  "loopies.counts",
-  "runs.waiting",
-  "runs.failed",
-  "overview.counts",
-  "logs.latest",
-  "events.latest",
-  "daemon",
-  "runs.page2",
-  "runs.slug",
-  "logs.text",
-  "events.run-filter",
-  "logs.page2",
-  "events.page2",
-] as const;
-
-const baselineSchema = z.object({
-  scope: z.literal("local-playground-read-only-api"),
-  phase: z.enum(["baseline", "baseline-small"]),
-  batch: z.string(),
-  startedAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
-  elapsedMs: z.number().nonnegative(),
-  targetRequestsPerSecond: z.number().min(1).max(3),
-  api: z.url(),
-  workspace: z.literal("playground"),
-  workloadControls: z.object({ apiSlots: z.literal(4), runtimeAttempts: z.literal(4) }),
-  samples: z.array(sampleSchema).min(1),
-});
+const baselinePhases: readonly string[] = ["baseline", "baseline-small"];
 
 export async function requireCurrentBaseline(path: string, batch: string, directory: string) {
   const canonical = await realpath(path);
+  const evidence = await realpath(directory);
 
-  if (!canonical.startsWith(`${await realpath(directory)}${sep}`)) {
+  if (canonical === evidence || !within(evidence, canonical)) {
     throw new Error("Architecture baseline must be saved under its selected evidence directory.");
   }
 
-  const receipt = baselineSchema
-    .extend({ batch: z.literal(batch) })
-    .parse(await Bun.file(resolve(canonical)).json());
+  const receipt = decodeBoundary(captureSchema)(await Bun.file(canonical).json());
+
+  if (
+    !baselinePhases.includes(receipt.phase) ||
+    receipt.batch !== batch ||
+    receipt.workloadControls.apiSlots !== CONCURRENCY ||
+    receipt.workloadControls.runtimeAttempts !== CONCURRENCY ||
+    receipt.samples.length === 0
+  ) {
+    throw new Error(
+      `Baseline must be a non-empty ${baselinePhases.join(" or ")} capture for batch ${batch} with ${CONCURRENCY} API slots and runtime attempts.`,
+    );
+  }
 
   const successful = new Set(
     receipt.samples
@@ -56,11 +39,7 @@ export async function requireCurrentBaseline(path: string, batch: string, direct
           sample.status < 300 &&
           sample.bytes > 0 &&
           sample.headersMs !== null &&
-          sample.headersMs >= 0 &&
-          sample.totalMs >= 0 &&
-          sample.parseMs !== null &&
-          sample.parseMs >= 0 &&
-          z.iso.datetime().safeParse(sample.at).success,
+          sample.parseMs !== null,
       )
       .map((sample) => sample.endpoint),
   );

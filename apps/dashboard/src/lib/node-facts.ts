@@ -1,7 +1,6 @@
-import type { GraphView, OutSchema, Value } from "@loopy/contract";
+import type { OutSchema, Value } from "@loopy/contract";
+import type { GraphNode } from "./graph";
 import { predicateText, refText, valueText } from "./graph-text";
-
-type GraphNode = GraphView["nodes"][number];
 
 type Fact = [label: string, value: string];
 
@@ -37,7 +36,7 @@ export function nodeFacts(node: GraphNode): Fact[] {
         ["module", node.module.name],
         ...entries("in.", node.in),
         ["out", outText(node.out)],
-        ["retry", `${node.retry.attempts} attempts, ${node.retry.backoff}`],
+        ["retry", `${node.retry.attempts} attempts`],
         ["timeout", node.timeout === null ? "default" : String(node.timeout)],
         ...rateLimit(node.rateLimit),
       ];
@@ -53,7 +52,7 @@ export function nodeFacts(node: GraphNode): Fact[] {
         ...entries("env.", node.options.env),
         ["ok exit codes", node.okExitCodes.join(", ")],
         ["out", outText(node.out)],
-        ["retry", `${node.retry.attempts} attempts, ${node.retry.backoff}`],
+        ["retry", `${node.retry.attempts} attempts`],
         ...rateLimit(node.rateLimit),
       ];
     }

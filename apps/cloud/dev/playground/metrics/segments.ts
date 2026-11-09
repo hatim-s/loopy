@@ -1,75 +1,69 @@
-import { resolve } from "node:path";
-import { z } from "zod";
-import { atomic, evidenceDirectory, state } from "../config";
-import { admissionSchema } from "../journal";
-import { distribution, sampleSchema, summarize } from "./statistics";
+import { distribution } from "../../shared/stats";
+import { evidence, state } from "../config";
+import {
+  decodeJournalEvent,
+  eventsPath,
+  groups,
+  journalDirectory,
+  readAdmissions,
+} from "../journal";
+import { planTotals } from "../plan";
+import { catalogs } from "../repository";
+import { captureArtifact, readArtifact, segmentsArtifact, writeArtifact } from "./artifacts";
+import { summarize } from "./statistics";
 
-const terminalSchema = z.object({
-  kind: z.string(),
-  phase: z.string().optional(),
-  runId: z.string().optional(),
-  terminalAt: z.string().optional(),
-});
+const continuous = await readArtifact(evidence, captureArtifact("during-load"));
 
-const continuousSchema = z.object({
-  startedAt: z.string(),
-  updatedAt: z.string(),
-  samples: z.array(sampleSchema),
-});
+const admissions = await readAdmissions(journalDirectory(state), "primary");
 
-const continuous = continuousSchema.parse(
-  await Bun.file(resolve(evidenceDirectory, "playground-performance-during-load.json")).json(),
-);
+const plan = planTotals(await catalogs());
 
-const admissions = [];
+const groupTimes = [];
 
-for await (const path of new Bun.Glob("primary/*/*.json").scan({
-  cwd: resolve(state, "journal"),
-  absolute: true,
-})) {
-  if (!path.endsWith(".progress.json")) {
-    admissions.push(admissionSchema.parse(await Bun.file(path).json()));
-  }
-}
-
-const groups = [];
-
-for (const group of ["a", "b", "c"] as const) {
+for (const group of groups) {
   const terminalTimes: string[] = [];
 
-  for (const line of (await Bun.file(resolve(state, "journal", `${group}.jsonl`)).text())
-    .trim()
-    .split("\n")) {
-    const event = terminalSchema.parse(JSON.parse(line));
+  for (const line of (await Bun.file(eventsPath(state, group)).text()).trim().split("\n")) {
+    const event = decodeJournalEvent(JSON.parse(line));
 
-    if (event.kind === "terminal" && event.phase === "primary" && event.terminalAt) {
+    if (event.kind === "terminal" && event.phase === "primary") {
       terminalTimes.push(event.terminalAt);
     }
   }
 
   const groupAdmissions = admissions.filter((item) => item.group === group);
-  groups.push({
+  groupTimes.push({
     group,
-    intentAt: groupAdmissions.map((item) => item.intentAt).sort()[0],
-    admittedAt: groupAdmissions
-      .flatMap((item) => (item.admittedAt === null ? [] : [item.admittedAt]))
-      .sort()[0],
-    terminalAt: terminalTimes.sort().at(-1),
+    intentAt: groupAdmissions.map((item) => item.intentAt).sort()[0] ?? null,
+    admittedAt:
+      groupAdmissions
+        .flatMap((item) => (item.admittedAt === null ? [] : [item.admittedAt]))
+        .sort()[0] ?? null,
+    terminalAt: terminalTimes.sort().at(-1) ?? null,
     admitted: groupAdmissions.length,
     terminal: terminalTimes.length,
   });
 }
 
-const firstIntent = groups.flatMap((group) => (group.intentAt ? [group.intentAt] : [])).sort()[0];
+const firstIntent = groupTimes
+  .flatMap((group) => (group.intentAt ? [group.intentAt] : []))
+  .sort()[0];
 
-const finishes = groups
+const finishes = groupTimes
   .flatMap((group) => (group.terminalAt ? [{ group: group.group, at: group.terminalAt }] : []))
   .sort((a, b) => a.at.localeCompare(b.at));
 
 const lastTerminal = finishes.at(-1)?.at;
 
-if (!firstIntent || !lastTerminal || admissions.length !== 525 || finishes.length !== 3) {
-  throw new Error("Segment analysis requires the completed 525-primary-run journals.");
+if (
+  !firstIntent ||
+  !lastTerminal ||
+  admissions.length !== plan.primary.runs ||
+  finishes.length !== groups.length
+) {
+  throw new Error(
+    `Segment analysis requires the completed ${plan.primary.runs}-primary-run journals.`,
+  );
 }
 
 const failureTimes = continuous.samples
@@ -128,12 +122,12 @@ const segments = windows.map((window) => {
   };
 });
 
-await atomic(resolve(evidenceDirectory, "playground-performance-segments.json"), {
+await writeArtifact(evidence, segmentsArtifact, {
   scope: "timestamp-derived-segments-of-preserved-continuous-capture",
   at: new Date().toISOString(),
   firstIntent,
   lastTerminal,
-  groups,
+  groups: groupTimes,
   samplerFinalSavedAt: continuous.updatedAt,
   segments,
   measurement:
@@ -148,5 +142,5 @@ await atomic(resolve(evidenceDirectory, "playground-performance-segments.json"),
 });
 
 process.stdout.write(
-  `${JSON.stringify({ firstIntent, lastTerminal, groups, segments: segments.map(({ name, samples, failures, endToEndMs }) => ({ name, samples, failures, endToEndMs })) })}\n`,
+  `${JSON.stringify({ firstIntent, lastTerminal, groups: groupTimes, segments: segments.map(({ name, samples, failures, endToEndMs }) => ({ name, samples, failures, endToEndMs })) })}\n`,
 );

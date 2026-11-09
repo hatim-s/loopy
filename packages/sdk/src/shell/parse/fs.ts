@@ -1,11 +1,11 @@
 import type { CommandResult } from "@loopy/core";
 import { jsonValue, lines, nulFields, unexpected } from "./shared";
 
-export type Find = string[];
+type Find = string[];
 
-export type Ls = string[];
+type Ls = string[];
 
-export type Stat = {
+type Stat = {
   path: string;
   size: number;
   mtime: string;
@@ -13,9 +13,9 @@ export type Stat = {
   mode: string;
 };
 
-export type Du = { path: string; kilobytes: number };
+type Du = { path: string; kilobytes: number };
 
-export type Df = {
+type Df = {
   filesystem: string;
   kilobytes: number;
   used: number;
@@ -24,15 +24,15 @@ export type Df = {
   mountedOn: string;
 };
 
-export type Realpath = string;
+type Realpath = string;
 
-export type Which = string | null;
+type Which = string | null;
 
-export type Mktemp = string;
+type Mktemp = string;
 
-export type TreeNode = { type: "directory" | "file"; name: string; contents?: TreeNode[] };
+type TreeNode = { type: "directory" | "file"; name: string; contents?: TreeNode[] };
 
-export type Tree = TreeNode[];
+type Tree = TreeNode[];
 
 // Neither BSD -f nor GNU -c interprets git's %x00. SOH separates metadata fields.
 export const STAT_DARWIN_FORMAT = "%N\x01%z\x01%m\x01%HT\x01%Lp";
