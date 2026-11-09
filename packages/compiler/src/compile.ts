@@ -19,7 +19,7 @@ export const compile = (path: string): Effect.Effect<CompileResult, CompilationE
   recoverDiagnostics(
     Effect.gen(function* () {
       const file = yield* compilerIO("resolve entry", resolve(path), () => realpath(resolve(path)));
-      const { modules, parsers } = yield* restrict(file);
+      const modules = yield* restrict(file);
       const evaluated = yield* evaluate(file, modules);
       const diagnostics = validateGraph(evaluated);
 
@@ -27,7 +27,7 @@ export const compile = (path: string): Effect.Effect<CompileResult, CompilationE
         return yield* new AuthorDiagnostics({ diagnostics: graphDiagnostics(diagnostics, file) });
       }
 
-      const { graph, bundles } = yield* bundle(evaluated, parsers, file);
+      const { graph, bundles } = yield* bundle(evaluated, file);
       const compiledRevision = yield* compilerIO("hash revision", file, () => revision(graph));
 
       return {

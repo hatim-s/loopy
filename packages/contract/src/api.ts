@@ -1,4 +1,4 @@
-import { jsonSchema, logRecordSchema, PAGE_LIMIT, struct } from "@loopy/core";
+import { jsonSchema, logRecordSchema, struct } from "@loopy/core";
 import { Schema, SchemaGetter } from "effect";
 import { pageLimit, queryCounter, queryNumber } from "./codec";
 import { putLoopyBodySchema } from "./compiled-loopy";
@@ -21,6 +21,7 @@ import {
   scopeItemsQuerySchema,
   scopesQuerySchema,
 } from "./dashboard";
+import { PAGE_LIMIT } from "./dashboard-reader";
 import { graphRevisionViewSchema, graphViewSchema } from "./graph";
 import { sourceArtifactSchema } from "./source-artifact";
 import {

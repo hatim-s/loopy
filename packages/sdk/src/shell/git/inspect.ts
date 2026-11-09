@@ -1,4 +1,4 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin, PATHS } from "../builtin";
 import {
   LOG_FORMAT,
   parseDiff,
@@ -26,8 +26,6 @@ export const inspect = {
     {
       exclude: ["short"],
       preset: { flags: { porcelain: "v2", z: true, branch: true } },
-      namespace: "git",
-      name: "status",
       program: "git",
       path: ["status"],
       flags: {
@@ -48,7 +46,7 @@ export const inspect = {
         },
       },
       style: "equals",
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       positionalSeparator: true,
     },
     {
@@ -73,8 +71,6 @@ export const inspect = {
     {
       exclude: ["stat", "quiet", "unified", "nameOnly", "nameStatus"],
       preset: { flags: { numstat: true, z: true } },
-      namespace: "git",
-      name: "diff",
       program: "git",
       path: ["diff"],
       flags: DIFF_FLAGS,
@@ -86,8 +82,6 @@ export const inspect = {
     {
       exclude: ["stat", "quiet", "unified", "nameOnly", "numstat"],
       preset: { flags: { nameStatus: true, z: true } },
-      namespace: "git",
-      name: "diffNames",
       program: "git",
       path: ["diff"],
       flags: DIFF_FLAGS,
@@ -99,8 +93,6 @@ export const inspect = {
     {
       exclude: ["graph", "oneline"],
       preset: { flags: { format: LOG_FORMAT, z: true } },
-      namespace: "git",
-      name: "log",
       program: "git",
       path: ["log"],
       flags: {
@@ -123,8 +115,6 @@ export const inspect = {
   ),
   revParse: builtin(
     {
-      namespace: "git",
-      name: "revParse",
       program: "git",
       path: ["rev-parse"],
       flags: {
@@ -133,15 +123,13 @@ export const inspect = {
         showToplevel: { cli: "--show-toplevel", kind: "boolean" },
         abbrevRef: { cli: "--abbrev-ref", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseRevParse, out: { kind: "value", type: "string" } },
   ),
   lsFiles: builtin(
     {
       preset: { flags: { z: true } },
-      namespace: "git",
-      name: "lsFiles",
       program: "git",
       path: ["ls-files"],
       flags: {
@@ -151,14 +139,12 @@ export const inspect = {
         others: { cli: "--others", kind: "boolean" },
         excludeStandard: { cli: "--exclude-standard", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
       positionalSeparator: true,
     },
     { parse: parseLsFiles, out: { kind: "value", type: "string[]" } },
   ),
   show: builtin({
-    namespace: "git",
-    name: "show",
     program: "git",
     path: ["show"],
     flags: {

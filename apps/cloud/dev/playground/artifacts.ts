@@ -1,8 +1,8 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type RunSnapshotView } from "@loopy/contract";
 import { sandboxArtifactSchema } from "@loopy/contract/sandbox";
-import { errnoCode } from "@loopy/core";
+import { publishExclusive } from "@loopy/runtime/os";
 import { Schema } from "effect";
 import { sha256Hex } from "../shared/hash";
 import type { PlaygroundClient } from "./client";
@@ -67,13 +67,7 @@ export async function materialize(
   await mkdir(directory, { recursive: true });
   const destination = resolve(directory, `${snapshot.run.id}.json`);
 
-  try {
-    await writeFile(destination, bytes, { flag: "wx", mode: 0o600 });
-  } catch (cause) {
-    if (errnoCode(cause) !== "EEXIST") {
-      throw cause;
-    }
-
+  if (!publishExclusive(destination, bytes, 0o600)) {
     const existing = await readFile(destination);
 
     if (!existing.equals(bytes)) {

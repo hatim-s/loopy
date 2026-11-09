@@ -1,7 +1,7 @@
 import type * as graph from "./graph";
 
 /** How the restricted compiler treats one option key beyond ordinary graph values. */
-export type OptionRole = "literal" | "module" | "parser" | "callback";
+type OptionRole = "literal" | "module" | "callback";
 
 /** The argument roles of one SDK call, which the restricted compiler enforces before evaluation. */
 export type CallSyntax = {
@@ -18,7 +18,7 @@ export type CallSyntax = {
 };
 
 /** Author-declared commands and built-in commands take operands first and options second. */
-export const COMMAND_CALL: CallSyntax = { options: 1 };
+export const COMMAND_CALL: CallSyntax = { options: 1, keys: { label: "literal" } };
 
 const plain: CallSyntax = {};
 
@@ -29,15 +29,15 @@ export const CALL_SYNTAX = {
   subgraph: { label: true, callbacks: "arguments", binding: "subgraph" },
   defineCommand: {
     options: "all",
-    keys: { key: "literal", namespace: "literal", name: "literal", parse: "parser" },
+    keys: { key: "literal", parse: "module" },
     binding: "command",
   },
   sh: COMMAND_CALL,
-  archive: COMMAND_CALL,
-  fs: COMMAND_CALL,
-  git: COMMAND_CALL,
-  net: COMMAND_CALL,
-  text: COMMAND_CALL,
+  archive: "namespace",
+  fs: "namespace",
+  git: "namespace",
+  net: "namespace",
+  text: "namespace",
   branch: { options: 1, callbacks: "options" },
   switch_: { options: 1, callbacks: "options" },
   parallel: { options: "all", callbacks: "options" },
@@ -65,5 +65,5 @@ export const CALL_SYNTAX = {
   or: plain,
   size: plain,
 } as const satisfies {
-  readonly [K in Exclude<keyof typeof graph, "GraphBuildError">]: CallSyntax;
+  readonly [K in keyof typeof graph]: CallSyntax | "namespace";
 };

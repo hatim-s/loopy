@@ -13,7 +13,6 @@ import {
   finally_,
   format,
   fs,
-  GraphBuildError,
   git,
   gt,
   gte,
@@ -42,6 +41,7 @@ import {
   uuid,
   wait,
 } from "@loopy/sdk/graph";
+import { GraphBuildError } from "@loopy/sdk/graph-host";
 import type { AuthorValue } from "../../sdk/src/graph/ref";
 import { capture } from "./fixtures/command-capture";
 import assetSync from "./fixtures/graph-examples/asset-sync";
@@ -293,15 +293,13 @@ test("all shell namespaces use descriptors and record parsers without executing 
     "archive.tar",
     "custom",
   ]);
-  expect(
-    commands.map((node) => (node.parse === null ? null : { bundleHash: node.parse.bundleHash })),
-  ).toEqual([
-    { bundleHash: null },
-    { bundleHash: null },
-    { bundleHash: null },
-    { bundleHash: null },
+  expect(commands.map((node) => node.parse?.module)).toEqual([
     null,
-    { bundleHash: null },
+    null,
+    null,
+    null,
+    undefined,
+    "./not-executed.ts",
   ]);
   expect(commands[1]?.argv).toEqual(["find", "."]);
 });

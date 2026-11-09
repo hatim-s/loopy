@@ -1,45 +1,46 @@
 import { OwnershipError, StorageError } from "@loopy/core";
 import { Effect } from "effect";
 
-export class StoreInvariantError extends Error {}
+export class StoreInvariantError extends Error {
+  override readonly name = "StoreInvariantError";
+}
 
 export class StoreRejectedError extends Error {}
 
 export class StoredDataError extends Error {}
 
-const classify = (operation: string, cause: unknown): Effect.Effect<never, StorageError> => {
-  if (cause instanceof StoreInvariantError) {
-    return Effect.die(cause);
+// An invariant breach is a defect; ownership loss is a defect unless the caller fences on it.
+const storeFailure = (operation: string) => (cause: unknown) => {
+  if (cause instanceof OwnershipError || cause instanceof StoreInvariantError) {
+    return cause;
   }
 
-  return Effect.fail(
-    new StorageError({
-      operation,
-      reason:
-        cause instanceof StoreRejectedError
-          ? "rejected"
-          : cause instanceof StoredDataError
-            ? "corrupt"
-            : "unavailable",
-      cause,
-    }),
-  );
+  return new StorageError({
+    operation,
+    reason:
+      cause instanceof StoreRejectedError
+        ? "rejected"
+        : cause instanceof StoredDataError
+          ? "corrupt"
+          : "unavailable",
+    cause,
+  });
 };
 
 export function storageOperation<A>(operation: string, body: () => A) {
-  return Effect.try({ try: body, catch: (cause) => cause }).pipe(
+  return Effect.try({ try: body, catch: storeFailure(operation) }).pipe(
     Effect.catch(
-      (cause): Effect.Effect<never, StorageError> =>
-        cause instanceof OwnershipError ? Effect.die(cause) : classify(operation, cause),
+      (failure): Effect.Effect<never, StorageError> =>
+        failure instanceof StorageError ? Effect.fail(failure) : Effect.die(failure),
     ),
   );
 }
 
 export function ownedStorageOperation<A>(operation: string, body: () => A) {
-  return Effect.try({ try: body, catch: (cause) => cause }).pipe(
+  return Effect.try({ try: body, catch: storeFailure(operation) }).pipe(
     Effect.catch(
-      (cause): Effect.Effect<never, StorageError | OwnershipError> =>
-        cause instanceof OwnershipError ? Effect.fail(cause) : classify(operation, cause),
+      (failure): Effect.Effect<never, StorageError | OwnershipError> =>
+        failure instanceof StoreInvariantError ? Effect.die(failure) : Effect.fail(failure),
     ),
   );
 }

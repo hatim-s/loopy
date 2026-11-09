@@ -105,7 +105,7 @@ if (sha256Hex(await queueFile.text()) !== queueHash) {
 
 const output = resolve(evidence, "playground-durable-receipts.json");
 
-await atomic(output, {
+atomic(output, {
   status: "passed",
   batch: settings.batch,
   startedAt,

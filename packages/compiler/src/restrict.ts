@@ -1,88 +1,21 @@
-import { dirname, resolve } from "node:path";
 import { MAX_SOURCE_BYTES, MAX_SOURCE_FILES } from "@loopy/contract";
-import { builtinCommandKeys, commandKey } from "@loopy/sdk/graph-host";
 import { Effect } from "effect";
-import { type Expression, parseSync, type Statement } from "oxc-parser";
-import {
-  type Context,
-  callable,
-  declarationKind,
-  literal,
-  name,
-  refuse,
-  type Scope,
-  unwrap,
-} from "./ast";
-import { diagnostic } from "./diagnostic";
+import { parseSync, type Statement } from "oxc-parser";
+import { type Context, name, refuse, type Scope } from "./ast";
+import { diagnostic, syntaxErrors } from "./diagnostic";
 import { AuthorDiagnostics, authorFailure, authorSource, type CompilationError } from "./errors";
 import { checkCodeModule } from "./module";
 import { modulePath } from "./module-imports";
-import { expressionRule } from "./rules";
-import type { AuthorModule, CompilerDiagnostic, ParserSource } from "./types";
+import { DEFAULT_LOOPY, declarations, inspectStatements } from "./statements";
+import type { AuthorModule, CompilerDiagnostic } from "./types";
 
 /** The only module specifiers that bind trusted builder calls in author source. */
 export const SDK_SPECIFIERS: readonly string[] = ["loopy", "loopy/graph"];
 
-function parserSource(context: Context, init: Expression) {
-  const node = unwrap(init);
-
-  if (node.type !== "CallExpression" || callable(node.callee, context.scope) !== "defineCommand") {
-    return;
-  }
-
-  const argument = node.arguments[0];
-  const descriptor = argument && argument.type !== "SpreadElement" ? unwrap(argument) : argument;
-
-  if (descriptor?.type !== "ObjectExpression") {
-    refuse(context, node, "command_descriptor", "defineCommand requires a literal descriptor.");
-
-    return;
-  }
-
-  const properties = descriptor.properties.filter((property) => property.type === "Property");
-  const property = (key: string) => properties.find((entry) => name(entry.key) === key);
-  const parser = property("parse");
-
-  if (!parser) {
-    return;
-  }
-
-  const keyLiteral = (key: string) => literal(context, property(key)?.value, "command_key");
-  const key = property("key") ? keyLiteral("key") : null;
-  const namespace = key === null ? keyLiteral("namespace") : null;
-  const command = key === null ? keyLiteral("name") : null;
-
-  const id =
-    key ??
-    (namespace === null || command === null ? null : commandKey({ namespace, name: command }));
-
-  if (id === null) {
-    return;
-  }
-
-  if (context.parsers.has(id) || builtinCommandKeys.includes(id)) {
-    refuse(
-      context,
-      node,
-      "command_key",
-      "Custom parser keys must be unique and cannot replace built-in commands.",
-    );
-  }
-
-  const path = literal(context, parser.value, "module_path");
-
-  if (path !== null) {
-    context.parsers.set(id, { file: resolve(dirname(context.file), path), exportName: "default" });
-  }
-}
-
-function declarations(statement: Statement) {
-  return statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
-}
-
 type Inspection = {
   modules: Map<string, AuthorModule>;
-  parsers: Map<string, ParserSource>;
+  /** Modules whose imports are still being inspected, which an import back to them would cycle. */
+  visiting: Set<string>;
   diagnostics: CompilerDiagnostic[];
   scopes: Map<string, Scope>;
   entry: string;
@@ -123,7 +56,7 @@ const inspectImports = Effect.fn(function* (
   state: Inspection,
 ) {
   const { file } = context;
-  const { scopes, modules } = state;
+  const { scopes, visiting } = state;
 
   for (const statement of statements) {
     if (statement.type !== "ImportDeclaration" || statement.importKind === "type") {
@@ -149,7 +82,7 @@ const inspectImports = Effect.fn(function* (
 
       if (scopes.has(dependency)) {
         imported = scopes.get(dependency) ?? new Map();
-      } else if (modules.has(dependency)) {
+      } else if (visiting.has(dependency)) {
         refuse(context, statement, "cyclic_import", "Builder imports cannot be cyclic.");
         continue;
       } else {
@@ -161,104 +94,15 @@ const inspectImports = Effect.fn(function* (
   }
 });
 
-function inspectConstants(
-  context: Context,
-  declarations: Extract<Statement, { type: "VariableDeclaration" }>["declarations"],
-) {
-  for (const declaration of declarations) {
-    if (
-      declaration.id.type !== "Identifier" ||
-      !declaration.init ||
-      context.scope.has(declaration.id.name)
-    ) {
-      refuse(context, declaration, "invalid_binding", "Use unique const declarations.");
-      continue;
-    }
-
-    expressionRule(context, declaration.init, context.scope);
-    parserSource(context, declaration.init);
-    const kind = declarationKind(declaration.init, context.scope);
-    context.scope.set(declaration.id.name, kind);
-  }
-}
-
-function defaultExport(
-  context: Context,
-  statement: Extract<Statement, { type: "ExportDefaultDeclaration" }>,
-  requireLoopy: boolean,
-) {
-  const expression = statement.declaration;
-
-  if (
-    expression.type === "FunctionDeclaration" ||
-    expression.type === "ClassDeclaration" ||
-    expression.type === "TSInterfaceDeclaration"
-  ) {
-    refuse(context, statement, "default_loopy", "Default-export a loopy() builder result.");
-
-    return;
-  }
-
-  if (requireLoopy && declarationKind(expression, context.scope) !== "graph") {
-    refuse(context, statement, "default_loopy", "Default-export a loopy() builder result.");
-  }
-
-  expressionRule(context, expression, context.scope);
-}
-
-function inspectStatements(context: Context, statements: Statement[], requireLoopy: boolean) {
-  for (const statement of statements) {
-    const node = declarations(statement);
-
-    if (
-      statement.type === "ExportAllDeclaration" ||
-      (statement.type === "ExportNamedDeclaration" && statement.source)
-    ) {
-      refuse(
-        context,
-        statement,
-        "module_import",
-        "Import and export author bindings explicitly without re-exports.",
-      );
-      continue;
-    }
-
-    if (
-      !node ||
-      statement.type === "ImportDeclaration" ||
-      ["TSTypeAliasDeclaration", "TSInterfaceDeclaration", "TSDeclareFunction"].includes(node.type)
-    ) {
-      continue;
-    }
-
-    if (node.type === "FunctionDeclaration") {
-      continue;
-    }
-
-    if (node.type === "VariableDeclaration" && node.kind === "const") {
-      inspectConstants(context, node.declarations);
-    } else if (statement.type === "ExportDefaultDeclaration") {
-      defaultExport(context, statement, requireLoopy);
-    } else {
-      refuse(
-        context,
-        statement,
-        "module_effect",
-        "Builder modules allow imports, immutable data, descriptors and subgraphs only.",
-      );
-    }
-  }
-}
-
 function inspectModule(
   file: string,
   state: Inspection,
 ): Effect.Effect<Scope, CompilationError | AuthorDiagnostics> {
   return Effect.gen(function* () {
-    const { modules, parsers, diagnostics, scopes } = state;
+    const { modules, visiting, diagnostics, scopes } = state;
     const input = Bun.file(file);
 
-    if (modules.size >= MAX_SOURCE_FILES) {
+    if (modules.size + visiting.size >= MAX_SOURCE_FILES) {
       return yield* authorFailure(
         "source_error",
         file,
@@ -281,27 +125,12 @@ function inspectModule(
     }
 
     const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
-
-    for (const error of parsed.errors) {
-      diagnostics.push(
-        diagnostic(file, source, error.labels[0]?.start ?? 0, "syntax_error", error.message),
-      );
-    }
-
+    syntaxErrors(file, source, parsed, diagnostics);
     const scope: Scope = new Map();
-    modules.set(file, { file, source, evaluated: source });
-
-    const context: Context = {
-      file,
-      source,
-      scope,
-      diagnostics,
-      modules: [],
-      parsers,
-      sourceCalls: [],
-    };
-
+    const context: Context = { file, source, scope, diagnostics, modules: [], sourceCalls: [] };
+    visiting.add(file);
     yield* inspectImports(context, parsed.program.body, state);
+    visiting.delete(file);
 
     for (const statement of parsed.program.body) {
       const node = declarations(statement);
@@ -317,9 +146,7 @@ function inspectModule(
       file === state.entry &&
       !parsed.program.body.some((statement) => statement.type === "ExportDefaultDeclaration")
     ) {
-      diagnostics.push(
-        diagnostic(file, source, 0, "default_loopy", "Default-export a loopy() builder result."),
-      );
+      diagnostics.push(diagnostic(file, source, 0, "default_loopy", DEFAULT_LOOPY));
     }
 
     for (const module of context.modules) {
@@ -343,24 +170,19 @@ function inspectModule(
 
 export const restrict = Effect.fn(function* (file: string) {
   const modules = new Map<string, AuthorModule>();
-  const parsers = new Map<string, ParserSource>();
   const diagnostics: CompilerDiagnostic[] = [];
   yield* inspectModule(file, {
     modules,
-    parsers,
+    visiting: new Set(),
     diagnostics,
     scopes: new Map(),
     entry: file,
     sourceBytes: 0,
   });
 
-  for (const parser of parsers.values()) {
-    yield* checkCodeModule(parser.file, diagnostics);
-  }
-
   if (diagnostics.length > 0) {
     return yield* new AuthorDiagnostics({ diagnostics });
   }
 
-  return { modules: [...modules.values()], parsers };
+  return [...modules.values()];
 });

@@ -41,7 +41,7 @@ function drive(options: ActivationOptions, turn: TurnOptions) {
           Effect.scoped(
             Effect.gen(function* () {
               while (true) {
-                const { disposition, work: next, retryAt } = yield* commitTurn(turn, event);
+                const { disposition, work: next, deadline } = yield* commitTurn(turn, event);
 
                 if (disposition.kind === "finished") {
                   return disposition.outcome;
@@ -51,7 +51,7 @@ function drive(options: ActivationOptions, turn: TurnOptions) {
                   return { status: "suspended" } as const;
                 }
 
-                yield* work.dispatch(next, retryAt);
+                yield* work.dispatch(next, deadline);
                 event = yield* work.next;
               }
             }),

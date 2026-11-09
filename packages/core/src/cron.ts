@@ -211,7 +211,9 @@ export function zoneFormatter(
   }
 }
 
-export function nextFire(schedule: CronSchedule, after: Date, timeZone: string): Date {
+export function nextFire(expression: string, after: Date, timeZone: string): Date {
+  const schedule = parseCron(expression);
+
   if (!Number.isFinite(after.getTime())) {
     throw new Error("Invalid after date. Provide a valid Date to find the next cron fire.");
   }

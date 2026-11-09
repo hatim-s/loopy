@@ -1417,6 +1417,7 @@ test("parser input references use the same graph visibility checks as command ar
         ? {
             ...node,
             parse: {
+              module: null,
               bundleHash: null,
               input: {
                 args: [{ ref: contract.decodeBoundary(contract.refIdSchema)("missing"), path: [] }],

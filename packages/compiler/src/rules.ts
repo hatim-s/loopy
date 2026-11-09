@@ -66,7 +66,7 @@ function moduleProperty(context: Context, property: Property) {
   }
 
   if (!path.startsWith("./") && !path.startsWith("../")) {
-    refuse(context, property, "module_path", "Code modules must use a relative file path.");
+    refuse(context, property, "module_path", "Code and parser modules must use a relative path.");
 
     return;
   }
@@ -79,10 +79,6 @@ function moduleProperty(context: Context, property: Property) {
 }
 
 function optionRole(syntax: CallSyntax | undefined, key: string) {
-  if (key === "label") {
-    return "literal";
-  }
-
   return syntax?.keys && Object.hasOwn(syntax.keys, key) ? syntax.keys[key] : undefined;
 }
 
@@ -114,12 +110,6 @@ function propertyValue(
 
   if (role === "module") {
     moduleProperty(context, property);
-
-    return;
-  }
-
-  if (role === "parser") {
-    parserProperty(context, property);
 
     return;
   }
@@ -367,13 +357,5 @@ function statementRule(context: Context, statement: Statement, scope: Scope) {
       "forbidden_statement",
       "Graph construction allows const declarations, SDK calls and return only.",
     );
-  }
-}
-
-function parserProperty(context: Context, property: Property) {
-  const path = literal(context, property.value, "module_path");
-
-  if (path !== null && !path.startsWith("./") && !path.startsWith("../")) {
-    refuse(context, property, "module_path", "Parser modules must use a relative file path.");
   }
 }

@@ -6,9 +6,6 @@ import type { Json } from "./json";
 import type { LogRecord, RunRecord, RuntimeEvent, Schedule, WaitRecord } from "./model";
 import type { RateLimitResult } from "./rate-limit";
 
-// Every page and snapshot list shares this cap, so a full list can be told from a truncated one.
-export const PAGE_LIMIT = 200;
-
 export class StorageError extends Data.TaggedError("StorageError")<{
   readonly operation: string;
   readonly reason: "unavailable" | "corrupt" | "rejected";
@@ -58,6 +55,10 @@ export interface Store {
   epoch(): Effect.Effect<string, StorageError>;
   eventCursor(): Effect.Effect<{ cursor: number; epoch: string }, StorageError>;
   pruneEvents(now: string): Effect.Effect<number, StorageError>;
+  /**
+   * Delivers each non-empty batch after it commits through this store instance. Writes from
+   * another connection are not observed; the daemon is the only writer of a local home.
+   */
   subscribe(listener: (events: RuntimeEvent[]) => void): () => void;
   acquireRateLimit(
     key: string,
@@ -96,6 +97,11 @@ export interface Store {
     schedule: ScheduleRef & Pick<Schedule, "nextFireAt">;
     next: string;
     run: RunRecord;
+  }): Effect.Effect<boolean, StorageError>;
+  /** Advances past a missed slot without a run, with the same slot fence as fireSchedule. */
+  skipSchedule(options: {
+    schedule: ScheduleRef & Pick<Schedule, "nextFireAt">;
+    next: string;
   }): Effect.Effect<boolean, StorageError>;
   /** A null retry disables the schedule; either way the error stays readable until it fires. */
   failSchedule(options: {

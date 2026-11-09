@@ -14,7 +14,7 @@ export type RefContext = {
   check(ref: RefValue): void;
 };
 
-export type RefMetadata = {
+type RefMetadata = {
   owner: RefContext;
   scope: symbol;
   id: RefId;
@@ -88,7 +88,7 @@ export function serializeRef(ref: RefValue, context: RefContext): GraphRef {
   return { ref: ref[REF].id, path: [...ref.path] };
 }
 
-// BOUNDARY: Author values from JavaScript modules are lowered to graph JSON here.
+// BOUNDARY: Untyped author JavaScript may pass any value; the evaluator's graph decode checks the result.
 export function serialize(value: AuthorValue, context: RefContext): Value {
   if (value === undefined) {
     return null;

@@ -31,7 +31,7 @@ export function macBundle(
     `(allow file-write* (subpath ${quote(workspace)}) (literal "/dev/null"))`,
     '(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/urandom") (literal "/dev/random"))',
     `(deny file-write* (subpath ${quote(dirname(bundle))}))`,
-    `(deny file-read* file-write* (subpath ${quote(home)}))`,
+    ...(home === null ? [] : [`(deny file-read* file-write* (subpath ${quote(home)}))`]),
     network ? "(allow network*)" : "(deny network*)",
   ].join("\n");
 

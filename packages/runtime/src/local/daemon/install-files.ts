@@ -1,5 +1,5 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { Data, Effect } from "effect";
 import { spawnCaptured } from "../../os";
 
@@ -18,22 +18,20 @@ const installIO = <A>(run: () => Promise<A>) =>
 export type DaemonExecResult = { code: number; stdout: string; stderr: string };
 
 export type DaemonOperations = {
-  writeFile: (path: string, content: string | undefined) => Effect.Effect<void, DaemonInstallError>;
+  makeDirectory: (path: string) => Effect.Effect<void, DaemonInstallError>;
+  writeFile: (path: string, content: string) => Effect.Effect<void, DaemonInstallError>;
+  removeFile: (path: string) => Effect.Effect<void, DaemonInstallError>;
   exec: (argv: string[]) => Effect.Effect<DaemonExecResult, DaemonInstallError>;
 };
 
 export const daemonOperations: DaemonOperations = {
+  makeDirectory: (path) => installIO(() => mkdir(path, { recursive: true })),
   writeFile: (path, content) =>
     Effect.gen(function* () {
-      if (content === undefined) {
-        yield* installIO(() => rm(path, { force: true }));
-
-        return;
-      }
-
       yield* installIO(() => mkdir(dirname(path), { recursive: true }));
       yield* installIO(() => writeFile(path, content));
     }),
+  removeFile: (path) => installIO(() => rm(path, { force: true })),
   exec: (argv) =>
     Effect.gen(function* () {
       const [program, ...args] = argv;
@@ -60,56 +58,18 @@ export const daemonOperations: DaemonOperations = {
     }),
 };
 
-function xml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
+export function checkedExec(operations: DaemonOperations, argv: string[]) {
+  return Effect.gen(function* () {
+    const result = yield* operations.exec(argv);
 
-function unitQuote(value: string): string {
-  return `"${value
-    .replaceAll("\\", "\\\\")
-    .replaceAll('"', '\\"')
-    .replaceAll("%", "%%")
-    .replaceAll("\n", "\\n")
-    .replaceAll("\r", "\\r")
-    .replaceAll("\t", "\\t")}"`;
-}
+    if (result.code !== 0) {
+      return yield* Effect.fail(
+        new DaemonInstallError({
+          message: `${argv.join(" ")} failed: ${result.stderr.trim() || result.stdout.trim() || result.code}. Check your user service manager and retry.`,
+        }),
+      );
+    }
 
-export function daemonPlist(home: string, command: readonly string[], path: string): string {
-  const log = xml(join(home, "logs/daemon.log"));
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>Label</key><string>com.loopy.daemon</string>
-<key>ProgramArguments</key><array>${command.map((arg) => `<string>${xml(arg)}</string>`).join("")}</array>
-<key>RunAtLoad</key><true/>
-<key>KeepAlive</key><true/>
-<key>WorkingDirectory</key><string>${xml(home)}</string>
-<key>EnvironmentVariables</key><dict><key>PATH</key><string>${xml(path)}</string></dict>
-<key>StandardOutPath</key><string>${log}</string>
-<key>StandardErrorPath</key><string>${log}</string>
-</dict></plist>
-`;
-}
-
-export function daemonUnit(home: string, command: readonly string[], path: string): string {
-  return `[Unit]
-Description=Loopy daemon
-
-[Service]
-ExecStart=${command.map((arg) => unitQuote(arg.replaceAll("$", () => "$$"))).join(" ")}
-Restart=always
-WorkingDirectory=${home.replaceAll("%", "%%")}
-Environment=${unitQuote(`LOOPY_HOME=${home}`)} ${unitQuote(`PATH=${path}`)}
-StandardOutput=append:${join(home, "logs/daemon.log").replaceAll("%", "%%")}
-StandardError=append:${join(home, "logs/daemon.log").replaceAll("%", "%%")}
-
-[Install]
-WantedBy=default.target
-`;
+    return result;
+  });
 }

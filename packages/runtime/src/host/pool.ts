@@ -32,7 +32,7 @@ export class ActivationPool {
     return this.pending.size;
   }
 
-  // Each activation reports its own failures.
+  // Awaiting, not joining, because each activation reports its own failures.
   drain() {
     return Effect.forEach([...this.pending.values()], Fiber.await, {
       concurrency: "unbounded",

@@ -1,14 +1,13 @@
 import { errorMessage } from "../errors";
 import type { Graph } from "../graph";
 import { sameExecution } from "../graph/key";
-import type { NodeRun } from "../graph/node-run";
 import { isExecutable } from "../graph/nodes";
 import { checkOutSchema } from "../record-spec";
 import { outputError } from "./failure";
 import { addMs, finish, type Transition, write } from "./node-run";
 import { resolve } from "./resolve";
 import { retryDelayMs, shouldRetry } from "./retry";
-import type { EngineEvent, EngineState, Sample } from "./state";
+import { type EngineEvent, type EngineState, nextDeadline, type Sample } from "./state";
 import { sequence } from "./traversal";
 
 function completion(
@@ -121,10 +120,6 @@ function validSample(sample: Sample): boolean {
     : Number.isFinite(sample.value) && sample.value >= 0 && sample.value < 1;
 }
 
-function isPaused(run: NodeRun): run is Extract<NodeRun, { status: "waiting" | "sleeping" }> {
-  return run.status === "waiting" || run.status === "sleeping";
-}
-
 // A retrying or rate-limited node keeps the run leased until its retry is due.
 function suspend(transition: Transition) {
   if (transition.effects.some((effect) => effect.kind === "dispatch" || effect.kind === "sample")) {
@@ -140,16 +135,13 @@ function suspend(transition: Transition) {
     return;
   }
 
-  const pending = transition.state.nodeRuns.filter(isPaused);
-
-  if (pending.length === 0) {
+  if (
+    !transition.state.nodeRuns.some((run) => run.status === "waiting" || run.status === "sleeping")
+  ) {
     return;
   }
 
-  const wakeAt =
-    pending.flatMap((run) => (run.wakeAt === null ? [] : [run.wakeAt])).sort()[0] ?? null;
-
-  transition.effects.push({ kind: "suspend_run", wakeAt });
+  transition.effects.push({ kind: "suspend_run", wakeAt: nextDeadline(transition.state.nodeRuns) });
 }
 
 export function step(graph: Graph, state: EngineState, event: EngineEvent): Transition {
@@ -167,7 +159,6 @@ export function step(graph: Graph, state: EngineState, event: EngineEvent): Tran
 
       if (previous?.status === "running" && previous.attempt === event.attempt) {
         write(transition, { ...previous, status: "rate_limited", nextRetryAt: event.retryAt });
-        transition.effects.push({ kind: "schedule_activation", at: event.retryAt });
       }
 
       return transition;

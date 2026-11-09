@@ -1,3 +1,5 @@
+export { requireDefinition } from "./definition";
+
 export { ServiceError } from "./error";
 
 export { type EventReader, eventStream } from "./events";

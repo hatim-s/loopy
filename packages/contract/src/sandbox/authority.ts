@@ -1,13 +1,7 @@
-import {
-  counter,
-  executionResultSchema,
-  hashSchema,
-  PAGE_LIMIT,
-  positiveInt,
-  struct,
-} from "@loopy/core";
+import { counter, executionResultSchema, hashSchema, positiveInt, struct } from "@loopy/core";
 import { Record as EffectRecord, Schema } from "effect";
 import { boundedToken } from "../codec";
+import { PAGE_LIMIT } from "../dashboard-reader";
 import {
   attemptRecordSchema,
   authorityFailureSchema,

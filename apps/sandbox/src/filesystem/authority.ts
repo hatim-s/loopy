@@ -1,4 +1,4 @@
-import { unlink } from "node:fs/promises";
+import { rmSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   type AttemptRecord,
@@ -9,15 +9,15 @@ import {
   admitTransition,
   beginExportTransition,
   completeTransition,
+  type ExportRecord,
   resultBytes,
   resultRef,
   sameSession,
 } from "@loopy/contract/sandbox";
+import { syncDirectory, writeFileAtomically } from "@loopy/runtime/os";
 import { Effect, Semaphore } from "effect";
 import type { SandboxAttemptAuthority } from "../authority";
-import { ignoreMissing, syncDirectory, writeAtomic } from "../journal-files";
-import type { SandboxOperationError } from "../operations";
-import { io } from "../operations";
+import { checked, type SandboxOperationError } from "../operations";
 import { FilesystemJournal } from "./journal";
 import { FilesystemResults } from "./results";
 
@@ -30,6 +30,12 @@ function inlineRef(record: AttemptRecord | null) {
   const bytes = resultBytes(record.result.value);
 
   return bytes === null ? Effect.succeed(null) : Effect.promise(() => resultRef(bytes));
+}
+
+function persist(path: string, record: AttemptRecord | ExportRecord) {
+  return checked("filesystem-authority", () =>
+    writeFileAtomically(path, JSON.stringify(record), 0o600),
+  );
 }
 
 function byteOrder(left: string, right: string) {
@@ -97,9 +103,7 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         });
 
         if (decision.kind === "created") {
-          yield* io("filesystem-authority", () =>
-            writeAtomic(this.journal.receiptPath(input.plan.id), decision.record),
-          );
+          yield* persist(this.journal.receiptPath(input.plan.id), decision.record);
         }
 
         return decision;
@@ -125,9 +129,7 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         }
 
         yield* new FilesystemResults(this.root, decision.record.plan.workspace).get(input.result);
-        yield* io("filesystem-authority", () =>
-          writeAtomic(this.journal.receiptPath(input.id), decision.record),
-        );
+        yield* persist(this.journal.receiptPath(input.id), decision.record);
 
         return { kind: "finished", record: decision.record };
       }),
@@ -160,9 +162,7 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
           return decision;
         }
 
-        yield* io("filesystem-authority", () =>
-          writeAtomic(this.journal.guardPath(input.attemptId), decision.record),
-        );
+        yield* persist(this.journal.guardPath(input.attemptId), decision.record);
 
         return { kind: "granted", record: decision.record };
       }),
@@ -179,12 +179,12 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
         const guard = (yield* this.journal.guards()).find((record) => record.token === input.token);
 
         if (guard) {
-          yield* io("filesystem-authority", () =>
-            writeAtomic(this.journal.releasedPath(guard.token), guard),
-          );
+          yield* persist(this.journal.releasedPath(guard.token), guard);
           const path = this.journal.guardPath(guard.attemptId);
-          yield* io("filesystem-authority", () => ignoreMissing(unlink(path)));
-          yield* io("filesystem-authority", () => syncDirectory(dirname(path)));
+          yield* checked("filesystem-authority", () => {
+            rmSync(path, { force: true });
+            syncDirectory(dirname(path));
+          });
         }
 
         return null;

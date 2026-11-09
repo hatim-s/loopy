@@ -56,9 +56,7 @@ export class SandboxProvider implements DurableExecutionProvider {
         );
       }
 
-      return yield* decodeProtocol("receipt", () =>
-        decodeBoundary(receiptSchema)(JSON.parse(text)),
-      );
+      return yield* decodeProtocol(() => decodeBoundary(receiptSchema)(JSON.parse(text)));
     });
   }
   lookup(key: ExecutionKey, attempt: number) {
@@ -112,7 +110,7 @@ export class SandboxProvider implements DurableExecutionProvider {
 
       return {
         kind: "artifact",
-        artifact: yield* decodeProtocol("artifact", () =>
+        artifact: yield* decodeProtocol(() =>
           decodeBoundary(sandboxArtifactSchema)(JSON.parse(text)),
         ),
       };
@@ -144,7 +142,7 @@ export class SandboxProvider implements DurableExecutionProvider {
 
 /** Every non-ok sandbox response carries a coded error whose status the contract fixes. */
 function sandboxError(response: Response, text: string) {
-  return decodeProtocol("artifact", () => {
+  return decodeProtocol(() => {
     const body = decodeBoundary(sandboxErrorSchema)(JSON.parse(text));
 
     if (sandboxErrorStatus[body.error.code] !== response.status) {

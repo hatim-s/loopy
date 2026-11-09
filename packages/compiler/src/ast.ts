@@ -2,7 +2,7 @@ import { isString } from "@loopy/core";
 import { COMMAND_CALL, sdkCalls } from "@loopy/sdk/graph-host";
 import type { Expression, Node } from "oxc-parser";
 import { diagnostic } from "./diagnostic";
-import type { CompilerDiagnostic, CompilerDiagnosticCode, ParserSource, SourceCall } from "./types";
+import type { CompilerDiagnostic, CompilerDiagnosticCode, SourceCall } from "./types";
 
 type Binding = "sdk" | "subgraph" | "command" | "value" | "ref" | "function" | "graph";
 
@@ -19,7 +19,6 @@ export type Context = {
   scope: Scope;
   diagnostics: CompilerDiagnostic[];
   modules: { start: number; end: number; path: string }[];
-  parsers: Map<string, ParserSource>;
   sourceCalls: SourceCall[];
 };
 

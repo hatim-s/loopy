@@ -1,4 +1,4 @@
-import type { CommandResult, Duration, Json, RateLimit } from "@loopy/core";
+import type { Duration, RateLimit } from "@loopy/core";
 import {
   type CommandFlagSpec,
   type CommandVariant,
@@ -6,7 +6,12 @@ import {
   type OutSchema,
   parseArgv,
 } from "@loopy/core";
-import { type CommandDescriptor, type Prepare, validateCommandDescriptor } from "../../descriptor";
+import {
+  type CommandDeclaration,
+  type CommandDescriptor,
+  type Prepare,
+  validateCommandDeclaration,
+} from "../../descriptor";
 import { currentBuilder, retryPolicy } from "../builder";
 import { type CommandArguments, commandArgv } from "../command-argv";
 import type { CommandInput, CommandRawInput } from "../command-input";
@@ -31,23 +36,16 @@ export const commandOutput = {
 
 type CommandOutput = Ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>;
 
-/** Built-in parsers receive the prepared operands; only wc reads them. */
-export type Parser<R> = (result: CommandResult, input: { args?: readonly Json[] }) => R;
-
-/** Symbol keys keep host metadata out of the author call surface the compiler enumerates. */
-export const PARSER = Symbol("loopy.command.parser");
-
 type CallArguments<I> = I extends { args: readonly unknown[] }
   ? [input: I, options?: Options]
   : [input?: I, options?: Options];
 
 export type CommandCall<
-  D extends CommandDescriptor,
+  D extends CommandDeclaration,
   S extends OutSchema,
-  R extends CommandDescriptor = D,
+  R extends CommandDeclaration = D,
 > = {
   (...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
-  readonly descriptor: D;
   raw: (...args: CallArguments<CommandRawInput<R>>) => CommandOutput;
 };
 
@@ -60,7 +58,7 @@ function addCommand(
     flagSpec?: CommandFlagSpec;
     variants?: Partial<Record<"darwin" | "linux", CommandVariant>>;
     okExitCodes: readonly number[];
-    parse: Readonly<Record<string, AuthorValue>> | null;
+    parse: { module: string | null; input: Readonly<Record<string, AuthorValue>> } | null;
   },
   options: Options,
 ) {
@@ -85,22 +83,35 @@ function addCommand(
       rateLimit: options.rateLimit ?? null,
       retry: retryPolicy(options.retry),
       okExitCodes: [...node.okExitCodes],
-      parse: node.parse && { bundleHash: null, input: serializeValues(node.parse, builder) },
+      parse: node.parse && {
+        module: node.parse.module,
+        bundleHash: null,
+        input: serializeValues(node.parse.input, builder),
+      },
     },
     options.label ?? null,
   ).id;
 }
 
-/** The direct call applies presets, exclusions and preparation; `.raw` passes flags through. */
-type CallMode = { out: OutSchema; prepare?: Prepare; parses: boolean };
+/**
+ * The direct call applies presets, exclusions and preparation; `.raw` passes flags through.
+ * A parser module of null names the built-in parser registered under the command key.
+ */
+export type CallMode = {
+  out: OutSchema;
+  prepare?: Prepare;
+  parser: { module: string | null } | null;
+};
 
 function descriptorCommand(
-  descriptor: CommandDescriptor,
+  key: string,
+  descriptor: CommandDeclaration,
   input: CommandArguments,
   options: Options,
   mode: CallMode | null,
 ) {
   const rendered = commandArgv(
+    key,
     descriptor,
     input,
     mode ? { kind: "parsed", prepare: mode.prepare } : { kind: "raw" },
@@ -108,43 +119,43 @@ function descriptorCommand(
 
   return addCommand(
     {
-      key: rendered.key,
+      key,
       out: mode?.out ?? commandOutput,
       argv: [rendered.program, ...rendered.operands],
       flags: rendered.flags,
       flagSpec: rendered.flagSpec,
       variants: rendered.variants,
       okExitCodes: rendered.okExitCodes,
-      parse: mode?.parses ? rendered.parseInput : null,
+      parse: mode?.parser ? { module: mode.parser.module, input: rendered.parseInput } : null,
     },
     options,
   );
 }
 
-function commandCall<D extends CommandDescriptor, S extends OutSchema, R extends CommandDescriptor>(
-  descriptor: D,
-  mode: CallMode & { out: S },
-  rawDescriptor: R,
-) {
-  new Set([descriptor, rawDescriptor]).forEach(validateCommandDescriptor);
+export function commandCall<
+  D extends CommandDeclaration,
+  S extends OutSchema,
+  R extends CommandDeclaration,
+>(key: string, descriptor: D, mode: CallMode & { out: S }, rawDescriptor: R): CommandCall<D, S, R> {
+  new Set([descriptor, rawDescriptor]).forEach(validateCommandDeclaration);
 
   function call(...args: CallArguments<CommandInput<D>>): Ref<Infer<S>, SchemaFields<S>>;
   function call(
     input: CommandArguments = {},
     options: Options = {},
   ): Ref<Infer<S>, SchemaFields<S>> {
-    return currentBuilder().ref(descriptorCommand(descriptor, input, options, mode), mode.out);
+    return currentBuilder().ref(descriptorCommand(key, descriptor, input, options, mode), mode.out);
   }
 
   function raw(...args: CallArguments<CommandRawInput<R>>): CommandOutput;
   function raw(input: CommandArguments = {}, options: Options = {}): CommandOutput {
     return currentBuilder().ref<Infer<typeof commandOutput>, SchemaFields<typeof commandOutput>>(
-      descriptorCommand(rawDescriptor, input, options, null),
+      descriptorCommand(key, rawDescriptor, input, options, null),
       commandOutput,
     );
   }
 
-  return Object.assign(call, { raw, descriptor });
+  return Object.assign(call, { raw });
 }
 
 export function defineCommand<const D extends CommandDescriptor>(
@@ -158,36 +169,15 @@ export function defineCommand<const S extends OutSchema, const D extends Command
   descriptor: D,
   out?: S,
 ) {
-  return commandCall(
-    descriptor,
-    { out: out ?? commandOutput, parses: Boolean(descriptor.parse) },
-    descriptor,
-  );
-}
+  if (!descriptor.key) {
+    throw new Error(
+      "defineCommand requires a nonempty key, such as 'gh.pr.create'. Add a key to the descriptor.",
+    );
+  }
 
-export function builtin<const D extends CommandDescriptor>(
-  descriptor: D,
-): CommandCall<D, typeof commandOutput>;
-export function builtin<
-  const D extends CommandDescriptor,
-  const S extends OutSchema,
-  const R extends CommandDescriptor = D,
->(
-  descriptor: D,
-  parsed: { parse: Parser<Infer<S>>; out: S; prepare?: Prepare; raw?: R },
-): CommandCall<D, S, R>;
-export function builtin<
-  D extends CommandDescriptor,
-  S extends OutSchema,
-  R extends CommandDescriptor,
->(descriptor: D, parsed?: { parse: Parser<Infer<S>>; out: S; prepare?: Prepare; raw?: R }) {
-  const mode: CallMode = parsed
-    ? { out: parsed.out, prepare: parsed.prepare, parses: true }
-    : { out: commandOutput, parses: false };
+  const parser = descriptor.parse === undefined ? null : { module: descriptor.parse };
 
-  const call = commandCall(descriptor, mode, parsed?.raw ?? descriptor);
-
-  return parsed ? Object.assign(call, { [PARSER]: parsed.parse }) : call;
+  return commandCall(descriptor.key, descriptor, { out: out ?? commandOutput, parser }, descriptor);
 }
 
 function shell(key: string, argv: readonly (string | RefValue)[], options: Options) {

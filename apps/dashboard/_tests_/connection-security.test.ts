@@ -2,7 +2,8 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { makeLocalService, openRunStore } from "@loopy/runtime/local";
+import { makeLocalService } from "@loopy/runtime/local";
+import { openRunStore } from "@loopy/runtime/store";
 import { Effect, Exit, Scope } from "effect";
 import { originSecurity } from "../../../packages/runtime/src/local/server/security";
 import {

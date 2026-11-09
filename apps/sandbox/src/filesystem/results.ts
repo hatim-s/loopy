@@ -1,5 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
-import { link, open, unlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { decodeBoundary, type ExecutionResult, executionResultSchema } from "@loopy/contract";
 import {
@@ -7,13 +6,13 @@ import {
   type ResultRef,
   resultBytes,
   resultRef,
+  SANDBOX_MAX_CAPTURE_BYTES,
   sameRef,
 } from "@loopy/contract/sandbox";
-import { errnoCode } from "@loopy/core";
+import { publishExclusive, readRegularFile } from "@loopy/runtime/os";
 import { Effect } from "effect";
 import type { ImmutableResults } from "../authority";
-import { readBytes, syncDirectory } from "../journal-files";
-import { checked, failure, io } from "../operations";
+import { checked, failure } from "../operations";
 import { stateLayout } from "../state-root";
 
 export class FilesystemResults implements ImmutableResults {
@@ -30,7 +29,10 @@ export class FilesystemResults implements ImmutableResults {
 
   get(ref: ResultRef) {
     return Effect.gen({ self: this }, function* () {
-      const read = yield* io("immutable-results", () => readBytes(this.path(ref)));
+      const read = yield* checked("immutable-results", () =>
+        readRegularFile(this.path(ref), SANDBOX_MAX_CAPTURE_BYTES),
+      );
+
       const bytes = read && Uint8Array.from(read);
 
       if (!bytes || !sameRef(yield* Effect.promise(() => resultRef(bytes)), ref)) {
@@ -59,33 +61,11 @@ export class FilesystemResults implements ImmutableResults {
       }
 
       const ref = yield* Effect.promise(() => resultRef(bytes));
-      const temporary = join(this.directory, `${randomUUID()}.tmp`);
+      // A result already published under this ref is verified by the read below.
+      yield* checked("result publish", () => publishExclusive(this.path(ref), bytes, 0o600));
+      yield* this.get(ref);
 
-      return yield* Effect.acquireUseRelease(
-        io("result open", () => open(temporary, "wx", 0o600)),
-        (file) =>
-          Effect.gen({ self: this }, function* () {
-            yield* io("result write", () => file.writeFile(bytes));
-            yield* io("result sync", () => file.sync());
-            yield* io("result link", () =>
-              link(temporary, this.path(ref)).catch((cause: unknown) => {
-                if (errnoCode(cause) !== "EEXIST") {
-                  throw cause;
-                }
-              }),
-            );
-            yield* io("result directory sync", () => syncDirectory(this.directory));
-            yield* this.get(ref);
-
-            return ref;
-          }),
-        (file) =>
-          Effect.acquireUseRelease(
-            Effect.void,
-            () => io("result close", () => file.close()),
-            () => io("result temporary removal", () => unlink(temporary)),
-          ),
-      );
+      return ref;
     }).pipe(Effect.uninterruptible);
   }
 }

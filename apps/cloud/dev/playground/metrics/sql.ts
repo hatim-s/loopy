@@ -31,11 +31,11 @@ const beforeHash = await approvedDiagnostic({
 
 // The probe records the store sources whose exported SQL it runs.
 const sources = [
-  "packages/runtime/src/store/sqlite/query/runs.ts",
-  "packages/runtime/src/store/sqlite/query/feeds.ts",
-  "packages/runtime/src/store/sqlite/query/nodes.ts",
-  "packages/runtime/src/store/sqlite/schema/fresh.ts",
-  "packages/runtime/src/store/sqlite/turns.ts",
+  "packages/runtime/src/store/query/runs.ts",
+  "packages/runtime/src/store/query/feeds.ts",
+  "packages/runtime/src/store/query/nodes.ts",
+  "packages/runtime/src/store/schema/fresh.ts",
+  "packages/runtime/src/store/turns.ts",
   "apps/cloud/src/sql-driver.ts",
   "apps/cloud/dev/playground/metrics/sql-queries.ts",
 ];
@@ -151,7 +151,7 @@ try {
     throw new Error("SQL evidence exists. Choose a new phase.");
   }
 
-  await atomic(output, {
+  atomic(output, {
     ...report,
     afterHash,
     sourceHashesAfter: afterSources,

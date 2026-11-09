@@ -14,7 +14,7 @@ export class LeaseReleaseFailed extends Data.TaggedError("LeaseReleaseFailed")<{
   cause: StorageError | OwnershipError;
 }> {}
 
-/** Claims the run under a fresh token, runs use and always releases, bounded so a hung store cannot pin shutdown. */
+// Release is bounded so a hung store cannot pin shutdown.
 export function withLease<A, E, R>(
   store: Pick<Store, "claim" | "release">,
   runId: string,

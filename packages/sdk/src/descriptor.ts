@@ -7,8 +7,6 @@ export type PositionalDefinition = {
 };
 
 export type CommandDefinition = {
-  readonly helpHash?: string;
-  readonly observedVersion?: string;
   readonly program: string;
   readonly path?: readonly string[];
   readonly positionalSeparator?: boolean;
@@ -29,15 +27,17 @@ export type CommandVariantDefinition = Partial<
 >;
 
 /** Command data shared by built-in commands, author defineCommand calls and generated wrappers. */
-export type CommandDescriptor = CommandDefinition & {
-  readonly namespace?: string;
-  readonly name?: string;
-  readonly key?: string;
-  /** Path of an author parser module, relative to the declaring module. */
-  readonly parse?: string;
+export type CommandDeclaration = CommandDefinition & {
   readonly variants?: {
     readonly [P in (typeof COMMAND_PLATFORMS)[number]]?: CommandVariantDefinition;
   };
+};
+
+/** Built-ins take their key from their namespace path; author commands state it. */
+export type CommandDescriptor = CommandDeclaration & {
+  readonly key: string;
+  /** Path of an author parser module, relative to the declaring module. */
+  readonly parse?: string;
 };
 
 export type CommandOperands<A, F> = {
@@ -79,7 +79,7 @@ type FlagInput<F extends CommandFlag> = F extends { readonly pairs: true }
     ? FlagValue<F> | true
     : FlagValue<F>;
 
-type Flags<D extends CommandDescriptor> = D extends {
+type Flags<D extends CommandDeclaration> = D extends {
   readonly flags: infer F extends Readonly<Record<string, CommandFlag>>;
 }
   ? keyof F extends never
@@ -91,13 +91,13 @@ type Flags<D extends CommandDescriptor> = D extends {
       }
   : Record<string, never>;
 
-type Args<D extends CommandDescriptor> = D extends {
+type Args<D extends CommandDeclaration> = D extends {
   readonly positionals: infer P extends readonly PositionalDefinition[];
 }
   ? Positionals<P>
   : readonly string[];
 
-type Operands<D extends CommandDescriptor> = D extends {
+type Operands<D extends CommandDeclaration> = D extends {
   readonly revisionPaths: true;
 }
   ? {
@@ -117,26 +117,22 @@ type ExcludedKeys<D> = D extends { readonly exclude: readonly (infer K extends s
 
 type ProtectedKeys<D> = PresetKeys<D> | ExcludedKeys<D>;
 
-type ParsedDescriptor<D extends CommandDescriptor> = D extends {
+type ParsedDescriptor<D extends CommandDeclaration> = D extends {
   readonly parsedPositionals: infer P extends readonly PositionalDefinition[];
 }
   ? Omit<D, "positionals"> & { readonly positionals: P }
   : D;
 
-export type Input<D extends CommandDescriptor> = Operands<ParsedDescriptor<D>> & {
+export type Input<D extends CommandDeclaration> = Operands<ParsedDescriptor<D>> & {
   flags?: Omit<Flags<D>, ProtectedKeys<D>> & { readonly [K in ProtectedKeys<D>]?: never };
 };
 
-export type RawInput<D extends CommandDescriptor> = Operands<D> & {
+export type RawInput<D extends CommandDeclaration> = Operands<D> & {
   flags?: Flags<D>;
 };
 
-export function commandKey(descriptor: Pick<CommandDescriptor, "key" | "namespace" | "name">) {
-  return descriptor.key ?? `${descriptor.namespace}.${descriptor.name}`;
-}
-
 export function platformVariant(
-  descriptor: CommandDescriptor,
+  descriptor: CommandDeclaration,
   platform: (typeof COMMAND_PLATFORMS)[number],
 ): CommandDefinition {
   const variant = descriptor.variants?.[platform];
@@ -167,7 +163,7 @@ function optionIdentity(flag: CommandFlag | undefined): string {
   return JSON.stringify([...(flag?.prefix ?? []), flag?.cli]);
 }
 
-export function validateCommandDescriptor(descriptor: CommandDescriptor): void {
+export function validateCommandDeclaration(descriptor: CommandDeclaration): void {
   for (const definition of [
     descriptor,
     platformVariant(descriptor, "darwin"),

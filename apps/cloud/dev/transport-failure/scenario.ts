@@ -7,7 +7,7 @@ import { DockerBackend } from "../../../sandbox/src/docker";
 import { DockerClient } from "../../../sandbox/src/docker/client";
 import { ownerOf } from "../../../sandbox/src/docker/identity";
 import { filesystemStorage } from "../../../sandbox/src/filesystem";
-import { assert, equal } from "../shared/assert";
+import { assert, equal, JourneyFailure } from "../shared/assert";
 import { sha256Hex } from "../shared/hash";
 import { type FaultMode, TransportFaults } from "./faults";
 import { fixtureFailure } from "./fixture-effect";
@@ -162,7 +162,8 @@ function prove(config: Config, mode: FaultMode, faults: TransportFaults) {
     yield* service.drain().pipe(
       Effect.timeoutOrElse({
         duration: config.maxTimeoutMs + 5000,
-        orElse: () => Effect.fail(new Error("Original worker deadline was abandoned.")),
+        orElse: () =>
+          Effect.die(new JourneyFailure({ failure: "original_worker_deadline_abandoned" })),
       }),
     );
 

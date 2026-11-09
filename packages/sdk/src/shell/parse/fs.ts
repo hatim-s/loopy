@@ -1,10 +1,6 @@
 import type { CommandResult } from "@loopy/core";
 import { jsonValue, lines, nulFields, unexpected } from "./shared";
 
-type Find = string[];
-
-type Ls = string[];
-
 type Stat = {
   path: string;
   size: number;
@@ -24,26 +20,18 @@ type Df = {
   mountedOn: string;
 };
 
-type Realpath = string;
-
-type Which = string | null;
-
-type Mktemp = string;
-
 type TreeNode = { type: "directory" | "file"; name: string; contents?: TreeNode[] };
-
-type Tree = TreeNode[];
 
 // Neither BSD -f nor GNU -c interprets git's %x00. SOH separates metadata fields.
 export const STAT_DARWIN_FORMAT = "%N\x01%z\x01%m\x01%HT\x01%Lp";
 
 export const STAT_LINUX_FORMAT = "%n\x01%s\x01%Y\x01%F\x01%a";
 
-export function parseFind({ stdout }: CommandResult): Find {
+export function parseFind({ stdout }: CommandResult): string[] {
   return nulFields(stdout, "find").map((path) => path || unexpected("find", stdout));
 }
 
-export function parseLs(result: CommandResult): Ls {
+export function parseLs(result: CommandResult): string[] {
   return nulFields(result.stdout, "ls").map(
     (path) => (path || unexpected("ls", result.stdout)).replace(/\/$/, "").split("/").at(-1) ?? "",
   );
@@ -147,15 +135,15 @@ function trimmed(stdout: string, command: string): string {
   return stdout.trim() || unexpected(command, stdout);
 }
 
-export function parseRealpath({ stdout }: CommandResult): Realpath {
+export function parseRealpath({ stdout }: CommandResult): string {
   return trimmed(stdout, "realpath");
 }
 
-export function parseWhich({ stdout, exitCode }: CommandResult): Which {
+export function parseWhich({ stdout, exitCode }: CommandResult): string | null {
   return exitCode === 1 ? null : trimmed(stdout, "which");
 }
 
-export function parseMktemp({ stdout }: CommandResult): Mktemp {
+export function parseMktemp({ stdout }: CommandResult): string {
   return trimmed(stdout, "mktemp");
 }
 
@@ -186,7 +174,7 @@ function treeNode(value: ReturnType<typeof jsonValue>, line: string): TreeNode {
   };
 }
 
-export function parseTree({ stdout }: CommandResult): Tree {
+export function parseTree({ stdout }: CommandResult): TreeNode[] {
   const value = jsonValue(stdout, "tree");
 
   if (!Array.isArray(value)) {

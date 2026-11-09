@@ -59,13 +59,21 @@ export const alreadyStarted = () =>
     }),
   );
 
+// Run ids may contain dots, which must not form "." or ".." path segments.
+const runSegment = (runId: string) => encodeURIComponent(runId).replaceAll(".", "%2E");
+
+/** The directory that holds every receipt of one run, one subdirectory per execution key. */
+export function runReceiptDirectory(home: string, runId: string) {
+  return join(home, "receipts", runSegment(runId));
+}
+
 export const receiptPath = Effect.fn(function* (home: string, key: ExecutionKey, attempt: number) {
   yield* io(() => mkdir(home, { recursive: true, mode: 0o700 }));
   let directory = yield* io(() => realpath(home));
 
   for (const segment of [
     "receipts",
-    encodeURIComponent(key.runId).replaceAll(".", "%2E"),
+    runSegment(key.runId),
     encodeURIComponent(executionKeyString(key)),
   ]) {
     directory = join(directory, segment);

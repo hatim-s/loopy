@@ -5,7 +5,7 @@ import { ServiceError } from "./error";
 import type { ArtifactRegistry, ServiceOptions } from "./registry";
 
 export const requireDefinition = Effect.fn("definition.requireDefinition")(function* (
-  registry: ArtifactRegistry,
+  registry: Pick<ArtifactRegistry, "get">,
   slug: string,
 ) {
   const saved = yield* registry.get(slug);

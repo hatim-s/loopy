@@ -1,11 +1,10 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test";
-import type { SavedLoopy } from "@loopy/contract";
+import { PAGE_LIMIT, type SavedLoopy } from "@loopy/contract";
 import {
   type ExecutionKey,
   executionKeyString,
   type Graph,
   type Json,
-  PAGE_LIMIT,
   type Receipt,
   revision,
   StorageError,
@@ -16,7 +15,7 @@ import { RegistryError } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { code, loopy, sleep, wait } from "@loopy/sdk/graph";
 import { Cause, Effect } from "effect";
-import { BunSqlDriver } from "../../../packages/runtime/src/store/sqlite/bun-driver";
+import { BunSqlDriver } from "../../../packages/runtime/src/store/bun-driver";
 import type { R2ArtifactRegistry } from "../src/artifacts";
 import { type SchedulerStorage, WorkspaceScheduler } from "../src/scheduler";
 
@@ -527,6 +526,21 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   ]);
   await f.registry.save(graph("missing", () => work("later")));
   expect((await f.runs("missing"))[0]?.revision).toBe(restoredRevision);
+});
+
+test("a slot more than a minute late is skipped without a run and the next slot fires", async () => {
+  const f = fixture();
+  await f.schedule(graph("late"));
+  f.at(61_000);
+  await Effect.runPromise(f.scheduler().tick());
+  expect(await f.runs("late")).toEqual([]);
+  expect((await Effect.runPromise(f.store.listSchedules()))[0]?.nextFireAt).toBe(
+    new Date(base + 120_000).toISOString(),
+  );
+  expect(f.registry.reads.get("late")).toBeUndefined();
+  f.at(120_000);
+  await Effect.runPromise(f.scheduler().tick());
+  expect(await f.runs("late")).toHaveLength(1);
 });
 
 for (const failure of ["before", "after"] as const) {

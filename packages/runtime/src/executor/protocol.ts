@@ -16,6 +16,37 @@ type Redact = (text: string, truncated?: boolean) => string;
 
 type FailureCode = Extract<ExecutionResult, { kind: "failed" }>["error"]["code"];
 
+/**
+ * Source of the entry the compiler bundles around each code or parser module. It writes the
+ * protocol this file decodes: stderr lines are `{message, data}` logs, the final stdout line
+ * is the JSON result, and a parser bundle reads the `{result, input}` envelope commandResult
+ * builds. Bun folds import.meta.main for virtual entrypoints, so the bundle compares its path.
+ */
+export function runnerSource(module: string, exportName: string, kind: "code" | "parser") {
+  const invocation =
+    kind === "code"
+      ? "run(input, { workspace: process.cwd(), log })"
+      : "run(input.result, input.input)";
+
+  return `
+    import {fileURLToPath} from "node:url";
+    const main = process.argv[1] === fileURLToPath(import.meta.url);
+    const log = (message, data = null) => process.stderr.write(JSON.stringify({message, data}) + "\\n");
+    if (main) {
+      for (const method of ["log", "info", "debug", "warn", "error", "trace", "table", "dir"]) {
+        console[method] = (...values) => log(values.map(String).join(" "));
+      }
+    }
+    const {${exportName}: run} = await import(${JSON.stringify(module)});
+    export default run;
+    if (main) {
+      const input = await Bun.stdin.json();
+      const output = await ${invocation};
+      process.stdout.write("\\n" + JSON.stringify(output ?? null) + "\\n");
+    }
+  `;
+}
+
 /** The next step after a command exits: a final result, or its parser bundle with the envelope. */
 export type CommandStep =
   | { kind: "finished"; result: ExecutionResult }

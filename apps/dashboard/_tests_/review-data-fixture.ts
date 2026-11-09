@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compile } from "@loopy/compiler";
 import type { NodeRun, StoreEffect } from "@loopy/core";
-import { makeLocalService, openRunStore } from "@loopy/runtime/local";
+import { makeLocalService } from "@loopy/runtime/local";
+import { openRunStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
 
 /** Persisted synthetic records let HTTP and browser checks inspect the same bounded pages. */

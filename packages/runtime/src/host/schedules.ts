@@ -2,7 +2,6 @@ import {
   errorMessage,
   type Graph,
   nextFire,
-  parseCron,
   type Schedule,
   type Store,
   validateGraphInput,
@@ -19,10 +18,16 @@ export class ScheduleDefinitionError extends Data.TaggedError("ScheduleDefinitio
 
 export type ScheduleDefinition = { revision: string; graph: Graph };
 
-export const SCHEDULE_POLICY = { batch: 32, retryMs: 5000, errorChars: 1000 } as const;
+// A slot more than graceMs late is skipped rather than fired, on every host.
+export const SCHEDULE_POLICY = {
+  batch: 32,
+  retryMs: 5000,
+  errorChars: 1000,
+  graceMs: 60_000,
+} as const;
 
 export type ScheduleFiringOptions = {
-  store: Pick<Store, "dueSchedules" | "fireSchedule" | "failSchedule">;
+  store: Pick<Store, "dueSchedules" | "fireSchedule" | "skipSchedule" | "failSchedule">;
   definitionFor: (schedule: Schedule) => Effect.Effect<ScheduleDefinition, ScheduleDefinitionError>;
   stopped?: () => boolean;
   report?: (cause: Cause.Cause<unknown>) => Effect.Effect<void>;
@@ -30,6 +35,14 @@ export type ScheduleFiringOptions = {
 
 const fireOne = (options: ScheduleFiringOptions, schedule: Schedule, now: string) =>
   Effect.gen(function* () {
+    const next = nextFire(schedule.cron, new Date(now), schedule.tz).toISOString();
+
+    if (Date.parse(now) - Date.parse(schedule.nextFireAt) > SCHEDULE_POLICY.graceMs) {
+      yield* options.store.skipSchedule({ schedule, next });
+
+      return false;
+    }
+
     const { revision, graph } = yield* options.definitionFor(schedule);
     const input = validateGraphInput(graph, schedule.input);
 
@@ -45,7 +58,7 @@ const fireOne = (options: ScheduleFiringOptions, schedule: Schedule, now: string
 
     return yield* options.store.fireSchedule({
       schedule,
-      next: nextFire(parseCron(schedule.cron), new Date(now), schedule.tz).toISOString(),
+      next,
       run: {
         id: crypto.randomUUID(),
         slug: schedule.slug,
@@ -60,7 +73,7 @@ const fireOne = (options: ScheduleFiringOptions, schedule: Schedule, now: string
   });
 
 /**
- * Missed slots coalesce into one run whose next slot follows the current time. A failed schedule
+ * A due slot fires once as now, and the next slot follows the current time. A failed schedule
  * waits for a persisted retry deadline so later schedules still enter the batch.
  */
 export const fireDueSchedules = (options: ScheduleFiringOptions, now: string) =>

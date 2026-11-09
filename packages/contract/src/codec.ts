@@ -1,5 +1,5 @@
-import { PAGE_LIMIT } from "@loopy/core";
 import { Effect, Schema, SchemaGetter } from "effect";
+import { PAGE_LIMIT } from "./dashboard-reader";
 
 export const boundaryOptions = { onExcessProperty: "error" } as const;
 

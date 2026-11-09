@@ -5,20 +5,29 @@ import {
   graphRecord,
   graphSchema,
   nodeIdSchema,
-  otherNodeSchemas,
+  nodeSchema,
   struct,
   valueSchema,
 } from "@loopy/core";
 import { Schema } from "effect";
 
-// Views drop module paths and parser bundle hashes, which name private registry files.
+type NodeMember = (typeof nodeSchema.members)[number];
+
+// Only executables name private registry files; every other node's view is its stored shape.
+function isPublicNode(
+  member: NodeMember,
+): member is Exclude<NodeMember, typeof codeNodeSchema | typeof commandNodeSchema> {
+  return member !== codeNodeSchema && member !== commandNodeSchema;
+}
+
+// Views drop module paths and parser bundle hashes.
 export const nodeViewSchema = Schema.Union([
   struct({ ...codeNodeSchema.fields, module: struct({ name: Schema.String }) }),
   struct({
     ...commandNodeSchema.fields,
     parse: Schema.NullOr(struct({ input: graphRecord(Schema.mutableKey(valueSchema)) })),
   }),
-  ...otherNodeSchemas,
+  ...nodeSchema.members.filter(isPublicNode),
 ]);
 
 export const graphViewSchema = struct({

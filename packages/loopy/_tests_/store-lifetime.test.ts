@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { StorageError } from "../../core/src/store";
-import { makeSqliteRunStore } from "../../runtime/src/store/sqlite/store";
+import { makeSqliteRunStore } from "../../runtime/src/store/open";
 import { newRun } from "./fixture";
 
 const nodeId = Schema.decodeUnknownSync(nodeIdSchema)("0:code");
@@ -86,7 +86,13 @@ test("invariant failures die and roll back their complete batch", async () => {
             runId: "run",
             token: "owner",
             effects: [
-              { kind: "schedule_activation", at: "2026-10-16T01:00:00.000Z" },
+              {
+                kind: "write_log",
+                executionKey: { runId: "run", nodeId, scope: [] },
+                attempt: 1,
+                at: newRun().createdAt,
+                log: { message: "rolled back", data: null },
+              },
               {
                 kind: "write_log",
                 executionKey: { runId: "other", nodeId, scope: [] },
@@ -113,7 +119,13 @@ test("invariant failures die and roll back their complete batch", async () => {
             runId: "run",
             token: "owner",
             effects: [
-              { kind: "schedule_activation", at: "2026-10-16T01:00:00.000Z" },
+              {
+                kind: "write_log",
+                executionKey: { runId: "run", nodeId, scope: [] },
+                attempt: 1,
+                at: newRun().createdAt,
+                log: { message: "rolled back", data: null },
+              },
               { kind: "suspend_run", wakeAt: "invalid date" },
             ],
           }),

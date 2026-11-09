@@ -146,7 +146,7 @@ function scheduleFireFailures(makeStore: StoreFactory): void {
           run: { ...newRun(), id: "missing" },
         }),
       ),
-    ).rejects.toThrow("Schedule 'test' does not exist. Save the schedule before firing it.");
+    ).rejects.toThrow("Schedule 'test' does not exist. Save the schedule before advancing it.");
     expect(await Effect.runPromise(store.getRun("missing"))).toBeUndefined();
   });
 }
@@ -446,14 +446,6 @@ function ownershipFencing(makeStore: StoreFactory): void {
                 at: LOG.at,
               },
             ],
-          }),
-        ),
-      () =>
-        Effect.runPromise(
-          store.apply({
-            runId: "run",
-            token: "old",
-            effects: [{ kind: "schedule_activation", at: LOG.at }],
           }),
         ),
       () =>

@@ -111,6 +111,14 @@ export const scopeItemsPageSchema = struct({
   next: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 });
 
+export const MAX_OVERVIEW_BUCKETS = 744;
+
+export function overviewBucketCount(window: { from: string; to: string; bucketSeconds: number }) {
+  return Math.ceil(
+    (Date.parse(window.to) - Date.parse(window.from)) / (window.bucketSeconds * 1000),
+  );
+}
+
 export const overviewQuerySchema = struct({
   ...runFilterFields,
   from: iso,
@@ -121,11 +129,12 @@ export const overviewQuerySchema = struct({
     .pipe(Schema.withDecodingDefault(Effect.succeed(3600))),
 }).check(
   Schema.makeFilter(
-    (query) =>
-      Date.parse(query.to) > Date.parse(query.from) &&
-      Math.ceil((Date.parse(query.to) - Date.parse(query.from)) / (query.bucketSeconds * 1000)) <=
-        744,
-    { message: "Window must contain between 1 and 744 buckets." },
+    (query) => {
+      const count = overviewBucketCount(query);
+
+      return count >= 1 && count <= MAX_OVERVIEW_BUCKETS;
+    },
+    { message: `Window must contain between 1 and ${MAX_OVERVIEW_BUCKETS} buckets.` },
   ),
 );
 

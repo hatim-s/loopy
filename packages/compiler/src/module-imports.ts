@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { isString } from "@loopy/core";
 import { Effect } from "effect";
 import { type Expression, type Node, type ParseResult, parseSync, Visitor } from "oxc-parser";
-import { diagnostic } from "./diagnostic";
+import { diagnostic, syntaxErrors } from "./diagnostic";
 import { type AuthorDiagnostics, authorSource, type CompilationError, compilerIO } from "./errors";
 import { typescriptSibling } from "./source-paths";
 import type { CompilerDiagnostic } from "./types";
@@ -119,11 +119,7 @@ export function checkImports(
     );
   };
 
-  for (const error of parsed.errors) {
-    diagnostics.push(
-      diagnostic(file, source, error.labels[0]?.start ?? 0, "syntax_error", error.message),
-    );
-  }
+  syntaxErrors(file, source, parsed, diagnostics);
 
   const dependency = (node: Node, value: string) => {
     if (runtimeCode.modules.has(value)) {

@@ -24,15 +24,14 @@ function fixture(platform: string, replies: DaemonExecResult[] = []) {
   const commands: string[][] = [];
 
   const operations: DaemonOperations = {
+    makeDirectory: () => Effect.void,
     writeFile: (path, content) =>
       Effect.sync(() => {
-        if (content === undefined) {
-          files.delete(path);
-
-          return;
-        }
-
         files.set(path, content);
+      }),
+    removeFile: (path) =>
+      Effect.sync(() => {
+        files.delete(path);
       }),
     exec: (argv) =>
       Effect.sync(() => {
@@ -123,7 +122,7 @@ for (const platform of ["darwin", "linux"]) {
     await Effect.runPromise(
       installDaemon({ ...options, command: ["/new/bun", "/opt/loopy/cli.js"] }),
     );
-    expect(files.size).toBe(2);
+    expect(files.size).toBe(1);
     expect(files.get(platform === "darwin" ? plist : unit)).toContain("/new/bun");
     expect(commands).toEqual(first);
   });

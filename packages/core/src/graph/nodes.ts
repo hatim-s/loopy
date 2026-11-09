@@ -105,13 +105,21 @@ export const commandNodeSchema = struct({
   rateLimit: Schema.NullOr(rateLimitSchema),
   retry: retrySchema,
   okExitCodes: Schema.Array(Schema.Int).pipe(Schema.mutable),
-  parse: Schema.NullOr(struct({ bundleHash: Schema.NullOr(Schema.String), input: values })),
+  // A null parser module names the built-in parser for the command key.
+  parse: Schema.NullOr(
+    struct({
+      module: Schema.NullOr(Schema.String),
+      bundleHash: Schema.NullOr(Schema.String),
+      input: values,
+    }),
+  ),
 });
 
 const MAP_ERROR_MODES = ["fail", "collect"] as const;
 
-// Control and value nodes need no executor, so their wire views equal their stored shape.
-export const otherNodeSchemas = [
+export const nodeSchema = Schema.Union([
+  codeNodeSchema,
+  commandNodeSchema,
   struct({
     ...base.fields,
     kind: Schema.Literal("branch"),
@@ -181,9 +189,7 @@ export const otherNodeSchemas = [
       struct({ kind: Schema.Literal("none") }),
     ]),
   }),
-] as const;
-
-export const nodeSchema = Schema.Union([codeNodeSchema, commandNodeSchema, ...otherNodeSchemas]);
+]);
 
 export type Node = Schema.Schema.Type<typeof nodeSchema>;
 

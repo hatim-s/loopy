@@ -5,8 +5,10 @@ import {
   type SandboxAttemptIdentity,
   sameRef,
 } from "@loopy/contract/sandbox";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import type { ResultsFor, SandboxAttemptAuthority } from "../../../../sandbox/src/authority";
+
+class EvidenceMismatch extends Data.TaggedError("EvidenceMismatch")<{ message: string }> {}
 
 export function receiptEvidence(options: {
   root: string;
@@ -23,15 +25,15 @@ export function receiptEvidence(options: {
       record.plan.id !== id ||
       (yield* Effect.promise(() => attemptId(options.root, record.plan))) !== id
     ) {
-      return yield* Effect.fail(
-        new Error("Authority evidence does not match the requested execution identity."),
-      );
+      return yield* new EvidenceMismatch({
+        message: "Authority evidence does not match the requested execution identity.",
+      });
     }
 
     if (record.kind !== "finished" || record.result.kind !== "blob") {
-      return yield* Effect.fail(
-        new Error("Architecture evidence requires a terminal receipt with immutable result bytes."),
-      );
+      return yield* new EvidenceMismatch({
+        message: "Architecture evidence requires a terminal receipt with immutable result bytes.",
+      });
     }
 
     const result = yield* options.resultsFor(options.identity.workspace).get(record.result.ref);
@@ -39,9 +41,9 @@ export function receiptEvidence(options: {
     const observed = bytes && (yield* Effect.promise(() => resultRef(bytes)));
 
     if (!observed || !sameRef(observed, record.result.ref)) {
-      return yield* Effect.fail(
-        new Error("Resolved terminal bytes do not match the authoritative result reference."),
-      );
+      return yield* new EvidenceMismatch({
+        message: "Resolved terminal bytes do not match the authoritative result reference.",
+      });
     }
 
     return {

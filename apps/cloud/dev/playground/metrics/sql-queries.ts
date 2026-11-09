@@ -1,19 +1,19 @@
 import type { Database } from "bun:sqlite";
 import type { SqlValue } from "@loopy/runtime/store/portable";
-import { FEED_SCAN_LIMIT } from "../../../../../packages/runtime/src/store/query-utils";
 import {
   EVENT_PROJECTION,
   LOG_PROJECTION,
-} from "../../../../../packages/runtime/src/store/sqlite/query/feeds";
+} from "../../../../../packages/runtime/src/store/query/feeds";
 import {
   ATTEMPT_PROJECTION,
   NODE_PAGE_PROJECTION,
-} from "../../../../../packages/runtime/src/store/sqlite/query/nodes";
+} from "../../../../../packages/runtime/src/store/query/nodes";
 import {
   PENDING_HOOK,
   RUN_PREVIEW_COLUMNS,
-} from "../../../../../packages/runtime/src/store/sqlite/query/runs";
-import { READY_TURNS, RUNNING_TURNS } from "../../../../../packages/runtime/src/store/sqlite/turns";
+} from "../../../../../packages/runtime/src/store/query/runs";
+import { FEED_SCAN_LIMIT } from "../../../../../packages/runtime/src/store/query/scan";
+import { READY_TURNS, RUNNING_TURNS } from "../../../../../packages/runtime/src/store/turns";
 
 export function sqlCases(db: Database) {
   const now = new Date().toISOString();
@@ -35,7 +35,7 @@ export function sqlCases(db: Database) {
   const add = (name: string, source: string, sql: string, bindings: SqlValue[] = []) =>
     cases.push({ name, source, sql, bindings });
 
-  const runSource = "packages/runtime/src/store/sqlite/query/runs.ts";
+  const runSource = "packages/runtime/src/store/query/runs.ts";
   add(
     "runs.latest",
     runSource,
@@ -91,7 +91,7 @@ export function sqlCases(db: Database) {
     );
   }
 
-  const feedSource = "packages/runtime/src/store/sqlite/query/feeds.ts";
+  const feedSource = "packages/runtime/src/store/query/feeds.ts";
 
   add(
     "logs.candidates",
@@ -123,7 +123,7 @@ export function sqlCases(db: Database) {
     `SELECT ${EVENT_PROJECTION} FROM events e LEFT JOIN runs r ON r.id=e.run_id WHERE e.sequence<? AND e.run_id=? ORDER BY e.sequence DESC LIMIT ${FEED_SCAN_LIMIT + 1}`,
     [Number.MAX_SAFE_INTEGER, run.id],
   );
-  const nodeSource = "packages/runtime/src/store/sqlite/query/nodes.ts";
+  const nodeSource = "packages/runtime/src/store/query/nodes.ts";
   add(
     "executions.page",
     nodeSource,
@@ -146,7 +146,7 @@ export function sqlCases(db: Database) {
     );
   }
 
-  const turns = "packages/runtime/src/store/sqlite/turns.ts";
+  const turns = "packages/runtime/src/store/turns.ts";
   add("scheduler.running", turns, RUNNING_TURNS, [now, 4]);
   add("scheduler.ready", turns, READY_TURNS, [now, now, 4]);
 

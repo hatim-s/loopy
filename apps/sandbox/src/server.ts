@@ -201,7 +201,8 @@ export function startSandbox(
           ),
           (server) =>
             Effect.gen(function* () {
-              const stopped = yield* Effect.sync(() => server.stop(true));
+              // Stop accepting requests before attempts close, then wait for the listener.
+              const stopped = server.stop(true);
               yield* attempts.close();
               yield* io("HTTP stop", () => stopped);
             }).pipe(Effect.orDie),

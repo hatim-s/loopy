@@ -76,7 +76,7 @@ async function probe(route: "runs" | "loopies" | "events", mode: "direct" | "sha
 }
 
 async function save() {
-  await atomic(output, {
+  atomic(output, {
     phase,
     scope: "local-read-only-matched-http-probe",
     startedAt,

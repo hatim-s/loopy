@@ -80,7 +80,7 @@ const value = {
   ],
 };
 
-await atomic(resolve(evidence, "playground-performance-runtime.json"), value);
+atomic(resolve(evidence, "playground-performance-runtime.json"), value);
 
 process.stdout.write(
   `${JSON.stringify({ completedBackendStarts: value.completedBackendStarts, backendQueueWaitMs: value.backendQueueWaitMs, backendDurationMs: value.backendDurationMs, backendOutcomes: value.backendOutcomes, resourceSamples: value.resourceSamples, invalidQueueLines })}\n`,

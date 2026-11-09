@@ -1,4 +1,4 @@
-import type { CommandDescriptor, Input, RawInput } from "../descriptor";
+import type { CommandDeclaration, Input, RawInput } from "../descriptor";
 import type { Ref } from "./ref";
 
 type WithRefs<T> = T extends string | number | boolean
@@ -11,8 +11,8 @@ type WithRefs<T> = T extends string | number | boolean
 
 type Fields<T> = { [K in keyof T]: WithRefs<T[K]> };
 
-export type CommandInput<D extends CommandDescriptor> = Fields<Omit<Input<D>, "flags">> & {
+export type CommandInput<D extends CommandDeclaration> = Fields<Omit<Input<D>, "flags">> & {
   flags?: Fields<NonNullable<Input<D>["flags"]>>;
 };
 
-export type CommandRawInput<D extends CommandDescriptor> = WithRefs<RawInput<D>>;
+export type CommandRawInput<D extends CommandDeclaration> = WithRefs<RawInput<D>>;

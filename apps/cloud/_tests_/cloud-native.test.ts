@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
+import { CLOUD_MAX_REQUEST_BYTES, decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import {
   authoritySessionSchema,
   dockerAttemptPlanSchema,
@@ -331,14 +331,14 @@ test("bounded stream cleanup retains typed limits and transport failures", async
 test("a limit failure keeps a rejected cancellation in its cause", async () => {
   const stream = new ReadableStream<Uint8Array>({
     pull(controller) {
-      controller.enqueue(new Uint8Array(24 * 1024 * 1024 + 1));
+      controller.enqueue(new Uint8Array(CLOUD_MAX_REQUEST_BYTES + 1));
     },
     cancel() {
       return Promise.reject(new Error("cancel rejected"));
     },
   });
 
-  const exit = await Effect.runPromiseExit(readBoundedBody(stream, 24 * 1024 * 1024));
+  const exit = await Effect.runPromiseExit(readBoundedBody(stream, CLOUD_MAX_REQUEST_BYTES));
 
   expect(Exit.isFailure(exit)).toBe(true);
 
@@ -424,13 +424,16 @@ test("Worker retains forbidden for foreign run/save bodies and not_yet cloud rou
     expect(await response.json()).toMatchObject({ error: { code: "forbidden" } });
   }
 
-  for (const [path, method] of [
-    ["/secrets", "GET"],
-    ["/types", "POST"],
+  for (const [path, method, body] of [
+    ["/secrets", "GET", undefined],
+    ["/secrets/token", "PUT", { value: "secret" }],
+    ["/secrets/token", "DELETE", undefined],
+    ["/types", "POST", { binary: "git", path: [], name: null }],
   ] as const) {
     const response = await runtime.dispatchFetch(`http://127.0.0.1/api${path}`, {
       method,
-      headers: { Authorization: `Bearer ${credential}` },
+      headers: { Authorization: `Bearer ${credential}`, "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
 
     expect(response.status).toBe(501);

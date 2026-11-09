@@ -12,6 +12,8 @@ import { errnoCode } from "@loopy/core";
 import { CONTAINER } from "./container-layout";
 import { SandboxRequestError } from "./request-error";
 
+const OVERSIZED = `Artifact exceeds its ${SANDBOX_MAX_ARTIFACT_BYTES} byte limit.`;
+
 async function readArtifactFile(path: string): Promise<SandboxArtifact> {
   const directories = [];
   let file;
@@ -53,7 +55,7 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
     }
 
     if (before.size > SANDBOX_MAX_ARTIFACT_BYTES) {
-      throw new SandboxRequestError("output_limit", "Artifact exceeds the 1 MiB byte limit.");
+      throw new SandboxRequestError("output_limit", OVERSIZED);
     }
 
     const buffer = Buffer.alloc(SANDBOX_MAX_ARTIFACT_BYTES + 1);
@@ -70,7 +72,7 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
     }
 
     if (size > SANDBOX_MAX_ARTIFACT_BYTES) {
-      throw new SandboxRequestError("output_limit", "Artifact exceeds the 1 MiB byte limit.");
+      throw new SandboxRequestError("output_limit", OVERSIZED);
     }
 
     const after = await file.stat();

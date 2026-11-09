@@ -103,14 +103,14 @@ export const makeActivationWork = (options: ActivationOptions) =>
         );
       });
 
-    const dispatch = (effects: HostWork[], retryAt: string | null) =>
+    const dispatch = (effects: HostWork[], deadline: string | null) =>
       Effect.gen(function* () {
         for (const work of effects) {
           yield* start(workId(work), perform(options, work));
         }
 
-        if (retryAt !== null) {
-          yield* start(`retry/${retryAt}`, retryWhenDue(retryAt));
+        if (deadline !== null) {
+          yield* start(`retry/${deadline}`, retryWhenDue(deadline));
         }
       });
 

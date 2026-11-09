@@ -53,10 +53,6 @@ export function normalizeRun(run: RunRecord): RunRecord {
     record.wakeAt = utc(record.wakeAt);
   }
 
-  if (record.nextRetryAt !== undefined) {
-    record.nextRetryAt = utc(record.nextRetryAt);
-  }
-
   if (record.owner !== undefined) {
     record.owner = { ...record.owner, heartbeatAt: utc(record.owner.heartbeatAt) };
   }

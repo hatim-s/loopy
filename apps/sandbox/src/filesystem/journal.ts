@@ -12,10 +12,10 @@ import {
   exportRecordSchema,
   planMatches,
 } from "@loopy/contract/sandbox";
+import { readRegularFile } from "@loopy/runtime/os";
 import { Effect, Result } from "effect";
-import { readBytes } from "../journal-files";
 import { checked, failure, io } from "../operations";
-import { stateLayout } from "../state-root";
+import { STATE_FILE_BYTES, stateLayout } from "../state-root";
 import { legacyRecord } from "./legacy";
 
 export class FilesystemJournal {
@@ -23,6 +23,10 @@ export class FilesystemJournal {
   constructor(private readonly root: string) {
     this.layout = stateLayout(root);
   }
+  private readFile(path: string) {
+    return checked("filesystem-journal", () => readRegularFile(path, STATE_FILE_BYTES));
+  }
+
   validPlan(plan: DockerAttemptPlan) {
     return Effect.promise(() => planMatches(this.root, plan));
   }
@@ -33,7 +37,7 @@ export class FilesystemJournal {
         return yield* Effect.fail(new AuthorityError("invalid_state"));
       }
 
-      const bytes = yield* io("filesystem-journal", () => readBytes(this.receiptPath(id)));
+      const bytes = yield* this.readFile(this.receiptPath(id));
 
       if (!bytes) {
         return null;
@@ -97,7 +101,7 @@ export class FilesystemJournal {
 
   released(token: string) {
     return Effect.gen({ self: this }, function* () {
-      const bytes = yield* io("filesystem-journal", () => readBytes(this.releasedPath(token)));
+      const bytes = yield* this.readFile(this.releasedPath(token));
 
       if (!bytes) {
         return null;
@@ -126,9 +130,7 @@ export class FilesystemJournal {
 
       for (const name of yield* io("filesystem-journal", () => readdir(this.layout.exports))) {
         if (/^[a-f0-9]{64}\.json$/.test(name)) {
-          const bytes = yield* io("filesystem-journal", () =>
-            readBytes(join(this.layout.exports, name)),
-          );
+          const bytes = yield* this.readFile(join(this.layout.exports, name));
 
           if (bytes) {
             const record = yield* checked("export decode", () =>

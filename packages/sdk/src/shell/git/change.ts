@@ -1,10 +1,8 @@
-import { builtin } from "../../graph/nodes/command";
+import { builtin, PATHS } from "../builtin";
 import { parseBranch, parseRemote, parseTag } from "../parse/git";
 
 export const change = {
   add: builtin({
-    namespace: "git",
-    name: "add",
     program: "git",
     path: ["add"],
     flags: {
@@ -13,12 +11,10 @@ export const change = {
       force: { cli: "--force", kind: "boolean" },
       update: { cli: "--update", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   commit: builtin({
-    namespace: "git",
-    name: "commit",
     program: "git",
     path: ["commit"],
     flags: {
@@ -31,12 +27,10 @@ export const change = {
       signoff: { cli: "--signoff", kind: "boolean" },
       file: { cli: "-F", kind: "string" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
     positionalSeparator: true,
   }),
   push: builtin({
-    namespace: "git",
-    name: "push",
     program: "git",
     path: ["push"],
     flags: {
@@ -49,11 +43,9 @@ export const change = {
       tags: { cli: "--tags", kind: "boolean" },
       delete: { cli: "--delete", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   pull: builtin({
-    namespace: "git",
-    name: "pull",
     program: "git",
     path: ["pull"],
     flags: {
@@ -61,11 +53,9 @@ export const change = {
       ffOnly: { cli: "--ff-only", kind: "boolean" },
       noRebase: { cli: "--no-rebase", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   fetch: builtin({
-    namespace: "git",
-    name: "fetch",
     program: "git",
     path: ["fetch"],
     flags: {
@@ -75,11 +65,9 @@ export const change = {
       depth: { cli: "--depth", kind: "number" },
     },
     style: "equals",
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   checkout: builtin({
-    namespace: "git",
-    name: "checkout",
     program: "git",
     path: ["checkout"],
     flags: {
@@ -88,11 +76,9 @@ export const change = {
       force: { cli: "--force", kind: "boolean" },
       detach: { cli: "--detach", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   switch: builtin({
-    namespace: "git",
-    name: "switch",
     program: "git",
     path: ["switch"],
     flags: {
@@ -100,7 +86,7 @@ export const change = {
       forceCreate: { cli: "-C", kind: "string" },
       detach: { cli: "--detach", kind: "boolean" },
     },
-    positionals: [{ name: "paths", optional: true, variadic: true }],
+    positionals: PATHS,
   }),
   branch: builtin(
     {
@@ -111,8 +97,6 @@ export const change = {
             "%(refname:short)%00%(HEAD)%00%(upstream:short)%00%(objectname)%00%(upstream:track)",
         },
       },
-      namespace: "git",
-      name: "branch",
       program: "git",
       path: ["branch"],
       flags: {
@@ -124,21 +108,19 @@ export const change = {
         showCurrent: { cli: "--show-current", kind: "boolean" },
       },
       style: "equals",
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseBranch, out: { kind: "value", type: "json[]" } },
   ),
   remote: builtin(
     {
       preset: { flags: { verbose: true } },
-      namespace: "git",
-      name: "remote",
       program: "git",
       path: ["remote"],
       flags: {
         verbose: { cli: "-v", kind: "boolean" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseRemote, out: { kind: "value", type: "json[]" } },
   ),
@@ -146,8 +128,6 @@ export const change = {
     {
       exclude: ["delete", "annotate", "message"],
       preset: { flags: { format: "%(refname:short)%00%(objectname)%00%(taggerdate:iso-strict)" } },
-      namespace: "git",
-      name: "tag",
       program: "git",
       path: ["tag"],
       flags: {
@@ -157,7 +137,7 @@ export const change = {
         message: { cli: "-m", kind: "string" },
         format: { cli: "--format", kind: "string" },
       },
-      positionals: [{ name: "paths", optional: true, variadic: true }],
+      positionals: PATHS,
     },
     { parse: parseTag, out: { kind: "value", type: "json[]" } },
   ),

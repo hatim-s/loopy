@@ -159,5 +159,5 @@ export async function readArtifact<T>(directory: string, artifact: Artifact<T>) 
 }
 
 export async function writeArtifact<T>(directory: string, artifact: Artifact<T>, value: T) {
-  await atomic(artifactPath(directory, artifact), encodeBoundary(artifact.schema)(value));
+  atomic(artifactPath(directory, artifact), encodeBoundary(artifact.schema)(value));
 }

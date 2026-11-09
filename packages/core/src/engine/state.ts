@@ -38,3 +38,21 @@ export type EngineEvent = { at: string } & (
 export function initialState(runId: string, input: Json, nodeRuns: NodeRun[] = []): EngineState {
   return { runId, input, nodeRuns, phase: { kind: "active" } };
 }
+
+// The run must step again by this time: a retry, a rate-limit window, a wait timeout or a sleep.
+export function nextDeadline(nodeRuns: readonly NodeRun[]): string | null {
+  const deadlines = nodeRuns.flatMap((run) => {
+    switch (run.status) {
+      case "retrying":
+      case "rate_limited":
+        return [run.nextRetryAt];
+      case "waiting":
+      case "sleeping":
+        return run.wakeAt === null ? [] : [run.wakeAt];
+      default:
+        return [];
+    }
+  });
+
+  return deadlines.sort()[0] ?? null;
+}
