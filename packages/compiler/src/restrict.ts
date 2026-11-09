@@ -6,6 +6,7 @@ import { diagnostic, syntaxErrors } from "./diagnostic";
 import { AuthorDiagnostics, authorFailure, authorSource, type CompilationError } from "./errors";
 import { checkCodeModule } from "./module";
 import { modulePath } from "./module-imports";
+import { graphModulePath } from "./source-paths";
 import { DEFAULT_LOOPY, declarations, inspectStatements } from "./statements";
 import type { AuthorModule, CompilerDiagnostic } from "./types";
 
@@ -157,7 +158,9 @@ function inspectModule(
       .sort((a, b) => b.start - a.start)
       .reduce(
         (text, module) =>
-          text.slice(0, module.start) + JSON.stringify(module.path) + text.slice(module.end),
+          text.slice(0, module.start) +
+          JSON.stringify(graphModulePath(state.entry, module.path)) +
+          text.slice(module.end),
         source,
       );
 

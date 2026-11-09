@@ -17,6 +17,10 @@ import { readBoundedText } from "./http";
 import type { CloudProtocolError } from "./operation";
 import { CloudError, decodeProtocol, platform } from "./operation";
 
+export const SANDBOX_REQUEST_TIMEOUT_MS = 5000;
+
+const SANDBOX_ARTIFACT_TIMEOUT_MS = 15_000;
+
 export class SandboxProvider implements DurableExecutionProvider {
   private readonly base: URL;
   constructor(
@@ -42,7 +46,7 @@ export class SandboxProvider implements DurableExecutionProvider {
   }
   private request(url: URL, body?: SandboxAttemptRequest) {
     return Effect.gen({ self: this }, function* () {
-      const response = yield* this.send(url, 5000, body);
+      const response = yield* this.send(url, SANDBOX_REQUEST_TIMEOUT_MS, body);
       const text = yield* readBoundedText(response, 4 * 1024 * 1024);
 
       if (!response.ok) {
@@ -89,7 +93,7 @@ export class SandboxProvider implements DurableExecutionProvider {
       url.searchParams.set("attempt", String(request.attempt));
       url.searchParams.set("path", request.path);
 
-      const response = yield* this.send(url, 15000);
+      const response = yield* this.send(url, SANDBOX_ARTIFACT_TIMEOUT_MS);
       const text = yield* readBoundedText(response, 2 * 1024 * 1024);
 
       if (!response.ok) {

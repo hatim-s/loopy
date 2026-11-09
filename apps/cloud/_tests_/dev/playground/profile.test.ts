@@ -1,32 +1,21 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
+import { qualityTestRoot } from "../../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { playgroundConfigSchema, withReceiptMode } from "../../../dev/playground/config";
 import { approvedDiagnostic, diagnosticPath } from "../../../dev/playground/metrics/snapshot";
 import type { PlaygroundProfile } from "../../../dev/playground/profile";
 import { playgroundProfile, profilePorts } from "../../../dev/playground/profile";
 
-const temporary: string[] = [];
-
 const decodeConfig = (selected: PlaygroundProfile, input: Record<string, string>) =>
   withReceiptMode(selected, decodeBoundary(playgroundConfigSchema(selected))(input));
 
-afterEach(async () => {
-  await Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-});
-
-async function freshRoot() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-profile-")));
-  temporary.push(root);
-
-  return root;
-}
+const freshRoot = () => qualityTestRoot("profile");
 
 test("the two profiles share no state path, evidence path or port and reject unknown names", async () => {
-  const root = await freshRoot();
+  const root = freshRoot();
   const legacy = playgroundProfile(root, undefined);
   const architecture = playgroundProfile(root, "architecture");
 
@@ -46,7 +35,7 @@ test("the two profiles share no state path, evidence path or port and reject unk
 });
 
 test("diagnostics reject old profiles, directory symlinks, and unapproved or changed copies", async () => {
-  const root = await freshRoot();
+  const root = freshRoot();
   const selected = playgroundProfile(root, "architecture");
   const diagnostics = join(selected.state, "diagnostics");
   const old = join(root, "old-diagnostic.sqlite");
@@ -94,7 +83,7 @@ test("diagnostics reject old profiles, directory symlinks, and unapproved or cha
 });
 
 test("each profile config holds exactly its own credentials and they stay distinct", async () => {
-  const root = await freshRoot();
+  const root = freshRoot();
   const legacy = playgroundProfile(root, undefined);
   const architecture = playgroundProfile(root, "architecture");
 

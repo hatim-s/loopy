@@ -5,12 +5,10 @@ import { NODE_RUN_STATUSES, nodeRunSchema } from "./graph/node-run";
 import { outputSchema } from "./graph/values";
 import { jsonSchema } from "./json";
 
-export type CommandResult = {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  durationMs: number;
-};
+/** What a parser bundle reads on stdin after its command exits. */
+export type ParserInput = { stdout: string; stderr: string; exitCode: number };
+
+export type CommandResult = ParserInput & { durationMs: number };
 
 export const RUN_STATUSES = [
   "queued",
@@ -124,6 +122,11 @@ export const scheduleSchema = struct({
 
 export type Schedule = Schema.Schema.Type<typeof scheduleSchema>;
 
+// The last failure of the saved version; a null retry means firing disabled the schedule.
+export const scheduleFailureSchema = Schema.NullOr(
+  struct({ error: Schema.String, retryAt: Schema.NullOr(Schema.String) }),
+);
+
 const TERMINAL_RUN_STATUSES = [
   "succeeded",
   "failed",
@@ -177,8 +180,9 @@ export const runtimeEventSchema = Schema.Union([
   struct({
     ...eventFields,
     entity: Schema.Literal("schedule"),
-    kind: Schema.Literals(["saved", "fired", "skipped"]),
-    record: scheduleSchema,
+    kind: Schema.Literals(["saved", "fired", "skipped", "failed"]),
+    // Each event states the current failure, so a stream consumer never infers it from the kind.
+    record: struct({ ...scheduleSchema.fields, failure: scheduleFailureSchema }),
   }),
   struct({
     ...eventFields,

@@ -26,6 +26,6 @@
       "loopy/*": ["./packages/loopy/src/*"]
     }
   },
-  "include": ["packages", "apps", "scripts"],
+  "include": ["packages", "apps", "scripts", "examples/_tests_"],
   "exclude": ["node_modules", "**/dist"]
 }

@@ -1,9 +1,12 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { attemptResources, dockerAttemptPlanSchema } from "@loopy/contract/sandbox";
-import { Miniflare } from "miniflare";
+import { Effect, Exit, Scope } from "effect";
+import { bundleForBrowser } from "../../../../packages/runtime/_tests_/fixtures/bundle";
+import { qualityTestRoot } from "../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { HttpSandboxAuthority } from "../../../sandbox/src/http-authority";
+import { cloudBindings, cloudBucket, cloudWorker, startWorkerd, testWorker } from "./workerd";
 
 export const bridgeToken = "synthetic-receipt-bridge-credential-0001";
 
@@ -12,31 +15,23 @@ export const principalToken = "synthetic-receipt-principal-credential-0001";
 export const namespace = "synthetic-receipt-authority";
 
 export async function receiptHarness(configuration: { stage?: string; token?: string } = {}) {
-  const root = resolve(import.meta.dir, "../../../..");
-  const parent = resolve(root, ".loopy/quality-tests");
-  await mkdir(parent, { recursive: true });
-  const directory = await mkdtemp(`${parent}/receipts-`);
+  // Callers allocate in beforeAll, so the harness owns its scope and closes it in close().
+  const scope = Scope.makeUnsafe();
+  const release = () => Effect.runPromise(Scope.close(scope, Exit.void));
+  const directory = qualityTestRoot("receipts", { scope });
   await writeFile(resolve(directory, "package.json"), JSON.stringify({ private: true }));
-  await mkdir(resolve(directory, ".loopy/loopies"), { recursive: true });
   const stateRoot = resolve(directory, "sandbox");
 
-  const bundle = await Bun.build({
-    entrypoints: [
-      resolve(root, "apps/cloud/src/worker.ts"),
+  await bundleForBrowser(
+    [
+      resolve(import.meta.dir, "../../src/worker.ts"),
       resolve(import.meta.dir, "receipt-rollback-probe.ts"),
       resolve(import.meta.dir, "receipt-count-probe.ts"),
     ],
-    target: "browser",
-    format: "esm",
-    outdir: directory,
-    naming: "[name].js",
-  });
+    directory,
+  );
 
-  if (!bundle.success) {
-    throw new Error(`Receipt fixture bundle failed: ${bundle.logs.join("\n")}`);
-  }
-
-  const bindings = {
+  const bindings = cloudBindings({
     LOOPY_STAGE: configuration.stage ?? "local",
     LOCAL_AUTH: JSON.stringify([{ token: principalToken, workspace: "alpha" }]),
     SANDBOX_URL: "http://127.0.0.1:1",
@@ -45,54 +40,35 @@ export async function receiptHarness(configuration: { stage?: string; token?: st
     RECEIPTS_TOKEN: configuration.token ?? bridgeToken,
     RECEIPTS_NAMESPACE: namespace,
     RECEIPTS_ROOT: stateRoot,
-  };
+  });
 
   function start() {
-    return new Miniflare({
-      host: "127.0.0.1",
-      port: 0,
+    return startWorkerd({
       durableObjectsPersist: resolve(directory, "do"),
       r2Persist: resolve(directory, "r2"),
       workers: [
-        {
-          name: "cloud",
-          modules: true,
-          scriptPath: resolve(directory, "worker.js"),
-          compatibilityDate: "2026-07-30",
-          durableObjects: {
-            WORKSPACES: { className: "Workspace", useSQLite: true },
-            SANDBOX_RECEIPTS: { className: "SandboxReceipts", useSQLite: true },
-          },
-          r2Buckets: { ARTIFACTS: "synthetic-artifacts", RECEIPT_RESULTS: "synthetic-results" },
-          bindings,
-        },
-        {
+        cloudWorker(directory, bindings),
+        testWorker({
           name: "rollback",
           serviceBindings: { CLOUD: "cloud" },
-          modules: true,
           scriptPath: resolve(directory, "receipt-rollback-probe.js"),
-          compatibilityDate: "2026-07-30",
           durableObjects: { PROBE: { className: "ReceiptRollbackProbe", useSQLite: true } },
-        },
-        {
+        }),
+        testWorker({
           name: "counts",
-          modules: true,
           scriptPath: resolve(directory, "receipt-count-probe.js"),
-          compatibilityDate: "2026-07-30",
           durableObjects: { COUNTS: { className: "ReceiptCountProbe", useSQLite: true } },
-          r2Buckets: { RECEIPT_RESULTS: "synthetic-results" },
+          r2Buckets: { RECEIPT_RESULTS: cloudBucket("RECEIPT_RESULTS") },
           bindings,
-        },
+        }),
       ],
     });
   }
 
-  let runtime = start();
+  let runtime = await start();
   let origin = (await runtime.ready).origin;
 
   return {
-    directory,
-    stateRoot,
     get runtime() {
       return runtime;
     },
@@ -118,12 +94,15 @@ export async function receiptHarness(configuration: { stage?: string; token?: st
     },
     async reopen() {
       await runtime.dispose();
-      runtime = start();
+      runtime = await start();
       origin = (await runtime.ready).origin;
     },
     async close() {
-      await runtime.dispose();
-      await rm(directory, { recursive: true, force: true });
+      try {
+        await runtime.dispose();
+      } finally {
+        await release();
+      }
     },
   };
 }

@@ -225,7 +225,7 @@ export class ExecutionWorker {
 
     const parsed = yield* this.bundle(
       step.bundleHash,
-      step.input,
+      step.result,
       step.timeoutMs,
       signal,
       environment,

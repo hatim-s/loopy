@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { Schema } from "effect";
 import ts from "typescript";
+import { bundleForBrowser } from "../../runtime/_tests_/fixtures/bundle";
+import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
 
 const ROOT = resolve(import.meta.dir, "../../..");
 
@@ -32,6 +33,16 @@ const RUNTIME_IMPORTS: Record<RuntimeLayer, readonly RuntimeLayer[]> = {
   executor: ["os"],
   service: [],
   local: ["os", "host", "store", "executor", "service"],
+};
+
+// Engine lives in core, so host needs no other package; only local composes the SDK.
+const RUNTIME_PACKAGES: Record<RuntimeLayer, readonly Package[]> = {
+  os: ["core"],
+  host: ["core"],
+  store: ["core", "contract"],
+  executor: ["core", "contract"],
+  service: ["core", "contract"],
+  local: ["core", "contract", "sdk"],
 };
 
 interface Manifest {
@@ -156,16 +167,16 @@ function workspaceImport(specifier: string) {
   return { owner, key: specifier === name ? "." : `.${specifier.slice(name.length)}` };
 }
 
+function runtimeLayer(file: string) {
+  return RUNTIME_LAYERS.find((candidate) =>
+    relative(sourceRoot("runtime"), file).startsWith(`${candidate}/`),
+  );
+}
+
 function runtimeViolations(file: string, target: string): string[] {
   const root = sourceRoot("runtime");
-
-  const layer = RUNTIME_LAYERS.find((candidate) =>
-    relative(root, file).startsWith(`${candidate}/`),
-  );
-
-  const targetLayer = RUNTIME_LAYERS.find((candidate) =>
-    relative(root, target).startsWith(`${candidate}/`),
-  );
+  const layer = runtimeLayer(file);
+  const targetLayer = runtimeLayer(target);
 
   if (!layer || !targetLayer || layer === targetLayer) {
     return [];
@@ -226,6 +237,12 @@ test("workspace source imports follow package ownership and explicit exports", (
 
         if (!ALLOWED[owner].includes(imported.owner)) {
           violations.push(`${name} may not import ${imported.owner} (${specifier}).`);
+        }
+
+        const layer = owner === "runtime" ? runtimeLayer(file) : undefined;
+
+        if (layer && !RUNTIME_PACKAGES[layer].includes(imported.owner)) {
+          violations.push(`${name} in runtime ${layer} may not import ${imported.owner}.`);
         }
 
         if (!Object.hasOwn(manifest(packageRoot(imported.owner)).exports, imported.key)) {
@@ -362,20 +379,26 @@ test("the entries tsconfig.portable.json typechecks without Bun also bundle for 
     Schema.Struct({ include: Schema.Array(Schema.String) }),
   )(JSON.parse(readFileSync(join(ROOT, "tsconfig.portable.json"), "utf8")));
 
-  const outdir = mkdtempSync(join(tmpdir(), "loopy-portable-"));
+  await bundleForBrowser(
+    include.map((entry) => join(ROOT, entry)),
+    qualityTestRoot("portable"),
+    { naming: "[dir]/[name].[ext]" },
+  );
+});
 
-  try {
-    // Bun.build inside bun test misresolves some nested relative imports, so bundle in a child.
-    const child = Bun.spawn(
-      [process.execPath, "build", "--target=browser", "--outdir", outdir, ...include],
-      { cwd: ROOT, stdout: "pipe", stderr: "pipe" },
-    );
+test("the test script runs every package, app and examples test root", () => {
+  const { scripts } = Schema.decodeUnknownSync(
+    Schema.Struct({ scripts: Schema.Struct({ test: Schema.String }) }),
+  )(manifest(ROOT));
 
-    const [stderr, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
-    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
-  } finally {
-    rmSync(outdir, { recursive: true, force: true });
-  }
+  const roots = [
+    ...["packages", "apps"].flatMap((parent) =>
+      readdirSync(join(ROOT, parent)).map((owner) => `${parent}/${owner}/_tests_`),
+    ),
+    "examples/_tests_",
+  ].filter((root) => existsSync(join(ROOT, root)));
+
+  expect(roots.filter((root) => !scripts.test.split(" ").includes(`./${root}`))).toEqual([]);
 });
 
 test("the published manifest depends on exactly the vendored packages' external dependencies", () => {

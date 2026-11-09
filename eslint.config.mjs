@@ -54,7 +54,7 @@ export default tseslint.config(
     rules: { "no-console": "off" },
   },
   {
-    files: ["packages/loopy/_tests_/**", "apps/cloud/_tests_/**", "examples/**"],
+    files: ["**/_tests_/**", "examples/**"],
     rules: { "sonarjs/cognitive-complexity": "off", "no-console": "off" },
   },
 );

@@ -1,14 +1,17 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { revision } from "@loopy/core";
 import { loopy, sh } from "@loopy/sdk/graph";
+import { Effect, Exit, Scope } from "effect";
 import { Miniflare } from "miniflare";
-import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
-import { qualityTestRoot } from "../../../packages/loopy/_tests_/fixtures/quality-test-root";
+import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
+import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
+import { bounded } from "../../../packages/runtime/_tests_/fixtures/wait";
+import { cloudWorker } from "./fixtures/workerd";
 import {
   type QueueProofDetails,
   type QueueProofEvent,
@@ -19,24 +22,11 @@ const token = "read-queue-synthetic-principal-0000001";
 
 const controlToken = "read-queue-synthetic-control-0000002";
 
-async function bounded<T>(promise: Promise<T>, label: string, ms: number): Promise<T> {
-  const timeout = new AbortController();
-
-  try {
-    return await Promise.race([
-      promise,
-      delay(ms, undefined, { signal: timeout.signal }).then(() => {
-        throw new Error(`${label} exceeded ${ms} ms.`);
-      }),
-    ]);
-  } finally {
-    timeout.abort();
-  }
-}
-
 test("production Workspace queues runs, loopies and event history during provider lookup/start", async () => {
   const repository = resolve(import.meta.dir, "../../..");
-  const directory = await qualityTestRoot("read-queue");
+  // Closed only after the proof passes, so a failure keeps its diagnostics on disk.
+  const retained = Scope.makeUnsafe();
+  const directory = qualityTestRoot("read-queue", { scope: retained });
   const events: QueueProofEvent[] = [];
   const origin = performance.now();
 
@@ -48,16 +38,10 @@ test("production Workspace queues runs, loopies and event history during provide
   console.log(`Read queue proof state: ${directory}`);
 
   try {
-    const build = await Bun.build({
-      entrypoints: [join(repository, "apps/cloud/src/worker.ts")],
-      target: "browser",
-      format: "esm",
-      outdir: join(directory, "bundle"),
-      naming: "[name].js",
-    });
-
-    expect(build.success).toBe(true);
-    expect(build.logs).toEqual([]);
+    await bundleForBrowser(
+      [join(repository, "apps/cloud/src/worker.ts")],
+      join(directory, "bundle"),
+    );
     record("production-bundle", {
       sha256: createHash("sha256")
         .update(await readFile(join(directory, "bundle/worker.js")))
@@ -68,19 +52,7 @@ test("production Workspace queues runs, loopies and event history during provide
       const provider = readQueueProvider(mode, record);
 
       const runtime = new Miniflare({
-        modulesRoot: join(directory, "bundle"),
-        name: `read-queue-${mode}`,
-        host: "127.0.0.1",
-        port: 0,
-        modules: true,
-        scriptPath: join(directory, "bundle/worker.js"),
-        compatibilityDate: "2026-07-30",
-        durableObjects: { WORKSPACES: { className: "Workspace", useSQLite: true } },
-        durableObjectsPersist: join(directory, mode, "do"),
-        r2Buckets: { ARTIFACTS: `read-queue-${mode}` },
-        r2Persist: join(directory, mode, "r2"),
-        bindings: {
-          LOOPY_STAGE: "local",
+        ...cloudWorker(join(directory, "bundle"), {
           LOCAL_AUTH: JSON.stringify([
             { token, workspace: mode },
             { token: controlToken, workspace: "control" },
@@ -88,7 +60,13 @@ test("production Workspace queues runs, loopies and event history during provide
           CONCURRENCY: "1",
           SANDBOX_URL: provider.url,
           SANDBOX_TOKEN: "read-queue-synthetic-provider",
-        },
+        }),
+        modulesRoot: join(directory, "bundle"),
+        name: `read-queue-${mode}`,
+        host: "127.0.0.1",
+        port: 0,
+        durableObjectsPersist: join(directory, mode, "do"),
+        r2Persist: join(directory, mode, "r2"),
       });
 
       const api = async (
@@ -150,7 +128,8 @@ test("production Workspace queues runs, loopies and event history during provide
         const control = await bounded(api(paths[0], controlToken), "control read", 1500);
         expect(control.status).toBe(200);
         expect(decodeBoundary(routes.runs.response)(control.body)).toEqual([]);
-        await delay(200);
+        // The control read was sent after the held reads and has answered, so a held read that
+        // bypassed the queue would have answered too.
         expect(provider.releaseReason).toBeNull();
         expect(
           events
@@ -207,5 +186,5 @@ test("production Workspace queues runs, loopies and event history during provide
     throw cause;
   }
 
-  await rm(directory, { recursive: true, force: true });
+  await Effect.runPromise(Scope.close(retained, Exit.void));
 }, 45_000);

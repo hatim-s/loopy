@@ -35,7 +35,7 @@ export const executionSpecSchema = Schema.Union([
     timeoutMs,
     maxOutputBytes: Schema.NullOr(positiveInt),
     okExitCodes: Schema.Array(Schema.Int).pipe(Schema.mutable),
-    parse: Schema.NullOr(struct({ bundleHash: hashSchema, input: dictionary, timeoutMs })),
+    parse: Schema.NullOr(struct({ bundleHash: hashSchema, timeoutMs })),
   }),
 ]);
 

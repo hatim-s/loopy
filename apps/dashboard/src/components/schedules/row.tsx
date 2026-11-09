@@ -1,6 +1,7 @@
 import type { ScheduleView } from "@loopy/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { until } from "../../lib/format";
 import { useRemoveSchedule, useToggleSchedule } from "../../lib/mutations";
 import { Button } from "../button";
 import { CodedError } from "../error-banner";
@@ -59,6 +60,29 @@ function InputSummary({ input }: { input: ScheduleView["input"] }) {
     <code className="block truncate" title={JSON.stringify(input, null, 2)}>
       {text}
     </code>
+  );
+}
+
+// A failure with no retry means firing disabled the schedule, which outranks the paused switch.
+function scheduleStatus(schedule: ScheduleView) {
+  if (schedule.failure !== null) {
+    return schedule.failure.retryAt === null ? "failed" : "retrying";
+  }
+
+  return schedule.enabled ? "active" : "paused";
+}
+
+function FailureLine({ failure, now }: { failure: ScheduleView["failure"]; now: number }) {
+  if (failure === null) {
+    return null;
+  }
+
+  const first = failure.error.split("\n")[0] ?? failure.error;
+
+  return (
+    <span className="cell-sub block max-w-48 truncate text-danger" title={failure.error}>
+      {failure.retryAt === null ? first : `${first} Retry ${until(failure.retryAt, now)}.`}
+    </span>
   );
 }
 
@@ -124,8 +148,9 @@ export function ScheduleRow({
             >
               <span />
             </button>
-            <StatusPill status={schedule.enabled ? "active" : "paused"} small />
+            <StatusPill status={scheduleStatus(schedule)} small />
           </span>
+          <FailureLine failure={schedule.failure} now={now} />
         </td>
         <td>
           <span className="flex justify-end gap-1.5">

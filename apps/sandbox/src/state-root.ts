@@ -2,6 +2,7 @@ import { lstat, mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { errnoCode } from "@loopy/core";
+import { readRegularFile } from "@loopy/runtime/os";
 import type { SandboxConfig } from "./config";
 
 // Journal records stay small; legacy receipts that embed a captured result fit as well.
@@ -15,6 +16,16 @@ export function stateLayout(root: string) {
     results: join(root, "results"),
     lock: join(root, "service.lock"),
   };
+}
+
+// Sandboxes before the shared pid lock wrote this file as JSON `{pid, nonce}`. The shared lock
+// cannot read that owner, so startup names the manual cleanup instead of converting it.
+function rejectPreviousLock(path: string) {
+  if (readRegularFile(path, 1024)?.toString("utf8").trimStart().startsWith("{")) {
+    throw new Error(
+      `Lock file '${path}' was written by an older sandbox version. Stop any sandbox running on this state root, delete the file, and start again.`,
+    );
+  }
 }
 
 export async function validateStateRoot(config: Pick<SandboxConfig, "worktree" | "stateRoot">) {
@@ -56,6 +67,8 @@ export async function validateStateRoot(config: Pick<SandboxConfig, "worktree" |
       throw new Error("Sandbox state directories must be real directories without symlinks.");
     }
   }
+
+  rejectPreviousLock(layout.lock);
 
   return root;
 }

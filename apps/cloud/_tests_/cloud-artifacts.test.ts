@@ -1,8 +1,6 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import {
   decodeBoundary,
   nodeIdSchema,
@@ -13,182 +11,48 @@ import {
 import { revision } from "@loopy/core";
 import { code, loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
-import { Miniflare } from "miniflare";
-import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import type { Miniflare } from "miniflare";
+import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
+import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
+import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { ARTIFACT_LIMITS } from "../src/artifacts";
+import { startWorkerd, testWorker } from "./fixtures/workerd";
 
 let runtime: Miniflare;
 
-let directory: string;
+const scope = fileScope();
 
 beforeAll(async () => {
-  directory = await realpath(await mkdtemp(join(tmpdir(), "loopy-artifacts-")));
+  const directory = qualityTestRoot("artifacts", { scope });
+  await bundleForBrowser([join(import.meta.dir, "fixtures/artifact-registry-probe.ts")], directory);
 
-  await mkdir(join(directory, ".loopy/loopies"), { recursive: true });
-  await writeFile(
-    join(directory, "effect.ts"),
-    `export { Effect } from ${JSON.stringify(new URL("../../../node_modules/effect/dist/index.js", import.meta.url).pathname)};`,
-  );
-
-  // Give the artifact entry a distinct output name from the service barrel.
-  await writeFile(
-    join(directory, "artifacts.ts"),
-    `export * from ${JSON.stringify(relative(directory, new URL("../src/artifacts", import.meta.url).pathname))};`,
-  );
-
-  const built = await Bun.build({
-    entrypoints: [
-      join(directory, "effect.ts"),
-      join(directory, "artifacts.ts"),
-      new URL("../src/sql-driver.ts", import.meta.url).pathname,
-      new URL("../../../packages/runtime/src/service/index.ts", import.meta.url).pathname,
-      new URL("../../../packages/runtime/src/store/portable.ts", import.meta.url).pathname,
-    ],
-    target: "browser",
-    splitting: true,
-    outdir: directory,
-    naming: "[name].js",
-  });
-
-  if (!built.success || !built.outputs[0]) {
-    throw new Error(built.logs.join("\n"));
-  }
-
-  runtime = new Miniflare({
-    host: "127.0.0.1",
-    port: 0,
-    modulesRoot: directory,
-    compatibilityDate: "2026-07-30",
-    r2Buckets: ["BUCKET"],
+  runtime = await startWorkerd({
     r2Persist: false,
-    durableObjects: { REGISTRY: { className: "RegistryFixture", useSQLite: true } },
     durableObjectsPersist: false,
-    modules: [
-      {
-        type: "ESModule",
-        path: join(directory, "fixture.js"),
-        contents: `
-      import { ARTIFACT_LIMITS, R2ArtifactRegistry } from "./artifacts.js";
-      import { DurableSqlDriver } from "./sql-driver.js";
-      import { Effect } from "./effect.js";
-      import { makeService, eventStream, apiRoutes, dispatch } from "./index.js";
-      import { SqlRunStore } from "./portable.js";
-      export class RegistryFixture {
-        constructor(state, env) {
-          this.state = state; this.env = env;
-          this.store = new SqlRunStore(new DurableSqlDriver(state.storage), {
-            owner: {identity: {pid: null, host: "fixture"}, isAlive: () => false}
-          });
-        }
-        async fetch(request) {
-          // Bundle bytes cross this test harness as tagged base64.
-          const {workspace, operation, args} = JSON.parse(await request.text(), (_, value) =>
-            value && typeof value.$bytes === "string" ? Uint8Array.from(atob(value.$bytes), (char) => char.charCodeAt(0)) : value);
-          const bucket = operation === "failWrite" ? {
-            get: this.env.BUCKET.get.bind(this.env.BUCKET),
-            put: (key, ...rest) => {
-              if (key.includes("/graphs/")) { throw new Error("R2 write unavailable"); }
-              return this.env.BUCKET.put(key, ...rest);
-            }
-          } : this.env.BUCKET;
-          const registry = new R2ArtifactRegistry(this.state.storage, bucket, workspace);
-          try {
-            let value;
-            if (operation === "failWrite") { await Effect.runPromise(registry.save(args[0])); }
-            else if (operation === "race") {
-              value = await Promise.all(args.map(async body => {
-                try { await Effect.runPromise(registry.save(body)); return "saved"; }
-                catch (error) { return error.message; }
-              }));
-            } else if (operation === "listSizes") {
-              const entries = await Effect.runPromise(registry.listSummaries());
-              value = {
-                count: entries.length,
-                bounded: this.state.storage.sql.exec("SELECT sum(s.bytes) AS bytes FROM artifact_definitions d JOIN artifact_graph_sizes s ON s.workspace = d.workspace AND s.revision = d.revision WHERE d.workspace = ?", workspace).one().bytes <= ARTIFACT_LIMITS.listBytes
-              };
-            } else if (operation === "serviceChecks" || operation === "httpSave") {
-              const store = this.store;
-              const service = makeService({
-                store, registry: () => Effect.succeed(registry), clock: {now: Date.now},
-                canonicalWorkspace: () => Effect.succeed(workspace),
-                secrets: {list: () => Effect.succeed([]), set: () => Effect.void, remove: () => Effect.void},
-                generateTypes: () => Effect.die(new Error("unused"))
-              });
-              if(operation === "httpSave") {
-                const url = new URL("http://127.0.0.1/api/loopies/"+args[0].graph.name);
-                const request = new Request(url,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(args[0], (_, value) => value instanceof Uint8Array ? btoa(String.fromCharCode(...value)) : value)});
-                return await dispatch(apiRoutes({service,store,cwd:workspace,daemon:{pid:null,startedAt:new Date().toISOString(),concurrency:1}}),request,url);
-              }
-              const before = await Effect.runPromise(store.eventCursor());
-              const run = await Effect.runPromise(service.startRun(args[0], {}, workspace));
-              const snapshot = await Effect.runPromise(service.runSnapshot(run.id));
-              const schedule = await Effect.runPromise(service.putSchedule(args[0], {cron: "* * * * *"}, workspace));
-              await Effect.runPromise(service.setScheduleEnabled(args[0], false, workspace));
-              const aborter = new AbortController();
-              const response = await Effect.runPromise(eventStream(store, service, {after: before.cursor, epoch: before.epoch}, aborter.signal));
-              const reader = response.body.getReader();
-              await reader.read();
-              const frame = new TextDecoder().decode((await reader.read()).value);
-              aborter.abort();
-              value = {
-                slug: run.slug, revision: (await Effect.runPromise(store.getRun(run.id))).revision,
-                snapshotRead: snapshot.run.id === run.id, scheduled: schedule.slug,
-                enabled: (await Effect.runPromise(service.listSchedules(workspace)))[0].enabled,
-                eventDelivered: frame.includes(run.id) && frame.includes("event: txn")
-              };
-            } else if (operation === "fillCapacity") {
-              this.state.storage.transactionSync(() => {
-                for (let index = 0; index < args[0]; index++) {
-                  this.state.storage.sql.exec(
-                    "INSERT INTO artifact_definitions (workspace, slug, revision, source, saved_at, generation) VALUES (?, ?, ?, ?, ?, ?)",
-                    workspace, "seed-" + index, "a".repeat(64), "/seed.ts", "now", "seed"
-                  );
-                }
-              });
-            } else { value = await Effect.runPromise(registry[operation](...args)); }
-            return Response.json({value: value ?? null});
-          } catch (error) { return Response.json({error: error.message}, {status: 400}); }
-        }
-      }
-      export default { fetch(request, env) {
-        return env.REGISTRY.get(env.REGISTRY.idFromName("registry-test")).fetch(request);
-      }};
-    `,
-      },
-      ...(await Promise.all(
-        built.outputs.map(async (output) => ({
-          type: "ESModule" as const,
-          path: output.path,
-          contents: await output.text(),
-        })),
-      )),
-    ],
+    ...testWorker({
+      scriptPath: join(directory, "artifact-registry-probe.js"),
+      r2Buckets: ["BUCKET"],
+      durableObjects: { REGISTRY: { className: "RegistryProbe", useSQLite: true } },
+    }),
   });
-  await runtime.ready;
+  onCleanup(() => runtime.dispose(), scope);
 });
-
-afterAll(async () => {
-  try {
-    await runtime?.dispose();
-  } finally {
-    if (directory) {
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
-});
-
-// BOUNDARY: JSON.stringify passes every value through; only bundle bytes are tagged as base64.
-function tagBytes(key: string, value: unknown) {
-  return key === "bytes" && value instanceof Uint8Array
-    ? { $bytes: Buffer.from(value).toString("base64") }
-    : value;
-}
 
 async function call(workspace: string, operation: string, ...args: unknown[]) {
-  const response = await runtime.dispatchFetch("http://local/registry", {
-    method: "POST",
-    body: JSON.stringify({ workspace, operation, args }, tagBytes),
-  });
+  const namespace = await runtime.getDurableObjectNamespace("REGISTRY");
+
+  const response = await namespace
+    .get(namespace.idFromName("registry-test"))
+    .fetch("http://probe", {
+      method: "POST",
+      // Bundle bytes cross into the probe as base64, as they do on the HTTP save route.
+      body: JSON.stringify({ workspace, operation, args }, (key, value) =>
+        key === "bytes" && value instanceof Uint8Array
+          ? Buffer.from(value).toString("base64")
+          : value,
+      ),
+    });
 
   const body: unknown = await response.json();
 

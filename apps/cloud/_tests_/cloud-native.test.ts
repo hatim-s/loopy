@@ -1,6 +1,5 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { CLOUD_MAX_REQUEST_BYTES, decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import {
@@ -11,10 +10,14 @@ import {
 import { canonicalJson, type Json } from "@loopy/core";
 import { RegistryError, readBoundedBody } from "@loopy/runtime/service";
 import { Cause, Effect, Exit } from "effect";
-import { Miniflare } from "miniflare";
-import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
+import type { Miniflare } from "miniflare";
+import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
+import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
+import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
+import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { readBoundedText } from "../src/http";
 import { SandboxProvider } from "../src/provider";
+import { cloudWorker, startWorkerd } from "./fixtures/workerd";
 
 const root = resolve(import.meta.dir, "../../..");
 
@@ -28,35 +31,15 @@ let stateRoot: string;
 
 const hash = (value: Json) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 
+const scope = fileScope();
+
 beforeAll(async () => {
-  await mkdir(resolve(root, ".loopy/quality-tests"), { recursive: true });
-  directory = await mkdtemp(resolve(root, ".loopy/quality-tests/cloud-native-"));
-  await mkdir(resolve(directory, ".loopy/loopies"), { recursive: true });
+  directory = qualityTestRoot("cloud-native", { scope });
   stateRoot = resolve(directory, "sandbox");
+  await bundleForBrowser([resolve(root, "apps/cloud/src/worker.ts")], directory);
 
-  const built = await Bun.build({
-    entrypoints: [resolve(root, "apps/cloud/src/worker.ts")],
-    target: "browser",
-    outdir: directory,
-  });
-
-  if (!built.success) {
-    throw new Error(built.logs.join("\n"));
-  }
-
-  runtime = new Miniflare({
-    host: "127.0.0.1",
-    port: 0,
-    modules: true,
-    scriptPath: resolve(directory, "worker.js"),
-    compatibilityDate: "2026-07-30",
-    durableObjects: {
-      WORKSPACES: { className: "Workspace", useSQLite: true },
-      SANDBOX_RECEIPTS: { className: "SandboxReceipts", useSQLite: true },
-    },
-    r2Buckets: ["ARTIFACTS", "RECEIPT_RESULTS"],
-    bindings: {
-      LOOPY_STAGE: "local",
+  runtime = await startWorkerd(
+    cloudWorker(directory, {
       LOCAL_AUTH: JSON.stringify([
         { workspace: "alpha", token: "synthetic-cloud-native-principal-0001" },
       ]),
@@ -66,19 +49,9 @@ beforeAll(async () => {
       RECEIPTS_TOKEN: token,
       RECEIPTS_NAMESPACE: "native",
       RECEIPTS_ROOT: stateRoot,
-    },
-  });
-  await runtime.ready;
-});
-
-afterAll(async () => {
-  try {
-    await runtime?.dispose();
-  } finally {
-    if (directory) {
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
+    }),
+  );
+  onCleanup(() => runtime.dispose(), scope);
 });
 
 async function command(operation: string, input: Json = {}) {

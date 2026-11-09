@@ -83,7 +83,7 @@ import { utc } from "./timestamps";
 import { readDueTurns, readNextTurnAt, readStrandedTurns, readTurnErrors, saveTurn } from "./turns";
 import { readWaits, resolveWait } from "./waits";
 
-const DEFAULT_LEASE_MS = 60_000;
+export const DEFAULT_LEASE_MS = 60_000;
 
 /** The caller owns the connection, including Durable Object eviction and disposal. */
 export class SqlRunStore implements Store, DurableTurnStore, DashboardReader {

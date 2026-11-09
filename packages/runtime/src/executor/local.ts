@@ -10,6 +10,7 @@ import {
 } from "@loopy/core";
 import { Effect } from "effect";
 import { spawnCaptured } from "../os";
+import { DIAGNOSTIC_TAIL_CHARS } from "./protocol";
 import { FilesystemReceipts } from "./receipts";
 import { type WorkerOptions, type WorkerRequest, workerFailure } from "./worker-protocol";
 
@@ -125,7 +126,7 @@ export class LocalExecutor implements Executor {
       new ExecutorError({
         operation: "execute",
         cause: new Error(
-          `Executor exited without a completion receipt. ${completed.output.stderr.slice(-500)}`,
+          `Executor exited without a completion receipt. ${completed.output.stderr.slice(-DIAGNOSTIC_TAIL_CHARS)}`,
         ),
       }),
     );

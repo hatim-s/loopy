@@ -30,18 +30,6 @@ function commandArgv(node: CommandNode, state: EngineState, context: ResolutionC
   return [program, ...operands] satisfies [string, ...string[]];
 }
 
-function parserSpec(node: CommandNode, state: EngineState, context: ResolutionContext) {
-  if (!carriesBundle(node)) {
-    return null;
-  }
-
-  return {
-    bundleHash: bundleHash(node),
-    input: resolveValues(node.parse.input, state, context),
-    timeoutMs: DEFAULT_TIMEOUT_MS,
-  };
-}
-
 export function executionSpec(
   node: Extract<Node, { kind: "code" | "command" }>,
   state: EngineState,
@@ -56,7 +44,6 @@ export function executionSpec(
     };
   }
 
-  const parse = parserSpec(node, state, context);
   const { options } = node;
 
   return {
@@ -77,6 +64,8 @@ export function executionSpec(
     timeoutMs: options.timeout === undefined ? DEFAULT_TIMEOUT_MS : durationMs(options.timeout),
     maxOutputBytes: options.maxOutputBytes ?? null,
     okExitCodes: [...node.okExitCodes],
-    parse,
+    parse: carriesBundle(node)
+      ? { bundleHash: bundleHash(node), timeoutMs: DEFAULT_TIMEOUT_MS }
+      : null,
   };
 }

@@ -1,7 +1,7 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { qualityTestRoot } from "../../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { requireCurrentBaseline } from "../../../dev/playground/baseline";
 import { groups, summaryPath } from "../../../dev/playground/journal";
 import { baselineEndpoints } from "../../../dev/playground/metrics/sampler";
@@ -12,15 +12,8 @@ import { baselineReceipt } from "./baseline-fixture";
 
 const batch = "fresh-batch";
 
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-});
-
 async function freshProfile() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "loopy-baseline-gate-")));
-  roots.push(root);
+  const root = qualityTestRoot("baseline-gate");
   const profile = playgroundProfile(root, "architecture");
   await mkdir(profile.state, { recursive: true });
   await mkdir(profile.evidence, { recursive: true });

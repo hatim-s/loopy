@@ -186,9 +186,7 @@ export function graphView(graph: Graph): GraphView {
         return { ...node, module: { name: node.module.path.split("/").at(-1) ?? "" } };
       }
 
-      return node.kind === "command"
-        ? { ...node, parse: node.parse === null ? null : { input: node.parse.input } }
-        : node;
+      return node.kind === "command" ? { ...node, parse: node.parse !== null } : node;
     }),
     warnings: graph.warnings.map(({ code, message, node }) => ({
       code,

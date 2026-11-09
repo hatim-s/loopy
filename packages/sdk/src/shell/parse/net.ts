@@ -1,4 +1,4 @@
-import type { CommandResult } from "@loopy/core";
+import type { ParserInput } from "@loopy/core";
 import { jsonValue, unexpected } from "./shared";
 
 type Curl = {
@@ -71,7 +71,7 @@ function responseBody(stdout: string, status: number, redirects: number) {
 }
 
 // BOUNDARY: curl metadata is untrusted JSON; require the fields used in the typed result.
-export function parseCurl({ stdout }: CommandResult): Curl {
+export function parseCurl({ stdout }: ParserInput): Curl {
   const marker = stdout.lastIndexOf(CURL_MARKER);
 
   if (marker === -1) {

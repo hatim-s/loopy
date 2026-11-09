@@ -22,7 +22,7 @@ function readSchedule(ctx: SqlContext, { workspace, slug }: ScheduleKey) {
 function emitSchedule(
   write: SqlWrite,
   schedule: ScheduleKey,
-  kind: "saved" | "fired" | "skipped",
+  kind: "saved" | "fired" | "skipped" | "failed",
 ): void {
   const row = readSchedule(write, schedule);
 
@@ -30,7 +30,20 @@ function emitSchedule(
     throw new Error("Schedule disappeared before commit. Restore storage.");
   }
 
-  emit(write, { entity: "schedule", kind, runId: null, record: rowToSchedule(row) });
+  const failure =
+    write.db
+      .query<{ error: string; retryAt: string | null }, [string, string, number]>(
+        `SELECT error,retry_at AS retryAt FROM schedule_failures
+        WHERE workspace=? AND slug=? AND version=?`,
+      )
+      .get(row.workspace, row.slug, row.version) ?? null;
+
+  emit(write, {
+    entity: "schedule",
+    kind,
+    runId: null,
+    record: { ...rowToSchedule(row), failure },
+  });
 }
 
 export function readSchedules(ctx: SqlContext): Schedule[] {
@@ -240,11 +253,13 @@ export function failSchedule(
     )
     .run(retryAt === null ? null : utc(retryAt), error, workspace, slug, version);
 
-  if (retryAt === null) {
-    emitSchedule(write, schedule, "saved");
+  if (recorded.changes === 0) {
+    return false;
   }
 
-  return recorded.changes > 0;
+  emitSchedule(write, schedule, "failed");
+
+  return true;
 }
 
 export function readScheduleOverview(ctx: SqlContext) {

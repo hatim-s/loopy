@@ -6,27 +6,28 @@ import {
   type CommandSpec,
   type ExecutionResult,
   isString,
-  type Json,
   limitLogs,
+  type ParserInput,
 } from "@loopy/core";
 import type { CommandExecutionError } from "../os";
 import { redactValue } from "./redact";
 
 type Redact = (text: string, truncated?: boolean) => string;
 
+/** Failure messages carry only the end of a stream, where the cause is usually printed. */
+export const DIAGNOSTIC_TAIL_CHARS = 500;
+
 type FailureCode = Extract<ExecutionResult, { kind: "failed" }>["error"]["code"];
 
 /**
  * Source of the entry the compiler bundles around each code or parser module. It writes the
  * protocol this file decodes: stderr lines are `{message, data}` logs, the final stdout line
- * is the JSON result, and a parser bundle reads the `{result, input}` envelope commandResult
- * builds. Bun folds import.meta.main for virtual entrypoints, so the bundle compares its path.
+ * is the JSON result, and a parser bundle reads the command result commandResult hands it.
+ * Bun folds import.meta.main for virtual entrypoints, so the bundle compares its path.
  */
 export function runnerSource(module: string, exportName: string, kind: "code" | "parser") {
   const invocation =
-    kind === "code"
-      ? "run(input, { workspace: process.cwd(), log })"
-      : "run(input.result, input.input)";
+    kind === "code" ? "run(input, { workspace: process.cwd(), log })" : "run(input)";
 
   return `
     import {fileURLToPath} from "node:url";
@@ -47,20 +48,20 @@ export function runnerSource(module: string, exportName: string, kind: "code" | 
   `;
 }
 
-/** The next step after a command exits: a final result, or its parser bundle with the envelope. */
+/** The next step after a command exits: a final result, or its parser bundle with the raw result. */
 export type CommandStep =
   | { kind: "finished"; result: ExecutionResult }
   | {
       kind: "parse";
       bundleHash: string;
       timeoutMs: number;
-      input: { result: Json; input: Json };
+      result: ParserInput;
       logs: AttemptLog[];
     };
 
 function exitMessage(exitCode: number, stderr: string) {
   return stderr
-    ? `Command exited with code ${exitCode}: ${stderr.slice(-500)}. Inspect stderr and correct the command.`
+    ? `Command exited with code ${exitCode}: ${stderr.slice(-DIAGNOSTIC_TAIL_CHARS)}. Inspect stderr and correct the command.`
     : `Command exited with code ${exitCode}. Correct the command.`;
 }
 
@@ -94,13 +95,11 @@ export function commandResult(spec: CommandSpec, raw: CommandResult, redact: Red
   }
 
   // Parsers read the unredacted streams inside the same sandbox; their output is redacted later.
-  const result = { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode };
-
   return {
     kind: "parse",
     bundleHash: spec.parse.bundleHash,
     timeoutMs: spec.parse.timeoutMs,
-    input: { result, input: spec.parse.input },
+    result: { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exitCode },
     logs,
   };
 }
@@ -198,7 +197,7 @@ export function bundleResult(
     const diagnostic = logs
       .map((log) => `${log.message}: ${isString(log.data) ? log.data : JSON.stringify(log.data)}`)
       .join("\n")
-      .slice(-500);
+      .slice(-DIAGNOSTIC_TAIL_CHARS);
 
     return {
       kind: "failed",

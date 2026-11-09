@@ -1,18 +1,11 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { qualityTestRoot } from "../../../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { requireFreshDurableRoot } from "../../../dev/playground/receipt/selection";
 
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-});
-
 test("durable selection rejects filesystem receipts and unreleased export guards", async () => {
-  const root = await mkdtemp(join(tmpdir(), "loopy-receipt-selection-"));
-  roots.push(root);
+  const root = qualityTestRoot("receipt-selection");
   await mkdir(join(root, "receipts"));
   await mkdir(join(root, "exports"));
   await requireFreshDurableRoot(root);
