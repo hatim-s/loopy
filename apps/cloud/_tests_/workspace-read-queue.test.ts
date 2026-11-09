@@ -120,7 +120,7 @@ test("production Workspace queues runs, loopies and event history during provide
       expect(runs?.status).toBe(200);
       expect(loopies?.status).toBe(200);
       expect(history?.status).toBe(200);
-      expect(decodeBoundary(routes.runs.response)(runs?.body)).toMatchObject([
+      expect(decodeBoundary(routes.runs.response)(runs?.body).runs).toMatchObject([
         { id: run.id, status: "succeeded" },
       ]);
       expect(decodeBoundary(routes.loopies.response)(loopies?.body)).toMatchObject([
