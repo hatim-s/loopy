@@ -19,11 +19,24 @@ test("the two profiles share no state path, evidence path or port and reject unk
   const legacy = playgroundProfile(root, undefined);
   const architecture = playgroundProfile(root, "architecture");
 
-  for (const key of ["state", "runtime", "sandboxState", "repository", "evidence"] as const) {
+  const paths = [
+    "state",
+    "runtime",
+    "sandboxState",
+    "repository",
+    "evidence",
+    "daemonState",
+  ] as const;
+
+  for (const key of paths) {
     expect(architecture[key]).not.toBe(legacy[key]);
   }
 
-  const ports = [...profilePorts(legacy), ...profilePorts(architecture)];
+  const ports = [legacy, architecture].flatMap((selected) => [
+    ...profilePorts(selected),
+    selected.daemonPort,
+  ]);
+
   expect(new Set(ports).size).toBe(ports.length);
   expect(playgroundProfile(root, architecture.environment.LOOPY_PLAYGROUND_PROFILE)).toEqual(
     architecture,

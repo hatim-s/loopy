@@ -10,7 +10,13 @@ import type { AttemptDependencies } from "../src/attempt/dependencies";
 import { FilesystemAuthority } from "../src/filesystem/authority";
 import { failure } from "../src/operations";
 import { stateLayout } from "../src/state-root";
-import { artifactReader, authorityFixture, successful, uncertain } from "./fixtures/authority";
+import {
+  artifactReader,
+  authorityFixture,
+  CountingBackend,
+  successful,
+  uncertain,
+} from "./fixtures/authority";
 import { openSandbox, run } from "./fixtures/run";
 
 // A hang fails here with its own message, well before the suite timeout, with load headroom.
@@ -64,24 +70,9 @@ class UnavailableAfterAdmit extends FilesystemAuthority {
 test("server close aborts an outage-bound admission handler and successor only recovers", async () => {
   const fixture = await authorityFixture();
   const authority = new UnavailableAfterAdmit(fixture.config.stateRoot);
-  let starts = 0;
-  let recoveries = 0;
   let dependencyCloses = 0;
 
-  const backend = {
-    start: () =>
-      Effect.gen(function* () {
-        starts++;
-
-        return successful;
-      }),
-    recover: () =>
-      Effect.gen(function* () {
-        recoveries++;
-
-        return uncertain;
-      }),
-  };
+  const backend = new CountingBackend();
 
   const service = await openSandbox(fixture.config, () =>
     Effect.promise(async () => ({
@@ -107,7 +98,7 @@ test("server close aborts an outage-bound admission handler and successor only r
     await within(closing, "Server shutdown waited for unavailable admission reconciliation");
     await within(pending, "HTTP request remained pending after server close");
     expect(authority.unavailable).toBe(true);
-    expect(starts).toBe(0);
+    expect(backend.starts).toBe(0);
     expect(dependencyCloses).toBe(1);
     expect(await Bun.file(stateLayout(fixture.config.stateRoot).lock).exists()).toBe(false);
 
@@ -126,8 +117,8 @@ test("server close aborts an outage-bound admission handler and successor only r
         kind: "finished",
         result: uncertain,
       });
-      expect(starts).toBe(0);
-      expect(recoveries).toBe(1);
+      expect(backend.starts).toBe(0);
+      expect(backend.recoveries).toBe(1);
     } finally {
       await run(successor.close());
     }

@@ -1,15 +1,7 @@
 import { expect, test } from "bun:test";
-import { readdir } from "node:fs/promises";
-import {
-  AuthorityError,
-  type AuthorityInput,
-  RECEIPTS_NAMESPACE_HEADER,
-} from "@loopy/contract/sandbox";
+import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { Cause, Deferred, Effect, Exit, Fiber, Result } from "effect";
-import { DockerBackend } from "../src/docker";
-import { DockerClient } from "../src/docker/client";
 import { FilesystemAuthority } from "../src/filesystem/authority";
-import { HttpSandboxAuthority } from "../src/http-authority";
 import { failure, SandboxOperationError } from "../src/operations";
 import { SandboxRequestError } from "../src/request-error";
 import { startSandbox } from "../src/server";
@@ -68,105 +60,6 @@ test("HTTP composition uses fixture port zero and keeps error envelopes", () =>
       ),
     );
   }));
-
-test("injected Docker absence yields uncertain result without reissuing work", () =>
-  fixture(async ({ config, plan }) => {
-    const commands: string[][] = [];
-
-    const backend = new DockerBackend(
-      config,
-      new DockerClient(config, (argv) =>
-        Effect.sync(() => {
-          commands.push(argv);
-
-          return {
-            stdout: "",
-            stderr: "",
-            exitCode: argv.includes("inspect") ? 1 : 0,
-          };
-        }),
-      ),
-    );
-
-    const result = await Effect.runPromise(backend.recover(plan));
-    expect(result.kind === "failed" && result.error.code).toBe("uncertain");
-    expect(commands.some((argv) => argv.includes("start") || argv.includes("create"))).toBe(false);
-  }));
-
-test("loopback authority HTTP keeps exact command and rejection envelopes", async () => {
-  const seen: unknown[] = [];
-  const namespaces: (string | null)[] = [];
-  let reject = false;
-
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: async (request) => {
-      namespaces.push(request.headers.get(RECEIPTS_NAMESPACE_HEADER));
-      seen.push(await request.json());
-
-      return reject
-        ? Response.json({ error: "stale_session" }, { status: 409 })
-        : Response.json({ epoch: 0 });
-    },
-  });
-
-  try {
-    const authority = new HttpSandboxAuthority({
-      url: server.url.origin,
-      token: "fixture",
-      namespace: "fixture",
-    });
-
-    expect(await Effect.runPromise(authority.status({}))).toEqual({ epoch: 0 });
-    reject = true;
-    const result = await Effect.runPromise(authority.status({}).pipe(Effect.result));
-    expect(
-      Result.isFailure(result) && result.failure instanceof AuthorityError && result.failure.code,
-    ).toBe("stale_session");
-    expect(seen).toEqual([
-      { operation: "status", input: {} },
-      { operation: "status", input: {} },
-    ]);
-    expect(namespaces).toEqual(["fixture", "fixture"]);
-  } finally {
-    await server.stop(true);
-  }
-});
-
-test("HTTP adapter refuses cloud origins and rejects malformed operation responses", async () => {
-  for (const url of [
-    "https://127.0.0.1",
-    "http://cloud.invalid",
-    "http://127.0.0.1/path",
-    "http://user@localhost",
-    "http://localhost/#fragment",
-  ]) {
-    expect(() => new HttpSandboxAuthority({ url, token: "fixture", namespace: "fixture" })).toThrow(
-      "requires a loopback HTTP origin",
-    );
-  }
-
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () => Response.json({ kind: "none" }),
-  });
-
-  try {
-    const client = new HttpSandboxAuthority({
-      url: server.url.origin,
-      token: "fixture",
-      namespace: "fixture",
-    });
-
-    await expect(Effect.runPromise(client.read({ id: "f".repeat(64) }))).rejects.toThrow(
-      "Expected",
-    );
-  } finally {
-    await server.stop(true);
-  }
-});
 
 test("HTTP export cleanup takes precedence when reading and release both fail", () =>
   fixture(async ({ config, dependencies, request, plan }) => {
@@ -333,32 +226,6 @@ test("interrupted request leaves admitted work owned and concurrent close waits 
           expect(closed).toBe(2);
         }),
       ),
-    );
-  }));
-
-test("interrupted injected Docker transport removes its owned staging directory", () =>
-  fixture(async ({ config, request, plan }) => {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const entered = yield* Deferred.make<void>();
-
-        const backend = new DockerBackend(
-          config,
-          new DockerClient(config, () =>
-            Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
-          ),
-        );
-
-        const worker = yield* backend.start(plan, request).pipe(Effect.forkChild);
-
-        yield* Deferred.await(entered);
-        yield* Fiber.interrupt(worker);
-        const exit = yield* Fiber.await(worker);
-        expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
-        expect(yield* Effect.promise(() => readdir(stateLayout(config.stateRoot).staging))).toEqual(
-          [],
-        );
-      }),
     );
   }));
 

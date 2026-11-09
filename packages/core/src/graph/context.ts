@@ -9,23 +9,47 @@ export type Context = {
   nodes: Map<string, Node>;
 };
 
-export function targets(node: Node): NodeId[] {
+type ControlNode = Extract<
+  Node,
+  { kind: "branch" | "switch" | "map" | "parallel" | "finally" | "rescue" }
+>;
+
+/** Each scoped entry a control node routes into, named the way authors and views label it. */
+export function arms(
+  node: ControlNode | { readonly kind: Exclude<Node["kind"], ControlNode["kind"]> },
+): [name: string, entry: NodeId][] {
   switch (node.kind) {
     case "branch":
-      return Object.values(node.arms);
+      return [
+        ["yes", node.arms.yes],
+        ["no", node.arms.no],
+      ];
     case "switch":
-      return [...Object.values(node.cases), ...(node.default === null ? [] : [node.default])];
+      return [
+        ...Object.entries(node.cases),
+        ...(node.default === null ? [] : [["default", node.default] satisfies [string, NodeId]]),
+      ];
     case "map":
-      return [node.body];
+      return [["each", node.body]];
     case "parallel":
-      return Object.values(node.branches);
+      return Object.entries(node.branches);
     case "finally":
-      return [node.body, node.cleanup];
+      return [
+        ["body", node.body],
+        ["cleanup", node.cleanup],
+      ];
     case "rescue":
-      return [node.body, node.handler];
+      return [
+        ["body", node.body],
+        ["handler", node.handler],
+      ];
     default:
       return [];
   }
+}
+
+export function targets(node: Node): NodeId[] {
+  return arms(node).map(([, entry]) => entry);
 }
 
 export function ancestors(node: Node, nodes: Map<string, Node>): Node[] {

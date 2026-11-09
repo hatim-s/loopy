@@ -1,2 +1,2 @@
-import {loopy, log, wait, code} from "__SDK__";
+import {loopy, log, wait, code} from "loopy";
 export default loopy("invalid", {input:{}, run: () => code("x",{in:{},out:{kind:"value",type:"number"},module:"./not-function.ts"})});

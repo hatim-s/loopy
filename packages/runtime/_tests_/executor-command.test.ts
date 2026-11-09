@@ -3,7 +3,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { graphSchema } from "@loopy/contract";
 import { DEFAULT_MAX_OUTPUT_BYTES, isRecord } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
-import { loopy, sh } from "@loopy/sdk/graph";
+import { loopy, sh } from "@loopy/sdk";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { LocalExecutor } from "../src/executor";

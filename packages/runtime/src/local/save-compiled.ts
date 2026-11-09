@@ -1,17 +1,12 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import {
-  definitionSummary,
-  type PutLoopyBody,
-  unavailableSource,
-  validateCompiled,
-} from "@loopy/contract";
+import { type PutLoopyBody, unavailableSource } from "@loopy/contract";
+import { validateCompiled } from "@loopy/contract/server";
 import { canonicalJson } from "@loopy/core";
 import { Effect } from "effect";
 import { writeFileAtomically } from "../os";
-import { type ArtifactRegistry, ArtifactValidationError, RegistryError } from "../service";
+import { ArtifactValidationError, RegistryError, registrySync } from "../service";
 import type { Registry } from "./registry";
-import { registrySync } from "./registry";
 import { redactSourceArtifact } from "./source-view";
 
 export const saveCompiled = Effect.fn(function* (registry: Registry, body: PutLoopyBody) {
@@ -62,15 +57,5 @@ export const saveCompiled = Effect.fn(function* (registry: Registry, body: PutLo
     writeFileAtomically(registry.graphPath(body.revision), canonicalJson(body.graph), 0o600),
   );
 
-  return yield* registry.save({ ...body, sourceArtifact });
-});
-
-export const makeArtifactRegistry = (registry: Registry): ArtifactRegistry => ({
-  workspace: () => Effect.succeed(registry.project),
-  listSummaries: () =>
-    registry.list().pipe(Effect.map((entries) => entries.map(definitionSummary))),
-  get: (slug) => registry.get(slug),
-  revisionGraph: (revision) => registry.revisionGraph(revision),
-  revisionSource: (slug, revision) => registry.revisionSource(slug, revision),
-  save: (body) => saveCompiled(registry, body).pipe(Effect.asVoid),
+  return yield* registry.publish({ ...body, sourceArtifact });
 });

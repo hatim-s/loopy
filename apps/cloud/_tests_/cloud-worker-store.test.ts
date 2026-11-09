@@ -1,44 +1,30 @@
-import { beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "@loopy/contract";
+import { decodeBoundary, encodeRunCursor, jsonSchema, PAGE_LIMIT, routes } from "@loopy/contract";
 import { waitRecordSchema } from "@loopy/core";
 import { Schema } from "effect";
-import type { Miniflare } from "miniflare";
-import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
-import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
-import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
-import { cloudBucket, startWorkerd, testWorker } from "./fixtures/workerd";
+import { probeRuntime } from "./fixtures/workerd";
 
-let runtime: Miniflare;
-
-const scope = fileScope();
+let harness: Awaited<ReturnType<typeof probeRuntime>>;
 
 beforeAll(async () => {
-  const directory = qualityTestRoot("workerd-store", { scope });
-  await bundleForBrowser([resolve(import.meta.dir, "fixtures/cloud-worker-probe.ts")], directory);
-
-  runtime = await startWorkerd(
-    testWorker({
-      name: "probe",
-      scriptPath: resolve(directory, "cloud-worker-probe.js"),
-      durableObjects: { PROBES: { className: "CloudWorkerProbe", useSQLite: true } },
-      r2Buckets: { ARTIFACTS: cloudBucket("ARTIFACTS") },
-    }),
-  );
-  onCleanup(() => runtime.dispose(), scope);
+  harness = await probeRuntime({
+    entry: resolve(import.meta.dir, "fixtures/cloud-worker-probe.ts"),
+    name: "probe",
+    className: "CloudWorkerProbe",
+    r2: "ARTIFACTS",
+  });
 }, 60_000);
 
+afterAll(async () => {
+  await harness?.cleanup();
+});
+
 async function probe(command: string, instance = command) {
-  const namespace = await runtime.getDurableObjectNamespace("PROBES", "probe");
+  const response = await harness.probe(instance, { path: `/${command}` });
+  expect(response).toMatchObject({ status: 200 });
 
-  const response = await namespace
-    .get(namespace.idFromName(instance))
-    .fetch(`http://probe/${command}`);
-
-  const body: unknown = await response.json();
-  expect({ status: response.status, body }).toMatchObject({ status: 200 });
-
-  return decodeBoundary(jsonSchema)(body);
+  return decodeBoundary(jsonSchema)(response.body);
 }
 
 test("workerd rolls back logs, usage and outbox rows when an apply batch fails", async () => {
@@ -63,7 +49,7 @@ test("workerd reopens durable records and fences stale lease owners without emit
     marker: "retained",
     logs: [],
   });
-  await runtime.unsafeEvictDurableObject("probe", "CloudWorkerProbe", { name: "owners" });
+  await harness.evict("owners");
   expect(await probe("reopen", "owners")).toMatchObject({
     cursor: { cursor: 5 },
     marker: "retained",
@@ -118,8 +104,11 @@ test("workerd pruning removes the whole transaction across an age boundary and p
   });
 });
 
-test("workerd run pages retain all pending hooks through the 200-row contract limit", async () => {
-  const namespace = await runtime.getDurableObjectNamespace("PROBES", "probe");
+test("workerd run pages retain all pending hooks through the contract page limit", async () => {
+  const total = PAGE_LIMIT + 5;
+  const limits = [PAGE_LIMIT / 2 - 1, PAGE_LIMIT / 2, PAGE_LIMIT];
+
+  const namespace = await harness.runtime.getDurableObjectNamespace("PROBES", "probe");
   const object = namespace.get(namespace.idFromName("pagination"));
   const seeded = await object.fetch("http://probe/pagination/seed");
 
@@ -135,11 +124,20 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
   const seededHooks = new Map(seed.hooks.map((hook) => [hook.runId, hook]));
   expect({ status: seeded.status, seed }).toMatchObject({ status: 200 });
   expect(seed).toMatchObject({
-    total: 205,
+    total,
     hooks: expect.arrayContaining([
-      expect.objectContaining({ runId: "page-200", resolvedAt: "2026-10-22T00:00:00.000Z" }),
-      expect.objectContaining({ runId: "page-201", expiredAt: "2026-10-22T00:00:00.000Z" }),
-      expect.objectContaining({ runId: "page-202", expiresAt: "2026-10-22T00:00:00.000Z" }),
+      expect.objectContaining({
+        runId: `page-${PAGE_LIMIT}`,
+        resolvedAt: "2026-10-22T00:00:00.000Z",
+      }),
+      expect.objectContaining({
+        runId: `page-${PAGE_LIMIT + 1}`,
+        expiredAt: "2026-10-22T00:00:00.000Z",
+      }),
+      expect.objectContaining({
+        runId: `page-${PAGE_LIMIT + 2}`,
+        expiresAt: "2026-10-22T00:00:00.000Z",
+      }),
     ]),
   });
 
@@ -148,33 +146,29 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
     const body: unknown = await response.json();
     expect({ status: response.status, body }).toMatchObject({ status: 200 });
 
-    return decodeBoundary(routes.runs.response)(body);
+    return decodeBoundary(routes.runs.response)(body).runs;
   }
 
   const boundaries = [];
 
-  for (const limit of [99, 100, 200]) {
+  for (const limit of limits) {
     const response = await object.fetch(`http://probe/pagination/runs?limit=${limit}`);
     const body: unknown = await response.json();
     boundaries.push({
       limit,
       status: response.status,
-      result: response.ok ? decodeBoundary(routes.runs.response)(body).length : body,
+      result: response.ok ? decodeBoundary(routes.runs.response)(body).runs.length : body,
     });
   }
 
-  expect(boundaries).toEqual([
-    { limit: 99, status: 200, result: 99 },
-    { limit: 100, status: 200, result: 100 },
-    { limit: 200, status: 200, result: 200 },
-  ]);
+  expect(boundaries).toEqual(limits.map((limit) => ({ limit, status: 200, result: limit })));
 
   const expectedIds = Array.from(
-    Array(205).keys(),
+    Array(total).keys(),
     (index) => `page-${String(index).padStart(3, "0")}`,
   ).reverse();
 
-  for (const limit of [99, 100, 200]) {
+  for (const limit of limits) {
     const first = await page(`limit=${limit}`);
     expect(first.map(({ id }) => id)).toEqual(expectedIds.slice(0, limit));
 
@@ -184,15 +178,18 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
       throw new Error("Synthetic first page was empty.");
     }
 
-    const rest = await page(`limit=200&before=${encodeURIComponent(encodeRunCursor(last))}`);
+    const rest = await page(
+      `limit=${PAGE_LIMIT}&before=${encodeURIComponent(encodeRunCursor(last))}`,
+    );
+
     const all = [...first, ...rest];
     expect(all.map(({ id }) => id)).toEqual(expectedIds);
-    expect(new Set(all.map(({ id }) => id)).size).toBe(205);
+    expect(new Set(all.map(({ id }) => id)).size).toBe(total);
 
     for (const row of all) {
       const index = Number(row.id.slice(5));
 
-      if (index >= 200) {
+      if (index >= PAGE_LIMIT) {
         expect(row.waitingOn).toBeNull();
         continue;
       }
@@ -213,11 +210,11 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
     }
   }
 
-  const waiting = await page("limit=200&waiting=true");
-  expect(waiting.map(({ id }) => id)).toEqual(expectedIds.slice(5));
-  expect(new Set(waiting.map(({ waitingOn }) => waitingOn?.token)).size).toBe(200);
-  expect((await page("limit=200&waiting=false")).map(({ id }) => id)).toEqual(
-    expectedIds.slice(0, 5),
+  const waiting = await page(`limit=${PAGE_LIMIT}&waiting=true`);
+  expect(waiting.map(({ id }) => id)).toEqual(expectedIds.slice(total - PAGE_LIMIT));
+  expect(new Set(waiting.map(({ waitingOn }) => waitingOn?.token)).size).toBe(PAGE_LIMIT);
+  expect((await page(`limit=${PAGE_LIMIT}&waiting=false`)).map(({ id }) => id)).toEqual(
+    expectedIds.slice(0, total - PAGE_LIMIT),
   );
   const oldest = waiting.at(-1);
 
@@ -225,8 +222,12 @@ test("workerd run pages retain all pending hooks through the 200-row contract li
     throw new Error("Synthetic waiting page was empty.");
   }
 
-  expect(await page(`limit=200&before=${encodeURIComponent(encodeRunCursor(oldest))}`)).toEqual([]);
-  expect((await object.fetch("http://probe/pagination/runs?limit=201")).status).toBe(400);
+  expect(
+    await page(`limit=${PAGE_LIMIT}&before=${encodeURIComponent(encodeRunCursor(oldest))}`),
+  ).toEqual([]);
+  expect((await object.fetch(`http://probe/pagination/runs?limit=${PAGE_LIMIT + 1}`)).status).toBe(
+    400,
+  );
 });
 
 test("R2 conditional create preserves the original bytes and enforces bounded tenant reads", async () => {

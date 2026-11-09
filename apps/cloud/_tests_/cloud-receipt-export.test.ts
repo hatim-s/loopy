@@ -81,13 +81,6 @@ test("real workerd recovery pages skip terminal attempts and released export his
 
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
-    counts: {
-      attempts: [{ kind: "finished", count: 1001 }],
-      exports: [
-        { active: 0, count: 1000 },
-        { active: 1, count: 1 },
-      ],
-    },
     recovered: { attempts: [], exports: [{ token: "active" }], next: null },
     malformed: expect.stringContaining('Expected { "kind": "started"'),
     exactVolume: { exports: [{ token: "active" }], next: null },

@@ -83,7 +83,7 @@ test("each call uses the method and path from the route table, with the token", 
   ).rejects.toBeInstanceOf(BackendError);
   expect(last()?.path).toBe("/api/loopies/triage/graph?workspace=%2Fwork%2Fa");
 
-  reply = () => Response.json([run]);
+  reply = () => Response.json({ runs: [run], next: null });
   await backend.call("runs", { query: { slug: "triage", limit: 20 } });
   expect(last()?.method).toBe("GET");
   expect(last()?.path).toBe("/api/runs?slug=triage&limit=20");
@@ -265,9 +265,7 @@ test("byte-at-a-time CRLF frames deliver a batch", async () => {
   reply = () =>
     new Response(
       new ReadableStream<Uint8Array>({
-        async pull(controller) {
-          await Bun.sleep(1);
-
+        pull(controller) {
           if (index === bytes.length) {
             controller.close();
 
@@ -358,7 +356,7 @@ test("session cursor uses its route schema and waiting booleans survive URL enco
     epoch: "session",
   });
   expect(last()?.path).toBe("/api/cursor");
-  reply = () => Response.json([]);
+  reply = () => Response.json({ runs: [], next: null });
   await backend.call("runs", { query: { status: "suspended", waiting: true } });
   expect(last()?.path).toBe("/api/runs?status=suspended&waiting=true");
   reply = () => Response.json({ cursor: "bad", epoch: "session" });

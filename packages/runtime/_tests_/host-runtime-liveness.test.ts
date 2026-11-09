@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { type Executor, LeaseReleaseUnknown, OwnershipError, StorageError } from "@loopy/core";
-import { loopy, sh } from "@loopy/sdk/graph";
+import { loopy, sh } from "@loopy/sdk";
 import { Cause, Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
@@ -11,7 +11,7 @@ import {
   ScheduleDefinitionError,
 } from "../src/host";
 import { countPasses, nextPass } from "./fixtures/service-runtime";
-import { MemorySqlStore } from "./fixtures/stores";
+import { LostLeaseStore, MemorySqlStore, StalledReleaseStore } from "./fixtures/stores";
 import { eventually } from "./fixtures/wait";
 
 const graph = loopy("test", { input: {}, run: () => sh(["true"]) });
@@ -117,13 +117,7 @@ test("preparation cleanup deadline unblocks stop and retains the original failur
         const releasing = yield* Deferred.make<void>();
         const errors: Cause.Cause<unknown>[] = [];
 
-        class StalledStore extends MemorySqlStore {
-          override release() {
-            return Deferred.succeed(releasing, undefined).pipe(Effect.andThen(Effect.never));
-          }
-        }
-
-        const store = new StalledStore();
+        const store = new StalledReleaseStore(releasing);
         const preparation = new PreparationError({ cause: new Error("Missing revision") });
 
         const daemon = yield* makeDaemon({
@@ -325,17 +319,8 @@ test("schedule mutation wakes the loop without repeated scans before its deadlin
     Effect.scoped(
       Effect.gen(function* () {
         yield* TestClock.setTime(base);
-        let scans = 0;
-
-        class CountingStore extends MemorySqlStore {
-          override dueRuns(at: string) {
-            scans++;
-
-            return super.dueRuns(at);
-          }
-        }
-
-        const store = new CountingStore();
+        const store = new MemorySqlStore();
+        const scans = countPasses(store);
 
         const daemon = yield* makeDaemon({
           store,
@@ -346,22 +331,22 @@ test("schedule mutation wakes the loop without repeated scans before its deadlin
 
         const running = yield* Effect.forkChild(daemon.run);
         yield* TestClock.adjust(0);
-        expect(scans).toBe(1);
+        expect(scans()).toBe(1);
         yield* store.putSchedule({
           ...schedule(),
           nextFireAt: new Date(base + 1500).toISOString(),
         });
         yield* TestClock.adjust(0);
-        expect(scans).toBe(2);
+        expect(scans()).toBe(2);
         yield* TestClock.adjust(1499);
-        expect(scans).toBe(2);
+        expect(scans()).toBe(2);
         // Backoff minimum is 2s after this no-progress wake, even for an earlier persisted deadline.
         yield* TestClock.adjust(501);
-        expect(scans).toBeGreaterThanOrEqual(3);
-        expect(scans).toBeLessThanOrEqual(5);
-        const afterProgress = scans;
+        expect(scans()).toBeGreaterThanOrEqual(3);
+        expect(scans()).toBeLessThanOrEqual(5);
+        const afterProgress = scans();
         yield* TestClock.adjust(999);
-        expect(scans).toBe(afterProgress);
+        expect(scans()).toBe(afterProgress);
         yield* daemon.stop;
         yield* Fiber.join(running);
       }),
@@ -373,17 +358,8 @@ test("unrelated terminal run events leave idle sleep intact", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        let scans = 0;
-
-        class CountingStore extends MemorySqlStore {
-          override dueRuns(at: string) {
-            scans++;
-
-            return super.dueRuns(at);
-          }
-        }
-
-        const store = new CountingStore();
+        const store = new MemorySqlStore();
+        const scans = countPasses(store);
 
         const daemon = yield* makeDaemon({
           store,
@@ -396,9 +372,9 @@ test("unrelated terminal run events leave idle sleep intact", async () => {
         yield* TestClock.adjust(0);
         yield* store.createRun({ ...newRun(), status: "succeeded", output: null });
         yield* TestClock.adjust(4999);
-        expect(scans).toBe(1);
+        expect(scans()).toBe(1);
         yield* TestClock.adjust(1);
-        expect(scans).toBe(2);
+        expect(scans()).toBe(2);
         yield* daemon.stop;
         yield* Fiber.join(running);
       }),
@@ -415,10 +391,7 @@ test("ownership loss reports activation unsubscribe defects instead of suppressi
         const errors: Cause.Cause<unknown>[] = [];
         let subscriptions = 0;
 
-        class LosingStore extends MemorySqlStore {
-          override heartbeat() {
-            return Effect.succeed(false);
-          }
+        class LosingStore extends LostLeaseStore {
           override subscribe(listener: Parameters<MemorySqlStore["subscribe"]>[0]) {
             const unsubscribe = super.subscribe(listener);
             const index = ++subscriptions;

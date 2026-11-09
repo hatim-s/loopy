@@ -4,12 +4,13 @@ import { join } from "node:path";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { localDaemon, Registry, readDaemonFile } from "@loopy/runtime/local";
 import { openRunStore } from "@loopy/runtime/store";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { fixture } from "../../compiler/_tests_/fixtures/project";
 import { newRun } from "../../core/_tests_/fixtures/run";
-import { fixture, object } from "../../runtime/_tests_/fixtures/project";
+import { object } from "../../runtime/_tests_/fixtures/project";
 import { onCleanup, runScoped } from "../../runtime/_tests_/fixtures/test-scope";
 import { waitForExit } from "../../runtime/_tests_/fixtures/wait";
-import { cli } from "./fixtures/cli";
+import { cli, spawnCli } from "./fixtures/cli";
 
 async function graphFixture(name = "compiled") {
   const f = fixture(name, "run: () => null");
@@ -39,6 +40,38 @@ test("save posts a compiled graph and graph prints the same redacted view by fil
   const text = await cli(f, "graph", "compiled", "--format", "text");
   expect(text.code).toBe(0);
   expect(text.stdout).toContain("0:log log [next -> 1:join]");
+});
+
+test("graph text names each control arm and the node it enters", async () => {
+  const f = fixture("arms", "run: () => null");
+  writeFileSync(
+    f.file,
+    `import { branch, eq, loopy, map, switch_ } from "loopy";
+export default loopy("arms", {
+  input: { kind: "string", items: "string[]" },
+  run: ({ input }) => {
+    branch(eq(input.get("kind"), "a"), { yes: () => 1, no: () => 2 });
+    switch_(input.get("kind"), { a: () => 1, default: () => 2 });
+    return map(input.get("items"), (item) => item, { onError: "fail" });
+  },
+});`,
+  );
+  const result = await cli(f, "graph", f.file, "--format", "text");
+  expect(result).toMatchObject({ code: 0, stderr: "" });
+  const view = object((await cli(f, "graph", f.file)).stdout);
+
+  const nodes = Schema.decodeUnknownSync(
+    Schema.Array(Schema.Struct({ id: Schema.String, kind: Schema.String })),
+  )(view.nodes);
+
+  const id = (kind: string) => nodes.find((node) => node.kind === kind)?.id;
+
+  const line = (kind: string) =>
+    result.stdout.split("\n").find((text) => text.trim().startsWith(`${id(kind)} ${kind}`));
+
+  expect(line("branch")).toMatch(/arm yes -> \S+, arm no -> \S+\]$/);
+  expect(line("switch")).toMatch(/arm a -> \S+, arm default -> \S+\]$/);
+  expect(line("map")).toMatch(/arm each -> \S+\]$/);
 });
 
 test("HTTP commands queue schema-validated graph runs and pin the saved revision", async () => {
@@ -81,7 +114,7 @@ test("compiler diagnostics include locations and do not create registry entries"
   const f = await graphFixture();
   writeFileSync(
     f.file,
-    `import {loopy} from "loopy/graph"; export default loopy("bad", {input:{},run:async()=>1});`,
+    `import {loopy} from "loopy"; export default loopy("bad", {input:{},run:async()=>1});`,
   );
   const result = await cli(f, "save", f.file);
   expect(result.code).toBe(1);
@@ -266,11 +299,80 @@ test("HTTP logs drains every page for normal output and terminal follow", async 
   );
 });
 
+test("logs --follow streams logs written while the run is live and stops when it finishes", async () => {
+  const f = await graphFixture();
+  const at = () => new Date().toISOString();
+  await Effect.runPromise(
+    f.store.createRun({ ...newRun(), id: "live", slug: "compiled", workspace: f.cwd }),
+  );
+  await Effect.runPromise(f.store.claim("live", "live-owner"));
+
+  const write = (message: string) =>
+    Effect.runPromise(
+      f.store.apply({
+        runId: "live",
+        token: "live-owner",
+        effects: [
+          {
+            kind: "write_log",
+            executionKey: {
+              runId: "live",
+              nodeId: decodeBoundary(nodeIdSchema)("0:log"),
+              scope: [],
+            },
+            attempt: 1,
+            log: { message, data: null },
+            at: at(),
+          },
+        ],
+      }),
+    );
+
+  await write("before");
+  const child = spawnCli(f, ["logs", "live", "--follow"], "ignore");
+  onCleanup(() => child.kill());
+  const reader = child.stdout.getReader();
+  const decoder = new TextDecoder();
+  let stdout = "";
+
+  // The first line proves the drain finished, so the next log can only arrive over the stream.
+  while (!stdout.includes("\n")) {
+    const chunk = await reader.read();
+
+    if (chunk.done) {
+      throw new Error(`logs --follow exited early: ${await new Response(child.stderr).text()}`);
+    }
+
+    stdout += decoder.decode(chunk.value, { stream: true });
+  }
+
+  await write("during");
+  await Effect.runPromise(
+    f.store.apply({
+      runId: "live",
+      token: "live-owner",
+      effects: [{ kind: "finish_run", outcome: { status: "succeeded", output: null }, at: at() }],
+    }),
+  );
+
+  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+    stdout += decoder.decode(chunk.value, { stream: true });
+  }
+
+  expect(await child.exited).toBe(0);
+  expect(
+    stdout
+      .trim()
+      .split("\n")
+      .map((line) => object(line).message),
+  ).toEqual(["before", "during"]);
+});
+
 test("HTTP run reports named JSON input errors before creating a run", async () => {
   const f = await graphFixture();
   writeFileSync(
     f.file,
-    'import {loopy} from "loopy/graph"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',
+    'import {loopy} from "loopy"; export default loopy("compiled",{input:{payload:"json",values:"number[]"},run:()=>null});',
   );
   expect((await cli(f, "save", f.file)).code).toBe(0);
 

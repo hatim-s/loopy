@@ -2,14 +2,14 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { NodeRun, Store } from "@loopy/core";
-import { loopy, wait } from "@loopy/sdk/graph";
+import { loopy, wait } from "@loopy/sdk";
 import { Effect, Schema, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";
 import { makeSqliteRunStore } from "../src/store";
+import { runAt } from "./fixtures/clock";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { runAt } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
 
 const at = "2026-10-20T00:00:00.000Z";

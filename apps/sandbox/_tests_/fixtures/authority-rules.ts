@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   AuthorityError,
   type AuthorityOutput,
+  attemptResources,
   SANDBOX_MAX_CAPTURE_BYTES,
 } from "@loopy/contract/sandbox";
 import type { SandboxAttemptAuthority } from "../../src/authority";
@@ -58,10 +59,20 @@ export function authorityRules(name: string, open: () => Promise<AuthoritySubjec
       { kind: "rejected", code: "stale_session" },
     );
 
+    // Each name derives from this authority's root, so a plan cannot reach another's resources.
     const other = await subject.plan("admission", 2);
-    expect(
-      await run(authority.admit({ session, plan: { ...other, container: plan.container } })),
-    ).toEqual({ kind: "rejected", code: "invalid_state" });
+    const foreign = await attemptResources("/another-authority-root", plan);
+
+    for (const changed of [
+      { ...other, container: plan.container },
+      { ...plan, volume: foreign.volume },
+      { ...plan, attempt: 2 },
+    ]) {
+      expect(await run(authority.admit({ session, plan: changed }))).toEqual({
+        kind: "rejected",
+        code: "invalid_state",
+      });
+    }
 
     const results = subject.resultsFor(plan.workspace);
     const result = await run(results.put(successful));

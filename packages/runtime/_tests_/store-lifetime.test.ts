@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
+import { StorageError } from "@loopy/core";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
-import { StorageError } from "../../core/src/store";
 import { makeSqliteRunStore } from "../src/store/open";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 

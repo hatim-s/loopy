@@ -7,10 +7,8 @@ import * as contract from "../src";
 
 const now = newRun().createdAt;
 
-const leaseMs = 60_000;
-
-function view(run: core.RunRecord, hook?: contract.PendingHook) {
-  return contract.runView({ run, hook, now, leaseMs });
+function view(run: core.RunRecord, hook?: contract.PendingHook, ownerStale = false) {
+  return contract.runView({ run, hook, ownerStale });
 }
 
 const hook: contract.PendingHook = {
@@ -22,7 +20,7 @@ const hook: contract.PendingHook = {
   expiresAt: null,
 };
 
-test("views strip fencing tokens and derive staleness at the lease boundary", () => {
+test("views strip fencing tokens and report staleness only for an owned run", () => {
   const run: core.RunRecord = {
     ...newRun(),
     status: "running",
@@ -41,23 +39,8 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
     ),
   ).toBe(false);
   expect(derived.ownerStale).toBe(false);
-  expect(
-    contract.runView({
-      run,
-      hook: undefined,
-      now: new Date(Date.parse(now) + leaseMs).toISOString(),
-      leaseMs,
-    }).ownerStale,
-  ).toBe(false);
-  expect(
-    contract.runView({
-      run,
-      hook: undefined,
-      now: new Date(Date.parse(now) + leaseMs + 1).toISOString(),
-      leaseMs,
-    }).ownerStale,
-  ).toBe(true);
-  expect(view(newRun())).toMatchObject({ owner: null, ownerStale: false });
+  expect(view(run, undefined, true).ownerStale).toBe(true);
+  expect(view(newRun(), undefined, true)).toMatchObject({ owner: null, ownerStale: false });
 });
 
 test("waitingOn names the run's pending hook and is null without one", () => {
@@ -108,6 +91,7 @@ test("loopy views carry the store counts, newest run and persisted schedule", ()
 
   expect(result.lastRun).toEqual(newer);
   expect(result.schedule).toEqual({
+    state: "saved",
     cron: schedule.cron,
     tz: "UTC",
     enabled: true,
@@ -172,8 +156,11 @@ test("serialized loopy and snapshot views exclude private registry and owner key
 
   const snapshot: contract.RunSnapshotView = {
     nodeRuns: [],
+    nodeRunsNext: null,
+    truncatedOutputs: {},
     run,
     hooks: [],
+    hooksTruncated: false,
     cursor: 0,
     epoch: "epoch",
   };
@@ -184,6 +171,11 @@ test("serialized loopy and snapshot views exclude private registry and owner key
   for (const serialized of [JSON.stringify(loopy), JSON.stringify(snapshot)]) {
     expect(serialized).not.toMatch(/"(?:bundleHash|token|source|secrets)"\s*:/);
   }
+
+  // Every producer pages the root nodes and hooks, so a snapshot without those markers is malformed.
+  const unpaged: Partial<contract.RunSnapshotView> = { ...snapshot };
+  delete unpaged.nodeRunsNext;
+  expect(() => contract.decodeBoundary(contract.runSnapshotViewSchema)(unpaged)).toThrow();
 });
 
 test("strict edges reject misspelled request keys and injected view tokens", () => {
@@ -272,10 +264,9 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
 
   const empty = { counts: contract.emptyRunCounts(), latest: [] };
   expect(contract.loopyView(saved, null, empty).schedule).toEqual({
+    state: "declared",
     cron: "0 * * * *",
     tz: "UTC",
-    enabled: false,
-    nextFireAt: null,
   });
   expect(
     contract.loopyView(
@@ -292,7 +283,13 @@ test("loopy declared schedule is visible until a persisted schedule overrides it
       },
       empty,
     ).schedule,
-  ).toEqual({ cron: "*/5 * * * *", tz: "Asia/Kolkata", enabled: true, nextFireAt: now });
+  ).toEqual({
+    state: "saved",
+    cron: "*/5 * * * *",
+    tz: "Asia/Kolkata",
+    enabled: true,
+    nextFireAt: now,
+  });
 });
 
 test("cursor route rejects invalid cursors and extra response fields", () => {
@@ -410,4 +407,8 @@ test("schedule events reach the wire as schedule views with a null last fire key
   expect(wire).toEqual({ ...event, record: { ...event.record, lastFireKey: null } });
   expect(contract.decodeBoundary(contract.serverEventSchema)(wire)).toEqual(wire);
   expect(() => contract.decodeBoundary(contract.serverEventSchema)(event)).toThrow();
+  // Only node events carry an output, so only they can report one truncated.
+  expect(() =>
+    contract.decodeBoundary(contract.serverEventSchema)({ ...wire, truncatedOutputBytes: 1 }),
+  ).toThrow();
 });

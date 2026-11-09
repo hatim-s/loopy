@@ -4,6 +4,7 @@ import {
   executionKeyString,
   type NodeRun,
   nodeRunSchema,
+  type RunPage,
   type RunSnapshotView,
   type RunsQuery,
   type RunView,
@@ -13,7 +14,7 @@ import {
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import type { EventSubscription, StreamState } from "../src/backend/backend";
 import { keys } from "../src/lib/keys";
-import { type RunPage, runQuery, scopesQuery } from "../src/lib/queries";
+import { runQuery, scopesQuery } from "../src/lib/queries";
 import { applyBatch } from "../src/lib/stream/apply";
 import { followSession } from "../src/lib/stream/follow";
 import { applyScheduleView } from "../src/lib/stream/schedules";
@@ -42,7 +43,7 @@ const run: RunView = {
 };
 
 function page(runs: RunView[]): RunPage {
-  return { runs, nextCursor: undefined };
+  return { runs, next: null };
 }
 
 /** A cached run list, as the run pages write it: the filters plus the page size. */
@@ -58,7 +59,10 @@ function snapshot(overrides: Partial<RunSnapshotView> = {}): RunSnapshotView {
   return {
     run,
     nodeRuns: [],
+    nodeRunsNext: null,
+    truncatedOutputs: {},
     hooks: [],
+    hooksTruncated: false,
     cursor: 10,
     epoch: "e1",
     ...overrides,
@@ -481,12 +485,18 @@ function heldLists(client: QueryClient) {
       server = answer;
     },
     fetches: (status: RunView["status"]) => fetches.get(status) ?? 0,
+    /** Answers every held fetch and waits until the cache has settled each one. */
     async release() {
+      const inflight = client
+        .getQueryCache()
+        .getAll()
+        .flatMap((query) => (query.promise ? [query.promise] : []));
+
       for (const answer of held.splice(0)) {
         answer();
       }
 
-      await Bun.sleep(0);
+      await Promise.allSettled(inflight);
     },
   };
 }
@@ -836,8 +846,8 @@ test("stream overflow keeps the execution keyset boundary and preview metadata b
   const firstPage = keysWritten.sort().slice(0, 200);
 
   expect(current.nodeRuns.map((node) => executionKeyString(node.key))).toEqual(firstPage);
-  expect(current.nodeRunsNext).toBe(firstPage.at(-1));
-  expect(Object.keys(current.truncatedOutputs ?? {}).sort()).toEqual(firstPage);
+  expect(current.nodeRunsNext).toBe(firstPage.at(-1) ?? null);
+  expect(Object.keys(current.truncatedOutputs).sort()).toEqual(firstPage);
 });
 
 test("scoped node bursts refetch active scope counts once and never the run snapshot", () => {

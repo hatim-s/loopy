@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { type Executor, LeaseReleaseFailed, OwnershipError, StorageError } from "@loopy/core";
-import { code, loopy, parallel } from "@loopy/sdk/graph";
+import { code, loopy, parallel } from "@loopy/sdk";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { ActivationWorkCleanupFailed, activate, DriverCleanupFailed } from "../src/host";
 import { withBundles } from "./fixtures/compiled";
-import { MemorySqlStore } from "./fixtures/stores";
+import { LostLeaseStore, MemorySqlStore, StalledReleaseStore } from "./fixtures/stores";
 
 function graph(wide = false) {
   const work = () =>
@@ -107,10 +107,7 @@ test("ownership loss interrupts and joins work before fenced release", async () 
       const started = yield* Deferred.make<void>();
       const events: string[] = [];
 
-      class LostStore extends MemorySqlStore {
-        override heartbeat() {
-          return Effect.succeed(false);
-        }
+      class LostStore extends LostLeaseStore {
         override release(id: string, token: string) {
           return Effect.sync(() => {
             events.push("release");
@@ -239,13 +236,7 @@ test("a stalled release reports unknown completion and retains the graph exit", 
     Effect.gen(function* () {
       const releasing = yield* Deferred.make<void>();
 
-      class StalledStore extends MemorySqlStore {
-        override release() {
-          return Deferred.succeed(releasing, undefined).pipe(Effect.andThen(Effect.never));
-        }
-      }
-
-      const store = new StalledStore();
+      const store = new StalledReleaseStore(releasing);
       yield* store.createRun(newRun());
       const executor = new FakeExecutor();
       executor.result = { kind: "succeeded", output: 42, logs: [] };
@@ -299,13 +290,7 @@ for (const primary of ["ownership", "root"] as const) {
         const entered = yield* Deferred.make<void>();
         const defect = new Error("executor cleanup defect");
 
-        class LosingStore extends MemorySqlStore {
-          override heartbeat() {
-            return Effect.succeed(false);
-          }
-        }
-
-        const store = new LosingStore({ leaseMs: 1000 });
+        const store = new LostLeaseStore({ leaseMs: 1000 });
 
         const executor: Executor = {
           lookup: () => Effect.succeed({ kind: "none" }),

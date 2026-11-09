@@ -3,7 +3,7 @@ import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { Registry } from "../src/local/registry";
-import { makeArtifactRegistry, saveCompiled } from "../src/local/save-compiled";
+import { saveCompiled } from "../src/local/save-compiled";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 
@@ -29,7 +29,7 @@ test("save validates before publication and pins a private historical graph", as
   });
   expect(Effect.runSync(registry.get("saved"))?.revision).toBe(body.revision);
   expect(readFileSync(registry.graphPath(body.revision), "utf8")).toBe(historical);
-  expect(await Effect.runPromise(makeArtifactRegistry(registry).get("absent"))).toBeNull();
+  expect(await Effect.runPromise(registry.get("absent"))).toBeNull();
 });
 
 test("publication failure leaves the previous registry identity intact", async () => {

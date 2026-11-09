@@ -16,6 +16,7 @@ export const ERROR_CODES = [
   "internal",
   "invalid_cron",
   "invalid_timezone",
+  "invalid_schedule_input",
 ] as const;
 
 const errorCodeSchema = Schema.Literals(ERROR_CODES);
@@ -37,6 +38,7 @@ export const DEFAULT_ERROR_MESSAGES = {
   internal: "An internal server error occurred.",
   invalid_cron: "The cron expression is invalid. Provide five valid fields or a supported alias.",
   invalid_timezone: "The time zone is invalid. Provide an IANA time zone such as Asia/Kolkata.",
+  invalid_schedule_input: "The schedule input does not match the loopy's input schema.",
 } satisfies Record<ErrorCode, string>;
 
 export const errorBodySchema = struct({
@@ -60,4 +62,5 @@ export const ERROR_STATUS = {
   internal: 500,
   invalid_cron: 400,
   invalid_timezone: 400,
+  invalid_schedule_input: 400,
 } as const satisfies Record<ErrorCode, number>;

@@ -1,13 +1,14 @@
 import { expect, test } from "bun:test";
 import { nodeIdSchema } from "@loopy/contract";
 import type { ExecutionKey, NodeRun, Store } from "@loopy/core";
-import { code, loopy, parallel, sh, wait } from "@loopy/sdk/graph";
+import { code, loopy, parallel, sh, wait } from "@loopy/sdk";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { activateDurable } from "../src/host";
+import { runAt } from "./fixtures/clock";
 import { withBundles } from "./fixtures/compiled";
 import { PolicyProvider, policyGraph, policySuccess } from "./fixtures/host-policy";
-import { MemorySqlStore, memoryStore, runAt } from "./fixtures/stores";
+import { MemorySqlStore, memoryStore } from "./fixtures/stores";
 
 test("targeted node reads preserve ordered scopes and detach nested data", async () => {
   const store = memoryStore();

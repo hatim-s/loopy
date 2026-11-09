@@ -9,3 +9,8 @@ export interface SqlOwnerPolicy {
 }
 
 export type SqlStoreOptions = { owner: SqlOwnerPolicy; leaseMs?: number };
+
+/** The first millisecond at which an owner that is not alive has lost its lease. */
+export function leaseExpiresAt(heartbeatAt: string, leaseMs: number): number {
+  return Date.parse(heartbeatAt) + leaseMs + 1;
+}

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { graphView } from "@loopy/contract";
-import { code, loopy, map } from "@loopy/sdk/graph";
+import { code, loopy, map } from "@loopy/sdk";
 import { graphModel } from "../src/lib/graph";
 import { focusOf, openItemTarget, scopeOf } from "../src/lib/run-focus";
 

@@ -13,8 +13,8 @@ import {
   type SqlTransactionMode,
   type SqlValue,
 } from "../src/store/portable";
+import { runAt } from "./fixtures/clock";
 import { storeContract } from "./fixtures/store-contract";
-import { runAt } from "./fixtures/stores";
 import { onCleanup } from "./fixtures/test-scope";
 
 const at = newRun().createdAt;

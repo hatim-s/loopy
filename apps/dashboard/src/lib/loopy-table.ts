@@ -17,7 +17,7 @@ export function successRate(counts: LoopyView["counts"]): number | null {
 
 const MATCH = {
   all: () => true,
-  scheduled: (loopy) => loopy.schedule?.enabled === true,
+  scheduled: (loopy) => nextFire(loopy) !== null,
   failing: (loopy) => loopy.lastRun?.status === "failed",
   active: (loopy) => loopy.counts.running + loopy.counts.queued + loopy.counts.suspended > 0,
 } satisfies Record<LoopyFilter, (loopy: LoopyView) => boolean>;
@@ -34,8 +34,8 @@ const RANK = {
 
 const NEVER = 5;
 
-function nextFire(loopy: LoopyView): string | null {
-  return loopy.schedule?.enabled ? loopy.schedule.nextFireAt : null;
+function nextFire({ schedule }: LoopyView): string | null {
+  return schedule?.state === "saved" && schedule.enabled ? schedule.nextFireAt : null;
 }
 
 const COMPARE = {

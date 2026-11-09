@@ -1,5 +1,5 @@
-import { writeFile } from "node:fs/promises";
 import { decodeBoundary, routes } from "@loopy/contract";
+import { createOnce } from "../shared/fs";
 import { updateApproval } from "./approval";
 import { materialize, verifySaved } from "./artifacts";
 import type { PlaygroundClient } from "./client";
@@ -59,7 +59,12 @@ async function admit(client: PlaygroundClient, group: Group, job: Job<CatalogEnt
   };
 
   // The intent is durable before the request so a crash leaves an ambiguous record, never a repeat.
-  await writeFile(file, `${JSON.stringify(intent, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  createOnce(
+    file,
+    `${JSON.stringify(intent, null, 2)}\n`,
+    0o600,
+    `Admission ${file} already exists. Reconcile it before admitting this ordinal again.`,
+  );
 
   const run = await client.call(routes.startRun, {
     params: { slug: fixture.slug },

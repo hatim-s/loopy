@@ -1,7 +1,5 @@
 import { afterEach } from "bun:test";
-import { createHash } from "node:crypto";
-import { decodeBoundary, type ExecutionResult, nodeIdSchema } from "@loopy/contract";
-import { type SandboxAttemptRequest, sandboxAttemptRequestSchema } from "@loopy/contract/sandbox";
+import type { ExecutionResult } from "@loopy/contract";
 import { Effect } from "effect";
 import type { ArtifactReader } from "../../src/artifacts";
 import type { Attempts } from "../../src/attempt";
@@ -10,26 +8,19 @@ import type { SandboxConfig } from "../../src/config";
 import type { AttemptBackend } from "../../src/docker";
 import { filesystemStorage } from "../../src/filesystem";
 import { FilesystemJournal } from "../../src/filesystem/journal";
-import { artifactReader as idleArtifactReader, sandboxFixtureConfig } from "./authority";
+import {
+  codeRequest,
+  artifactReader as idleArtifactReader,
+  sandboxFixtureConfig,
+} from "./authority";
 import { openAttempts, run } from "./run";
 
 export const succeeded: ExecutionResult = { kind: "succeeded", output: { ok: true }, logs: [] };
 
 export const fixture = () => sandboxFixtureConfig("cloud-sandbox");
 
-export function request(
-  source = "process.stdout.write(JSON.stringify({ok:true}))",
-): SandboxAttemptRequest {
-  const bytes = Buffer.from(source);
-  const hash = createHash("sha256").update(bytes).digest("hex");
-
-  return decodeBoundary(sandboxAttemptRequestSchema)({
-    workspace: "workspace-one",
-    executionKey: { runId: "run-one", nodeId: decodeBoundary(nodeIdSchema)("0:code"), scope: [] },
-    attempt: 1,
-    spec: { kind: "code", bundleHash: hash, input: {}, timeoutMs: 1000 },
-    bundles: [{ hash, bytes: bytes.toString("base64") }],
-  });
+export function request(source = "process.stdout.write(JSON.stringify({ok:true}))") {
+  return codeRequest({ workspace: "workspace-one", runId: "run-one", source });
 }
 
 export function dependencies(

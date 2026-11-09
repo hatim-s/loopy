@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import {
   encodeRunCursor,
+  type RunPage,
   type RunSnapshotView,
   type RunView,
   type ServerEvent,
 } from "@loopy/contract";
 import { QueryClient } from "@tanstack/react-query";
 import { keys } from "../src/lib/keys";
-import type { RunPage } from "../src/lib/queries";
 import { applyBatch } from "../src/lib/stream/apply";
 import { applyToSnapshot } from "../src/lib/stream/snapshot";
 
@@ -33,11 +33,20 @@ const queuedList = keys.runPage({ status: "queued", limit: 25 });
 const runningList = keys.runPage({ status: "running", limit: 25 });
 
 function page(runs: RunView[]): RunPage {
-  return { runs, nextCursor: undefined };
+  return { runs, next: null };
 }
 
 function snapshot(run: RunView): RunSnapshotView {
-  return { run, nodeRuns: [], hooks: [], cursor: 10, epoch: "e1" };
+  return {
+    run,
+    nodeRuns: [],
+    nodeRunsNext: null,
+    truncatedOutputs: {},
+    hooks: [],
+    hooksTruncated: false,
+    cursor: 10,
+    epoch: "e1",
+  };
 }
 
 function event(record: RunView, sequence: number, kind: "claimed" | "heartbeat"): ServerEvent {
@@ -128,8 +137,8 @@ test("the displayed run page keeps its next cursor after the oldest row leaves",
   const client = new QueryClient();
   const key = keys.runPage({ status: "queued", limit: 1 });
   const cursor = encodeRunCursor(queued);
-  client.setQueryData(key, { runs: [queued], nextCursor: cursor });
+  client.setQueryData(key, { runs: [queued], next: cursor });
   applyBatch(client, [event(running, 11, "claimed")]);
-  expect(client.getQueryData<RunPage>(key)).toEqual({ runs: [], nextCursor: cursor });
+  expect(client.getQueryData<RunPage>(key)).toEqual({ runs: [], next: cursor });
   client.clear();
 });

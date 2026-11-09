@@ -35,6 +35,7 @@ function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
   }
 }
 
+// An invalid entry fails the read, so a later write cannot drop it. Errors name the key, never the value.
 // BOUNDARY: The secrets.json file is checked for an object with valid secret names and bounded string values.
 function parseSecrets(value: unknown) {
   if (!isRecord(value)) {
@@ -111,7 +112,7 @@ export class SecretStore {
     }
   }
 
-  private readSnapshot(): Record<string, string> {
+  private readSnapshot() {
     if (!this.directoryExists(false)) {
       return {};
     }

@@ -22,4 +22,4 @@ export { secretRedactor } from "./secret-redactor";
 
 export { SecretStore } from "./secrets";
 
-export { spawnCaptured, unstarted } from "./spawn";
+export { spawnCaptured } from "./spawn";

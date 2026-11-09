@@ -9,13 +9,13 @@ import {
 } from "@loopy/core";
 import type { PendingHook, RunPreview, StatusCounts } from "./dashboard-reader";
 import type { GraphView } from "./graph";
-import type { LoopyView, RunView, ServerEvent } from "./views";
+import type { LoopyView, RunView, ScheduleView, ServerEvent } from "./views";
 
 type RunViewOptions = {
   run: RunPreview;
   hook: PendingHook | undefined;
-  now: string;
-  leaseMs: number;
+  // The store decides staleness because only it knows whether a local owner is still alive.
+  ownerStale: boolean;
 };
 
 function outcome(run: RunRecord) {
@@ -39,7 +39,7 @@ export function previewPayload(value: Json): { value: Json; bytes: number | null
 }
 
 export function runView(options: RunViewOptions): RunView {
-  const { run, now, leaseMs } = options;
+  const { run } = options;
 
   const owner = run.owner
     ? { pid: run.owner.pid, host: run.owner.host, heartbeatAt: run.owner.heartbeatAt }
@@ -71,7 +71,7 @@ export function runView(options: RunViewOptions): RunView {
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     owner,
-    ownerStale: owner !== null && Date.parse(now) - Date.parse(owner.heartbeatAt) > leaseMs,
+    ownerStale: owner !== null && options.ownerStale,
     waitingOn: options.hook
       ? {
           hook: options.hook.name,
@@ -96,15 +96,16 @@ type SavedLoopyInput = Pick<LoopyView, "slug" | "workspace" | "scope" | "mode" |
   schedule: Graph["meta"]["schedule"];
 };
 
-function scheduleView(
+function loopySchedule(
   schedule: Schedule | null,
   declared: SavedLoopyInput["schedule"],
 ): LoopyView["schedule"] {
   if (schedule === null) {
-    return declared ? { ...declared, enabled: false, nextFireAt: null } : null;
+    return declared && { state: "declared", cron: declared.cron, tz: declared.tz };
   }
 
   return {
+    state: "saved",
     cron: schedule.cron,
     tz: schedule.tz,
     enabled: schedule.enabled,
@@ -125,7 +126,7 @@ export function loopyView(
     scope: saved.scope,
     mode: saved.mode,
     input: saved.input,
-    schedule: scheduleView(schedule, saved.schedule),
+    schedule: loopySchedule(schedule, saved.schedule),
     lastRun: runs.latest[0] ?? null,
     latestRuns: runs.latest,
     counts: runs.counts,
@@ -159,6 +160,11 @@ function nodeEventPreview(event: NodeEvent): NodeEventView {
     : { ...view, truncatedOutputBytes: output.bytes, record: { ...view.record, output: null } };
 }
 
+/** The wire view of a schedule, where a schedule that never fired has a null fire key. */
+export function scheduleView(schedule: Schedule, failure: ScheduleView["failure"]): ScheduleView {
+  return { ...schedule, lastFireKey: schedule.lastFireKey ?? null, failure };
+}
+
 /** The live-stream view of one runtime event. */
 export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunView): ServerEvent {
   switch (event.entity) {
@@ -173,7 +179,7 @@ export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunVi
     case "schedule": {
       return event.kind === "deleted"
         ? event
-        : { ...event, record: { ...event.record, lastFireKey: event.record.lastFireKey ?? null } };
+        : { ...event, record: scheduleView(event.record, event.record.failure) };
     }
 
     default: {

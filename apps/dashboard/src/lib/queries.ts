@@ -1,4 +1,4 @@
-import { encodeRunCursor, type RunsQuery, type RunView } from "@loopy/contract";
+import type { RunsQuery } from "@loopy/contract";
 import { queryOptions, skipToken } from "@tanstack/react-query";
 import type { ApiQuery, LoopyBackend } from "../backend/backend";
 import { keys } from "./keys";
@@ -16,24 +16,14 @@ export function loopiesQuery(backend: LoopyBackend, workspace?: string) {
   });
 }
 
-// The server page boundary survives stream removals, including removal of its oldest row.
-export function runPage(runs: RunView[], limit: number) {
-  const oldest = runs.at(-1);
-
-  return {
-    runs,
-    nextCursor: runs.length < limit || oldest === undefined ? undefined : encodeRunCursor(oldest),
-  };
-}
-
-export type RunPage = ReturnType<typeof runPage>;
-
-// The stream keeps a shown page current by patching rows and refetching on membership changes.
+/**
+ * The stream keeps a shown page current by patching rows and refetching on membership changes.
+ * The server's next cursor stays with the page, so stream removals never move its boundary.
+ */
 export function runPageQuery(backend: LoopyBackend, query: RunsQuery & { limit: number }) {
   return queryOptions({
     queryKey: keys.runPage(query),
-    queryFn: async ({ signal }) =>
-      runPage(await backend.call("runs", { query }, signal), query.limit),
+    queryFn: ({ signal }) => backend.call("runs", { query }, signal),
     gcTime: 0,
     placeholderData: (previous) => previous,
   });

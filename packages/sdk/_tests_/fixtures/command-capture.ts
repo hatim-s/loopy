@@ -1,7 +1,7 @@
 import type { ExecutionResult, ExecutionSpec, RunOutcome } from "@loopy/core";
 import { renderCommand } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
-import { loopy } from "loopy/graph";
+import { loopy } from "../../src";
 
 type Capture = {
   executor: { calls: { program: string; args: string[] }[] };

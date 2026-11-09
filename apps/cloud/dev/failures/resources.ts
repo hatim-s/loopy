@@ -1,48 +1,14 @@
-import { readdir } from "node:fs/promises";
 import { errnoCode } from "@loopy/core";
-import { Effect, Schema } from "effect";
-import { SANDBOX_LABELS } from "../../../sandbox/src/docker/identity";
-import { stateLayout } from "../../../sandbox/src/state-root";
-import { filesystemReceipt } from "../filesystem-receipt";
 import { assert } from "../shared/assert";
 import { docker as runDocker } from "../shared/process";
 import { root } from "../stack/constants";
+import { OwnedResources } from "../stack/owned";
 import { processFields, processTree } from "../stack/processes";
-import { environment, owner, sandboxState } from "./config";
+import { environment, sandboxState } from "./config";
 
 export const docker = (args: string[]) => runDocker(args, { env: environment });
 
-const containerSchema = Schema.Tuple([
-  Schema.Struct({
-    Name: Schema.String,
-    Config: Schema.Struct({ Labels: Schema.Record(Schema.String, Schema.String) }),
-    State: Schema.Struct({ Running: Schema.Boolean }),
-    Mounts: Schema.Array(
-      Schema.Struct({ Type: Schema.String, Name: Schema.optional(Schema.String) }),
-    ),
-  }),
-]);
-
-const decodeContainer = Schema.decodeUnknownSync(containerSchema);
-
-export async function ownedContainer(name: string) {
-  const [row] = decodeContainer(JSON.parse(await docker(["inspect", name])));
-  assert(row.Config.Labels[SANDBOX_LABELS.owner] === owner, "container_owner_mismatch");
-
-  return row;
-}
-
-export async function receipts() {
-  const files = await readdir(stateLayout(sandboxState).receipts);
-
-  return Effect.runPromise(
-    Effect.all(
-      files
-        .filter((file) => /^[a-f0-9]{64}\.json$/.test(file))
-        .map((file) => filesystemReceipt(sandboxState, file.slice(0, -5))),
-    ),
-  );
-}
+export const owned = new OwnedResources(sandboxState, docker);
 
 const identity = (pid: number) => processFields(pid, "lstart=,command=", environment);
 

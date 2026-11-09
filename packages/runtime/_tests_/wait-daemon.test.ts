@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loopy, wait } from "@loopy/sdk/graph";
+import { loopy, wait } from "@loopy/sdk";
 import { type Cause, Effect, Fiber, Queue } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";

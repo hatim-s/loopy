@@ -2,4 +2,4 @@ export { compile } from "./compile";
 
 export { CompilationError } from "./errors";
 
-export type { Bundle, CompileResult, CompilerDiagnostic } from "./types";
+export type { Bundle, CompilerDiagnostic } from "./types";

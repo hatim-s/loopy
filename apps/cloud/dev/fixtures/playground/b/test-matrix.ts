@@ -1,4 +1,4 @@
-import { branch, code, eq, fail, log, loopy, map } from "loopy/graph";
+import { branch, code, eq, fail, log, loopy, map } from "loopy";
 
 export default loopy("playground-b-test-matrix", {
   description: "Seed CI sources, map bounded test shards, and publish their scores",

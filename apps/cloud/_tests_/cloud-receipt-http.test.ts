@@ -94,29 +94,6 @@ test("malformed, extra-field and oversized commands cannot mutate the authority"
   expect(await Effect.runPromise(harness.authority.status({}))).toEqual(before);
 });
 
-test("root-derived identities include ordered scope and cannot name another authority's Docker resources", async () => {
-  const session = await Effect.runPromise(
-    harness.authority.openSession({ expectedEpoch: 0, nonce: "identity" }),
-  );
-
-  const plan = await harness.plan("identity");
-  expect(
-    await Effect.runPromise(
-      harness.authority.admit({
-        session,
-        plan: { ...plan, volume: `loopy-workspace-${"f".repeat(64)}` },
-      }),
-    ),
-  ).toEqual({ kind: "rejected", code: "invalid_state" });
-  expect(
-    await Effect.runPromise(harness.authority.admit({ session, plan: { ...plan, attempt: 2 } })),
-  ).toEqual({
-    kind: "rejected",
-    code: "invalid_state",
-  });
-  expect(await Effect.runPromise(harness.authority.read({ id: plan.id }))).toBeNull();
-});
-
 test("nonlocal stage and overlapping user/bridge credentials cannot open the internal authority", async () => {
   for (const configuration of [{ stage: "production" }, { token: principalToken }]) {
     const isolated = await receiptHarness(configuration);

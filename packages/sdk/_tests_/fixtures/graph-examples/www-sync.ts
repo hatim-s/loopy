@@ -1,4 +1,4 @@
-import { code, log, loopy, uuid } from "loopy/graph";
+import { code, log, loopy, uuid } from "loopy";
 
 export default loopy("www-uacode-sync", {
   input: {

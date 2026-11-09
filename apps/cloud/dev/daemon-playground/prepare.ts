@@ -1,9 +1,9 @@
-import { cp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, symlink } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { CLI_ENTRY } from "../../../../packages/cli/src/entry";
-import { catalogSchema, regularFiles } from "../playground/repository";
-import { lstatOrAbsent } from "../shared/fs";
+import { catalogSchema, regularFiles, SOURCE_MARKER } from "../playground/repository";
+import { createOnce, lstatOrAbsent } from "../shared/fs";
 import { sha256Hex } from "../shared/hash";
 import { root } from "../stack/constants";
 import { environment, evidencePath, home, port, source, state, upstream } from "./config";
@@ -45,7 +45,7 @@ export async function selections() {
 
 export async function prepare() {
   await mkdir(state, { recursive: true });
-  const marker = await readFile(join(upstream, ".playground-source-sha256"), "utf8");
+  const marker = await readFile(join(upstream, SOURCE_MARKER), "utf8");
   const sourceExists = await lstatOrAbsent(source);
 
   if (sourceExists) {
@@ -63,7 +63,7 @@ export async function prepare() {
       force: false,
     });
 
-    for (const file of ["README.md", "package.json", ".playground-source-sha256"]) {
+    for (const file of ["README.md", "package.json", SOURCE_MARKER]) {
       await cp(join(upstream, file), join(source, file), { errorOnExist: true, force: false });
     }
 
@@ -143,7 +143,12 @@ export async function prepare() {
     const json = `${JSON.stringify(manifest, null, 2)}\n`;
 
     // Preflight evidence is retained history, so a rerun must not overwrite it.
-    await writeFile(evidencePath("-preflight"), json, { flag: "wx" });
+    createOnce(
+      evidencePath("-preflight"),
+      json,
+      0o644,
+      `Preflight evidence ${evidencePath("-preflight")} already exists. Move it aside to rerun.`,
+    );
     await Bun.write(resolve(state, "manifest.json"), json);
   } finally {
     await daemon.stop();

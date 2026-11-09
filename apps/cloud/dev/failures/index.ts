@@ -1,12 +1,12 @@
 import { routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal, failureEvidence } from "../shared/assert";
-import { compileFixture } from "../shared/fixture-client";
+import { compileFixture } from "../shared/compile-fixture";
 import { FAILURE_JOURNEY_SOURCES, sourceHashes } from "../shared/sources";
 import { root } from "../stack/constants";
 import { FailureJourney } from "./client";
 import { ports } from "./config";
-import { docker, ownedContainer } from "./resources";
+import { docker, owned } from "./resources";
 
 const journey = new FailureJourney();
 
@@ -56,7 +56,7 @@ try {
     const { receipt, request } = await journey.running(run.id);
     await journey.duplicate(request, "started");
     const restart = await journey.stack.restart(14_000);
-    const stopped = await ownedContainer(receipt.container);
+    const stopped = await owned.container(receipt);
     assert(!stopped.State.Running, "command_did_not_finish_during_process_loss");
     const finished = await journey.wait(run.id);
     assert(finished.run.status === "succeeded", "recovered_command_failed", {
@@ -110,7 +110,7 @@ try {
   await evidence.check("docker_worker_kill_uncertain_without_retry", async () => {
     const run = await journey.start("cloud-failure-command");
     const { receipt, request } = await journey.running(run.id);
-    const container = await ownedContainer(receipt.container);
+    const container = await owned.container(receipt);
     assert(container.State.Running, "kill_target_not_running");
     const killedAt = Date.now();
     await docker(["kill", receipt.container]);
@@ -123,7 +123,7 @@ try {
         saved.result.error.code === "uncertain",
       "killed_worker_not_uncertain",
     );
-    assert(!(await ownedContainer(receipt.container)).State.Running, "killed_worker_still_running");
+    assert(!(await owned.container(receipt)).State.Running, "killed_worker_still_running");
     await journey.duplicate(request, "finished");
     await Bun.sleep(2000);
     await journey.assertSingleAttempt(await journey.snapshot(run.id));
@@ -152,7 +152,7 @@ try {
         saved.result.error.code === "execution",
       "timeout_error_code_changed",
     );
-    assert(!(await ownedContainer(saved.container)).State.Running, "timeout_worker_still_running");
+    assert(!(await owned.container(saved)).State.Running, "timeout_worker_still_running");
     equal(await journey.artifact(saved), "started\n", "timeout_effect_finished");
 
     return {
@@ -170,7 +170,7 @@ try {
     const slug = "cloud-failure-schedule";
     const runs = { query: { slug, limit: 200 } };
     const prior = await api.call(routes.runs, runs);
-    const existing = new Set(prior.map((run) => run.id));
+    const existing = new Set(prior.runs.map((run) => run.id));
 
     const schedule = await api.call(routes.putSchedule, {
       params: { slug },
@@ -181,7 +181,7 @@ try {
       api.call(routes.setScheduleEnabled, { params: { slug }, body: { enabled: false } });
 
     const list = async () =>
-      (await api.call(routes.runs, runs)).filter((run) => !existing.has(run.id));
+      (await api.call(routes.runs, runs)).runs.filter((run) => !existing.has(run.id));
 
     try {
       const first = (
@@ -214,8 +214,8 @@ try {
       assert(second, "second_scheduled_run_missing");
       const secondWorker = await journey.running(second.id, "fired\n");
       assert(
-        (await ownedContainer(firstWorker.receipt.container)).State.Running &&
-          (await ownedContainer(secondWorker.receipt.container)).State.Running,
+        (await owned.container(firstWorker.receipt)).State.Running &&
+          (await owned.container(secondWorker.receipt)).State.Running,
         "scheduled_workers_did_not_overlap",
       );
       await disable();

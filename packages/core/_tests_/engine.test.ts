@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
-import { loopy, sh } from "@loopy/sdk/graph";
 import { type ExecutionKey, type ExecutionResult, graphSchema, type Json } from "../src";
 import { type EngineEvent, initialState, nextDeadline, step } from "../src/engine";
 import { decode } from "./fixtures/decode";
-import { approveDemoGraph } from "./fixtures/graphs";
+import { approveDemoGraph, commandGraph } from "./fixtures/graphs";
 
 const at = "2026-10-18T00:00:00.000Z";
 
@@ -220,10 +219,7 @@ test("stale completions emit no logs and completion and log nodes use write_log"
 
 for (const retryOnExit of [false, true]) {
   test(`command exit retry policy honors retryOnExit=${retryOnExit}`, () => {
-    const graph = loopy("exit-policy", {
-      input: {},
-      run: () => sh(["false"], { retry: { attempts: 3, retryOnExit } }),
-    });
+    const graph = commandGraph(["false"], { retryOnExit });
 
     const started = step(graph, initialState("run", {}), { kind: "run_started", at });
     const dispatch = started.effects.find((effect) => effect.kind === "dispatch");

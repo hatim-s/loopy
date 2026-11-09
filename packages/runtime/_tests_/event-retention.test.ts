@@ -3,17 +3,21 @@ import { nodeIdSchema } from "@loopy/contract";
 import type { RuntimeEvent, Store } from "@loopy/core";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
-import { memoryStore, runAt } from "./fixtures/stores";
+import { EVENT_RETENTION } from "../src/store/events";
+import { runAt } from "./fixtures/clock";
+import { memoryStore } from "./fixtures/stores";
 
 const start = Date.parse(newRun().createdAt);
 
-test("subscribers survive throwing listeners and unsubscribe after committed batches", async () => {
+test("a throwing listener is dropped while other subscribers keep committed batches", async () => {
   const store = memoryStore();
 
   const batches: RuntimeEvent[][] = [];
   const reads: Promise<Effect.Success<ReturnType<Store["getRun"]>>>[] = [];
+  let failures = 0;
 
   store.subscribe(() => {
+    failures++;
     throw new Error("Listener failed.");
   });
 
@@ -26,6 +30,7 @@ test("subscribers survive throwing listeners and unsubscribe after committed bat
   expect(await reads[0]).toEqual(newRun());
   await Effect.runPromise(store.claim("run", "owner"));
   expect(batches.map((batch) => batch.length)).toEqual([1, 1]);
+  expect(failures).toBe(1);
   unsubscribe();
   await Effect.runPromise(
     store.apply({
@@ -52,7 +57,7 @@ test("retention keeps the exact 24-hour boundary and monotonic sequences", async
   await run(store.createRun(newRun()));
   time++;
   await run(store.claim("run", "owner"));
-  time += 86_400_000;
+  time += EVENT_RETENTION.maxAgeMs;
   expect(await run(store.pruneEvents(new Date(time).toISOString()))).toBe(1);
   expect((await run(store.events(0, 10))).map((event) => event.sequence)).toEqual([2]);
   expect(await run(store.pruneEvents(new Date(time).toISOString()))).toBe(0);
@@ -60,7 +65,7 @@ test("retention keeps the exact 24-hour boundary and monotonic sequences", async
   expect((await run(store.events(2, 10)))[0]?.sequence).toBe(3);
 });
 
-test("retention bounds recent rows to the newest 100000", async () => {
+test("retention bounds recent rows to the newest maxRows", async () => {
   const store = memoryStore();
 
   await Effect.runPromise(store.createRun(newRun()));
@@ -68,17 +73,17 @@ test("retention bounds recent rows to the newest 100000", async () => {
   await Effect.runPromise(store.heartbeat("run", "owner"));
   // Copies the committed heartbeat so the table reaches the cap in one statement.
   store.driver.exec(`
-    WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM copies WHERE n < 100000)
+    WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM copies WHERE n < ${EVENT_RETENTION.maxRows})
     INSERT INTO events(at,txn,entity,kind,run_id,record,node_id,slug,workspace)
     SELECT at, txn || '-' || n, entity, kind, run_id, record, node_id, slug, workspace
     FROM copies, events WHERE sequence = 3
   `);
 
   expect(await Effect.runPromise(store.pruneEvents(newRun().createdAt))).toBe(3);
-  const events = await Effect.runPromise(store.events(0, 100_010));
-  expect(events).toHaveLength(100_000);
+  const events = await Effect.runPromise(store.events(0, EVENT_RETENTION.maxRows + 10));
+  expect(events).toHaveLength(EVENT_RETENTION.maxRows);
   expect(events[0]?.sequence).toBe(4);
-  expect(events.at(-1)?.sequence).toBe(100_003);
+  expect(events.at(-1)?.sequence).toBe(EVENT_RETENTION.maxRows + 3);
 });
 
 test("graph node, log and run events commit in reducer order within one transaction", async () => {

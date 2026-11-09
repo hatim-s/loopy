@@ -3,15 +3,16 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { decodeBoundary, nodeIdSchema, runSnapshotViewSchema } from "@loopy/contract";
 import { type Executor, type StoreEffect } from "@loopy/core";
-import { code, finally_, loopy, parallel, sleep, uuid, wait } from "@loopy/sdk/graph";
+import { code, finally_, loopy, parallel, sleep, uuid, wait } from "@loopy/sdk";
 import { Deferred, Effect, Exit, Schema, Scope } from "effect";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";
 import { activate } from "../src/host";
 import { makeLocalService, Registry } from "../src/local";
 import { makeSqliteRunStore } from "../src/store";
+import { runAt } from "./fixtures/clock";
 import { withBundles } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
-import { MemorySqlStore, runAt } from "./fixtures/stores";
+import { MemorySqlStore } from "./fixtures/stores";
 import { fixtureScope } from "./fixtures/test-scope";
 
 async function fixture() {
@@ -213,8 +214,8 @@ test("a signal accepted while a parallel execution runs survives its completion"
 
 test("parallel dispatches run concurrently and sampling completes without an executor", async () => {
   const store = new MemorySqlStore();
+  const bothStarted = Deferred.makeUnsafe<void>();
   let active = 0;
-  let peak = 0;
 
   const graph = loopy("concurrent", {
     input: {},
@@ -228,29 +229,33 @@ test("parallel dispatches run concurrently and sampling completes without an exe
 
   withBundles(graph);
 
+  // Each execution holds until both have started, so a serial host times out instead of passing.
   const executor: Executor = {
-    lookup: () => {
-      return Effect.gen(function* () {
-        return { kind: "none" as const };
-      });
-    },
-    execute: () => {
-      return Effect.gen(function* () {
+    lookup: () => Effect.succeed({ kind: "none" as const }),
+    execute: () =>
+      Effect.gen(function* () {
         active++;
-        peak = Math.max(peak, active);
-        yield* Effect.sleep(5);
-        active--;
+
+        if (active === 2) {
+          yield* Deferred.succeed(bothStarted, undefined);
+        }
+
+        yield* Deferred.await(bothStarted).pipe(
+          Effect.timeoutOrElse({
+            duration: "5 seconds",
+            orElse: () => Effect.die(new Error("The second dispatch never started.")),
+          }),
+        );
 
         return { kind: "succeeded" as const, output: 1, logs: [] };
-      }).pipe(Effect.orDie);
-    },
+      }),
   };
 
   await Effect.runPromise(store.createRun(newRun()));
   expect((await Effect.runPromise(activate({ store, executor, graph, runId: "run" }))).status).toBe(
     "succeeded",
   );
-  expect(peak).toBe(2);
+  expect(active).toBe(2);
 });
 
 test("cancelling a suspended approval expires its token and cancels its pending node", async () => {

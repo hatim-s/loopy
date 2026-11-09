@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { routes } from "@loopy/contract";
 import type { Json } from "@loopy/core";
+import { writeDaemonFile } from "@loopy/runtime/local";
 import { Effect } from "effect";
 import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
 import { onCleanup } from "../../runtime/_tests_/fixtures/test-scope";
-import { writeDaemonFile } from "../../runtime/src/local/daemon/file";
 import { HttpError, request, TransportError } from "../src/client";
 
 async function withHttp(

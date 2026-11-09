@@ -1,4 +1,4 @@
-import { branch, code, eq, fail, log, loopy } from "loopy/graph";
+import { branch, code, eq, fail, log, loopy } from "loopy";
 
 export default loopy("playground-a-format-report", {
   input: { batch: "string", ordinal: "number", fail: "boolean", items: "number[]" },

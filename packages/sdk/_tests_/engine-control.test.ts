@@ -1,4 +1,13 @@
 import { expect, test } from "bun:test";
+import { validateGraph } from "@loopy/core";
+import { initialState, step } from "@loopy/core/engine";
+import {
+  at,
+  complete,
+  dispatches,
+  failed,
+  start,
+} from "../../core/_tests_/fixtures/engine-control";
 import {
   and,
   branch,
@@ -20,10 +29,7 @@ import {
   switch_,
   uuid,
   wait,
-} from "@loopy/sdk/graph";
-import { validateGraph } from "../src";
-import { initialState, step } from "../src/engine";
-import { at, complete, dispatches, failed, start } from "./fixtures/engine-control";
+} from "../src/graph";
 
 test("branch and switch run only selected arms and resolve joined nested values", () => {
   const graph = loopy("selected", {

@@ -6,7 +6,7 @@ import {
   type RunStatus,
 } from "@loopy/contract";
 import { kindDetail } from "./graph-text";
-import { byUrgency, isInFlight, type NodeRunStatus } from "./status";
+import { byUrgency, isSettled, type NodeRunStatus } from "./status";
 import type { ScopeTuple } from "./view-models";
 
 export type GraphNode = GraphView["nodes"][number];
@@ -268,7 +268,7 @@ export function focusNodes(model: GraphModel, entry: string): string[] {
   const ran = (test: (status: NodeRunStatus) => boolean) =>
     model.nodes.filter((node) => node.state.kind === "ran" && test(node.state.status));
 
-  const active = ran(isInFlight);
+  const active = ran((status) => !isSettled(status));
   const inner = active.filter((node) => node.role !== "control");
   const failed = ran((status) => status === "failed");
   const [first] = [inner, active, failed].filter((nodes) => nodes.length > 0);

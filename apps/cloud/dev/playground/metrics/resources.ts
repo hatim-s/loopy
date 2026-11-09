@@ -45,30 +45,43 @@ function processRows(text: string) {
   });
 }
 
-export async function resources() {
-  let processes: ProcessRow[] | null = null;
-  let disk: string | null = null;
-
+// A failed ps or df leaves that context unknown rather than blocking API timing.
+async function tool(file: string, args: string[]) {
   try {
-    const manifest = decodeBoundary(supervisorManifestSchema)(
-      await Bun.file(resolve(state, "processes.json")).json(),
-    );
-
-    const ids = await processTree([manifest.owner, ...manifest.children.map((child) => child.pid)]);
-
-    processes = processRows(
-      (
-        await execute(
-          "ps",
-          ["-p", [...ids].join(","), "-o", "pid=,ppid=,%cpu=,rss=,vsz=,etime=,comm="],
-          { timeout: 5000 },
-        )
-      ).stdout.trim(),
-    );
-    disk = (await execute("df", ["-k", state], { timeout: 5000 })).stdout.trim();
+    return (await execute(file, args, { timeout: 5000 })).stdout.trim();
   } catch {
-    // Missing process or disk context remains unknown rather than blocking API timing.
+    return null;
   }
+}
+
+async function supervisedProcesses() {
+  const file = Bun.file(resolve(state, "processes.json"));
+
+  if (!(await file.exists())) {
+    return null;
+  }
+
+  const manifest = decodeBoundary(supervisorManifestSchema)(await file.json());
+  const roots = [manifest.owner, ...manifest.children.map((child) => child.pid)];
+  const ids = await processTree(roots).catch(() => null);
+
+  if (!ids) {
+    return null;
+  }
+
+  const table = await tool("ps", [
+    "-p",
+    [...ids].join(","),
+    "-o",
+    "pid=,ppid=,%cpu=,rss=,vsz=,etime=,comm=",
+  ]);
+
+  return table === null ? null : processRows(table);
+}
+
+export async function resources() {
+  const processes = await supervisedProcesses();
+  const disk = await tool("df", ["-k", state]);
 
   return {
     at: new Date().toISOString(),

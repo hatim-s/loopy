@@ -4,7 +4,6 @@ import { type RunRecord, revision } from "@loopy/core";
 import { Effect } from "effect";
 import { runIn } from "../../../core/_tests_/fixtures/run";
 import { Registry } from "../../src/local/registry";
-import { makeArtifactRegistry } from "../../src/local/save-compiled";
 import { type ArtifactRegistry, makeService, RegistryError } from "../../src/service";
 import { compiledBody } from "./compiled";
 import { qualityTestRoot } from "./quality-test-root";
@@ -58,14 +57,16 @@ export async function summaryServiceFixture() {
   const adapter = (workspace: string): Effect.Effect<ArtifactRegistry> => {
     calls.registries += 1;
     const native = registry(workspace);
-    const base = makeArtifactRegistry(native);
 
     return Effect.succeed({
-      ...base,
+      workspace: () => native.workspace(),
+      revisionGraph: (revision) => native.revisionGraph(revision),
+      revisionSource: (slug, revision) => native.revisionSource(slug, revision),
+      save: (body) => native.save(body),
       listSummaries: () =>
         Effect.sync(() => {
           calls.lists.set(native.project, (calls.lists.get(native.project) ?? 0) + 1);
-        }).pipe(Effect.andThen(base.listSummaries())),
+        }).pipe(Effect.andThen(native.listSummaries())),
       get: (slug) =>
         Effect.suspend(() => {
           calls.graphs.push(slug);
@@ -77,7 +78,7 @@ export async function summaryServiceFixture() {
                   cause: new Error("Stored graph is corrupt."),
                 }),
               )
-            : base.get(slug);
+            : native.get(slug);
         }),
     });
   };
@@ -100,7 +101,7 @@ export async function summaryServiceFixture() {
     body.graph.inputValidation = { root: "json", minItems: {}, unknownKeys: "reject" };
     body.revision = await revision(body.graph);
 
-    return Effect.runPromise(registry(workspace).save(body));
+    return Effect.runPromise(registry(workspace).publish(body));
   };
 
   const run = async (id: string, workspace: string, slug: string, status: RunRecord["status"]) => {

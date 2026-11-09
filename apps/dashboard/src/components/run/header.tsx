@@ -1,11 +1,12 @@
 import {
   canCancelRun,
-  cancelRefusal,
   canResumeRun,
+  cleanupRefusal,
   type GraphView,
   isTerminalRun,
   type RunSnapshotView,
   type RunView,
+  runningRefusal,
 } from "@loopy/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
@@ -65,7 +66,11 @@ function RunActions({ snapshot, graph }: { snapshot: RunSnapshotView; graph: Gra
   const action = useRunAction(run);
   const busy = action.pending !== null;
   const truncated = run.truncatedFields?.input !== undefined;
-  const refusal = cancelRefusal(snapshot.nodeRuns, graph ?? { nodes: [] });
+
+  // An unstarted run has nothing to clean up, and a loading graph cannot refuse yet.
+  const refusal =
+    runningRefusal(snapshot.nodeRuns) ??
+    (snapshot.nodeRuns.length === 0 || graph === null ? null : cleanupRefusal(graph));
 
   return (
     <div className="flex flex-col items-end gap-2">

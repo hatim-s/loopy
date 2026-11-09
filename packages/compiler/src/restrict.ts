@@ -10,8 +10,8 @@ import { graphModulePath } from "./source-paths";
 import { DEFAULT_LOOPY, declarations, inspectStatements } from "./statements";
 import type { AuthorModule, CompilerDiagnostic } from "./types";
 
-/** The only module specifiers that bind trusted builder calls in author source. */
-export const SDK_SPECIFIERS: readonly string[] = ["loopy", "loopy/graph"];
+/** The only module specifier that binds trusted builder calls in author source. */
+export const SDK_SPECIFIER = "loopy";
 
 type Inspection = {
   modules: Map<string, AuthorModule>;
@@ -65,7 +65,7 @@ const inspectImports = Effect.fn(function* (
     }
 
     const specifier = statement.source.value;
-    const sdk = SDK_SPECIFIERS.includes(specifier);
+    const sdk = specifier === SDK_SPECIFIER;
     let imported: Scope = new Map();
 
     if (!sdk) {
@@ -74,7 +74,7 @@ const inspectImports = Effect.fn(function* (
           context,
           statement,
           "module_import",
-          "Builder imports must use loopy, loopy/graph or relative author modules.",
+          "Builder imports must use loopy or relative author modules.",
         );
         continue;
       }

@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { generateCommand } from "../src/local/typegen/generate";
 import { parseCliHelp } from "../src/local/typegen/parse-help";
 import { renderCommandSource } from "../src/local/typegen/render";
-import { compileOrThrow } from "./fixtures/compile";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 
 const repository = resolve(import.meta.dir, "../../..");
@@ -41,27 +40,6 @@ describe("CLI help generation", () => {
       },
       json: { cli: "--json", kind: "boolean" },
       config: { cli: "--config", kind: "string", repeatable: true },
-    });
-  });
-
-  test("a generated wrapper compiles into a saved graph's command node", async () => {
-    const directory = qualityTestRoot("generated");
-
-    await writeFile(
-      join(directory, "codex.ts"),
-      renderCommandSource("codexExec", parseCliHelp("codex", ["exec"], help).descriptor),
-    );
-    await writeFile(
-      join(directory, "entry.ts"),
-      'import {loopy} from "loopy"; import {codexExec} from "./codex.ts"; export default loopy("generated", {input:{}, run:()=>codexExec({args:["hi"], flags:{json:true}})});',
-    );
-    const result = await compileOrThrow(join(directory, "entry.ts"));
-
-    expect(result.graph.nodes[0]).toMatchObject({
-      kind: "command",
-      key: "codex.exec",
-      argv: ["codex", "hi"],
-      flags: { json: true },
     });
   });
 

@@ -11,7 +11,7 @@ import { atomic } from "./files";
 import { gatePath, gateSchema, groupSchema, groups, readSummary, summaryPath } from "./journal";
 import { FIXTURES_PER_GROUP } from "./plan";
 import type { PlaygroundProfile } from "./profile";
-import { catalog, prepareRepository } from "./repository";
+import { catalog, prepareRepository, SOURCE_MARKER } from "./repository";
 
 const WORKFLOWS = groups.length * FIXTURES_PER_GROUP;
 
@@ -91,7 +91,7 @@ export function prepare() {
       repository: profile.repository,
       ...snapshot,
       sourceHash: (yield* io(operation, () =>
-        Bun.file(resolve(profile.repository, ".playground-source-sha256")).text(),
+        Bun.file(resolve(profile.repository, SOURCE_MARKER)).text(),
       )).trim(),
       revisions,
     });

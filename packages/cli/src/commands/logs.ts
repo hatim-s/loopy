@@ -1,20 +1,13 @@
 import { isTerminalRun, PAGE_LIMIT, routes } from "@loopy/contract";
 import { Effect } from "effect";
-import { request } from "../client";
+import { followEvents, request } from "../client";
 import { defineCommand, RUN_ID } from "../command";
 import type { Context } from "../context";
 import { printJson, printLine } from "../output";
 
-// Follow polls until the CLI gains an SSE reader like the dashboard's.
-const FOLLOW_POLL_MS = 500;
-
-function drainLogs(
-  context: Context,
-  id: string,
-  { after, follow }: { after: number; follow: boolean },
-) {
+function drainLogs(context: Context, id: string, follow: boolean) {
   return Effect.gen(function* () {
-    let cursor = after;
+    let cursor = 0;
 
     while (true) {
       const logs = yield* request(context, routes.logs, {
@@ -52,19 +45,35 @@ export const logs = defineCommand({
   run: (cli) =>
     Effect.gen(function* () {
       const [id] = cli.args;
-      const { follow } = cli.values;
-      let after = 0;
 
-      while (true) {
-        const snapshot = yield* request(cli, routes.run, { params: { id } });
+      if (!cli.values.follow) {
+        yield* drainLogs(cli, id, false);
 
-        after = yield* drainLogs(cli, id, { after, follow });
+        return;
+      }
 
-        if (!follow || isTerminalRun(snapshot.run.status)) {
-          return;
+      // The stream replays from this cursor, so nothing committed during the reads below is lost.
+      const from = yield* request(cli, routes.cursor, {});
+      const snapshot = yield* request(cli, routes.run, { params: { id } });
+      let printed = yield* drainLogs(cli, id, true);
+
+      if (isTerminalRun(snapshot.run.status)) {
+        return;
+      }
+
+      yield* followEvents(cli, from, (events) => {
+        for (const event of events.filter((candidate) => candidate.runId === id)) {
+          if (event.entity === "log" && event.record.seq > printed) {
+            printLine(JSON.stringify(event.record));
+            printed = event.record.seq;
+          }
+
+          if (event.entity === "run" && isTerminalRun(event.record.status)) {
+            return true;
+          }
         }
 
-        yield* Effect.sleep(FOLLOW_POLL_MS);
-      }
+        return false;
+      });
     }),
 });

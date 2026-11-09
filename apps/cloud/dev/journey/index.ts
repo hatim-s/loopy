@@ -1,9 +1,9 @@
 import { type CursorView, type Json, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal, failureEvidence } from "../shared/assert";
-import { compileFixture } from "../shared/fixture-client";
+import { compileFixture } from "../shared/compile-fixture";
 import { LOCAL_STACK } from "../stack/ports";
-import { Journey } from "./client";
+import { JOURNEY_EVIDENCE, Journey } from "./client";
 import { docker } from "./docker";
 import { frame } from "./events";
 import { execution } from "./execution";
@@ -80,8 +80,8 @@ async function main() {
 
     const after = await journey.call(routes.runs, runs);
     equal(
-      after.map((run) => run.id),
-      before.map((run) => run.id),
+      after.runs.map((run) => run.id),
+      before.runs.map((run) => run.id),
       "invalid_input_created_run",
     );
 
@@ -273,7 +273,7 @@ async function main() {
   const { results } = journey.evidence;
   const failed = results.filter((result) => result.status === "failed").length;
   process.stdout.write(
-    `${JSON.stringify({ status: failed ? "failed" : "passed", passed: results.length - failed, failed, evidence: ".notes/cloud/evidence/journey.json", scope: "local-stack-journey-only" })}\n`,
+    `${JSON.stringify({ status: failed ? "failed" : "passed", passed: results.length - failed, failed, evidence: JOURNEY_EVIDENCE.path, scope: JOURNEY_EVIDENCE.scope })}\n`,
   );
   process.exitCode = failed ? 1 : 0;
 }

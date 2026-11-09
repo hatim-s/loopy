@@ -26,7 +26,7 @@ Execution flags are `--max-timeout-ms 600000`, `--memory 256m`, `--cpus 1` and `
 
 ## Receipt authority modes
 
-The CLI above and `cloud:start` use filesystem authority. It serializes writes under the state-root process lock and a process-local session. Its epoch is not persistent. New attempt records live in `receipts/`, immutable terminal result files in `results/`, and active guards plus released-token records in `exports/`. `src/state-root.ts` owns this layout, its validation and the process lock. A terminal record points to result bytes by SHA-256 and size instead of embedding the result.
+The CLI above and `cloud:start` use filesystem authority. It serializes writes under the state-root process lock and a process-local session. Its epoch is not persistent. New attempt records live in `receipts/`, immutable terminal result files in `results/`, and active guards plus released-token records in `exports/`. `src/state-root.ts` owns this layout and its validation. `src/attempt/index.ts` takes the process lock with the shared `acquirePidLock` from `@loopy/runtime/os`. A terminal record points to result bytes by SHA-256 and size instead of embedding the result.
 
 The architecture playground injects `HttpSandboxAuthority` backed by the Worker's `SANDBOX_RECEIPTS` DO and `RECEIPT_RESULTS` R2 bucket. The default playground profile remains filesystem-backed. DO sessions persist epoch and nonce, fencing writers from earlier bridge processes. Receipt SQL owns admission, terminal pointers and export guards; R2 owns immutable result bytes. Both authorities derive attempt identity with `packages/contract/src/sandbox/identity.ts` and decide admission, completion and export with the transitions in `transitions.ts`, each inside its own transaction. Both reject a result whose canonical bytes exceed 2 MiB as `invalid_state`. The sandbox CLI has no DO-mode flag.
 
@@ -106,9 +106,9 @@ The support to delete together is:
 - The `inline` result variant of `attemptRecordSchema` in `packages/contract/src/sandbox/journal.ts`.
 - The `inlineRef` fact of `completeTransition` in `packages/contract/src/sandbox/transitions.ts`.
 - The inline branches in `resolveResult` (`src/receipt-view.ts`) and `inlineRef` (`src/filesystem/authority.ts`).
-- The tests that write flat or inline receipts: the retained-receipt case in `_tests_/authority-contract.test.ts` and the historical scan in `_tests_/authority-publication.test.ts`.
+- The legacy receipt case in `_tests_/authority-contract.test.ts`, the only test that writes flat or inline receipts.
 
-A `service.lock` written by an older sandbox holds JSON `{pid, nonce}` instead of the shared `pid nonce` format. Startup does not convert it: `rejectPreviousLock` in `src/state-root.ts` stops with the lock path and asks the operator to stop any sandbox on that root, delete the file and start again. Remove that check and its case in `_tests_/attempts.test.ts` once no retained root carries an old lock.
+A `service.lock` written by an older sandbox holds JSON `{pid, nonce}` instead of the shared `pid nonce` format. Startup does not convert it: `rejectPreviousLock` in `src/state-root.ts` stops with the lock path and asks the operator to stop any sandbox on that root, delete the file and start again. Remove that check and its case in `_tests_/state-root.test.ts` once no retained root carries an old lock.
 
 ## Tests
 

@@ -1,8 +1,8 @@
 import type { ExecutionKey, ExecutionResult, Receipt } from "@loopy/core";
 import { executionKeyString } from "@loopy/core";
-import { code, loopy, parallel, wait } from "@loopy/sdk/graph";
+import { code, loopy, parallel, wait } from "@loopy/sdk";
 import { Deferred, Effect } from "effect";
-import type { DurableExecutionProvider } from "../../src/host";
+import type { DurableExecutionProvider, DurableProviderError } from "../../src/host";
 import { withBundles } from "./compiled";
 import { MemorySqlStore } from "./stores";
 
@@ -43,30 +43,49 @@ export function policyGraph() {
   return graph;
 }
 
+/** Records every lookup and start; each start returns `result` until a test finishes it. */
 export class PolicyProvider implements DurableExecutionProvider {
   receipts = new Map<string, Receipt>();
   starts: { key: ExecutionKey; attempt: number }[] = [];
   lookups: string[] = [];
+  result: Receipt = { kind: "started" };
 
   id(key: ExecutionKey, attempt: number) {
     return `${executionKeyString(key)}/${attempt}`;
   }
 
-  lookup(key: ExecutionKey, attempt: number) {
-    return Effect.gen({ self: this }, function* () {
+  lookup(key: ExecutionKey, attempt: number): Effect.Effect<Receipt, DurableProviderError> {
+    return Effect.sync(() => {
       this.lookups.push(this.id(key, attempt));
 
       return this.receipts.get(this.id(key, attempt)) ?? { kind: "none" as const };
     });
   }
 
-  start(key: ExecutionKey, attempt: number): Effect.Effect<Receipt> {
-    return Effect.gen({ self: this }, function* () {
+  start(key: ExecutionKey, attempt: number): Effect.Effect<Receipt, DurableProviderError> {
+    return Effect.sync(() => {
       this.starts.push({ key, attempt });
-      this.receipts.set(this.id(key, attempt), { kind: "started" as const });
+      this.receipts.set(this.id(key, attempt), this.result);
 
-      return { kind: "started" as const };
+      return this.result;
     });
+  }
+
+  /** Finishes the latest start. */
+  finish(result: ExecutionResult = policySuccess) {
+    const started = this.starts.at(-1);
+
+    if (!started) {
+      throw new Error("Expected a started execution.");
+    }
+
+    this.receipts.set(this.id(started.key, started.attempt), { kind: "finished", result });
+  }
+
+  finishAll(result: ExecutionResult = policySuccess) {
+    for (const started of this.starts) {
+      this.receipts.set(this.id(started.key, started.attempt), { kind: "finished", result });
+    }
   }
 }
 

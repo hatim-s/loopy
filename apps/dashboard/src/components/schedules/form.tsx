@@ -17,11 +17,16 @@ function rejectedField(error: Error | null): Field | undefined {
     return undefined;
   }
 
-  if (error.code === "invalid_cron") {
-    return "cron";
+  switch (error.code) {
+    case "invalid_cron":
+      return "cron";
+    case "invalid_timezone":
+      return "tz";
+    case "invalid_schedule_input":
+      return "input";
+    default:
+      return undefined;
   }
-
-  return error.code === "invalid_timezone" ? "tz" : undefined;
 }
 
 function Labelled({ label, children }: { label: ReactNode; children: ReactNode }) {

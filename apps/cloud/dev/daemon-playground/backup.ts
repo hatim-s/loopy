@@ -1,11 +1,12 @@
 import { Database } from "bun:sqlite";
 import { existsSync, statSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { decodeBoundary, type RunView, runStatusSchema } from "@loopy/contract";
 import { readDaemonFile } from "@loopy/runtime/local";
 import { Schema } from "effect";
+import { byId } from "../playground/metrics/sql-probe";
+import { createOnce } from "../shared/fs";
 import { closedDatabase } from "./closed-executions";
 import { home } from "./config";
 import { PLANNED_RUNS } from "./plan";
@@ -38,11 +39,6 @@ function withDatabase<T>(path: string, readonly: boolean, read: (database: Datab
   }
 }
 
-// SQLite orders ids by byte value, so the API census is sorted the same way before comparing.
-function byId(left: { id: string }, right: { id: string }) {
-  return Buffer.compare(Buffer.from(left.id), Buffer.from(right.id));
-}
-
 // The daemon must be stopped, so a read-only open sees a settled database and serialize copies it.
 export async function backupClosedDatabase(apiRuns: Pick<RunView, "id" | "status">[] | null) {
   if (readDaemonFile(home)) {
@@ -58,7 +54,12 @@ export async function backupClosedDatabase(apiRuns: Pick<RunView, "id" | "status
     bytes: database.serialize(),
   }));
 
-  await writeFile(destination, original.bytes, { flag: "wx", mode: 0o600 });
+  createOnce(
+    destination,
+    original.bytes,
+    0o600,
+    `Closed database backup ${destination} already exists. Move it aside to back up again.`,
+  );
 
   const destinationJournal = withDatabase(
     destination,

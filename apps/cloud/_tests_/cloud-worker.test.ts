@@ -1,20 +1,15 @@
 import { beforeAll, expect, test } from "bun:test";
-import { resolve } from "node:path";
 import { decodeBoundary, routes } from "@loopy/contract";
 import { cloudRoutes, WORKSPACE_HEADER } from "@loopy/contract/sandbox";
 import { revision } from "@loopy/core";
-import { log, loopy, wait } from "@loopy/sdk/graph";
+import { log, loopy, wait } from "@loopy/sdk";
 import type { Miniflare } from "miniflare";
-import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
-import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
 import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { until } from "../../../packages/runtime/_tests_/fixtures/wait";
-import { cloudWorker, startWorkerd } from "./fixtures/workerd";
+import { cloudWorker, cloudWorkerBundle, startWorkerd } from "./fixtures/workerd";
 
 let runtime: Miniflare;
-
-let directory: string;
 
 const tokenA = "synthetic-workerd-credential-alpha-0001";
 
@@ -23,13 +18,8 @@ const tokenB = "synthetic-workerd-credential-bravo-0002";
 const scope = fileScope();
 
 beforeAll(async () => {
-  const root = resolve(import.meta.dir, "../../..");
-  directory = qualityTestRoot("workerd", { scope });
-
-  await bundleForBrowser([resolve(root, "apps/cloud/src/worker.ts")], directory);
-
   runtime = await startWorkerd(
-    cloudWorker(directory, {
+    cloudWorker(await cloudWorkerBundle(), {
       LOCAL_AUTH: JSON.stringify([
         { token: tokenA, workspace: "alpha" },
         { token: tokenB, workspace: "bravo" },
@@ -121,7 +111,7 @@ test("Worker rejects invalid save/run inputs without publishing or creating runs
     ).status,
   ).toBe(403);
   const runs = await api("/runs?slug=input-check");
-  expect(decodeBoundary(routes.runs.response)(await runs.json())).toEqual([]);
+  expect(decodeBoundary(routes.runs.response)(await runs.json()).runs).toEqual([]);
   expect(
     decodeBoundary(routes.loopies.response)(await (await api("/loopies")).json()).some(
       ({ slug }) => slug === "invalid",
@@ -319,7 +309,7 @@ test("Worker pins historical graph/source revisions and isolates tenant runs, ho
     410,
   );
   expect(
-    decodeBoundary(routes.runs.response)(await (await api("/runs", { token: tokenB })).json()),
+    decodeBoundary(routes.runs.response)(await (await api("/runs", { token: tokenB })).json()).runs,
   ).toEqual([]);
   const bravo = structuredClone(first);
   bravo.source.workspace = "bravo";

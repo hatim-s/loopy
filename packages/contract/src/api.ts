@@ -40,6 +40,11 @@ const workspaceQuerySchema = struct({ workspace: Schema.optional(Schema.String) 
 
 const runParamsSchema = struct({ id: Schema.String });
 
+// The ID breaks timestamp ties so every run remains reachable.
+const runCursorSchema = Schema.String.check(
+  Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/),
+);
+
 export const runsQuerySchema = struct({
   ...runFilterFields,
   waiting: Schema.optional(
@@ -56,14 +61,19 @@ export const runsQuerySchema = struct({
     ]),
   ),
   limit: pageLimit(DEFAULT_PAGE_SIZE),
-  before: Schema.optional(
-    Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]+$/)),
-  ),
+  before: Schema.optional(runCursorSchema),
 });
 
 export type RunsQuery = Schema.Codec.Encoded<typeof runsQuerySchema>;
 
-// The ID breaks timestamp ties so every run remains reachable.
+/** One page of runs, newest first, with the cursor of the next older page or null at the end. */
+export const runPageSchema = struct({
+  runs: Schema.Array(runViewSchema).pipe(Schema.mutable),
+  next: Schema.NullOr(runCursorSchema),
+});
+
+export type RunPage = Schema.Schema.Type<typeof runPageSchema>;
+
 export function encodeRunCursor(run: { createdAt: string; id: string }): string {
   return `${run.createdAt}|${run.id}`;
 }
@@ -336,7 +346,7 @@ export const routes = {
     params: emptySchema,
     query: runsQuerySchema,
     body: Schema.Undefined,
-    response: Schema.Array(runViewSchema).pipe(Schema.mutable),
+    response: runPageSchema,
   },
   run: {
     method: "GET",

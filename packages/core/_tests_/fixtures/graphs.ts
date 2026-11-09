@@ -1,4 +1,4 @@
-import { graphSchema } from "../../src";
+import { type Graph, graphSchema } from "../../src";
 import { decode } from "./decode";
 
 // This boundary fixture fixes the builder's call-order ids and explicit scope joins for H2.
@@ -100,3 +100,181 @@ export const approveDemoGraph = decode(graphSchema)({
     { from: "8:join", to: "9:join", kind: "next" },
   ],
 });
+
+const meta = { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" };
+
+/** The graph the builder emits for `run: () => sh(argv, options)`. */
+export function commandGraph(
+  argv: string[],
+  options: { env?: Record<string, string>; stdin?: string; retryOnExit?: boolean } = {},
+) {
+  return decode(graphSchema)({
+    version: 1,
+    meta,
+    name: "command",
+    input: {},
+    entry: "0:sh.exec",
+    outputs: { ref: "1:join", path: [] },
+    nodes: [
+      {
+        id: "0:sh.exec",
+        kind: "command",
+        label: null,
+        scope: null,
+        key: "sh.exec",
+        out: { kind: "record", fields: { stdout: "string", stderr: "string", exitCode: "number" } },
+        argv,
+        flags: {},
+        flagSpec: null,
+        variants: {},
+        options: {
+          cwd: null,
+          env: options.env ?? {},
+          stdin: options.stdin ?? null,
+          timeout: null,
+          maxOutputBytes: null,
+        },
+        rateLimit: null,
+        retry: { attempts: 3, retryOnExit: options.retryOnExit ?? false },
+        okExitCodes: [0],
+        parse: null,
+      },
+      {
+        id: "1:join",
+        kind: "join",
+        label: null,
+        scope: null,
+        result: { kind: "value", value: { ref: "0:sh.exec", path: [] } },
+      },
+    ],
+    edges: [{ from: "0:sh.exec", to: "1:join", kind: "next" }],
+  });
+}
+
+/** The graph the builder emits for `run: ({ input }) => input`. */
+export function inputGraph(
+  input: Graph["input"],
+  inputValidation: NonNullable<Graph["inputValidation"]>,
+) {
+  return decode(graphSchema)({
+    version: 1,
+    meta,
+    name: "input",
+    input,
+    inputValidation,
+    entry: "0:join",
+    outputs: { ref: "0:join", path: [] },
+    nodes: [
+      {
+        id: "0:join",
+        kind: "join",
+        label: null,
+        scope: null,
+        result: { kind: "value", value: { ref: "input", path: [] } },
+      },
+    ],
+    edges: [],
+  });
+}
+
+export const mapGraph = decode(graphSchema)({
+  version: 1,
+  meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
+  name: "map",
+  input: { items: "json" },
+  entry: "map",
+  outputs: { ref: "map", path: [] },
+  nodes: [
+    {
+      id: "map",
+      kind: "map",
+      scope: null,
+      label: null,
+      over: { ref: "input", path: ["items"] },
+      body: "body",
+      item: "item",
+      index: "index",
+      concurrency: 4,
+      onError: "collect",
+    },
+    {
+      id: "body",
+      kind: "format",
+      scope: "map",
+      label: null,
+      template: "{i}:{value}",
+      values: { i: { ref: "index", path: [] }, value: "item" },
+    },
+    {
+      id: "end",
+      kind: "join",
+      scope: "map",
+      label: null,
+      result: {
+        kind: "value" as const,
+        value: { value: { ref: "item", path: [] }, formatted: { ref: "body", path: [] } },
+      },
+    },
+  ],
+  edges: [
+    { from: "body", to: "end", kind: "next" },
+    { from: "end", to: "map", kind: "join" },
+  ],
+});
+
+export function numericBranchGraph(): Graph {
+  return decode(graphSchema)({
+    version: 1,
+    meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
+    name: "derived-types",
+    input: {},
+    entry: "branch",
+    outputs: null,
+    nodes: [
+      {
+        id: "branch",
+        kind: "branch",
+        scope: null,
+        label: null,
+        predicate: { op: "eq", left: true, right: true },
+        arms: { yes: "yes", no: "no" },
+      },
+      {
+        id: "yes",
+        kind: "join",
+        scope: "branch",
+        label: null,
+        result: { kind: "value" as const, value: 1 },
+      },
+      {
+        id: "no",
+        kind: "join",
+        scope: "branch",
+        label: null,
+        result: { kind: "value" as const, value: 2 },
+      },
+      {
+        id: "result",
+        kind: "join",
+        scope: null,
+        label: null,
+        result: { kind: "value" as const, value: { ref: "branch", path: [] } },
+      },
+      {
+        id: "check",
+        kind: "branch",
+        scope: null,
+        label: null,
+        predicate: { op: "gt", left: { ref: "branch", path: [] }, right: 0 },
+        arms: { yes: "pass", no: "fail" },
+      },
+      { id: "pass", kind: "uuid", scope: "check", label: null },
+      { id: "fail", kind: "uuid", scope: "check", label: null },
+    ],
+    edges: [
+      { from: "yes", to: "result", kind: "join" },
+      { from: "no", to: "result", kind: "join" },
+      { from: "result", to: "check", kind: "next" },
+    ],
+  });
+}

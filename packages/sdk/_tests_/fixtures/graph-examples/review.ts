@@ -1,4 +1,4 @@
-import { branch, code, git, log, loopy, lte, sh, size } from "loopy/graph";
+import { branch, code, git, log, loopy, lte, sh, size } from "loopy";
 
 export default loopy("review", {
   input: { "instructions?": "string" },

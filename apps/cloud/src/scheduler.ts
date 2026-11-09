@@ -8,7 +8,7 @@ import {
   ScheduleDefinitionError,
 } from "@loopy/runtime/host";
 import { requireDefinition } from "@loopy/runtime/service";
-import type { SqlRunStore } from "@loopy/runtime/store/portable";
+import { leaseExpiresAt, type SqlRunStore } from "@loopy/runtime/store/portable";
 import { Cause, Clock, Effect, Exit } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
 import { cloudSync, platform } from "./operation";
@@ -97,7 +97,7 @@ export class WorkspaceScheduler {
       return null;
     }
 
-    const expires = Date.parse(owner.heartbeatAt) + this.options.store.leaseMs + 1;
+    const expires = leaseExpiresAt(owner.heartbeatAt, this.options.store.leaseMs);
 
     return now < expires ? iso(expires) : null;
   }

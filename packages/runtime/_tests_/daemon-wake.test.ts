@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loopy } from "@loopy/sdk/graph";
+import { loopy } from "@loopy/sdk";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { FakeExecutor, newRun } from "../../core/_tests_/fixtures/run";

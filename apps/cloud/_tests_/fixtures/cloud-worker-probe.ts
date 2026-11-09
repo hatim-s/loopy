@@ -2,7 +2,8 @@ import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
 import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import type { RunRecord, StoreEffect } from "@loopy/core";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
-import { Clock, Effect } from "effect";
+import { Effect } from "effect";
+import { runAt } from "../../../../packages/runtime/_tests_/fixtures/clock";
 import { EVENT_RETENTION } from "../../../../packages/runtime/src/store/events";
 import { ImmutableBucket, r2Key } from "../../src/artifacts/storage";
 import { DurableSqlDriver } from "../../src/sql-driver";
@@ -72,9 +73,13 @@ export class CloudWorkerProbe {
       await Effect.runPromise(storage.put("immutable", "original"));
       await Effect.runPromise(storage.put("immutable", "replacement"));
 
-      const conditional = await this.env.ARTIFACTS.put("workspaces/probe/immutable", "third", {
-        onlyIf: { etagDoesNotMatch: "*" },
-      });
+      const conditional = await this.env.ARTIFACTS.put(
+        `${r2Key.workspace("probe")}immutable`,
+        "third",
+        {
+          onlyIf: { etagDoesNotMatch: "*" },
+        },
+      );
 
       const other = new ImmutableBucket(this.env.ARTIFACTS, r2Key.workspace("other"));
 
@@ -90,21 +95,8 @@ export class CloudWorkerProbe {
 
     await this.ctx.storage.put("synthetic-marker", "retained");
     let tick = Date.parse(at);
-    const platform = Effect.runSync(Clock.Clock);
-
     // The store reads time from Effect's Clock. Each reading advances one millisecond.
-    const clock: Clock.Clock = {
-      currentTimeMillisUnsafe: () => tick++,
-      currentTimeMillis: Effect.sync(() => tick++),
-      currentTimeNanosUnsafe: () => BigInt(tick++) * 1_000_000n,
-      currentTimeNanos: Effect.sync(() => BigInt(tick++) * 1_000_000n),
-      monotonicTimeNanosUnsafe: () => platform.monotonicTimeNanosUnsafe(),
-      monotonicTimeNanos: platform.monotonicTimeNanos,
-      sleep: (duration) => platform.sleep(duration),
-    };
-
-    const onClock = <A, E>(effect: Effect.Effect<A, E>) =>
-      Effect.runPromise(effect.pipe(Effect.provideService(Clock.Clock, clock)));
+    const onClock = runAt(() => tick++);
 
     const driver = new DurableSqlDriver(this.ctx.storage);
 

@@ -1,4 +1,4 @@
-import { branch, code, defineCommand, eq, loopy, map, parallel, sh } from "loopy/graph";
+import { branch, code, defineCommand, eq, loopy, map, parallel, sh } from "loopy";
 
 const parsed = defineCommand(
   { key: "acceptance.printf", program: "printf", parse: "./parse.ts" },

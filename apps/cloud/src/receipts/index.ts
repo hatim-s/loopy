@@ -1,6 +1,7 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
 import { decodeBoundary, encodeBoundary } from "@loopy/contract";
 import {
+  AUTHORITY_REJECTED_STATUS,
   type AuthorityCommand,
   AuthorityError,
   authorityCommandSchema,
@@ -58,7 +59,7 @@ export class SandboxReceipts {
 
           return Effect.succeed(
             reason && Cause.isFailReason(reason) && reason.error instanceof AuthorityError
-              ? Response.json({ error: reason.error.code }, { status: 409 })
+              ? Response.json({ error: reason.error.code }, { status: AUTHORITY_REJECTED_STATUS })
               : Response.json({ error: "storage_unavailable" }, { status: 500 }),
           );
         }),

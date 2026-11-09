@@ -7,14 +7,9 @@ import {
   type RouteInput,
   routes,
 } from "@loopy/contract";
+import { ApiClient, type CallOptions, type RequestOptions, readJson } from "../shared/api-client";
 import { assert } from "../shared/assert";
-import {
-  ApiClient,
-  type CallOptions,
-  EvidenceLog,
-  type RequestOptions,
-  readJson,
-} from "../shared/fixture-client";
+import { EvidenceLog } from "../shared/evidence-log";
 import { root } from "../stack/constants";
 import { principalToken, readLocalCredentials } from "../stack/credentials";
 import { LOCAL_STACK } from "../stack/ports";
@@ -29,9 +24,14 @@ export type JourneyCall = Omit<CallOptions, "token"> & As;
 
 export type JourneyRequest = Omit<RequestOptions, "token"> & As;
 
+export const JOURNEY_EVIDENCE = {
+  path: ".notes/cloud/evidence/journey.json",
+  scope: "local-stack-journey-only",
+} as const;
+
 export class Journey {
-  readonly evidence = new EvidenceLog(resolve(root, ".notes/cloud/evidence/journey.json"), {
-    scope: "local-stack-journey-only",
+  readonly evidence = new EvidenceLog(resolve(root, JOURNEY_EVIDENCE.path), {
+    scope: JOURNEY_EVIDENCE.scope,
     command: "bun --no-env-file apps/cloud/dev/journey/index.ts",
     api,
   });

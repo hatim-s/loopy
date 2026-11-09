@@ -50,7 +50,15 @@ export const catalogSchema = Schema.Array(
 
 export type CatalogEntry = (typeof catalogSchema.Type)[number];
 
-const sourceMarker = ".playground-source-sha256";
+// Fixtures write this identity into their result artifact; other result fields are workflow-specific.
+export const artifactIdentitySchema = Schema.Struct({
+  batch: Schema.String,
+  ordinal: Schema.Int,
+  slug: Schema.String,
+});
+
+/** Names the hash of the fixture snapshot a prepared playground repository was built from. */
+export const SOURCE_MARKER = ".playground-source-sha256";
 
 const modulesPath = "modules/catalog.json";
 
@@ -117,8 +125,8 @@ async function readCatalog(group: Group, root: string): Promise<readonly Catalog
 
     const source = await readFile(file, "utf8");
 
-    if (!/(?:from\s*|import\s*\()\s*["']loopy\/graph["']/.test(source)) {
-      throw new Error(`Catalog fixture must import loopy/graph as supplied: ${entry.file}`);
+    if (!/(?:from\s*|import\s*\()\s*["']loopy["']/.test(source)) {
+      throw new Error(`Catalog fixture must import loopy as supplied: ${entry.file}`);
     }
   }
 
@@ -200,10 +208,10 @@ export async function prepareRepository(): Promise<{ commit: string; files: numb
   }
 
   if (existing) {
-    const markerPath = join(repository, sourceMarker);
+    const markerPath = join(repository, SOURCE_MARKER);
 
     const recordedHash = await readFile(markerPath, "utf8").catch(
-      whenMissing(`Refusing to replace existing playground repository without ${sourceMarker}`),
+      whenMissing(`Refusing to replace existing playground repository without ${SOURCE_MARKER}`),
     );
 
     if (recordedHash.trim() !== snapshot.hash) {
@@ -242,7 +250,7 @@ export async function prepareRepository(): Promise<{ commit: string; files: numb
       '{\n  "name": "loopies-playground",\n  "private": true,\n  "type": "module"\n}\n',
     );
     await writeFile(join(repository, ".gitignore"), "node_modules/\n");
-    await writeFile(join(repository, sourceMarker), `${snapshot.hash}\n`);
+    await writeFile(join(repository, SOURCE_MARKER), `${snapshot.hash}\n`);
 
     await git(["init", "--initial-branch=playground"]);
     const dependencyDirectory = join(workspace, "node_modules");
@@ -252,7 +260,7 @@ export async function prepareRepository(): Promise<{ commit: string; files: numb
       await symlink(dependencyDirectory, join(repository, "node_modules"), "dir");
     }
 
-    await git(["add", "README.md", "package.json", ".gitignore", sourceMarker, "fixtures"]);
+    await git(["add", "README.md", "package.json", ".gitignore", SOURCE_MARKER, "fixtures"]);
     await git(["commit", "--no-gpg-sign", "-m", "Seed local playground fixtures"]);
     const commit = await git(["rev-parse", "HEAD"]);
     await git(["update-ref", "refs/loopy/playground-seed", commit]);
@@ -266,7 +274,7 @@ export async function prepareRepository(): Promise<{ commit: string; files: numb
 
 export async function catalog(group: Group): Promise<readonly CatalogEntry[]> {
   const snapshot = await sourceSnapshot();
-  const markerPath = join(repository, sourceMarker);
+  const markerPath = join(repository, SOURCE_MARKER);
 
   const recordedHash = await readFile(markerPath, "utf8").catch(
     whenMissing("Playground repository has not been prepared yet."),

@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { compile } from "@loopy/compiler";
 import { type GraphView, graphView, routes } from "@loopy/contract";
+import { arms } from "@loopy/core";
 import { Effect } from "effect";
 import { request } from "../client";
 import { defineCommand } from "../command";
@@ -18,10 +19,12 @@ function text(graph: GraphView) {
         depth++;
       }
 
-      const edges = graph.edges
-        .filter((edge) => edge.from === node.id)
-        .map((edge) => `${edge.kind} -> ${edge.to}`)
-        .join(", ");
+      const edges = [
+        ...graph.edges
+          .filter((edge) => edge.from === node.id)
+          .map((edge) => `${edge.kind} -> ${edge.to}`),
+        ...arms(node).map(([name, entry]) => `arm ${name} -> ${entry}`),
+      ].join(", ");
 
       return `${"  ".repeat(depth)}${node.id} ${node.kind}${edges ? ` [${edges}]` : ""}`;
     })

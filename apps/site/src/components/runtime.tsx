@@ -41,8 +41,12 @@ const CONTROLS: Control[] = [
     ),
   },
   {
-    title: "Approvals",
-    body: "The run waits until a person says yes.",
+    title: "Approvals and hooks",
+    body: (
+      <>
+        A wait node holds the run until <code>loopy hook</code> or the dashboard sends its payload.
+      </>
+    ),
     icon: (
       <>
         <path className="s" d="M2 14h14M28 14h14" />
@@ -51,8 +55,8 @@ const CONTROLS: Control[] = [
     ),
   },
   {
-    title: "Pause, resume, cancel",
-    body: "Stop a run between nodes and pick it up later.",
+    title: "Resume and cancel",
+    body: "Resume wakes a run whose owner stopped. Cancel ends a run with no execution in flight.",
     icon: (
       <>
         <path className="s" d="M2 14h40" />
@@ -62,8 +66,8 @@ const CONTROLS: Control[] = [
     ),
   },
   {
-    title: "Replay",
-    body: "Run a finished graph again from its recorded inputs.",
+    title: "Run again",
+    body: "Start a new run with a finished run's input from the dashboard.",
     icon: (
       <>
         <path className="s" d="M2 20h40" />
@@ -73,13 +77,13 @@ const CONTROLS: Control[] = [
     ),
   },
   {
-    title: "Checkpoint forks",
-    body: "Branch a new run from any checkpoint.",
+    title: "Map",
+    body: "Run the same steps for every item in a list, a few at a time.",
     icon: (
       <>
-        <path className="s" d="M2 18h40" />
-        <path className="a" d="M18 18c6 0 6-12 12-12h12" />
-        <circle className="d" cx="18" cy="18" r="3" />
+        <path className="s" d="M2 14h12" />
+        <path className="a" d="M14 14c8 0 8-10 16-10h12M14 14h28M14 14c8 0 8 10 16 10h12" />
+        <circle className="d" cx="14" cy="14" r="3" />
       </>
     ),
   },
@@ -87,7 +91,7 @@ const CONTROLS: Control[] = [
     title: "Schedules",
     body: (
       <>
-        Put a loopy on cron. <code>0 9 * * *</code> runs it every morning.
+        Put a loopy on cron with a time zone. <code>0 9 * * *</code> runs it every morning.
       </>
     ),
     icon: (
@@ -109,8 +113,8 @@ export function Runtime() {
           The agent does the work. The graph decides what happens next.
         </h2>
         <p className="sub rv" style={stagger(1)}>
-          Inside a node the agent loops as long as it needs. Between nodes, Loopy runs plain rules
-          you can read.
+          Inside a node, a command or an agent CLI runs as long as it needs. Between nodes, Loopy
+          follows plain rules you can read.
         </p>
         <div className="controls">
           {CONTROLS.map((c, i) => (

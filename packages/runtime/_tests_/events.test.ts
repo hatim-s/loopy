@@ -46,8 +46,7 @@ test("stored run and node events parse over SSE", async () => {
       runView({
         run,
         hook: undefined,
-        now: run.updatedAt,
-        leaseMs: store.leaseMs,
+        ownerStale: false,
       }),
     );
 

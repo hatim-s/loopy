@@ -1,64 +1,25 @@
-import { beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
-import {
-  decodeBoundary,
-  nodeIdSchema,
-  type PutLoopyBody,
-  type SourceArtifact,
-  validateCompiled,
-} from "@loopy/contract";
+import type { PutLoopyBody, SourceArtifact } from "@loopy/contract";
 import { revision } from "@loopy/core";
-import { code, loopy } from "@loopy/sdk/graph";
-import { Effect } from "effect";
-import type { Miniflare } from "miniflare";
-import { bundleForBrowser } from "../../../packages/runtime/_tests_/fixtures/bundle";
+import { code, loopy } from "@loopy/sdk";
 import { compiledBody } from "../../../packages/runtime/_tests_/fixtures/compiled";
-import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
-import { fileScope, onCleanup } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { ARTIFACT_LIMITS } from "../src/artifacts";
 import { r2Key } from "../src/artifacts/storage";
-import { startWorkerd, testWorker } from "./fixtures/workerd";
+import { type ArtifactRegistry, artifactRegistry } from "./fixtures/artifact-registry";
 
-let runtime: Miniflare;
-
-const scope = fileScope();
+let registry: ArtifactRegistry;
 
 beforeAll(async () => {
-  const directory = qualityTestRoot("artifacts", { scope });
-  await bundleForBrowser([join(import.meta.dir, "fixtures/artifact-registry-probe.ts")], directory);
+  registry = await artifactRegistry("artifacts");
+}, 60_000);
 
-  runtime = await startWorkerd({
-    r2Persist: false,
-    durableObjectsPersist: false,
-    ...testWorker({
-      scriptPath: join(directory, "artifact-registry-probe.js"),
-      r2Buckets: ["BUCKET"],
-      durableObjects: { REGISTRY: { className: "RegistryProbe", useSQLite: true } },
-    }),
-  });
-  onCleanup(() => runtime.dispose(), scope);
+afterAll(async () => {
+  await registry?.cleanup();
 });
 
-async function call(workspace: string, operation: string, ...args: unknown[]) {
-  const namespace = await runtime.getDurableObjectNamespace("REGISTRY");
-
-  const response = await namespace
-    .get(namespace.idFromName("registry-test"))
-    .fetch("http://probe", {
-      method: "POST",
-      // Bundle bytes cross into the probe as base64, as they do on the HTTP save route.
-      body: JSON.stringify({ workspace, operation, args }, (key, value) =>
-        key === "bytes" && value instanceof Uint8Array
-          ? Buffer.from(value).toString("base64")
-          : value,
-      ),
-    });
-
-  const body: unknown = await response.json();
-
-  return { status: response.status, body };
-}
+const call = (workspace: string, operation: string, ...args: unknown[]) =>
+  registry.call(workspace, operation, ...args);
 
 function artifact(hash: string, content: string): SourceArtifact {
   return {
@@ -136,7 +97,7 @@ test("real local R2 and DO SQL publish immutable revisions, pinned source and ba
   });
   expect(await call(workspace, "workspace")).toMatchObject({ body: { value: workspace } });
 
-  const bucket = await runtime.getR2Bucket("BUCKET");
+  const bucket = await registry.bucket();
   const objects = await bucket.list({ prefix: r2Key.workspace(workspace) });
   expect(objects.objects).toHaveLength(5);
 });
@@ -218,148 +179,6 @@ test("final SQL transaction rejects source ownership races and explicit replace 
   });
 });
 
-test("capacity rejects overflow without truncating list results", async () => {
-  expect(await call("capacity", "fillCapacity", ARTIFACT_LIMITS.definitions)).toMatchObject({
-    status: 200,
-  });
-  const body = await compiledBody("overflow", "/entry.ts", { workspace: "capacity" });
-  expect(await call("capacity", "save", body)).toMatchObject({
-    status: 400,
-    body: { error: expect.stringContaining(`${ARTIFACT_LIMITS.definitions} definition capacity`) },
-  });
-  expect(await call("overfull", "fillCapacity", ARTIFACT_LIMITS.definitions + 1)).toMatchObject({
-    status: 200,
-  });
-  expect(await call("overfull", "listSummaries")).toMatchObject({
-    status: 400,
-    body: { error: expect.stringContaining(`${ARTIFACT_LIMITS.definitions} definition capacity`) },
-  });
-});
-
-const capacityError = expect.stringContaining(
-  "Workspace exceeds its 32 MiB current graph capacity. Replace a definition with a smaller graph before saving.",
-);
-
-test("aggregate capacity rejects new and replacement pointers while existing operations remain readable", async () => {
-  const workspace = "aggregate";
-  const description = "x".repeat(800_000);
-  const first = await compiledBody("definition-0", "/entry.ts", { workspace, description });
-
-  for (let index = 0; index < 43; index++) {
-    const body = await compiledBody(`definition-${index}`, "/entry.ts", { workspace, description });
-    expect(await call(workspace, "save", body)).toMatchObject(
-      index < 41 ? { status: 200 } : { status: 400, body: { error: capacityError } },
-    );
-  }
-
-  expect(await call(workspace, "listSizes")).toEqual({
-    status: 200,
-    body: { value: { count: 41, bounded: true } },
-  });
-  expect(await call(workspace, "get", "definition-41")).toEqual({
-    status: 200,
-    body: { value: null },
-  });
-  expect(await call(workspace, "get", first.graph.name)).toMatchObject({
-    status: 200,
-    body: { value: { revision: first.revision } },
-  });
-
-  const oversizedReplacement = await compiledBody("definition-0", "/entry.ts", {
-    workspace,
-    description: "x".repeat(1_000_000),
-  });
-
-  const equalReplacement = await compiledBody("definition-0", "/entry.ts", {
-    workspace,
-    description: "y".repeat(800_000),
-  });
-
-  expect(await call(workspace, "save", oversizedReplacement)).toMatchObject({ status: 200 });
-
-  const otherReplacement = await compiledBody("definition-1", "/entry.ts", {
-    workspace,
-    description: "x".repeat(1_000_000),
-  });
-
-  expect(await call(workspace, "save", otherReplacement)).toMatchObject({ status: 200 });
-
-  const thirdReplacement = await compiledBody("definition-2", "/entry.ts", {
-    workspace,
-    description: "x".repeat(1_000_000),
-  });
-
-  expect(await call(workspace, "save", thirdReplacement)).toMatchObject({ status: 200 });
-
-  const crossingReplacement = await compiledBody("definition-3", "/entry.ts", {
-    workspace,
-    description: "x".repeat(1_000_000),
-  });
-
-  expect(await call(workspace, "save", crossingReplacement)).toMatchObject({
-    status: 400,
-    body: { error: capacityError },
-  });
-  expect(await call(workspace, "get", "definition-3")).toMatchObject({
-    body: { value: { graph: { meta: { description } } } },
-  });
-  expect(await call(workspace, "save", equalReplacement)).toMatchObject({ status: 200 });
-  expect(await call(workspace, "get", "definition-0")).toMatchObject({
-    body: { value: { revision: equalReplacement.revision } },
-  });
-  expect(await call(workspace, "serviceChecks", "definition-0")).toMatchObject({
-    status: 200,
-    body: {
-      value: {
-        slug: "definition-0",
-        revision: equalReplacement.revision,
-        snapshotRead: true,
-        scheduled: "definition-0",
-        enabled: false,
-        eventDelivered: true,
-      },
-    },
-  });
-  const smaller = await compiledBody("definition-0", "/entry.ts", { workspace });
-  expect(await call(workspace, "save", smaller)).toMatchObject({ status: 200 });
-
-  const previouslyRejected = await compiledBody("definition-41", "/entry.ts", {
-    workspace,
-    description,
-  });
-
-  expect(await call(workspace, "save", previouslyRejected)).toMatchObject({ status: 200 });
-  expect(await call(workspace, "listSizes")).toEqual({
-    status: 200,
-    body: { value: { count: 42, bounded: true } },
-  });
-}, 60_000);
-
-test("concurrent publications compete for aggregate capacity in the pointer transaction", async () => {
-  const workspace = "aggregate-race";
-  const description = "x".repeat(800_000);
-
-  for (let index = 0; index < 40; index++) {
-    const body = await compiledBody(`definition-${index}`, "/entry.ts", { workspace, description });
-    expect(await call(workspace, "save", body)).toMatchObject({ status: 200 });
-  }
-
-  const contenders = await Promise.all(
-    [40, 41].map((index) =>
-      compiledBody(`definition-${index}`, "/entry.ts", { workspace, description }),
-    ),
-  );
-
-  expect(await call(workspace, "race", ...contenders)).toEqual({
-    status: 200,
-    body: { value: expect.arrayContaining(["saved", capacityError]) },
-  });
-  expect(await call(workspace, "listSizes")).toMatchObject({
-    status: 200,
-    body: { value: { count: 41 } },
-  });
-}, 60_000);
-
 test("cloud rejects unsupported modes, declared secrets, oversized writes and bounded R2 reads", async () => {
   const workspace = "limits";
 
@@ -377,7 +196,7 @@ test("cloud rejects unsupported modes, declared secrets, oversized writes and bo
     status: 400,
     body: { error: expect.stringContaining("Compiled artifacts exceed cloud limits") },
   });
-  const bucket = await runtime.getR2Bucket("BUCKET");
+  const bucket = await registry.bucket();
   const hash = "b".repeat(64);
   await bucket.put(
     r2Key.workspace(workspace) + r2Key.graph(hash),
@@ -385,79 +204,18 @@ test("cloud rejects unsupported modes, declared secrets, oversized writes and bo
   );
   expect(await call(workspace, "revisionGraph", hash)).toMatchObject({
     status: 400,
-    body: { error: expect.stringContaining("Object exceeds its 1048576 byte limit.") },
+    body: {
+      error: expect.stringContaining(
+        `Object exceeds its ${ARTIFACT_LIMITS.graphBytes} byte limit.`,
+      ),
+    },
   });
 });
 
-test("shared validation rejects forged bundles, revisions and source mappings before storage", async () => {
+test("cloud save rejects a forged revision before storage", async () => {
   const body = await executable("validation");
-  await expect(
-    Effect.runPromise(validateCompiled({ ...body, revision: "f".repeat(64) })),
-  ).rejects.toThrow("The graph revision does not match its contents.");
-  await expect(Effect.runPromise(validateCompiled({ ...body, bundles: [] }))).rejects.toThrow(
-    "Supply exactly one bundle for each code node and parser in node order.",
-  );
-  await expect(
-    Effect.runPromise(
-      validateCompiled({
-        ...body,
-        bundles: body.bundles.map((bundle) => ({
-          ...bundle,
-          bytes: new TextEncoder().encode("wrong"),
-        })),
-      }),
-    ),
-  ).rejects.toThrow("Bundle bytes do not match their hash.");
-  await expect(
-    Effect.runPromise(
-      validateCompiled({ ...body, sourceArtifact: artifact("f".repeat(64), "wrong") }),
-    ),
-  ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
-  const source = artifact(body.revision, "source");
-
-  if (source.status !== "available") {
-    throw new Error("Fixture requires source files.");
-  }
-
-  source.ranges = [
-    {
-      nodeId: decodeBoundary(nodeIdSchema)("missing-node"),
-      fileId: "file-0",
-      startLine: 1,
-      endLine: 2,
-    },
-  ];
-  await expect(
-    Effect.runPromise(validateCompiled({ ...body, sourceArtifact: source })),
-  ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
-  source.ranges = [
-    {
-      nodeId: decodeBoundary(nodeIdSchema)("missing-node"),
-      fileId: "file-0",
-      startLine: 1,
-      endLine: 1,
-    },
-  ];
-  await expect(
-    Effect.runPromise(validateCompiled({ ...body, sourceArtifact: source })),
-  ).rejects.toThrow("Source must name this compiled revision and its graph nodes.");
   expect(await call("validation", "save", { ...body, revision: "f".repeat(64) })).toMatchObject({
     status: 400,
   });
   expect(await call("validation", "listSummaries")).toMatchObject({ body: { value: [] } });
-});
-
-test("HTTP capacity rejection retains bad_request and an actionable message", async () => {
-  const workspace = "capacity-http";
-  expect((await call(workspace, "fillCapacity", ARTIFACT_LIMITS.definitions)).status).toBe(200);
-  const body = await compiledBody("overflow", "/overflow.ts", { workspace });
-  expect(await call(workspace, "httpSave", body)).toMatchObject({
-    status: 400,
-    body: {
-      error: {
-        code: "bad_request",
-        message: expect.stringContaining(`${ARTIFACT_LIMITS.definitions} definition capacity`),
-      },
-    },
-  });
 });

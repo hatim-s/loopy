@@ -286,6 +286,131 @@ test("workspace source imports follow package ownership and explicit exports", (
   expect(violations).toEqual([]);
 });
 
+function packageDirectoryOf(file: string): Package | undefined {
+  return PACKAGES.find((owner) => {
+    const path = relative(packageRoot(owner), file);
+
+    return path !== ".." && !path.startsWith("../") && !path.startsWith("/");
+  });
+}
+
+function declares(config: ReturnType<typeof manifest>, name: string) {
+  return (config.dependencies?.[name] ?? config.devDependencies?.[name]) !== undefined;
+}
+
+function inside(directory: string, file: string) {
+  const path = relative(directory, file);
+
+  return path !== ".." && !path.startsWith("../");
+}
+
+/**
+ * Files test or tool code loads, starting from every file outside a fixtures directory. Author
+ * definitions under fixtures are compiled from disk, never imported, so they import `loopy` the
+ * way any author file does.
+ */
+function loadedFiles(roots: string[]) {
+  const loaded = new Set<string>();
+
+  const pending = roots.flatMap((root) =>
+    existsSync(root)
+      ? sourceFiles(root).filter((file) => !relative(root, file).split("/").includes("fixtures"))
+      : [],
+  );
+
+  for (let file = pending.pop(); file !== undefined; file = pending.pop()) {
+    if (loaded.has(file)) {
+      continue;
+    }
+
+    loaded.add(file);
+    pending.push(
+      ...importsOf(file)
+        .filter((specifier) => specifier.startsWith("."))
+        .map((specifier) => resolveImport(file, specifier)),
+    );
+  }
+
+  return [...loaded];
+}
+
+// A test that needs a higher package lives with the lowest owner allowed to import it.
+test("package tests import only their own package and the packages below it", () => {
+  const violations: string[] = [];
+  const roots = PACKAGES.map((owner) => join(packageRoot(owner), "_tests_"));
+
+  for (const file of loadedFiles(roots)) {
+    const owner = packageDirectoryOf(file);
+
+    if (!owner || !inside(join(packageRoot(owner), "_tests_"), file)) {
+      continue;
+    }
+
+    const name = relative(ROOT, file);
+    const config = manifest(packageRoot(owner));
+    const allowed = [owner, ...ALLOWED[owner]];
+
+    for (const specifier of importsOf(file)) {
+      if (specifier.startsWith(".")) {
+        const target = packageDirectoryOf(resolveImport(file, specifier));
+
+        if (target && !allowed.includes(target)) {
+          violations.push(`${name} may not reach ${target} (${specifier}).`);
+        }
+
+        continue;
+      }
+
+      const imported = workspaceImport(specifier);
+
+      if (!imported) {
+        continue;
+      }
+
+      const target = manifest(packageRoot(imported.owner));
+
+      if (!allowed.includes(imported.owner)) {
+        violations.push(`${name} may not import ${imported.owner} (${specifier}).`);
+      } else if (imported.owner !== owner && !declares(config, target.name)) {
+        violations.push(`${name} needs a declared workspace dependency for ${specifier}.`);
+      }
+
+      if (!Object.hasOwn(target.exports ?? {}, imported.key)) {
+        violations.push(`${name} imports an undeclared export (${specifier}).`);
+      }
+    }
+  }
+
+  expect(violations).toEqual([]);
+});
+
+const BUILTIN = /^(?:node|bun):/;
+
+function packageName(specifier: string) {
+  const [scope = "", name = ""] = specifier.split("/");
+
+  return scope.startsWith("@") ? `${scope}/${name}` : scope;
+}
+
+test("package source declares every third-party import it uses", () => {
+  const violations = PACKAGES.flatMap((owner) => {
+    const config = manifest(packageRoot(owner));
+
+    return sourceFiles(sourceRoot(owner)).flatMap((file) =>
+      importsOf(file)
+        .filter(
+          (specifier) =>
+            !specifier.startsWith(".") && !BUILTIN.test(specifier) && !workspaceImport(specifier),
+        )
+        .map(packageName)
+        .filter((name) => config.dependencies?.[name] === undefined)
+        .map((name) => `${relative(ROOT, file)} imports undeclared ${name}.`),
+    );
+  });
+
+  expect(violations).toEqual([]);
+});
+
 test("private manifests expose explicit existing source entries and declare the package DAG", () => {
   const violations: string[] = [];
   const root = manifest(ROOT);
@@ -366,6 +491,39 @@ test("apps use public workspace exports and dashboard uses only contract", () =>
           /packages\//.test(relative(ROOT, resolve(dirname(file), specifier)))
         ) {
           violations.push(`${relative(ROOT, file)} reaches package source (${specifier}).`);
+        }
+      }
+    }
+  }
+
+  expect(violations).toEqual([]);
+});
+
+test("app tests and development tools declare the workspace packages they import", () => {
+  const violations: string[] = [];
+
+  for (const app of readdirSync(join(ROOT, "apps"))) {
+    const directory = join(ROOT, "apps", app);
+    const config = manifest(directory);
+    const roots = ["_tests_", "dev"].map((path) => join(directory, path));
+
+    for (const file of loadedFiles(roots).filter((path) => inside(directory, path))) {
+      for (const specifier of importsOf(file)) {
+        const imported = workspaceImport(specifier);
+
+        if (!imported) {
+          continue;
+        }
+
+        const target = manifest(packageRoot(imported.owner));
+        const name = relative(ROOT, file);
+
+        if (!Object.hasOwn(target.exports ?? {}, imported.key)) {
+          violations.push(`${name} imports an undeclared export (${specifier}).`);
+        }
+
+        if (!declares(config, target.name)) {
+          violations.push(`${name} needs ${app} to declare ${target.name}.`);
         }
       }
     }

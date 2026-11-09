@@ -65,23 +65,25 @@ export {
   type PutScheduleBody,
   putScheduleBodySchema,
   type Route,
+  type RunPage,
   type RunsQuery,
   routes,
   scheduleEnabledBodySchema,
 } from "./api";
 
 export {
+  API_MOUNT,
   decodeRouteResponse,
   type RouteInput,
   type RouteName,
   type RouteOutcome,
-  type RouteRequest,
   type RouteResult,
   routeRequest,
   routeUrl,
 } from "./client";
 
 export {
+  base64Encode,
   boundaryOptions,
   decodeBoundary,
   decodeJson,
@@ -95,12 +97,6 @@ export {
   type SavedLoopy,
   savedLoopySchema,
 } from "./compiled-loopy";
-
-export {
-  CompiledHashError,
-  CompiledValidationError,
-  validateCompiled,
-} from "./compiled-validation";
 
 export * from "./dashboard";
 
@@ -117,8 +113,8 @@ export {
   graphView,
   loopyView,
   nodeDetailEvent,
-  previewPayload,
   runView,
+  scheduleView,
   serverEvent,
 } from "./derive";
 
@@ -126,7 +122,6 @@ export {
   DEFAULT_ERROR_MESSAGES,
   ERROR_CODES,
   ERROR_STATUS,
-  type ErrorBody,
   type ErrorCode,
   errorBodySchema,
 } from "./errors";
@@ -135,13 +130,18 @@ export * from "./graph";
 
 export * from "./limits";
 
-export { canCancelRun, cancelRefusal, canResumeRun, runMatchesQuery } from "./run-rules";
+export {
+  canCancelRun,
+  canResumeRun,
+  cleanupRefusal,
+  runMatchesQuery,
+  runningRefusal,
+} from "./run-rules";
 
 export {
   MAX_SOURCE_BYTES,
   MAX_SOURCE_FILES,
   MAX_SOURCE_JSON_BYTES,
-  MAX_SOURCE_RANGES,
   type SourceArtifact,
   sourceArtifactOrUnavailable,
   sourceArtifactSchema,
@@ -150,7 +150,6 @@ export {
 
 export {
   decodeEventBatch,
-  eventFrame,
   SSE_CONNECTED,
   SSE_HEARTBEAT,
   type SseFrame,

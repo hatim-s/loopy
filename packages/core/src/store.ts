@@ -67,6 +67,8 @@ export interface Store {
     now: string,
   ): Effect.Effect<RateLimitResult, StorageError>;
   readonly leaseMs: number;
+  /** True when the run's owner has lost its lease, so a resume or cancel may claim the run. */
+  ownerStale(run: RunRecord, now: string): boolean;
   createRun(run: RunRecord): Effect.Effect<void, StorageError>;
   getRun(id: string): Effect.Effect<RunRecord | undefined, StorageError>;
   claim(runId: string, token: string): Effect.Effect<RunRecord, StorageError | OwnershipError>;

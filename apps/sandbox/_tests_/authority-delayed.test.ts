@@ -5,7 +5,13 @@ import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { FilesystemAuthority } from "../src/filesystem/authority";
 import { failure } from "../src/operations";
-import { artifactReader, authorityFixture, successful, uncertain } from "./fixtures/authority";
+import {
+  artifactReader,
+  authorityFixture,
+  CountingBackend,
+  successful,
+  uncertain,
+} from "./fixtures/authority";
 import { openAttemptsWith, run } from "./fixtures/run";
 
 class DelayedCommit extends FilesystemAuthority {
@@ -43,37 +49,23 @@ for (const trigger of ["start", "lookup"] as const) {
     const { config, request, resultsFor } = await authorityFixture();
     const authority = new DelayedCommit(config.stateRoot);
     const completed = Promise.withResolvers<ExecutionResult>();
-    let starts = 0;
-    let recoveries = 0;
+    const counting = new CountingBackend(Effect.promise(() => completed.promise));
 
     const service = await openAttemptsWith(config, {
       authority,
       resultsFor,
       artifactReader,
-      backend: {
-        start: () =>
-          Effect.gen(function* () {
-            starts++;
-
-            return yield* Effect.promise(() => completed.promise);
-          }),
-        recover: () =>
-          Effect.gen(function* () {
-            recoveries++;
-
-            return uncertain;
-          }),
-      },
+      backend: counting,
     });
 
     await expect(run(service.start(request))).rejects.toThrow("timed out before eventual commit");
-    expect(starts).toBe(0);
+    expect(counting.starts).toBe(0);
     expect(await run(service.lookup(request))).toEqual({ kind: "none" });
     expect((await run(authority.commit())).kind).toBe("created");
     expect(await run(service[trigger](request))).toEqual({ kind: "started" });
     await run(service.start(request));
-    expect(starts).toBe(1);
-    expect(recoveries).toBe(0);
+    expect(counting.starts).toBe(1);
+    expect(counting.recoveries).toBe(0);
     completed.resolve(successful);
     await run(service.drain());
     expect(await run(service.lookup(request))).toEqual({ kind: "finished", result: successful });

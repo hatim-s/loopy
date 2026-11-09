@@ -97,6 +97,14 @@ export class SummaryProbe {
 
       const registry = new R2ArtifactRegistry(storage, bucket, workspace);
 
+      // Listing resolves and repairs every summary the way a single read would.
+      const summaryOf = (slug: string) =>
+        Effect.runPromise(
+          registry
+            .listSummaries()
+            .pipe(Effect.map((list) => list.find((item) => item.slug === slug) ?? null)),
+        );
+
       const pointer = () =>
         storage.sql
           .exec(
@@ -123,7 +131,7 @@ export class SummaryProbe {
           break;
         case "summary":
         case "race":
-          value = await Effect.runPromise(registry.summary(input.slug));
+          value = await summaryOf(input.slug);
           break;
         case "list":
           value = await Effect.runPromise(registry.listSummaries());
@@ -208,7 +216,7 @@ export class SummaryProbe {
           } else {
             value = {
               loopies: await Effect.runPromise(service.listLoopies(workspace)),
-              runs: await Effect.runPromise(service.listRuns({ limit: 200 })),
+              runs: (await Effect.runPromise(service.listRuns({ limit: 200 }))).runs,
             };
           }
 

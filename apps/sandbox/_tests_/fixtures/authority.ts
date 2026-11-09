@@ -31,6 +31,32 @@ export const uncertain: ExecutionResult = {
   logs: [],
 };
 
+/** Starts return `result` and recovery reports uncertain, and both are counted. */
+export class CountingBackend implements AttemptBackend {
+  starts = 0;
+  recoveries = 0;
+
+  constructor(
+    private readonly result: Effect.Effect<ExecutionResult> = Effect.succeed(successful),
+  ) {}
+
+  start() {
+    return Effect.suspend(() => {
+      this.starts++;
+
+      return this.result;
+    });
+  }
+
+  recover() {
+    return Effect.sync(() => {
+      this.recoveries++;
+
+      return uncertain;
+    });
+  }
+}
+
 export const succeedingBackend: AttemptBackend = {
   start: () => Effect.succeed(successful),
   recover: () => Effect.succeed(successful),
@@ -50,6 +76,24 @@ export const artifactReader: ArtifactReader = {
 };
 
 export const FIXTURE_TOKEN = "sandbox-fixture-token-32-characters";
+
+/** A first-attempt code request whose one bundle is `source`. */
+export function codeRequest(options: { workspace: string; runId: string; source: string }) {
+  const bytes = Buffer.from(options.source);
+  const hash = createHash("sha256").update(bytes).digest("hex");
+
+  return decodeBoundary(sandboxAttemptRequestSchema)({
+    workspace: options.workspace,
+    executionKey: {
+      runId: options.runId,
+      nodeId: decodeBoundary(nodeIdSchema)("0:code"),
+      scope: [],
+    },
+    attempt: 1,
+    spec: { kind: "code", bundleHash: hash, input: {}, timeoutMs: 1000 },
+    bundles: [{ hash, bytes: bytes.toString("base64") }],
+  });
+}
 
 /** A validated sandbox config on its own repository-local worktree. */
 export async function sandboxFixtureConfig(name: string) {
@@ -76,15 +120,11 @@ export async function authorityFixture() {
   const root = config.worktree;
   const authority = new FilesystemAuthority(config.stateRoot);
   const resultsFor = (workspace: string) => new FilesystemResults(config.stateRoot, workspace);
-  const bytes = Buffer.from("export default () => 1;");
-  const hash = createHash("sha256").update(bytes).digest("hex");
 
-  const request = decodeBoundary(sandboxAttemptRequestSchema)({
+  const request = codeRequest({
     workspace: "fixture",
-    executionKey: { runId: "run", nodeId: decodeBoundary(nodeIdSchema)("0:code"), scope: [] },
-    attempt: 1,
-    spec: { kind: "code", bundleHash: hash, input: {}, timeoutMs: 1000 },
-    bundles: [{ hash, bytes: bytes.toString("base64") }],
+    runId: "run",
+    source: "export default () => 1;",
   });
 
   async function plan(attempt = 1, runId = "run"): Promise<DockerAttemptPlan> {

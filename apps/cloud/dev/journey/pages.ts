@@ -1,21 +1,19 @@
-import { type ExecutionPage, encodeRunCursor, PAGE_LIMIT, routes } from "@loopy/contract";
+import { type ExecutionPage, PAGE_LIMIT, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal } from "../shared/assert";
-import { compileFixture } from "../shared/fixture-client";
+import { compileFixture } from "../shared/compile-fixture";
 import type { Journey } from "./client";
 
 export async function pages(journey: Journey, runId: string) {
   const query = { slug: "cloud-journey-execution", workspace: "fixtures", limit: 1 };
   const first = await journey.call(routes.runs, { query });
-  equal(first.length, 1, "run_page_not_bounded");
-  assert(first[0], "missing_run_page");
+  equal(first.runs.length, 1, "run_page_not_bounded");
+  assert(first.runs[0] && first.next, "missing_run_page");
 
-  const second = await journey.call(routes.runs, {
-    query: { ...query, before: encodeRunCursor(first[0]) },
-  });
+  const second = await journey.call(routes.runs, { query: { ...query, before: first.next } });
 
-  equal(second.length, 1, "second_run_page_missing");
-  assert(second[0]?.id !== first[0].id, "run_page_repeats_cursor");
+  equal(second.runs.length, 1, "second_run_page_missing");
+  assert(second.runs[0]?.id !== first.runs[0].id, "run_page_repeats_cursor");
   const nodeIds = new Set<string>();
   let after: string | null = null;
   let nodePages = 0;
@@ -165,7 +163,7 @@ export async function isolation(journey: Journey, runId: string) {
   const otherRuns = await journey.call(routes.runs, { query: { limit: 200 } }, asOther);
 
   assert(
-    otherRuns.every((run) => run.workspace === "other" && run.id !== runId),
+    otherRuns.runs.every((run) => run.workspace === "other" && run.id !== runId),
     "other_workspace_leaked_run",
   );
 

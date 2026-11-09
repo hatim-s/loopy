@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { decodeBoundary, executionResultSchema } from "@loopy/contract";
 import {
-  attemptId,
+  attemptResources,
   finishedAttemptRecordSchema,
+  resultBytes,
+  resultRef,
   sandboxAttemptIdentitySchema,
 } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
@@ -17,7 +18,9 @@ const identity = decodeBoundary(sandboxAttemptIdentitySchema)({
 
 const root = "/synthetic/runtime-root/.loopy/cloud/sandbox";
 
-const id = await attemptId(root, identity);
+const resources = await attemptResources(root, identity);
+
+const { id } = resources;
 
 const result = decodeBoundary(executionResultSchema)({
   kind: "succeeded",
@@ -25,22 +28,20 @@ const result = decodeBoundary(executionResultSchema)({
   logs: [],
 });
 
-const bytes = '{"kind":"succeeded","logs":[],"output":{"ok":true}}';
+const bytes = resultBytes(result);
 
-const ref = {
-  sha256: createHash("sha256").update(bytes).digest("hex"),
-  size: Buffer.byteLength(bytes),
-};
+if (bytes === null) {
+  throw new Error("The fixture result must fit the sandbox capture limit.");
+}
+
+const ref = await resultRef(bytes);
 
 const record = decodeBoundary(finishedAttemptRecordSchema)({
   kind: "finished",
   plan: {
     ...identity,
-    id,
+    ...resources,
     requestHash: "c".repeat(64),
-    container: `loopy-attempt-${id}`,
-    inputVolume: `loopy-input-${id}`,
-    volume: `loopy-workspace-${"d".repeat(64)}`,
     deadline: 1,
   },
   session: { epoch: 1, nonce: "synthetic-session" },

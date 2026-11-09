@@ -1,4 +1,5 @@
 import {
+  type RunPage,
   type RunSnapshotView,
   type RunsQuery,
   type RunView,
@@ -7,7 +8,6 @@ import {
 } from "@loopy/contract";
 import type { Query, QueryClient } from "@tanstack/react-query";
 import { keys } from "../keys";
-import type { RunPage } from "../queries";
 import { historyOf, remember, type SeenRun, type StreamHistory, seenRun } from "./history";
 import { type HookEvent, newer, waitingAfter } from "./snapshot";
 

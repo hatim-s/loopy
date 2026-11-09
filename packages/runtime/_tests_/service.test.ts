@@ -2,17 +2,17 @@ import { expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { decodeBoundary, encodeRunCursor, graphView, routes } from "@loopy/contract";
+import { decodeBoundary, encodeRunCursor, graphView, nodeIdSchema, routes } from "@loopy/contract";
 import type { Graph } from "@loopy/core";
-import { revision } from "@loopy/core";
-import { loopy } from "@loopy/sdk/graph";
+import { loopy } from "@loopy/sdk";
 import { Effect } from "effect";
 import { FakeExecutor, runIn } from "../../core/_tests_/fixtures/run";
 import { makeLocalService, Registry } from "../src/local";
+import { saveCompiled } from "../src/local/save-compiled";
+import { runAt } from "./fixtures/clock";
 import { compiledBody } from "./fixtures/compiled";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { fixtureDaemon, fixtureStore } from "./fixtures/service-runtime";
-import { runAt } from "./fixtures/stores";
 import { eventually } from "./fixtures/wait";
 
 const serviceGraph = loopy("test", { input: { name: "string" }, run: ({ input }) => input });
@@ -28,7 +28,7 @@ async function fixture(meta: Partial<Pick<Graph["meta"], "scope" | "schedule">> 
     secrets: ["PRIVATE"],
   });
 
-  await Effect.runPromise(registry.save(body));
+  await Effect.runPromise(saveCompiled(registry, body));
   let now = Date.parse("2026-10-17T00:00:00.000Z");
   const clock = { now: () => now };
   // The service and store read this clock through Effect's Clock.
@@ -130,22 +130,72 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
   });
 });
 
+test("cancelling a run cancels its pending nodes and keeps their recorded input", async () => {
+  const { service, store, root, onClock } = await fixture();
+  const run = await onClock(service.startRun("service", { name: "Hatim" }, root));
+  const at = new Date(0).toISOString();
+
+  const node = (nodeId: string) => ({
+    key: { runId: run.id, nodeId: decodeBoundary(nodeIdSchema)(nodeId), scope: [] },
+    attempt: 1,
+    maxAttempts: 2,
+    startedAt: at,
+    receipt: "none" as const,
+    inputView: { state: "available" as const, value: { nodeId } },
+  });
+
+  await onClock(store.claim(run.id, "owner"));
+  await onClock(
+    store.apply({
+      runId: run.id,
+      token: "owner",
+      effects: [
+        { kind: "write_node_run", nodeRun: { ...node("waits"), status: "waiting", wakeAt: null } },
+        { kind: "write_node_run", nodeRun: { ...node("sleeps"), status: "sleeping", wakeAt: at } },
+        {
+          kind: "write_node_run",
+          nodeRun: { ...node("done"), status: "succeeded", output: 1, endedAt: at },
+        },
+      ],
+    }),
+  );
+  await onClock(store.release(run.id, "owner"));
+  await onClock(service.cancelRun(run.id));
+
+  const nodes = await onClock(store.getNodeRuns(run.id));
+  expect(
+    nodes.map((stored) => ({
+      nodeId: String(stored.key.nodeId),
+      status: stored.status,
+      inputView: stored.inputView,
+    })),
+  ).toEqual(
+    ["waits", "sleeps", "done"].map((nodeId) => ({
+      nodeId,
+      status: nodeId === "done" ? "succeeded" : "cancelled",
+      inputView: { state: "available", value: { nodeId } },
+    })),
+  );
+  expect(nodes.find((stored) => stored.key.nodeId === "waits")).not.toHaveProperty("wakeAt");
+});
+
 test("service pages newest runs by createdAt with default and maximum page sizes", async () => {
   const { service, store, root, advance, onClock } = await fixture();
   const first = await onClock(service.startRun("service", { name: "first" }, root));
   advance();
   const second = await onClock(service.startRun("service", { name: "second" }, root));
-  expect(await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })))).toEqual([
-    second,
-  ]);
+  expect(await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })))).toEqual({
+    runs: [second],
+    next: encodeRunCursor(second),
+  });
   expect(
     await onClock(
       service.listRuns(decodeBoundary(routes.runs.query)({ before: encodeRunCursor(second) })),
     ),
-  ).toEqual([first]);
+  ).toEqual({ runs: [first], next: null });
   expect(
     await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ status: "failed" }))),
-  ).toEqual([]);
+  ).toEqual({ runs: [], next: null });
 
   for (let i = 0; i < 205; i++) {
     await onClock(
@@ -163,9 +213,38 @@ test("service pages newest runs by createdAt with default and maximum page sizes
   }
 
   expect(
-    await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ slug: "page" }))),
+    (await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ slug: "page" })))).runs,
   ).toHaveLength(50);
-  expect(await onClock(service.listRuns({ slug: "page", limit: 200 }))).toHaveLength(200);
+  expect((await onClock(service.listRuns({ slug: "page", limit: 200 }))).runs).toHaveLength(200);
+});
+
+test("run paging includes every run sharing a timestamp", async () => {
+  const { service, store, root, onClock } = await fixture();
+
+  for (const id of ["a", "b"]) {
+    await onClock(
+      store.createRun({
+        id,
+        slug: "paging",
+        workspace: root,
+        revision: "a".repeat(64),
+        input: {},
+        status: "queued",
+        createdAt: "2026-10-17T00:00:00.000Z",
+        updatedAt: "2026-10-17T00:00:00.000Z",
+      }),
+    );
+  }
+
+  const first = await onClock(service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1 })));
+  expect(first.runs.map((run) => run.id)).toEqual(["b"]);
+
+  const second = await onClock(
+    service.listRuns(decodeBoundary(routes.runs.query)({ limit: 1, before: first.next ?? "" })),
+  );
+
+  // A page that ends exactly at the last run offers no next page.
+  expect(second).toMatchObject({ runs: [{ id: "a" }], next: null });
 });
 
 test("service schedules create, replace, toggle, delete and emit persisted events", async () => {
@@ -247,7 +326,7 @@ test("service rejects invalid schedule semantics before writing", async () => {
     { body: { cron: "" }, code: "invalid_cron" },
     { body: { cron: "* * * * *", tz: "Invalid/Zone" }, code: "invalid_timezone" },
     { body: {}, code: "invalid_schedule" },
-    { body: { cron: "* * * * *", input: {} }, code: "bad_request" },
+    { body: { cron: "* * * * *", input: {} }, code: "invalid_schedule_input" },
   ];
 
   for (const { body, code } of cases) {
@@ -273,10 +352,9 @@ test("definition defaults apply and workspace schedule mutations stay isolated",
   });
 
   expect((await onClock(service.listLoopies(root)))[0]?.schedule).toEqual({
+    state: "declared",
     cron: "*/5 * * * *",
     tz: "Asia/Kolkata",
-    enabled: false,
-    nextFireAt: null,
   });
 
   const saved = await onClock(service.putSchedule("service", { input: { name: "default" } }, root));
@@ -452,21 +530,15 @@ test("service cursor follows the last event without requiring a run snapshot", a
 
 test("run graphs stay pinned to the revision each run started on", async () => {
   const { service, root, onClock } = await fixture();
-  const unsaved = await onClock(service.startRun("service", { name: "Hatim" }, root));
-  // The fixture registry entry was never compiled to disk, so its run has no graph to show.
-  await expect(onClock(service.runGraph(unsaved.id))).rejects.toHaveProperty(
-    "_tag",
-    "RegistryError",
-  );
   const source = join(root, "service.ts");
-  const first = await compiledBody("service", source);
-  first.graph.input = { name: "string" };
-  first.revision = await revision(first.graph);
+  const first = await compiledBody("service", source, { input: { name: "string" } });
   await onClock(service.putLoopy("service", first));
   const pinned = await onClock(service.startRun("service", { name: "Hatim" }, root));
-  const second = await compiledBody("service", source);
-  second.graph.input = { name: "string", "note?": "string" };
-  second.revision = await revision(second.graph);
+
+  const second = await compiledBody("service", source, {
+    input: { name: "string", "note?": "string" },
+  });
+
   await onClock(service.putLoopy("service", second));
   expect(second.revision).not.toBe(first.revision);
   expect(
@@ -547,9 +619,7 @@ test("loopy views are keyed by workspace and slug so graph and start reach that 
     mkdirSync(join(workspace, ".loopy", "loopies"), { recursive: true });
     const source = join(workspace, "shared.ts");
     await Bun.write(source, "");
-    const body = await compiledBody("shared", source);
-    body.graph.input = { [field]: "string" };
-    body.revision = await revision(body.graph);
+    const body = await compiledBody("shared", source, { input: { [field]: "string" } });
     await Effect.runPromise(service.putLoopy("shared", body));
 
     return body.revision;

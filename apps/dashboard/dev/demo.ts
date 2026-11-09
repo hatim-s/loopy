@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { decodeBoundary, type Json, routes } from "@loopy/contract";
+import { decodeBoundary, type Json, routes, runViewSchema } from "@loopy/contract";
 import { Schema } from "effect";
 
 // The same entry as the root `loopy` script.
@@ -62,7 +62,7 @@ const daemonFile = Schema.Struct({ port: Schema.Number, token: Schema.String });
 
 const runView = decodeBoundary(routes.startRun.response);
 
-const runList = decodeBoundary(routes.runs.response);
+const runList = decodeBoundary(Schema.Array(runViewSchema));
 
 async function start(slug: string, input: Json): Promise<string> {
   return runView(JSON.parse(await loopy("run", slug, "--input-json", JSON.stringify(input)))).id;
@@ -89,7 +89,7 @@ function source(file: string, text: string): string {
   return path;
 }
 
-const triage = (version: 1 | 2) => `import { log, loopy, sh } from "loopy/graph";
+const triage = (version: 1 | 2) => `import { log, loopy, sh } from "loopy";
 
 export default loopy("triage-inbox", {
   description: "Sort the support inbox and draft replies.",
@@ -108,7 +108,7 @@ const files = {
   triage: source("triage.loopy.ts", triage(1)),
   review: source(
     "review.loopy.ts",
-    `import { log, loopy, map, sh } from "loopy/graph";
+    `import { log, loopy, map, sh } from "loopy";
 
 export default loopy("review-changes", {
   description: "Review each changed package.",
@@ -127,7 +127,7 @@ export default loopy("review-changes", {
   ),
   release: source(
     "release.loopy.ts",
-    `import { loopy, sh, wait } from "loopy/graph";
+    `import { loopy, sh, wait } from "loopy";
 
 export default loopy("release", {
   description: "Build, then wait for a person to approve the publish.",
@@ -146,7 +146,7 @@ export default loopy("release", {
   ),
   digest: source(
     "digest.loopy.ts",
-    `import { log, loopy } from "loopy/graph";
+    `import { log, loopy } from "loopy";
 
 export default loopy("daily-digest", {
   description: "Summarise yesterday's activity.",
@@ -157,7 +157,7 @@ export default loopy("daily-digest", {
   ),
   flaky: source(
     "flaky.loopy.ts",
-    `import { loopy, sh } from "loopy/graph";
+    `import { loopy, sh } from "loopy";
 
 export default loopy("flaky-check", {
   description: "A check that always fails, so failure screens have data.",

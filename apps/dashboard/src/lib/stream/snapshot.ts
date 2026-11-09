@@ -82,7 +82,7 @@ function withSnapshotNode(
   const retained = new Map(
     nodeRuns.map((node) => [
       executionKeyString(node.key),
-      snapshot.truncatedOutputs?.[executionKeyString(node.key)],
+      snapshot.truncatedOutputs[executionKeyString(node.key)],
     ]),
   );
 

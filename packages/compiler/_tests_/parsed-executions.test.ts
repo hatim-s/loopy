@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { LocalExecutor } from "@loopy/runtime/executor";
+import { activate } from "@loopy/runtime/host";
+import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
-import { LocalExecutor } from "../src/executor";
-import { activate } from "../src/host";
-import { makeSqliteRunStore } from "../src/store";
+import { fixture } from "../../runtime/_tests_/fixtures/executor";
+import { onCleanup, runScoped } from "../../runtime/_tests_/fixtures/test-scope";
 import { compileOrThrow } from "./fixtures/compile";
-import { fixture } from "./fixtures/executor";
-import { onCleanup, runScoped } from "./fixtures/test-scope";
 
 test("real parsed git, filesystem, text and redirecting curl executions persist their graph results", async () => {
   const f = await fixture();

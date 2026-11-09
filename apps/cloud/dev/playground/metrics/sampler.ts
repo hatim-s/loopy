@@ -1,5 +1,4 @@
 import {
-  encodeRunCursor,
   type Route,
   type RouteInput,
   type RouteResult,
@@ -7,12 +6,13 @@ import {
   routes,
 } from "@loopy/contract";
 import { executionKeyString } from "@loopy/core";
-import type { Capture } from "./artifacts";
+import type { PlaygroundClient } from "../client";
+import { evidence } from "../config";
+import { CONCURRENCY } from "../plan";
+import { captureArtifact, writeArtifact } from "./artifacts";
 import { createMeasure } from "./request";
 import { resources } from "./resources";
 import { type Sample, summarize } from "./statistics";
-
-type Request = (path: string, signal: AbortSignal) => Promise<Response>;
 
 // Per-run detail requests are conditional and cannot be required before the first workload.
 export const baselineEndpoints = [
@@ -39,22 +39,12 @@ type Endpoint =
   | "execution.page"
   | "execution.detail";
 
-type ApiEvidence = Omit<Capture, "api" | "dashboard" | "batch" | "workspace" | "workloadControls">;
-
-export async function sampleApi(options: {
-  phase: string;
-  seconds: number;
-  requestsPerSecond: number;
-  request: Request;
-  save: (value: ApiEvidence) => Promise<void>;
-  shouldStop?: () => boolean;
-  onProgress?: (progress: {
-    phase: string;
-    samples: number;
-    failures: number;
-    elapsedMs: number;
-  }) => void;
-}) {
+/** Samples the read API at a fixed rate and rewrites the phase's capture artifact each cycle. */
+export async function sampleApi(
+  client: PlaygroundClient,
+  options: { phase: string; seconds: number; requestsPerSecond: number; shouldStop: () => boolean },
+) {
+  const artifact = captureArtifact(options.phase);
   const samples: Sample[] = [];
   const resourceSamples = [await resources()];
   let runs: RunView[] = [];
@@ -68,7 +58,7 @@ export async function sampleApi(options: {
   const windowStart = new Date(Date.now() - 24 * 3600_000).toISOString();
   const windowEnd = new Date(Date.now() + 3600_000).toISOString();
 
-  const measureAny = createMeasure(options.request, samples);
+  const measureAny = createMeasure((path, signal) => client.request(path, { signal }), samples);
 
   const measure = <R extends Route>(
     endpoint: Endpoint,
@@ -82,11 +72,10 @@ export async function sampleApi(options: {
   const plan = [
     () =>
       measure("runs.latest", routes.runs, { query: page }, (value) => {
-        runs = value;
-        const last = value.at(-1);
-        before = last ? encodeRunCursor(last) : undefined;
+        runs = value.runs;
+        before = value.next ?? undefined;
 
-        return { items: value.length };
+        return { items: value.runs.length };
       }),
     () =>
       measure("loopies.counts", routes.loopies, {}, (value) => ({
@@ -98,11 +87,11 @@ export async function sampleApi(options: {
       })),
     () =>
       measure("runs.waiting", routes.runs, { query: { ...page, waiting: true } }, (v) => ({
-        items: v.length,
+        items: v.runs.length,
       })),
     () =>
       measure("runs.failed", routes.runs, { query: { ...page, status: "failed" } }, (v) => ({
-        items: v.length,
+        items: v.runs.length,
       })),
     () =>
       measure(
@@ -130,12 +119,12 @@ export async function sampleApi(options: {
       })),
     () =>
       measure("runs.page2", routes.runs, { query: { ...page, before } }, (v) => ({
-        items: v.length,
+        items: v.runs.length,
         cursorSupplied: before !== undefined,
       })),
     () =>
       measure("runs.slug", routes.runs, { query: { ...page, slug: runs[0]?.slug } }, (v) => ({
-        items: v.length,
+        items: v.runs.length,
         filterSupplied: runs[0] !== undefined,
       })),
     () =>
@@ -224,8 +213,8 @@ export async function sampleApi(options: {
   ];
 
   async function save() {
-    await options.save({
-      scope: "local-playground-read-only-api" as const,
+    await writeArtifact(evidence, artifact, {
+      scope: "local-playground-read-only-api",
       phase: options.phase,
       startedAt,
       updatedAt: new Date().toISOString(),
@@ -240,16 +229,24 @@ export async function sampleApi(options: {
         "No response payloads, hook tokens or credentials saved.",
         "Host resources include unrelated work; sampler CPU is not server CPU.",
       ],
+      api: client.settings.api,
+      dashboard: client.settings.dashboard,
+      batch: client.settings.batch,
+      workspace: client.settings.workspace,
+      workloadControls: { apiSlots: CONCURRENCY, runtimeAttempts: CONCURRENCY },
     });
-    options.onProgress?.({
-      phase: options.phase,
-      samples: samples.length,
-      failures: samples.filter((sample) => sample.failure !== null).length,
-      elapsedMs: performance.now() - start,
-    });
+    process.stdout.write(
+      `${JSON.stringify({
+        status: "progress",
+        phase: options.phase,
+        samples: samples.length,
+        failures: samples.filter((sample) => sample.failure !== null).length,
+        elapsedMs: performance.now() - start,
+      })}\n`,
+    );
   }
 
-  while (performance.now() - start < options.seconds * 1000 && !options.shouldStop?.()) {
+  while (performance.now() - start < options.seconds * 1000 && !options.shouldStop()) {
     const tick = performance.now();
     await plan[index % plan.length]?.();
     index++;
