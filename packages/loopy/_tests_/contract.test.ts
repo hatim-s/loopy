@@ -3,6 +3,7 @@ import * as contract from "@loopy/contract";
 import type * as core from "@loopy/core";
 import { Option, Schema } from "effect";
 import { newRun } from "./fixture";
+import { approveDemoGraph } from "./fixtures/graphs";
 
 const now = newRun().createdAt;
 
@@ -65,7 +66,7 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
 });
 
 test("waitingOn names the run's pending hook and is null without one", () => {
-  const run = { ...newRun(), status: "suspended" } satisfies core.RunRecord;
+  const run = { ...newRun(), status: "suspended", wakeAt: null } satisfies core.RunRecord;
 
   expect(view(run, hook).waitingOn).toEqual({
     hook: "approve",
@@ -361,5 +362,65 @@ test("runs queries default to 50 and cap pages at 200", () => {
         contract.boundaryOptions,
       )({ limit: 201 }),
     ),
+  ).toBe(false);
+});
+
+test("graph wire views reject paths and hashes, including command parser hashes", () => {
+  const nodes = approveDemoGraph.nodes.map((node) => {
+    if (node.kind === "code") {
+      return { ...node, module: { name: "draft.ts" } };
+    }
+
+    if (node.kind === "command") {
+      return { ...node, parse: node.parse === null ? null : { input: node.parse.input } };
+    }
+
+    return node;
+  });
+
+  const view = { ...approveDemoGraph, nodes, warnings: [] };
+  expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
+  expect(
+    Schema.decodeUnknownExit(contract.graphViewSchema)(approveDemoGraph, {
+      onExcessProperty: "error",
+    })._tag === "Success",
+  ).toBe(false);
+  expect(
+    Schema.decodeUnknownExit(contract.graphViewSchema)(
+      {
+        ...view,
+        nodes: nodes.map((node) =>
+          node.kind === "command" ? { ...node, parse: { bundleHash: "secret" } } : node,
+        ),
+      },
+      { onExcessProperty: "error" },
+    )._tag === "Success",
+  ).toBe(false);
+});
+
+test("graph warning views project node labels without source module paths", () => {
+  const graph = {
+    ...approveDemoGraph,
+    warnings: [
+      {
+        code: "predicate_type" as const,
+        message: "warning",
+        node: approveDemoGraph.entry,
+        source: { module: "/private/author.ts", line: 1, column: 1 },
+      },
+    ],
+  };
+
+  const view = contract.graphView(graph);
+  expect(view.warnings).toEqual([
+    { code: "predicate_type", message: "warning", nodeId: graph.entry, label: "draft" },
+  ]);
+  expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
+  expect(JSON.stringify(view)).not.toContain("/private/author.ts");
+  expect(
+    Schema.decodeUnknownExit(contract.graphViewSchema)(
+      { ...view, warnings: graph.warnings },
+      { onExcessProperty: "error" },
+    )._tag === "Success",
   ).toBe(false);
 });

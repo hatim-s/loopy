@@ -1,3 +1,4 @@
+import type { CommandSpec } from "./executor";
 import type { CommandFlag, CommandFlagSpec } from "./graph";
 import type { Json } from "./json";
 
@@ -128,7 +129,7 @@ function renderFlag<V>(
 }
 
 function renderFlags<V>(
-  spec: CommandFlagSpec | undefined,
+  spec: CommandFlagSpec | null,
   values: Readonly<Record<string, V>>,
   deferred: Deferred<V>,
 ) {
@@ -158,18 +159,25 @@ function renderFlags<V>(
   return { before, after };
 }
 
-/** Rejects unknown flags and invalid literal values while a graph is built. */
+/**
+ * Rejects unknown flags and invalid literal values while a graph is built. Flag support depends on
+ * the executing host, so only rendering at execution rejects an unsupported flag.
+ */
 export function checkCommandFlags<V>(
   spec: CommandFlagSpec,
   flags: Readonly<Record<string, V>>,
   deferred: Deferred<V>,
 ): void {
-  renderFlags(spec, flags, deferred);
+  const portable = Object.fromEntries(
+    Object.entries(spec.flags).map(([name, flag]) => [name, { ...flag, supported: true }]),
+  );
+
+  renderFlags({ ...spec, flags: portable }, flags, deferred);
 }
 
 /** A command node without a flag spec accepts no flags. */
-export function renderCommandArgv(
-  spec: CommandFlagSpec | undefined,
+function renderCommandArgv(
+  spec: CommandFlagSpec | null,
   operands: readonly string[],
   flags: Readonly<Record<string, Json>>,
 ): string[] {
@@ -177,4 +185,21 @@ export function renderCommandArgv(
   const separator = spec?.positionalSeparator && operands.length ? ["--"] : [];
 
   return [...(spec?.path ?? []), ...rendered.before, ...separator, ...operands, ...rendered.after];
+}
+
+/** Renders argv with the executing platform's variant, or the base declaration without one. */
+export function renderCommand(spec: CommandSpec, platform: string): [string, ...string[]] {
+  const [program, ...operands] = spec.argv;
+
+  const variant =
+    platform === "darwin" || platform === "linux" ? spec.variants[platform] : undefined;
+
+  if (variant === undefined) {
+    return [program, ...renderCommandArgv(spec.flagSpec, operands, spec.flags)];
+  }
+
+  return [
+    variant.program,
+    ...renderCommandArgv(variant.flagSpec, operands, { ...spec.flags, ...variant.preset }),
+  ];
 }

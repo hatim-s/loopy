@@ -1,6 +1,6 @@
 import type { Json } from "../json";
 import { isRecord } from "../validation";
-import type { Ref, Value } from ".";
+import type { Ref, Value } from "./values";
 
 export function isRef(value: Value): value is Ref {
   return (

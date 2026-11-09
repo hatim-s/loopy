@@ -8,7 +8,7 @@ import { validatePredicate } from "../validate";
 type Arm = () => AuthorValue;
 
 function labelled(arms: Record<string, Arm>) {
-  return Object.entries(arms).map(([name, run]) => ({ name, run, edge: "case" as const }));
+  return Object.entries(arms).map(([name, run]) => ({ name, run }));
 }
 
 export function branch<Y extends AuthorValue, N extends AuthorValue>(
@@ -21,8 +21,8 @@ export function branch<Y extends AuthorValue, N extends AuthorValue>(
 
   const { id, tails } = builder.control("branch", () => ({
     arms: [
-      { name: "yes", run: arms.yes, edge: "yes" },
-      { name: "no", run: arms.no, edge: "no" },
+      { name: "yes", run: arms.yes },
+      { name: "no", run: arms.no },
     ],
     node: (entry) => ({ kind: "branch", predicate, arms: { yes: entry("yes"), no: entry("no") } }),
   }));
@@ -72,9 +72,7 @@ export function map<T, R extends AuthorValue, M extends "fail" | "collect">(
     const index = builder.binding(owner, "index");
 
     return {
-      arms: [
-        { name: "body", run: () => body(builder.ref(item), builder.ref(index)), edge: "each" },
-      ],
+      arms: [{ name: "body", run: () => body(builder.ref(item), builder.ref(index)) }],
       node: (entry) => ({
         kind: "map",
         over: items,
@@ -119,8 +117,8 @@ export function finally_<R extends AuthorValue>(body: () => R, cleanup: Arm): Re
 
   const { id, tails } = builder.control("finally", () => ({
     arms: [
-      { name: "body", run: body, edge: "next" },
-      { name: "cleanup", run: cleanup, edge: "cleanup" },
+      { name: "body", run: body },
+      { name: "cleanup", run: cleanup },
     ],
     node: (entry) => ({ kind: "finally", body: entry("body"), cleanup: entry("cleanup") }),
   }));
@@ -141,11 +139,10 @@ export function rescue<R extends AuthorValue, H extends AuthorValue>(
 
     return {
       arms: [
-        { name: "body", run: body, edge: "next" },
+        { name: "body", run: body },
         {
           name: "handler",
           run: () => handler(builder.ref(error, { kind: "record", fields: ERROR_FIELDS })),
-          edge: "rescue",
         },
       ],
       node: (entry) => ({ kind: "rescue", body: entry("body"), handler: entry("handler"), error }),

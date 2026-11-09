@@ -1,4 +1,4 @@
-import type { CommandFlag } from "@loopy/core";
+import type { COMMAND_PLATFORMS, CommandFlag } from "@loopy/core";
 
 export type PositionalDefinition = {
   readonly name: string;
@@ -18,14 +18,15 @@ export type CommandDefinition = {
   readonly parsedPositionals?: readonly PositionalDefinition[];
   readonly flags?: Readonly<Record<string, CommandFlag>>;
   readonly style?: "equals" | "space";
-  readonly preset?: {
-    readonly flags: Readonly<
-      Record<string, string | number | boolean | readonly string[] | Record<string, string>>
-    >;
-  };
+  readonly preset?: { readonly flags: Readonly<Record<string, string | number | boolean>> };
   readonly exclude?: readonly string[];
   readonly okExitCodes?: readonly number[];
 };
+
+/** A variant changes only how argv renders, so operands and exit codes stay platform neutral. */
+export type CommandVariantDefinition = Partial<
+  Pick<CommandDefinition, "program" | "path" | "flags" | "style" | "preset">
+>;
 
 /** Command data shared by built-in commands, author defineCommand calls and generated wrappers. */
 export type CommandDescriptor = CommandDefinition & {
@@ -35,8 +36,7 @@ export type CommandDescriptor = CommandDefinition & {
   /** Path of an author parser module, relative to the declaring module. */
   readonly parse?: string;
   readonly variants?: {
-    readonly darwin?: Partial<CommandDefinition>;
-    readonly linux?: Partial<CommandDefinition>;
+    readonly [P in (typeof COMMAND_PLATFORMS)[number]]?: CommandVariantDefinition;
   };
 };
 
@@ -137,14 +137,9 @@ export function commandKey(descriptor: Pick<CommandDescriptor, "key" | "namespac
 
 export function platformVariant(
   descriptor: CommandDescriptor,
-  platform: string,
+  platform: (typeof COMMAND_PLATFORMS)[number],
 ): CommandDefinition {
-  const variant =
-    platform === "darwin"
-      ? descriptor.variants?.darwin
-      : platform === "linux"
-        ? descriptor.variants?.linux
-        : undefined;
+  const variant = descriptor.variants?.[platform];
 
   return { ...descriptor, ...variant, flags: { ...descriptor.flags, ...variant?.flags } };
 }

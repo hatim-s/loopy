@@ -8,10 +8,6 @@ type Listener = (events: RuntimeEvent[]) => void;
 export class EventListeners {
   private readonly listeners = new Set<Listener>();
 
-  get size(): number {
-    return this.listeners.size;
-  }
-
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
 
@@ -21,20 +17,16 @@ export class EventListeners {
   }
 
   publish(events: RuntimeEvent[]): void {
-    if (events.length > 0) {
-      this.deliver(events);
+    if (events.length === 0 || this.listeners.size === 0) {
+      return;
     }
-  }
 
-  // Storage changed without events from this connection. Listeners re-read what they need.
-  notify(): void {
-    this.deliver([]);
-  }
+    // One copy per commit detaches listeners from the writer's records. Listeners only read it.
+    const delivered = structuredClone(events);
 
-  private deliver(events: RuntimeEvent[]): void {
     for (const listener of this.listeners) {
       try {
-        listener(structuredClone(events));
+        listener(delivered);
       } catch {
         continue;
       }

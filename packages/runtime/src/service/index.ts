@@ -10,7 +10,6 @@ export {
   GenerationError,
   RegistryConflictError,
   RegistryError,
-  SecretError,
   type ServiceOptions,
   WorkspaceError,
 } from "./registry";

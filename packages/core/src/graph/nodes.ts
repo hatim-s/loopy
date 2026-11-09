@@ -1,12 +1,14 @@
 import { Schema } from "effect";
 import { positiveInt, struct } from "../codec";
 import { durationSchema } from "../duration";
+import { jsonSchema } from "../json";
 import { rateLimitSchema } from "../rate-limit";
 import {
   formatOperandSchema,
   graphRecord,
   labelSchema,
   nodeIdSchema,
+  type OutSchema,
   outputSchema,
   predicateSchema,
   refIdSchema,
@@ -35,7 +37,7 @@ const commandFlagSchema = Schema.Struct({
 
 export type CommandFlag = Schema.Schema.Type<typeof commandFlagSchema>;
 
-const commandFlagSpecSchema = struct({
+export const commandFlagSpecSchema = struct({
   path: Schema.Array(Schema.String).pipe(Schema.mutable),
   flags: graphRecord(Schema.mutableKey(commandFlagSchema)),
   style: Schema.Literals(["equals", "space"]),
@@ -44,6 +46,23 @@ const commandFlagSpecSchema = struct({
 });
 
 export type CommandFlagSpec = Schema.Schema.Type<typeof commandFlagSpecSchema>;
+
+export const COMMAND_PLATFORMS = ["darwin", "linux"] as const;
+
+/** A platform's program, flag rendering and preset flag values, which override the base values. */
+const commandVariantSchema = struct({
+  program: Schema.String,
+  flagSpec: commandFlagSpecSchema,
+  preset: graphRecord(Schema.mutableKey(jsonSchema)),
+});
+
+export type CommandVariant = Schema.Schema.Type<typeof commandVariantSchema>;
+
+// The executing host picks its variant, so a graph saved on one platform runs on another.
+export const commandVariantsSchema = struct({
+  darwin: Schema.optional(commandVariantSchema),
+  linux: Schema.optional(commandVariantSchema),
+});
 
 const values = graphRecord(Schema.mutableKey(valueSchema));
 
@@ -75,6 +94,7 @@ export const commandNodeSchema = struct({
   argv: Schema.Array(valueSchema).pipe(Schema.mutable),
   flags: values,
   flagSpec: Schema.optional(commandFlagSpecSchema),
+  variants: Schema.optional(commandVariantsSchema),
   options: struct({
     cwd: Schema.NullOr(valueSchema),
     env: values,
@@ -88,7 +108,7 @@ export const commandNodeSchema = struct({
   parse: Schema.NullOr(struct({ bundleHash: Schema.NullOr(Schema.String), input: values })),
 });
 
-export const MAP_ERROR_MODES = ["fail", "collect"] as const;
+const MAP_ERROR_MODES = ["fail", "collect"] as const;
 
 // Control and value nodes need no executor, so their wire views equal their stored shape.
 export const otherNodeSchemas = [
@@ -167,4 +187,20 @@ export const nodeSchema = Schema.Union([codeNodeSchema, commandNodeSchema, ...ot
 
 export type Node = Schema.Schema.Type<typeof nodeSchema>;
 
-export type NodeKind = Node["kind"];
+export type ExecutableNode = Extract<Node, { kind: "code" | "command" }>;
+
+export function isExecutable(node: Node): node is ExecutableNode {
+  return node.kind === "code" || node.kind === "command";
+}
+
+export function declaredOutput(node: Node): OutSchema | null {
+  switch (node.kind) {
+    case "code":
+    case "command":
+      return node.out;
+    case "wait":
+      return node.payload;
+    default:
+      return null;
+  }
+}

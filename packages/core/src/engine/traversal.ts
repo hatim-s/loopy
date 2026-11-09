@@ -1,16 +1,16 @@
 import { errorMessage } from "../errors";
 import type { ExecutionError } from "../executor";
 import { continuation, type Context as GraphContext } from "../graph/context";
-import type { NodeRun } from "../graph/node-run";
+import { sameExecution } from "../graph/key";
 import type { Node } from "../graph/nodes";
 import type { NodeId } from "../graph/values";
 import type { Json } from "../json";
 import { control } from "./control";
 import { failNode } from "./failure";
 import { immediate } from "./immediate";
-import { invoke } from "./invoke";
-import { type Transition, write } from "./node-run";
-import { type ResolutionContext, ROOT_CONTEXT, sameExecution } from "./resolve";
+import { type InvokeResult, invoke } from "./invoke";
+import { type Execution, runBase, type Transition, write } from "./node-run";
+import { type ResolutionContext, ROOT_CONTEXT } from "./resolve";
 
 export type TraversalResult =
   | { kind: "pending" }
@@ -36,11 +36,9 @@ function nodeAt(graph: GraphContext, id: NodeId): Node {
   return node;
 }
 
-function run(
-  traversal: Traversal,
-  node: Node,
-  options: { previous: NodeRun | undefined; context: ResolutionContext },
-): TraversalResult {
+function run(traversal: Traversal, execution: Execution): InvokeResult {
+  const { node } = execution;
+
   switch (node.kind) {
     case "branch":
     case "switch":
@@ -48,9 +46,9 @@ function run(
     case "parallel":
     case "finally":
     case "rescue":
-      return control(traversal, node, options.context);
+      return control(traversal, node, execution.context);
     default:
-      return invoke(traversal, node, options);
+      return invoke(traversal, { ...execution, node });
   }
 }
 
@@ -62,6 +60,7 @@ export function evaluate(
   const { transition, at } = traversal;
   const key = { runId: transition.state.runId, nodeId: node.id, scope: context.scope };
   const previous = transition.state.nodeRuns.find((run) => sameExecution(run.key, key));
+  const execution = { node, key, previous, context };
 
   if (previous?.status === "succeeded") {
     return { kind: "succeeded", output: previous.output };
@@ -76,25 +75,19 @@ export function evaluate(
   }
 
   try {
-    const result = run(traversal, node, { previous, context });
+    const result = run(traversal, execution);
 
     switch (result.kind) {
       case "failed":
-        failNode(transition, node, { error: result.error, at, scope: context.scope });
+        failNode(transition, execution, { error: result.error, at });
 
         return result;
       case "succeeded":
-        return immediate(transition, node, { output: result.output, at, context });
+        return immediate(transition, execution, { output: result.output, log: null, at });
+      case "logged":
+        return immediate(transition, execution, { output: null, log: result.log, at });
       case "cancelled":
-        write(transition, {
-          key,
-          attempt: previous?.attempt ?? 1,
-          maxAttempts: previous?.maxAttempts ?? 1,
-          startedAt: previous?.startedAt ?? at,
-          endedAt: at,
-          status: "cancelled",
-          receipt: previous?.receipt ?? "none",
-        });
+        write(transition, { ...runBase(execution, at), endedAt: at, status: "cancelled" });
 
         return result;
       case "pending":
@@ -102,7 +95,7 @@ export function evaluate(
     }
   } catch (cause) {
     const error: ExecutionError = { code: "validation", message: errorMessage(cause) };
-    failNode(transition, node, { error, at, scope: context.scope });
+    failNode(transition, execution, { error, at });
 
     return { kind: "failed", error };
   }

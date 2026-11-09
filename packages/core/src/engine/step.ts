@@ -1,11 +1,14 @@
 import { errorMessage } from "../errors";
 import type { Graph } from "../graph";
+import { sameExecution } from "../graph/key";
+import type { NodeRun } from "../graph/node-run";
+import { isExecutable } from "../graph/nodes";
 import { checkOutSchema } from "../record-spec";
 import { outputError } from "./failure";
-import { finish, type Transition, write } from "./node-run";
-import { resolve, sameExecution } from "./resolve";
+import { addMs, finish, type Transition, write } from "./node-run";
+import { resolve } from "./resolve";
 import { retryDelayMs, shouldRetry } from "./retry";
-import type { EngineEvent, EngineState } from "./state";
+import type { EngineEvent, EngineState, Sample } from "./state";
 import { sequence } from "./traversal";
 
 function completion(
@@ -23,7 +26,7 @@ function completion(
 
   const node = graph.nodes.find((node) => node.id === previous.key.nodeId);
 
-  if (node?.kind !== "code" && node?.kind !== "command") {
+  if (!node || !isExecutable(node)) {
     return false;
   }
 
@@ -45,13 +48,12 @@ function completion(
 
   if (error) {
     if (previous.attempt < previous.maxAttempts && shouldRetry(error, node.retry)) {
-      const at = new Date(Date.parse(event.at) + retryDelayMs(previous.attempt)).toISOString();
       write(transition, {
         ...previous,
         status: "retrying",
         error,
         endedAt: event.at,
-        nextRetryAt: at,
+        nextRetryAt: addMs(event.at, retryDelayMs(previous.attempt)),
         receipt: "finished",
       });
     } else {
@@ -91,18 +93,40 @@ function sampled(
     return false;
   }
 
-  write(transition, {
-    ...previous,
-    status: "succeeded",
-    output: event.sample.value,
-    endedAt: event.at,
-  });
+  // Hosts supply samples through the public reducer, so a value outside its kind's range fails.
+  if (validSample(event.sample)) {
+    write(transition, {
+      ...previous,
+      status: "succeeded",
+      output: event.sample.value,
+      endedAt: event.at,
+    });
+  } else {
+    write(transition, {
+      ...previous,
+      status: "failed",
+      endedAt: event.at,
+      error: { code: "validation", message: `Invalid ${node.kind} sample.` },
+    });
+  }
 
   return true;
 }
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function validSample(sample: Sample): boolean {
+  return sample.valueKind === "uuid"
+    ? UUID_V4.test(sample.value)
+    : Number.isFinite(sample.value) && sample.value >= 0 && sample.value < 1;
+}
+
+function isPaused(run: NodeRun): run is Extract<NodeRun, { status: "waiting" | "sleeping" }> {
+  return run.status === "waiting" || run.status === "sleeping";
+}
+
 // A retrying or rate-limited node keeps the run leased until its retry is due.
-function suspend(transition: Transition, at: string) {
+function suspend(transition: Transition) {
   if (transition.effects.some((effect) => effect.kind === "dispatch" || effect.kind === "sample")) {
     return;
   }
@@ -116,24 +140,16 @@ function suspend(transition: Transition, at: string) {
     return;
   }
 
-  const pending = transition.state.nodeRuns.filter(
-    (run) => run.status === "waiting" || run.status === "sleeping",
-  );
+  const pending = transition.state.nodeRuns.filter(isPaused);
 
   if (pending.length === 0) {
     return;
   }
 
   const wakeAt =
-    pending
-      .flatMap((run) =>
-        (run.status === "waiting" || run.status === "sleeping") && run.wakeAt !== null
-          ? [run.wakeAt]
-          : [],
-      )
-      .sort()[0] ?? null;
+    pending.flatMap((run) => (run.wakeAt === null ? [] : [run.wakeAt])).sort()[0] ?? null;
 
-  transition.effects.push({ kind: "suspend_run", wakeAt, at });
+  transition.effects.push({ kind: "suspend_run", wakeAt });
 }
 
 export function step(graph: Graph, state: EngineState, event: EngineEvent): Transition {
@@ -151,7 +167,7 @@ export function step(graph: Graph, state: EngineState, event: EngineEvent): Tran
 
       if (previous?.status === "running" && previous.attempt === event.attempt) {
         write(transition, { ...previous, status: "rate_limited", nextRetryAt: event.retryAt });
-        transition.effects.push({ kind: "schedule_retry", at: event.retryAt });
+        transition.effects.push({ kind: "schedule_activation", at: event.retryAt });
       }
 
       return transition;
@@ -197,7 +213,7 @@ export function step(graph: Graph, state: EngineState, event: EngineEvent): Tran
         finish(transition, { status: "cancelled" }, event.at);
         break;
       case "pending":
-        suspend(transition, event.at);
+        suspend(transition);
         break;
     }
   } catch (cause) {

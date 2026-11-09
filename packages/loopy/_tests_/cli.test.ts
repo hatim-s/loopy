@@ -317,6 +317,14 @@ test("HTTP run reports named JSON input errors before creating a run", async () 
   ).toEqual([]);
 });
 
-function registryEntry(home: string, cwd: string, slug: string) {
-  return Effect.runPromise(Effect.flatMap(Registry.make(home, cwd), (r) => r.get(slug)));
+async function registryEntry(home: string, cwd: string, slug: string) {
+  const entry = await Effect.runPromise(
+    Effect.flatMap(Registry.make(home, cwd), (r) => r.get(slug)),
+  );
+
+  if (entry === null) {
+    throw new Error(`Expected saved loopy '${slug}'.`);
+  }
+
+  return entry;
 }

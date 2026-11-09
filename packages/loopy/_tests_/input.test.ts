@@ -24,6 +24,9 @@ test("field text parses to the value of every field type", () => {
 
 test("field text rejects malformed JSON, wrong kinds and loose scalars", () => {
   expect(parseFieldText("json", "{bad")).toEqual({ ok: false, reason: "json" });
+  // JSON.parse reads these as Infinity, which would be stored as null.
+  expect(parseFieldText("json", "1e400")).toEqual({ ok: false, reason: "json" });
+  expect(parseFieldText("json[]", "[1e400]")).toEqual({ ok: false, reason: "json" });
 
   for (const [kind, text] of [
     ["string[]", "[1]"],

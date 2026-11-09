@@ -7,7 +7,7 @@ import {
   sandboxErrorSchema,
   sandboxErrorStatus,
 } from "@loopy/contract/sandbox";
-import type { ExecutionKey, ExecutionSpec } from "@loopy/core";
+import { type ExecutionKey, type ExecutionSpec, specBundles } from "@loopy/core";
 import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
 import type { BodyLimitError, BodyReadError } from "@loopy/runtime/service";
 import { Effect } from "effect";
@@ -120,10 +120,7 @@ export class SandboxProvider implements DurableExecutionProvider {
   }
   start(executionKey: ExecutionKey, attempt: number, spec: ExecutionSpec) {
     return Effect.gen({ self: this }, function* () {
-      const hashes =
-        spec.kind === "code" ? [spec.bundleHash] : spec.parse ? [spec.parse.bundleHash] : [];
-
-      const bundles = yield* Effect.forEach(hashes, (hash) =>
+      const bundles = yield* Effect.forEach(specBundles(spec), (hash) =>
         this.options.artifacts.getBundle(hash).pipe(Effect.map((bytes) => ({ hash, bytes }))),
       );
 

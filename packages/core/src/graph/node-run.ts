@@ -4,7 +4,7 @@ import { executionErrorSchema } from "../executor";
 import { jsonSchema } from "../json";
 import { executionKeySchema } from "./key";
 
-export const RECEIPT_KINDS = ["none", "started", "finished"] as const;
+const RECEIPT_KINDS = ["none", "started", "finished"] as const;
 
 const base = struct({
   key: executionKeySchema,

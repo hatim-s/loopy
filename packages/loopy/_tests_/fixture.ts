@@ -4,6 +4,7 @@ import {
   type Executor,
   ExecutorError,
   type RunRecord,
+  type RunStatus,
 } from "@loopy/core";
 import { Effect } from "effect";
 
@@ -29,7 +30,7 @@ export class FakeExecutor implements Executor {
   }
 }
 
-export function newRun(): RunRecord {
+export function newRun(): Extract<RunRecord, { status: "queued" }> {
   return {
     id: "run",
     slug: "test",
@@ -40,6 +41,20 @@ export function newRun(): RunRecord {
     createdAt: "2026-10-16T00:00:00.000Z",
     updatedAt: "2026-10-16T00:00:00.000Z",
   };
+}
+
+/** A stored run in `status` with the outcome fields that status requires. */
+export function runIn(status: RunStatus, base: Omit<RunRecord, "status">): RunRecord {
+  switch (status) {
+    case "succeeded":
+      return { ...base, status, output: null };
+    case "failed":
+      return { ...base, status, error: "controlled" };
+    case "suspended":
+      return { ...base, status, wakeAt: null };
+    default:
+      return { ...base, status };
+  }
 }
 
 export function delay(milliseconds: number): Promise<void> {

@@ -2,12 +2,11 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, encodeRunCursor, jsonSchema, routes } from "@loopy/contract";
-import { revision } from "@loopy/core";
+import { revision, waitRecordSchema } from "@loopy/core";
 import { log, loopy, wait } from "@loopy/sdk/graph";
 import { Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { compiledBody } from "../../../packages/loopy/_tests_/compiled-fixture";
-import { waitRecordSchema } from "../../../packages/runtime/src/store/wait-schema";
 
 let runtime: Miniflare;
 
@@ -130,15 +129,15 @@ test("workerd reopens durable records and fences stale lease owners without emit
     live: expect.stringContaining("not owned"),
     stale: expect.stringContaining("not owned"),
     heartbeat: false,
-    before: { cursor: 4 },
-    after: { cursor: 4 },
+    before: { cursor: 5 },
+    after: { cursor: 5 },
     run: { owner: { token: "second", pid: null, host: "probe" } },
     marker: "retained",
     logs: [],
   });
   await runtime.unsafeEvictDurableObject("probe", "CloudWorkerProbe", { name: "owners" });
   expect(await probe("reopen", "owners")).toMatchObject({
-    cursor: { cursor: 4 },
+    cursor: { cursor: 5 },
     marker: "retained",
     run: { owner: { token: "second", host: "probe", pid: null } },
   });

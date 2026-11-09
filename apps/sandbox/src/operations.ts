@@ -1,5 +1,5 @@
 import type { AuthorityError } from "@loopy/contract/sandbox";
-import type { CommandExecutionError } from "@loopy/runtime/local/execution-host";
+import type { CommandExecutionError } from "@loopy/runtime/os";
 import { Data, Effect } from "effect";
 import type { ExportCleanupError, SandboxRequestError } from "./request-error";
 

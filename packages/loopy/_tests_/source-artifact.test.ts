@@ -10,7 +10,8 @@ import {
   type SourceArtifact,
   sourceArtifactSchema,
 } from "@loopy/contract";
-import { Registry, SecretStore } from "@loopy/runtime/local";
+import { Registry } from "@loopy/runtime/local";
+import { SecretStore } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
 import { saveCompiled } from "../../runtime/src/local/save-compiled";
 import { compiledBody } from "./compiled-fixture";
@@ -113,7 +114,7 @@ test("old registry metadata never gains today's source for an existing revision"
   expect(await Effect.runPromise(registry.revisionSource("legacy", body.revision))).toEqual(
     unavailable,
   );
-  expect((await Effect.runPromise(registry.get("legacy"))).version).toBe(3);
+  expect((await Effect.runPromise(registry.get("legacy")))?.version).toBe(3);
 });
 
 test("source lookup rejects traversal and never opens source metadata paths", async () => {

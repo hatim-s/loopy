@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { decodeBoundary } from "@loopy/contract";
-import { within } from "../../../../packages/runtime/src/local/sandbox/paths";
+import { within } from "../../../../packages/runtime/src/os/sandbox/paths";
 import { captureSchema } from "./metrics/artifacts";
 import { baselineEndpoints } from "./metrics/sampler";
 import { CONCURRENCY } from "./plan";

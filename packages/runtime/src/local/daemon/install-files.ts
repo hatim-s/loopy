@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Data, Effect } from "effect";
-import { spawnCaptured } from "../spawn";
+import { spawnCaptured } from "../../os";
 
 export class DaemonInstallError extends Data.TaggedError("DaemonInstallError")<{
   message: string;
@@ -45,8 +45,6 @@ export const daemonOperations: DaemonOperations = {
       const result = yield* spawnCaptured(
         { program, args, cwd: process.cwd(), env: process.env },
         { timeoutMs: 30000, maxOutputBytes: 1024 * 1024 },
-        undefined,
-        performance.now(),
       ).pipe(
         Effect.mapError(
           (cause) =>

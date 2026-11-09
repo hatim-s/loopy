@@ -19,9 +19,9 @@ export function makeRunQueries(context: ServiceContext, runViews: RunViews) {
   const runPayload = Effect.fn("queries.runPayload")(function* (id: string) {
     const run = yield* requireRun(id);
 
-    return run.output === undefined
-      ? { input: run.input }
-      : { input: run.input, output: run.output };
+    return run.status === "succeeded"
+      ? { input: run.input, output: run.output }
+      : { input: run.input };
   });
 
   const logs = Effect.fn("queries.logs")(function* (id: string, query: Query<"logs">) {

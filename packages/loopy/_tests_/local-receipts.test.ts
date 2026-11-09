@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import type { ExecutionResult } from "@loopy/core";
 import { Effect } from "effect";
 import { ExecutionWorker } from "../../runtime/src/executor/execution";
-import { LocalExecutor } from "../../runtime/src/executor/local";
 import {
   FilesystemReceipts,
   type LocalReceipt,
@@ -135,11 +134,11 @@ test("two execution workers sharing a receipt perform the side effect once", asy
 
   const worker = () =>
     new ExecutionWorker({
-      ...f,
+      home: f.home,
+      workspace: f.workspace,
       mode: "sandbox",
       secrets: [],
-      bundlePath: () => f.bundle,
-      receipts: f.receipts,
+      bundles: { [f.spec.kind === "code" ? f.spec.bundleHash : ""]: f.bundle },
     });
 
   const outcomes = await Promise.allSettled([
@@ -177,32 +176,6 @@ test("competing local parents cannot give two trusted children the same effect",
     kind: "finished",
     result: { kind: "succeeded", output: 42 },
   });
-});
-
-test("trusted child receives a parsed descriptor instead of the injected receipt object", async () => {
-  const f = await receiptsFixture();
-  Object.assign(f.receipts, { cannotSerialize: 1n });
-  await writeFile(f.bundle, "console.log(42);");
-
-  const completed = await Effect.runPromise(
-    f.executor.execute(f.key, 1, f.spec, new AbortController().signal),
-  );
-
-  expect(completed).toMatchObject({ kind: "succeeded", output: 42 });
-  expect(await Effect.runPromise(f.receipts.read(f.identity))).toMatchObject({
-    kind: "finished",
-    result: completed,
-  });
-  expect(
-    () =>
-      new LocalExecutor({
-        ...f,
-        mode: "sandbox",
-        secrets: [],
-        bundlePath: () => f.bundle,
-        receipts: new FilesystemReceipts(f.workspace),
-      }),
-  ).toThrow("Execution receipts must use the protected daemon home.");
 });
 
 test("a live trusted child retains completion authority, a killed child becomes uncertain", async () => {

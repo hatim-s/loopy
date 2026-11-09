@@ -93,8 +93,6 @@ export const approveDemoGraph = Schema.decodeUnknownSync(graphSchema)({
     { from: "0:draft", to: "1:log", kind: "next" },
     { from: "1:log", to: "2:approve", kind: "next" },
     { from: "2:approve", to: "3:branch", kind: "next" },
-    { from: "3:branch", to: "4:format", kind: "yes" },
-    { from: "3:branch", to: "7:fail", kind: "no" },
     { from: "4:format", to: "5:apply", kind: "next" },
     { from: "5:apply", to: "6:join", kind: "next" },
     { from: "6:join", to: "8:join", kind: "join" },

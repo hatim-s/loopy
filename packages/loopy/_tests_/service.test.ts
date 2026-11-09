@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { decodeBoundary, encodeRunCursor, graphView, routes } from "@loopy/contract";
-import type { Graph, RunRecord } from "@loopy/core";
+import type { Graph } from "@loopy/core";
 import { revision } from "@loopy/core";
 import { makeLocalService, Registry } from "@loopy/runtime/local";
 import { makeService } from "@loopy/runtime/service";
@@ -11,7 +11,7 @@ import { loopy } from "@loopy/sdk/graph";
 import { Effect } from "effect";
 import { makeArtifactRegistry } from "../../runtime/src/local/save-compiled";
 import { compiledBody } from "./compiled-fixture";
-import { FakeExecutor } from "./fixture";
+import { FakeExecutor, runIn } from "./fixture";
 import { fixtureDaemon, fixtureStore, waitUntil } from "./fixtures/service-runtime";
 
 const serviceGraph = loopy("test", { input: { name: "string" }, run: ({ input }) => input });
@@ -105,16 +105,15 @@ test("service resumes queued, suspended and abandoned runs and rejects terminal 
     "failed",
     "cancelled",
   ] as const) {
-    const run: RunRecord = {
+    const run = runIn(status, {
       id: status,
       slug: "service",
       workspace: root,
       revision: "a".repeat(64),
       input: {},
-      status,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    };
+    });
 
     if (status === "running") {
       run.owner = {

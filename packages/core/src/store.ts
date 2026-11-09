@@ -1,9 +1,9 @@
 import type { Effect } from "effect";
 import { Data } from "effect";
 import type { StoreEffect } from "./effects";
-import type { ExecutionKey, NodeRun, OutSchema } from "./graph";
+import type { ExecutionKey, NodeRun } from "./graph";
 import type { Json } from "./json";
-import type { HookRecord, LogRecord, RunRecord, RuntimeEvent, Schedule } from "./model";
+import type { LogRecord, RunRecord, RuntimeEvent, Schedule, WaitRecord } from "./model";
 import type { RateLimitResult } from "./rate-limit";
 
 // Every page and snapshot list shares this cap, so a full list can be told from a truncated one.
@@ -32,8 +32,6 @@ export class OwnershipError extends Data.TaggedError("OwnershipError")<{ readonl
 }
 
 export type WakeError = "not_found" | "owned_elsewhere" | "not_claimable";
-
-export type WaitRecord = HookRecord & { executionKey: ExecutionKey; schema: OutSchema };
 
 export type WaitResolution =
   | { kind: "resolved"; runId: string }

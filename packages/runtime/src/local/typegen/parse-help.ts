@@ -65,7 +65,6 @@ function parsePositionalToken(token: string): PositionalDefinition | undefined {
   return positional;
 }
 
-/** Candidate tokens per line: the first column of an Arguments section, else bracketed usage words. */
 type PositionalCandidates = { tokens: string[][]; fromSection: boolean };
 
 function positionalCandidates(lines: string[]): PositionalCandidates {
@@ -116,7 +115,6 @@ function parsePositionals(lines: string[]): PositionalDefinition[] {
   const seen = new Set<string>();
 
   for (const line of tokens) {
-    // Without an Arguments section only the first usage line counts.
     if (!fromSection && result.length) {
       break;
     }
@@ -157,7 +155,6 @@ function choicesAfter(lines: string[], start: number): string[] | undefined {
   return undefined;
 }
 
-/** The option line plus its continuation lines, up to the next option. */
 function descriptionLines(options: string[], index: number): string[] {
   const description: string[] = [options[index] ?? ""];
 
@@ -276,7 +273,6 @@ function flagName(cli: string, flags: Record<string, CommandFlag>, warnings: str
   return name;
 }
 
-/** True when a later usage line repeats the command prefix, meaning several usage forms exist. */
 function hasMultipleUsageForms(lines: string[], prefix: string): boolean {
   const usageIndex = lines.findIndex((line) => USAGE_LINE.test(line));
 

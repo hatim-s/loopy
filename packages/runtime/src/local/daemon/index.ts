@@ -2,10 +2,10 @@ import { join } from "node:path";
 import { errorMessage, type RunRecord } from "@loopy/core";
 import type { Cause } from "effect";
 import { Clock, Data, Effect } from "effect";
-import { FilesystemReceipts, LocalExecutor } from "../../executor";
+import { LocalExecutor } from "../../executor";
 import { makeDaemon, PreparationError, ScheduleDefinitionError } from "../../host";
-import type { SqliteRunStore } from "../../store";
-import { withLockDirectory } from "../fs";
+import { withLockDirectory } from "../../os";
+import type { SqlRunStore } from "../../store";
 import { Registry } from "../registry";
 import { startServer } from "../server/start-server";
 import { makeLocalService } from "../service";
@@ -28,7 +28,7 @@ export class LocalDaemonError extends Data.TaggedError("LocalDaemonError")<{
 type DaemonOptions = {
   home: string;
   cwd: string;
-  store: SqliteRunStore;
+  store: SqlRunStore;
   concurrency: number;
   port: number;
   assets: string;
@@ -38,8 +38,6 @@ type DaemonOptions = {
 /** The caller's scope must outlive requests and close before the store scope. */
 export const localDaemon = (options: DaemonOptions) =>
   Effect.gen(function* () {
-    const receipts = new FilesystemReceipts(options.home);
-
     const daemon = yield* makeDaemon({
       store: options.store,
       concurrency: options.concurrency,
@@ -47,9 +45,15 @@ export const localDaemon = (options: DaemonOptions) =>
       definitionFor: (schedule) =>
         Effect.gen(function* () {
           const registry = yield* Registry.make(options.home, schedule.workspace);
-          const { revision, graph } = yield* registry.get(schedule.slug);
+          const entry = yield* registry.get(schedule.slug);
 
-          return { revision, graph };
+          if (entry === null) {
+            return yield* Effect.fail(
+              new Error(`No saved loopy '${schedule.slug}'. Use loopy save <file.ts> first.`),
+            );
+          }
+
+          return { revision: entry.revision, graph: entry.graph };
         }).pipe(Effect.mapError((cause) => new ScheduleDefinitionError({ cause }))),
       prepare: (run) =>
         Effect.gen(function* () {
@@ -60,7 +64,6 @@ export const localDaemon = (options: DaemonOptions) =>
             graph,
             executor: new LocalExecutor({
               home: options.home,
-              receipts,
               workspace: run.workspace,
               mode: graph.meta.mode,
               secrets: graph.meta.secrets,
@@ -105,7 +108,7 @@ export const localDaemon = (options: DaemonOptions) =>
               );
             }
 
-            // Keep listener acquisition after discovery validation; publication-failure fixtures rely on this boundary.
+            // Validate discovery before binding a port, so a second daemon never holds a listener.
             server = startServer({
               ...options,
               service,

@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import { struct } from "../codec";
 import type { Json } from "../json";
+import { fieldKey } from "../record-spec";
 import { isString } from "../validation";
-import { isReservedGraphName } from "./names";
 
 declare const brand: unique symbol;
 
@@ -25,6 +25,12 @@ export const refIdSchema = Schema.declare<RefId>(
   (value): value is RefId => isString(value) && value.length > 0,
 );
 
+const RESERVED_GRAPH_NAMES = ["__proto__", "constructor", "prototype"] as const;
+
+export function isReservedGraphName(name: string): boolean {
+  return RESERVED_GRAPH_NAMES.some((reserved) => reserved === fieldKey(name));
+}
+
 export const labelSchema = Schema.String.check(
   Schema.makeFilter((name) => !isReservedGraphName(name), {
     message: "Reserved graph names cannot be labels or record keys.",
@@ -44,12 +50,37 @@ export const FIELD_TYPES = [
 
 export type FieldType = (typeof FIELD_TYPES)[number];
 
+const BASE_TYPES = ["string", "number", "boolean", "json", "object", "null", "never"] as const;
+
+type BaseType = (typeof BASE_TYPES)[number];
+
+// Field types are declared; object, null and never are derived from node kinds and literals.
+export type GraphType = BaseType | `${BaseType}[]`;
+
+export function elementType(type: GraphType | null): BaseType | null {
+  return BASE_TYPES.find((base) => type === `${base}[]`) ?? null;
+}
+
+// Nested arrays have no declared type, so their elements read as JSON.
+export function arrayType(element: GraphType | null): GraphType {
+  const base = BASE_TYPES.find((candidate) => candidate === element);
+
+  return base === undefined ? "json[]" : `${base}[]`;
+}
+
+export function isScalarType(type: GraphType | null): type is "string" | "number" | "boolean" {
+  return type === "string" || type === "number" || type === "boolean";
+}
+
 export const refSchema = struct({
   ref: refIdSchema,
   path: Schema.Array(Schema.String).pipe(Schema.mutable),
 });
 
 export type Ref = Schema.Schema.Type<typeof refSchema>;
+
+// A lookup may name an unbranded id from author code before it resolves to a node or binding.
+export type RefLookup = { ref: string; path: string[] };
 
 // Check raw keys before parsing so reserved own keys cannot disappear in a decoder.
 export function graphRecord<T extends Schema.Constraint>(schema: T) {
@@ -104,8 +135,6 @@ export const formatOperandSchema = Schema.Union([
   Schema.Boolean,
   refSchema,
 ]);
-
-export type FormatOperand = Schema.Schema.Type<typeof formatOperandSchema>;
 
 const sizeOperandSchema = struct({ ...refSchema.fields, size: Schema.Literal(true) });
 

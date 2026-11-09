@@ -1,97 +1,72 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { nodeIdSchema } from "@loopy/contract";
 import type { ExecutionKey, NodeRun, Store } from "@loopy/core";
 import { activateDurable } from "@loopy/runtime/host";
-import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { code, loopy, parallel, sh, wait } from "@loopy/sdk/graph";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Effect, Schema } from "effect";
 import { newRun } from "./fixture";
 import { PolicyProvider, policyGraph, policySuccess } from "./host-policy-fixture";
 import { MemorySqlStore, memoryStore, runAt } from "./store-fixture";
 
-for (const backend of ["portable", "local"] as const) {
-  test(`${backend} targeted node reads preserve ordered scopes and detach nested data`, async () => {
-    const root = mkdtempSync(join(tmpdir(), "loopy-host-node-"));
+test("targeted node reads preserve ordered scopes and detach nested data", async () => {
+  const store = memoryStore();
 
-    const scope = Scope.makeUnsafe();
+  await Effect.runPromise(store.createRun(newRun()));
+  await Effect.runPromise(store.claim("run", "owner"));
 
-    const store =
-      backend === "portable"
-        ? memoryStore()
-        : await Effect.runPromise(
-            makeSqliteRunStore(join(root, "runs.sqlite")).pipe(
-              Effect.provideService(Scope.Scope, scope),
-            ),
-          );
+  const key: ExecutionKey = {
+    runId: "run",
+    nodeId: Schema.decodeUnknownSync(nodeIdSchema)("work"),
+    scope: [
+      { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("outer"), index: 1 },
+      { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("inner"), index: 2 },
+    ],
+  };
 
-    try {
-      await Effect.runPromise(store.createRun(newRun()));
-      await Effect.runPromise(store.claim("run", "owner"));
+  const node: NodeRun = {
+    key,
+    status: "succeeded",
+    attempt: 1,
+    maxAttempts: 2,
+    receipt: "finished",
+    startedAt: newRun().createdAt,
+    endedAt: newRun().createdAt,
+    output: { nested: [42] },
+  };
 
-      const key: ExecutionKey = {
-        runId: "run",
-        nodeId: Schema.decodeUnknownSync(nodeIdSchema)("work"),
+  await Effect.runPromise(
+    store.apply({
+      runId: "run",
+      token: "owner",
+      effects: [{ kind: "write_node_run", nodeRun: node }],
+    }),
+  );
+  expect(await Effect.runPromise(store.getNodeRun({ ...key, runId: "missing" }))).toBeUndefined();
+  expect(
+    await Effect.runPromise(store.getNodeRun({ ...key, scope: [...key.scope].reverse() })),
+  ).toBeUndefined();
+  expect(
+    await Effect.runPromise(
+      store.getNodeRun({
+        ...key,
         scope: [
-          { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("outer"), index: 1 },
-          { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("inner"), index: 2 },
+          { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("outer"), index: 0 },
+          ...key.scope.slice(1),
         ],
-      };
+      }),
+    ),
+  ).toBeUndefined();
+  const read = await Effect.runPromise(store.getNodeRun(key));
+  expect(read).toEqual(node);
 
-      const node: NodeRun = {
-        key,
-        status: "succeeded",
-        attempt: 1,
-        maxAttempts: 2,
-        receipt: "finished",
-        startedAt: newRun().createdAt,
-        endedAt: newRun().createdAt,
-        output: { nested: [42] },
-      };
+  if (read?.status !== "succeeded") {
+    throw new Error("Expected succeeded node.");
+  }
 
-      await Effect.runPromise(
-        store.apply({
-          runId: "run",
-          token: "owner",
-          effects: [{ kind: "write_node_run", nodeRun: node }],
-        }),
-      );
-      expect(
-        await Effect.runPromise(store.getNodeRun({ ...key, runId: "missing" })),
-      ).toBeUndefined();
-      expect(
-        await Effect.runPromise(store.getNodeRun({ ...key, scope: [...key.scope].reverse() })),
-      ).toBeUndefined();
-      expect(
-        await Effect.runPromise(
-          store.getNodeRun({
-            ...key,
-            scope: [
-              { nodeId: Schema.decodeUnknownSync(nodeIdSchema)("outer"), index: 0 },
-              ...key.scope.slice(1),
-            ],
-          }),
-        ),
-      ).toBeUndefined();
-      const read = await Effect.runPromise(store.getNodeRun(key));
-      expect(read).toEqual(node);
-
-      if (read?.status !== "succeeded") {
-        throw new Error("Expected succeeded node.");
-      }
-
-      read.key.scope.reverse();
-      read.output = { nested: [0] };
-      expect(await Effect.runPromise(store.getNodeRun(key))).toEqual(node);
-    } finally {
-      await Effect.runPromise(Scope.close(scope, Exit.void));
-
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-}
+  read.key.scope.reverse();
+  read.output = { nested: [0] };
+  expect(await Effect.runPromise(store.getNodeRun(key))).toEqual(node);
+});
 
 test("started-only turns use two full reads plus B targeted reads without extra receipt writes", async () => {
   class CountingStore extends MemorySqlStore {

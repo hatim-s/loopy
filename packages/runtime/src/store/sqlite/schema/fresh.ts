@@ -2,10 +2,7 @@ import { StoreRejectedError } from "../../operation";
 import type { SqlDriver } from "../driver";
 import { SCHEMA_15_TO_16 } from "./upgrade";
 
-export const SCHEMA_VERSION = 16;
-
-export const SCHEDULE_OVERVIEW_INDEX = `CREATE INDEX IF NOT EXISTS schedules_enabled_next
-  ON schedules(enabled,next_fire_at,workspace,slug)`;
+const SCHEMA_VERSION = 16;
 
 const FRESH_SCHEMA = `
   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -76,7 +73,7 @@ const FRESH_SCHEMA = `
     last_fire_key TEXT, next_fire_at TEXT NOT NULL, version INTEGER NOT NULL,
     PRIMARY KEY(workspace,slug)
   );
-  ${SCHEDULE_OVERVIEW_INDEX};
+  CREATE INDEX schedules_enabled_next ON schedules(enabled,next_fire_at,workspace,slug);
   CREATE TABLE schedule_failures (
     workspace TEXT NOT NULL, slug TEXT NOT NULL, version INTEGER NOT NULL,
     retry_at TEXT, error TEXT NOT NULL,
@@ -89,11 +86,11 @@ const FRESH_SCHEMA = `
   );
 `;
 
-export function markSchemaVersion(db: SqlDriver): void {
+function markSchemaVersion(db: SqlDriver): void {
   db.query("INSERT OR REPLACE INTO meta VALUES ('schema_version',?)").run(String(SCHEMA_VERSION));
 }
 
-export function runScript(db: SqlDriver, script: string): void {
+function runScript(db: SqlDriver, script: string): void {
   for (const statement of script.split(";")) {
     if (statement.trim().length > 0) {
       db.exec(statement);
@@ -105,10 +102,9 @@ function createSchema(db: SqlDriver): void {
   runScript(db, FRESH_SCHEMA);
 
   db.query("INSERT INTO meta VALUES ('epoch',?)").run(crypto.randomUUID());
-  markSchemaVersion(db);
+  db.query("INSERT INTO meta VALUES ('schema_version',?)").run(String(SCHEMA_VERSION));
 }
 
-// meta.schema_version is the only version marker. An empty database receives the fresh schema.
 export function initializeSchema(db: SqlDriver): void {
   db.transaction(() => {
     const tables = db

@@ -1,13 +1,23 @@
 import { isBoolean, isNumber, isString } from "../validation";
-import type { ComparisonOperand, DiagnosticCode, Predicate, Value } from ".";
+import type { DiagnosticCode } from ".";
 import { refs } from "./context";
 import { isRef } from "./ref";
+import {
+  arrayType,
+  type ComparisonOperand,
+  elementType,
+  type GraphType,
+  isScalarType,
+  type Predicate,
+  type RefLookup,
+  type Value,
+} from "./values";
 
-export type ResolveType = (ref: { ref: string; path: string[] }) => string | null;
+export type ResolveType = (ref: RefLookup) => GraphType | null;
 
 type PredicateIssue = { code: DiagnosticCode; message: string };
 
-export function operandType(value: ComparisonOperand, resolveType: ResolveType): string | null {
+export function operandType(value: ComparisonOperand, resolveType: ResolveType): GraphType | null {
   if (isRef(value)) {
     return "size" in value ? "number" : resolveType(value);
   }
@@ -17,11 +27,9 @@ export function operandType(value: ComparisonOperand, resolveType: ResolveType):
   }
 
   if (Array.isArray(value)) {
-    const elements = value.map((item) => operandType(item, resolveType));
-    const type = elements[0];
-    const scalar = type === "string" || type === "number" || type === "boolean";
+    const [first = null, ...rest] = value.map((item) => operandType(item, resolveType));
 
-    return `${scalar && elements.every((element) => element === type) ? type : "json"}[]`;
+    return arrayType(isScalarType(first) && rest.every((type) => type === first) ? first : null);
   }
 
   if (isString(value)) {
@@ -57,7 +65,7 @@ function comparisonErrors(
 
     const type = resolveType(operand);
 
-    return operand.size !== true || (type !== "string" && !type?.endsWith("[]"));
+    return operand.size !== true || (type !== "string" && elementType(type) === null);
   });
 
   if (invalidSize) {
@@ -74,7 +82,7 @@ function comparisonErrors(
   const mismatch =
     predicate.op === "in"
       ? !Array.isArray(predicate.right) &&
-        (!right?.endsWith("[]") || right.slice(0, -2) !== left || left === "json")
+        (elementType(right) === null || elementType(right) !== left || left === "json")
       : ordering
         ? left !== right || (left !== "number" && left !== "string")
         : left !== null && right !== null && left !== right;

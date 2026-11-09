@@ -1,11 +1,10 @@
 import type { DashboardReader } from "@loopy/contract";
 import type { Store } from "@loopy/core";
 import { Effect } from "effect";
+import { canonicalPath, SecretStore } from "../os";
 import { GenerationError, makeService, WorkspaceError } from "../service";
-import { canonicalPath } from "./fs";
 import { Registry } from "./registry";
 import { makeArtifactRegistry } from "./save-compiled";
-import { SecretStore } from "./secrets";
 import { generateCommand } from "./typegen/generate";
 
 export { ServiceError } from "../service";

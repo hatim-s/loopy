@@ -8,7 +8,7 @@ Read this before changing code. `bun run check` builds the package and dashboard
 packages/core/src/       graph contracts, validation and pure engine/ reducer.
 packages/contract/src/   browser-safe wire schemas, routes and views.
 packages/sdk/src/        compile-only graph builder, descriptors and parsers.
-packages/runtime/src/    host/, store/, executor/, service/ and local/ adapters.
+packages/runtime/src/    os/, host/, store/, executor/, service/ and local/ adapters.
 packages/compiler/src/   restricted author evaluation and artifact compilation.
 packages/cli/src/        HTTP commands and daemon control.
 packages/loopy/src/      thin public re-exports and executable entrypoint.
@@ -29,9 +29,9 @@ Within each package, imports are relative and extensionless without `/index`. Ac
 
 Core has no workspace dependencies. Contract and SDK depend on core. Runtime depends on core, contract and SDK. Compiler depends on runtime and SDK as well as core and contract. CLI composes those owners. The public distribution re-exports supported APIs and starts the CLI; it owns no business logic. The build vendors private implementation modules and declarations into the published tarball and rewrites private specifiers so installation needs no unpublished packages.
 
-Inside runtime, host depends on core and engine, store and service on core and contract, and executor on core, contract and the narrow local/execution-host OS bridge. Local composes these modules. Runtime layers use their target's public barrel. SDK host and graph-host are explicit trusted exports. Author definitions import `loopy` or `loopy/graph`; private package names are not supported author imports. Architecture tests enforce package exports, declared dependencies, the package DAG, runtime layer imports and browser portability.
+Inside runtime, host depends on core and engine, service on core and contract, store and executor on core, contract and os/, and os/ on core only. Os owns processes, sandbox profiles, secret files and durable files and is exported to apps as `@loopy/runtime/os`. Local composes these modules. Runtime layers use their target's public barrel. SDK host and graph-host are explicit trusted exports. Author definitions import `loopy` or `loopy/graph`; private package names are not supported author imports. Architecture tests enforce package exports, declared dependencies, the package DAG, runtime layer imports and browser portability.
 
-Ownership paths below are relative to their named package source. The runtime sections use the host/store/executor/service/local subdirectory names; engine lives under core/src/engine.
+Ownership paths below are relative to their named package source. The runtime sections use the os/host/store/executor/service/local subdirectory names; engine lives under core/src/engine.
 
 ## Ownership
 
@@ -42,8 +42,10 @@ Ownership paths below are relative to their named package source. The runtime se
 - `host/durable/` owns bounded activation turns and provider reconciliation. The reducer keeps a run leased while a node waits to retry, and rate admission follows persistence. Provider calls stay outside store transactions.
 - `host/daemon.ts`, `pool.ts`, `schedules.ts` and `heartbeat.ts` coordinate due work and leases without author callbacks.
 - `store/sqlite/` separates events, runs, nodes, waits, schedules and dashboard queries. `apply` fences the owner and commits node writes, attempts, scope summaries, log usage, wait registration, suspension, retry deadlines, run outcomes and outbox rows in one transaction. `SqlRunStore` is a facade over table modules that take one connection context, with every effect kind handled in `apply.ts`. `schema/fresh.ts` owns the fresh schema and its only version marker, `meta.schema_version`. Local homes upgrade schema 13 and 14 without dropping records or changing the epoch and reject unsupported populated schemas without resetting them. Stores read time from Effect's Clock. Tests use the same store on in-memory SQLite.
-- `executor/local.ts` starts a trusted worker. `execution.ts` owns executions, `receipts.ts` owns exclusive started and atomic finished receipt files, and `protocol.ts` decodes stdout results and stderr logs. Finished receipts prevent repeating lost completions. A dead worker with an unfinished receipt fails as uncertain.
-- `local/process.ts`, `spawn.ts` and `sandbox/` own OS processes, bounded capture, process groups and sandbox profiles. Bundles always have restricted filesystem access; mode controls network. Only declared secrets are injected into bundle environments.
+- `core/executor.ts` owns the execution spec. Command specs carry resolved settings and every platform variant; the executing host renders argv for its own platform. `attemptBudgetMs` is the one outer deadline for the local worker and sandbox admission.
+- `executor/local.ts` starts a trusted worker with one `worker-protocol.ts` request. `execution.ts` owns executions, `receipts.ts` owns exclusive started and atomic finished receipt files, and `protocol.ts` decodes stdout results and stderr logs and interprets command exits for both the local executor and the sandbox worker. Finished receipts prevent repeating lost completions. Execute waits for a started attempt on receipt file events. A dead worker with an unfinished receipt fails as uncertain.
+- `os/fs.ts` owns durable files: exclusive writes, atomic replace, exclusive link publication, directory sync, bounded reads, process liveness and pid locks.
+- `os/process.ts`, `spawn.ts` and `sandbox/` own OS processes, bounded capture, process groups and sandbox profiles. `sandbox/tool.ts` resolves the one sandbox tool that commands, bundles and the compiler use. Bundles always have restricted filesystem access; mode controls network. Only declared secrets are injected into bundle environments.
 - `sdk/graph/` owns compile-only construction. `sdk/shell/` supplies descriptor data and parser implementations, with no executable step path.
 - `compiler/restrict.ts` and `ast.ts` enforce builder syntax. `module.ts` checks code exports, `evaluate.ts` imports one restricted snapshot, `bundle.ts` produces executable bundles, and `core/revision.ts` hashes the canonical graph and bundles.
 - `local/save-compiled.ts` validates and stores private bundles and historical graphs before publishing registry metadata. `local/registry.ts` owns paths and source identity.

@@ -7,7 +7,7 @@ import {
   sandboxArtifactReadSchema,
   verifiedBase64,
 } from "@loopy/contract/sandbox";
-import type { CommandExecutionError } from "@loopy/runtime/local/execution-host";
+import type { CommandExecutionError } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
 import type { SandboxConfig } from "./config";
 import type { DockerClient } from "./docker/client";

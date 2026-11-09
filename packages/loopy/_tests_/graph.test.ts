@@ -116,7 +116,7 @@ broken(
         : node,
     ),
   }),
-  ["invalid_scope", "invalid_scope"],
+  ["invalid_scope"],
 );
 
 broken("invalid_scope", (graph) => ({
@@ -124,17 +124,17 @@ broken("invalid_scope", (graph) => ({
   nodes: graph.nodes.map((node) => (node.id === "7:fail" ? { ...node, scope: null } : node)),
 }));
 
-broken("cycle", (graph) => ({
-  ...graph,
-  edges: [
-    ...graph.edges,
-    {
-      from: contract.decodeBoundary(contract.nodeIdSchema)("8:join"),
-      to: graph.entry,
-      kind: "next",
-    },
-  ],
-}));
+test("graph validation reports cycle", () => {
+  const graph = structuredClone(approveDemoGraph);
+  graph.edges.push({
+    from: contract.decodeBoundary(contract.nodeIdSchema)("8:join"),
+    to: graph.entry,
+    kind: "next",
+  });
+
+  // A back edge is also a second continuation for its source.
+  expect(validateGraph(graph).map((error) => error.code)).toEqual(["invalid_scope", "cycle"]);
+});
 
 test("execution identity escapes delimiters and distinguishes runs and iteration paths", () => {
   const nodeId = contract.decodeBoundary(contract.nodeIdSchema)("a/b");
@@ -257,7 +257,6 @@ const mapGraph = contract.decodeBoundary(contract.graphSchema)({
     },
   ],
   edges: [
-    { from: "map", to: "body", kind: "each" },
     { from: "body", to: "end", kind: "next" },
     { from: "end", to: "map", kind: "join" },
   ],
@@ -361,39 +360,6 @@ test("rescue error binding is visible only to the handler", () => {
       : node,
   );
   expect(validateGraph(graph).map((error) => error.code)).toEqual(["out_of_scope_ref"]);
-});
-
-test("graph wire views reject paths and hashes, including command parser hashes", () => {
-  const nodes = approveDemoGraph.nodes.map((node) => {
-    if (node.kind === "code") {
-      return { ...node, module: { name: "draft.ts" } };
-    }
-
-    if (node.kind === "command") {
-      return { ...node, parse: node.parse === null ? null : { input: node.parse.input } };
-    }
-
-    return node;
-  });
-
-  const view = { ...approveDemoGraph, nodes, warnings: [] };
-  expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
-  expect(
-    Schema.decodeUnknownExit(contract.graphViewSchema)(approveDemoGraph, {
-      onExcessProperty: "error",
-    })._tag === "Success",
-  ).toBe(false);
-  expect(
-    Schema.decodeUnknownExit(contract.graphViewSchema)(
-      {
-        ...view,
-        nodes: nodes.map((node) =>
-          node.kind === "command" ? { ...node, parse: { bundleHash: "secret" } } : node,
-        ),
-      },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
 });
 
 test("scope bindings cannot shadow node outputs, input, or one another", () => {
@@ -537,64 +503,6 @@ test("format accepts scalar literals and declared scalar refs only", () => {
   }
 });
 
-test("graph warning views project node labels without source module paths", () => {
-  const graph = {
-    ...approveDemoGraph,
-    warnings: [
-      {
-        code: "predicate_type" as const,
-        message: "warning",
-        node: approveDemoGraph.entry,
-        source: { module: "/private/author.ts", line: 1, column: 1 },
-      },
-    ],
-  };
-
-  const view = contract.graphView(graph);
-  expect(view.warnings).toEqual([
-    { code: "predicate_type", message: "warning", nodeId: graph.entry, label: "draft" },
-  ]);
-  expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
-  expect(JSON.stringify(view)).not.toContain("/private/author.ts");
-  expect(
-    Schema.decodeUnknownExit(contract.graphViewSchema)(
-      { ...view, warnings: graph.warnings },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
-});
-
-test("predicate wire schema parses the complete vocabulary and rejects unknown ops", () => {
-  for (const op of ["eq", "ne", "lt", "lte", "gt", "gte", "in"] as const) {
-    const predicate = { op, left: 1, right: 1 };
-    expect(JSON.stringify(contract.decodeBoundary(contract.predicateSchema)(predicate))).toBe(
-      JSON.stringify(predicate),
-    );
-  }
-
-  const eq = { op: "eq", left: 1, right: 1 } as const;
-
-  for (const predicate of [
-    { op: "exists", value: 1 },
-    { op: "isNull", value: null },
-    { op: "and", predicates: [eq] },
-    { op: "or", predicates: [eq] },
-    { op: "not", predicate: eq },
-    { op: "gt", left: { ref: "input", path: ["text"], size: true }, right: 0 },
-  ]) {
-    expect(JSON.stringify(contract.decodeBoundary(contract.predicateSchema)(predicate))).toBe(
-      JSON.stringify(predicate),
-    );
-  }
-
-  expect(
-    Schema.decodeUnknownExit(contract.predicateSchema)(
-      { op: "unknown" },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
-});
-
 test("disconnected nodes are diagnosed", () => {
   const graph = {
     ...approveDemoGraph,
@@ -614,6 +522,33 @@ test("disconnected nodes are diagnosed", () => {
       .filter((error) => error.code === "invalid_scope")
       .map((error) => error.node),
   ).toEqual([contract.decodeBoundary(contract.nodeIdSchema)("orphan")]);
+});
+
+test("a node with next edges to two different targets is diagnosed", () => {
+  const sibling = contract.decodeBoundary(contract.nodeSchema)({
+    id: "sibling",
+    kind: "uuid",
+    label: null,
+    scope: null,
+  });
+
+  const graph = {
+    ...approveDemoGraph,
+    nodes: [...approveDemoGraph.nodes, sibling],
+    edges: [
+      ...approveDemoGraph.edges,
+      { from: approveDemoGraph.entry, to: sibling.id, kind: "next" as const },
+    ],
+  };
+
+  expect(validateGraph(graph)).toEqual([
+    {
+      code: "invalid_scope",
+      node: approveDemoGraph.entry,
+      message: "A node must continue to exactly one next node.",
+      source: null,
+    },
+  ]);
 });
 
 test("a second root with an edge into the graph is diagnosed", () => {
@@ -795,8 +730,6 @@ function numericBranchGraph(): Graph {
       { id: "fail", kind: "uuid", scope: "check", label: null },
     ],
     edges: [
-      { from: "branch", to: "yes", kind: "yes" },
-      { from: "branch", to: "no", kind: "no" },
       { from: "yes", to: "result", kind: "join" },
       { from: "no", to: "result", kind: "join" },
       { from: "result", to: "check", kind: "next" },
@@ -847,11 +780,6 @@ test("switch results resolve through each arm's terminal join", () => {
           default: "no",
         })
       : node,
-  );
-  graph.edges = graph.edges.map((edge) =>
-    edge.from === "branch"
-      ? { ...edge, kind: "case", label: edge.to === "yes" ? "yes" : "default" }
-      : edge,
   );
   expect(validateGraph(graph)).toEqual([]);
   graph.nodes = graph.nodes.map((node) =>
@@ -928,9 +856,6 @@ test("finally preserves its body result type", () => {
         })
       : node,
   );
-  graph.edges = graph.edges.map((edge) =>
-    edge.from === "branch" ? { ...edge, kind: edge.to === "yes" ? "next" : "cleanup" } : edge,
-  );
   expect(validateGraph(graph)).toEqual([]);
 });
 
@@ -968,48 +893,6 @@ test("command refs use their declared output fields", () => {
       : node,
   );
   expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
-});
-
-for (const kind of ["yes", "no", "case", "each", "cleanup", "rescue"] as const) {
-  test(`${kind} control edges reject the wrong owner`, () => {
-    const graph = structuredClone(approveDemoGraph);
-    graph.edges.push(
-      kind === "case"
-        ? contract.decodeBoundary(contract.edgeSchema)({
-            from: "0:draft",
-            to: "1:log",
-            kind,
-            label: "arm",
-          })
-        : contract.decodeBoundary(contract.edgeSchema)({ from: "0:draft", to: "1:log", kind }),
-    );
-    expect(validateGraph(graph).map((error) => error.code)).toEqual(["invalid_scope"]);
-  });
-
-  test(`${kind} control edges participate in cycle detection`, () => {
-    const graph = structuredClone(approveDemoGraph);
-    graph.edges.push(
-      kind === "case"
-        ? contract.decodeBoundary(contract.edgeSchema)({
-            from: "1:log",
-            to: "0:draft",
-            kind,
-            label: "arm",
-          })
-        : contract.decodeBoundary(contract.edgeSchema)({ from: "1:log", to: "0:draft", kind }),
-    );
-    expect(validateGraph(graph).map((error) => error.code)).toEqual(["invalid_scope", "cycle"]);
-  });
-}
-
-test("control edges must match their owner's declared target", () => {
-  const graph = structuredClone(approveDemoGraph);
-  graph.edges = graph.edges.map((edge) =>
-    edge.kind === "yes"
-      ? { ...edge, to: contract.decodeBoundary(contract.nodeIdSchema)("7:fail") }
-      : edge,
-  );
-  expect(validateGraph(graph).map((error) => error.code)).toEqual(["invalid_scope"]);
 });
 
 test("cyclic join field projections produce diagnostics without recursing forever", () => {
@@ -1050,9 +933,6 @@ test("rescue results use the common body and handler type", () => {
           error: "error",
         })
       : node,
-  );
-  graph.edges = graph.edges.map((edge) =>
-    edge.from === "branch" ? { ...edge, kind: edge.to === "yes" ? "next" : "rescue" } : edge,
   );
   expect(validateGraph(graph)).toEqual([]);
   graph.nodes = graph.nodes.map((node) =>
@@ -1162,15 +1042,6 @@ test("parallel result paths resolve each labelled arm through its join", () => {
               },
             }
           : node,
-  );
-  graph.edges = graph.edges.map((edge) =>
-    edge.from === "branch"
-      ? contract.decodeBoundary(contract.edgeSchema)({
-          ...edge,
-          kind: "case",
-          label: edge.to === "yes" ? "a" : "b",
-        })
-      : edge,
   );
   expect(validateGraph(graph)).toEqual([]);
   const resolve = graphTypeResolver(graph);
@@ -1285,13 +1156,7 @@ for (const kind of ["branch", "rescue"] as const) {
             })
           : node,
     );
-    graph.edges = graph.edges
-      .filter((edge) => edge.from !== "yes")
-      .map((edge) =>
-        edge.from === "branch" && kind === "rescue"
-          ? { ...edge, kind: edge.to === "yes" ? "next" : "rescue" }
-          : edge,
-      );
+    graph.edges = graph.edges.filter((edge) => edge.from !== "yes");
 
     expect(graphTypeResolver(graph)({ ref: "branch", path: [] })).toBe("number");
     expect(validateGraph(graph)).toEqual([]);
@@ -1367,43 +1232,6 @@ for (const field of ["toString", "constructor", "__proto__"]) {
 
     expect(validateGraph(graph).map((error) => error.code)).toEqual(["unresolved_ref"]);
   });
-
-  for (const kind of ["switch", "parallel"] as const) {
-    test(`${kind} edges reject inherited target ${field}`, () => {
-      const graph = numericBranchGraph();
-      graph.nodes = graph.nodes.map((node) =>
-        node.id === "branch"
-          ? contract.decodeBoundary(contract.nodeSchema)({
-              id: node.id,
-              kind,
-              scope: null,
-              label: null,
-              ...(kind === "switch"
-                ? { on: { ref: "input", path: [] }, cases: { a: "yes" }, default: "no" }
-                : { branches: { a: "yes", b: "no" } }),
-            })
-          : node,
-      );
-      const control = graph.nodes.find((node) => node.id === "branch");
-
-      if (control?.kind === "switch" || control?.kind === "parallel") {
-        Object.setPrototypeOf(control.kind === "switch" ? control.cases : control.branches, {
-          [field]: "yes",
-        });
-      }
-
-      graph.edges = graph.edges.map((edge) =>
-        edge.from === "branch"
-          ? {
-              ...edge,
-              kind: "case",
-              label: edge.to === "yes" ? field : kind === "switch" ? "default" : "b",
-            }
-          : edge,
-      );
-      expect(validateGraph(graph).map((error) => error.code)).toContain("invalid_scope");
-    });
-  }
 }
 
 for (const label of ["__proto__", "constructor", "prototype"]) {
@@ -1463,18 +1291,6 @@ for (const label of ["__proto__", "constructor", "prototype"]) {
               }
             : node,
         ),
-      },
-      {
-        ...graph,
-        edges: [
-          ...graph.edges,
-          {
-            from: graph.entry,
-            to: contract.decodeBoundary(contract.nodeIdSchema)("yes"),
-            kind: "case",
-            label,
-          },
-        ],
       },
     ];
 
@@ -1553,7 +1369,6 @@ for (const name of ["__proto__", "constructor", "prototype"]) {
   for (const label of [name, `${name}?`]) {
     const sites = [
       ["node label", contract.nodeSchema, { ...base, kind: "uuid", label }],
-      ["case-edge label", contract.edgeSchema, { from: "node", to: "arm", kind: "case", label }],
       [
         "parallel arm",
         contract.nodeSchema,

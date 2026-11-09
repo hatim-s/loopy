@@ -208,7 +208,7 @@ test("queued runs activate and prune runs at startup and hourly", async () => {
         yield* store.createRun(newRun());
         yield* Effect.forkScoped(daemon.run);
         yield* settled(store, 1);
-        expect((yield* store.getRun("run"))?.output).toEqual({ value: 42 });
+        expect(yield* store.getRun("run")).toMatchObject({ output: { value: 42 } });
         yield* nextPass(daemon, passes);
         expect(prunes).toBe(1);
         yield* TestClock.adjust(3_600_000);

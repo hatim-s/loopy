@@ -2,7 +2,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
-import { within } from "../../../../../packages/runtime/src/local/sandbox/paths";
+import { within } from "../../../../../packages/runtime/src/os/sandbox/paths";
 import { sha256Hex } from "../../shared/hash";
 
 export async function diagnosticPath(path: string, directory: string) {

@@ -133,7 +133,7 @@ export class CloudWorkerProbe {
           store.apply({
             runId: "run",
             token: "owner",
-            effects: [...logs(), { kind: "schedule_retry", at: "invalid-date" }],
+            effects: [...logs(), { kind: "schedule_activation", at: "invalid-date" }],
           }),
         ),
       );
@@ -248,7 +248,7 @@ export class CloudWorkerProbe {
               payload: { kind: "record", fields: { approved: "boolean" } },
               at,
             },
-            { kind: "suspend_run", wakeAt: "2026-10-22T01:00:00.000Z", at },
+            { kind: "suspend_run", wakeAt: "2026-10-22T01:00:00.000Z" },
           ],
         }),
       );

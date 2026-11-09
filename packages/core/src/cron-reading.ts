@@ -1,4 +1,4 @@
-import { CRON_WEEKDAYS, type CronAlias, cronAlias, parseCron } from "./cron";
+import { CRON_WEEKDAYS, type CronAlias, cronAlias, cronFields, parseCron } from "./cron";
 
 const ALIAS_READINGS = {
   "@hourly": "Every hour at :00",
@@ -71,7 +71,6 @@ function recurring(minute: string, hour: string): string | undefined {
   return minute === "0" && hours !== undefined ? `Every ${hours} hours at :00` : undefined;
 }
 
-/** A plain sentence for common schedules; anything else keeps its literal spelling. */
 export function describeCron(expression: string): string | undefined {
   const alias = cronAlias(expression);
 
@@ -85,9 +84,7 @@ export function describeCron(expression: string): string | undefined {
     return undefined;
   }
 
-  const [minute = "", hour = "", dayOfMonth = "", month = "", dayOfWeek = ""] = expression
-    .trim()
-    .split(/\s+/u);
+  const { minute, hour, dayOfMonth, month, dayOfWeek } = cronFields(expression);
 
   if (month !== "*") {
     return undefined;

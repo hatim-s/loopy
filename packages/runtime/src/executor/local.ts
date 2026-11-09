@@ -1,38 +1,31 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  durationMs,
+  attemptBudgetMs,
   type ExecutionKey,
-  type ExecutionMode,
   type ExecutionSpec,
   type Executor,
   ExecutorError,
+  specBundles,
 } from "@loopy/core";
 import { Effect } from "effect";
-import { spawnCaptured } from "../local/execution-host";
-import { specBundles } from "./prepare";
+import { spawnCaptured } from "../os";
 import { FilesystemReceipts } from "./receipts";
-import { workerFailure } from "./response";
+import { type WorkerOptions, type WorkerRequest, workerFailure } from "./worker-protocol";
 
-type Options = {
-  home: string;
-  workspace: string;
-  mode: ExecutionMode;
-  secrets: readonly string[];
-  bundlePath: (hash: string) => string;
-  receipts?: FilesystemReceipts;
-};
+type Options = WorkerOptions & { bundlePath: (hash: string) => string };
+
+const WORKER = fileURLToPath(
+  new URL(import.meta.url.endsWith(".ts") ? "./worker.ts" : "./worker.js", import.meta.url),
+);
 
 export class LocalExecutor implements Executor {
   private readonly receipts: FilesystemReceipts;
 
   constructor(private readonly options: Options) {
-    this.receipts = options.receipts ?? new FilesystemReceipts(options.home);
-
-    if (this.receipts.descriptor.home !== options.home) {
-      throw new Error("Execution receipts must use the protected daemon home.");
-    }
+    this.receipts = new FilesystemReceipts(options.home);
   }
+
   lookup = Effect.fn("LocalExecutor.lookup")(function* (
     this: LocalExecutor,
     key: ExecutionKey,
@@ -42,6 +35,7 @@ export class LocalExecutor implements Executor {
 
     return receipt.kind === "finished" ? receipt.receipt : receipt;
   });
+
   execute = Effect.fn("LocalExecutor.execute")(function* (
     this: LocalExecutor,
     key: ExecutionKey,
@@ -49,6 +43,7 @@ export class LocalExecutor implements Executor {
     spec: ExecutionSpec,
     signal: AbortSignal,
   ) {
+    const identity = { executionKey: key, attempt };
     const previous = yield* this.lookup(key, attempt);
 
     if (previous.kind === "finished") {
@@ -56,60 +51,39 @@ export class LocalExecutor implements Executor {
     }
 
     if (previous.kind === "started") {
-      return yield* Effect.fail(
-        new ExecutorError({
-          operation: "execute",
-          cause: new Error("Execution already started. Reconcile its receipt."),
-        }),
-      );
+      return (yield* this.receipts.settle(identity)).result;
     }
 
-    const hashes = specBundles(spec);
-
     const bundles = yield* Effect.try({
-      try: () => Object.fromEntries(hashes.map((hash) => [hash, this.options.bundlePath(hash)])),
+      try: () =>
+        Object.fromEntries(specBundles(spec).map((hash) => [hash, this.options.bundlePath(hash)])),
       catch: (cause) => new ExecutorError({ operation: "execute", cause }),
     });
 
-    const worker = fileURLToPath(
-      new URL(import.meta.url.endsWith(".ts") ? "./worker.ts" : "./worker.js", import.meta.url),
-    );
+    const { home, workspace, mode, secrets } = this.options;
+
+    const request: WorkerRequest = {
+      options: { home, workspace, mode, secrets, bundles },
+      key,
+      attempt,
+      spec,
+    };
 
     const completed = yield* spawnCaptured(
       {
         program: process.execPath,
-        args: ["--no-env-file", worker],
-        cwd: dirname(worker),
-        env: this.options.mode === "full" ? process.env : { PATH: process.env.PATH },
-        stdin: JSON.stringify({
-          options: {
-            home: this.options.home,
-            workspace: this.options.workspace,
-            mode: this.options.mode,
-            secrets: this.options.secrets,
-            receipts: this.receipts.descriptor,
-            bundles,
-          },
-          key,
-          attempt,
-          spec,
-        }),
+        args: ["--no-env-file", WORKER],
+        cwd: dirname(WORKER),
+        env: mode === "full" ? process.env : { PATH: process.env.PATH },
+        stdin: JSON.stringify(request),
       },
       {
-        timeoutMs:
-          spec.kind === "code"
-            ? spec.timeoutMs + 30_000
-            : (spec.node.options.timeout === undefined
-                ? 300_000
-                : durationMs(spec.node.options.timeout)) +
-              (spec.parse === null ? 0 : 300_000) +
-              30_000,
+        timeoutMs: attemptBudgetMs(spec),
         maxOutputBytes: 64 * 1024,
         // Let the worker escalate its own process group and persist its receipt first.
         killGraceMs: 10_000,
+        signal,
       },
-      signal,
-      performance.now(),
     ).pipe(
       Effect.map((output) => ({ kind: "output" as const, output })),
       Effect.catchTag("CommandExecutionError", (cause) =>
@@ -117,14 +91,14 @@ export class LocalExecutor implements Executor {
       ),
     );
 
-    const observed = yield* this.receipts.read({ executionKey: key, attempt });
+    const observed = yield* this.receipts.read(identity);
 
     if (observed?.kind === "finished") {
       return observed.result;
     }
 
     const failure = workerFailure(completed.output.stdout);
-    const receipt = yield* this.receipts.reconcile({ executionKey: key, attempt });
+    const receipt = yield* this.receipts.reconcile(identity);
 
     if (receipt.kind === "finished" && receipt.source === "stored") {
       return receipt.receipt.result;
@@ -137,7 +111,6 @@ export class LocalExecutor implements Executor {
       );
     }
 
-    // Sealing an unfinished receipt does not turn a failed worker transport into success.
     if (completed.kind === "failure") {
       return yield* Effect.fail(
         new ExecutorError({ operation: "execute", cause: completed.cause }),

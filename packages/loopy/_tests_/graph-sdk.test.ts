@@ -171,8 +171,6 @@ test("branch carries each successful arm result in its own join", () => {
   });
   expect(graph.nodes[2]).toMatchObject({ scope: "0:branch", result: { kind: "value", value: 3 } });
   expect<unknown>(graph.edges).toEqual([
-    { from: "0:branch", to: "1:join", kind: "yes" },
-    { from: "0:branch", to: "2:join", kind: "no" },
     { from: "1:join", to: "3:join", kind: "join" },
     { from: "2:join", to: "3:join", kind: "join" },
     { from: "3:join", to: "4:join", kind: "next" },
@@ -213,8 +211,6 @@ test("parallel expands two independent branches", () => {
   const graph = compile(() => parallel({ a: uuid, b: now }));
   expect(graph.nodes[0]).toMatchObject({ kind: "parallel", branches: { a: "1:uuid", b: "3:now" } });
   expect<unknown>(graph.edges).toEqual([
-    { from: "0:parallel", to: "1:uuid", kind: "case", label: "a" },
-    { from: "0:parallel", to: "3:now", kind: "case", label: "b" },
     { from: "1:uuid", to: "2:join", kind: "next" },
     { from: "2:join", to: "5:join", kind: "join" },
     { from: "3:now", to: "4:join", kind: "next" },
@@ -226,7 +222,6 @@ test("parallel expands two independent branches", () => {
 test("finally records body and cleanup paths with the body result", () => {
   const graph = compile(() => finally_(uuid, () => log("cleanup")));
   expect(graph.nodes[0]).toMatchObject({ kind: "finally", body: "1:uuid", cleanup: "3:log" });
-  expect<unknown>(graph.edges).toContainEqual({ from: "0:finally", to: "3:log", kind: "cleanup" });
   expect(graph.nodes[2]).toMatchObject({
     kind: "join",
     result: { kind: "value", value: { ref: "1:uuid", path: [] } },
@@ -247,7 +242,6 @@ test("rescue binds its error only in the handler", () => {
     handler: "2:log",
     error: "0:rescue:error",
   });
-  expect<unknown>(graph.edges).toContainEqual({ from: "0:rescue", to: "2:log", kind: "rescue" });
   expect(graph.nodes[2]).toMatchObject({
     message: { ref: "0:rescue:error", path: ["message"] },
   });
@@ -259,12 +253,6 @@ test("switch records literal cases and default", () => {
     kind: "switch",
     cases: { first: "2:join" },
     default: "3:join",
-  });
-  expect<unknown>(graph.edges).toContainEqual({
-    from: "1:switch",
-    to: "3:join",
-    kind: "case",
-    label: "default",
   });
 });
 
@@ -968,9 +956,6 @@ test("arm dictionaries contain only own callbacks", () => {
   Object.setPrototypeOf(arms, { inherited: () => fail("unused") });
   const graph = compile(() => parallel(arms));
   expect(graph.nodes[0]).toMatchObject({ branches: { own: "1:join" } });
-  expect(graph.edges.filter((edge) => edge.kind === "case").map((edge) => edge.label)).toEqual([
-    "own",
-  ]);
 });
 
 test("an author reference to a parallel with one failing arm is unresolved", () => {

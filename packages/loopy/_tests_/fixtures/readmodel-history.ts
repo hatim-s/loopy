@@ -95,7 +95,7 @@ export async function countHistory(store: Store & DashboardReader) {
     store.apply({
       runId: "count-1",
       token: "owner",
-      effects: [{ kind: "suspend_run", wakeAt: "2026-10-23T01:00:00.000Z", at: readmodelAt }],
+      effects: [{ kind: "suspend_run", wakeAt: "2026-10-23T01:00:00.000Z" }],
     }),
   );
   snapshots.push(await snapshot("suspend"));
@@ -115,7 +115,7 @@ export async function countHistory(store: Store & DashboardReader) {
         token: "owner",
         effects: [
           { kind: "finish_run", outcome: { status: "succeeded", output: null }, at: readmodelAt },
-          { kind: "schedule_retry", at: "invalid-timestamp" },
+          { kind: "schedule_activation", at: "invalid-timestamp" },
         ],
       }),
     );

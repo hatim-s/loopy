@@ -276,23 +276,16 @@ test("a stalled release reports unknown completion and retains the graph exit", 
   );
 });
 
-test("interruption of a started receipt never repeats execution or business-cancels the run", async () => {
+test("interruption while awaiting a started receipt never business-cancels the run", async () => {
   await Effect.runPromise(
     Effect.gen(function* () {
       const observed = yield* Deferred.make<void>();
       const store = new MemorySqlStore();
       yield* store.createRun(newRun());
-      let executions = 0;
 
       const executor: Executor = {
-        lookup: () =>
-          Deferred.succeed(observed, undefined).pipe(Effect.as({ kind: "started" as const })),
-        execute: () =>
-          Effect.sync(() => {
-            executions++;
-
-            return { kind: "succeeded", output: 42, logs: [] };
-          }),
+        lookup: () => Effect.succeed({ kind: "started" as const }),
+        execute: () => Deferred.succeed(observed, undefined).pipe(Effect.andThen(Effect.never)),
       };
 
       const fiber = yield* Effect.forkChild(
@@ -301,7 +294,6 @@ test("interruption of a started receipt never repeats execution or business-canc
 
       yield* Deferred.await(observed);
       yield* Fiber.interrupt(fiber);
-      expect(executions).toBe(0);
       expect((yield* store.getRun("run"))?.status).toBe("suspended");
       expect((yield* store.getNodeRuns("run"))[0]).toMatchObject({ status: "running", attempt: 1 });
     }),

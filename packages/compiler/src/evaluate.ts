@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { boundaryOptions, diagnosticSchema, graphSchema } from "@loopy/contract";
 import { errorMessage } from "@loopy/core";
-import { compilerLauncher, spawnCaptured } from "@loopy/runtime/local";
+import { compilerLauncher, spawnCaptured } from "@loopy/runtime/os";
 import { Effect, Schema } from "effect";
 import {
   AuthorDiagnostics,
@@ -104,8 +104,6 @@ export const evaluate = Effect.fn(function* (file: string, modules: AuthorModule
             env: { PATH: "/usr/bin:/bin", HOME: cwd, TMPDIR: cwd },
           },
           { timeoutMs: 10_000, maxOutputBytes: 16 * 1024 * 1024 },
-          undefined,
-          performance.now(),
         ).pipe(
           Effect.catchTag(
             "CommandExecutionError",

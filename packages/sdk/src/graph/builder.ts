@@ -33,11 +33,7 @@ type NodeData = Node extends infer N
 
 type ControlKind = "branch" | "switch" | "map" | "parallel" | "finally" | "rescue";
 
-type ControlArm = {
-  name: string;
-  run: () => AuthorValue;
-  edge: Exclude<Edge["kind"], "join">;
-};
+type ControlArm = { name: string; run: () => AuthorValue };
 
 type Control = {
   arms: readonly ControlArm[];
@@ -201,7 +197,7 @@ export class GraphBuilder {
     }
   }
 
-  edge(from: NodeId, to: NodeId, kind: Exclude<Edge["kind"], "case">) {
+  edge(from: NodeId, to: NodeId, kind: Edge["kind"]) {
     this.edges.push({ from, to, kind });
   }
 
@@ -219,11 +215,6 @@ export class GraphBuilder {
       const expanded = this.arm(base.id, arm.run);
       entries.set(arm.name, expanded.entry);
       tails.push(...expanded.tails);
-      this.edges.push(
-        arm.edge === "case"
-          ? { from: base.id, to: expanded.entry, kind: "case", label: arm.name }
-          : { from: base.id, to: expanded.entry, kind: arm.edge },
-      );
     }
 
     this.nodes[index] = { ...base, ...node((arm) => entries.get(arm) ?? base.id) };

@@ -1,4 +1,9 @@
-import { type CommandFlagSpec, checkCommandFlags } from "@loopy/core";
+import {
+  COMMAND_PLATFORMS,
+  type CommandFlagSpec,
+  type CommandVariant,
+  checkCommandFlags,
+} from "@loopy/core";
 import {
   type CommandDefinition,
   type CommandDescriptor,
@@ -13,12 +18,15 @@ import { type AuthorValue, RefValue } from "./ref";
 
 export type CommandArguments = CommandOperands<string | RefValue, AuthorValue>;
 
+type Mode = { kind: "raw" } | { kind: "parsed"; prepare?: Prepare };
+
 type RenderedCommand = {
   key: string;
   program: string;
   operands: (string | RefValue)[];
   flags: Readonly<Record<string, AuthorValue>>;
   flagSpec: CommandFlagSpec;
+  variants: Partial<Record<(typeof COMMAND_PLATFORMS)[number], CommandVariant>>;
   okExitCodes: readonly number[];
   parseInput: Record<string, AuthorValue>;
 };
@@ -67,14 +75,43 @@ function operands(descriptor: CommandDefinition, input: CommandArguments) {
   ];
 }
 
+const deferred = (value: AuthorValue) => value instanceof RefValue;
+
+/** Each declared variant must accept the same author flags, since the executing host picks one. */
+function variants(
+  descriptor: CommandDescriptor,
+  input: CommandArguments,
+  flags: Readonly<Record<string, AuthorValue>>,
+  mode: Mode,
+): RenderedCommand["variants"] {
+  return Object.fromEntries(
+    COMMAND_PLATFORMS.flatMap((platform) => {
+      if (descriptor.variants?.[platform] === undefined) {
+        return [];
+      }
+
+      const definition = platformVariant(descriptor, platform);
+      const spec = flagSpec(definition);
+      const preset = mode.kind === "parsed" ? { ...definition.preset?.flags } : {};
+
+      if (mode.kind === "parsed") {
+        parsedFlags(definition, input);
+      }
+
+      checkCommandFlags(spec, { ...flags, ...preset }, deferred);
+
+      return [[platform, { program: definition.program, flagSpec: spec, preset }]];
+    }),
+  );
+}
+
 /** Validates author operands and flags with the rules the executor applies to resolved values. */
 export function commandArgv(
-  original: CommandDescriptor,
+  descriptor: CommandDescriptor,
   input: CommandArguments,
-  mode: { kind: "raw" } | { kind: "parsed"; prepare?: Prepare },
+  mode: Mode,
 ): RenderedCommand {
-  const descriptor = platformVariant(original, process.platform);
-  const key = commandKey(original);
+  const key = commandKey(descriptor);
   const flags = mode.kind === "parsed" ? parsedFlags(descriptor, input) : (input.flags ?? {});
   const unprepared = { ...input, flags };
   const prepared = mode.kind === "parsed" && mode.prepare ? mode.prepare(unprepared) : unprepared;
@@ -87,7 +124,7 @@ export function commandArgv(
     prepared.args ?? [],
     key,
   );
-  checkCommandFlags(spec, prepared.flags ?? {}, (value) => value instanceof RefValue);
+  checkCommandFlags(spec, prepared.flags ?? {}, deferred);
 
   return {
     key,
@@ -95,7 +132,8 @@ export function commandArgv(
     operands: operands(descriptor, prepared),
     flags: prepared.flags ?? {},
     flagSpec: spec,
-    okExitCodes: original.okExitCodes ?? [0],
+    variants: variants(descriptor, input, prepared.flags ?? {}, mode),
+    okExitCodes: descriptor.okExitCodes ?? [0],
     parseInput: Object.fromEntries(
       Object.entries(prepared).filter(([, value]) => value !== undefined),
     ),

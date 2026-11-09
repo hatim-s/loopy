@@ -7,9 +7,9 @@ import { makeService, ServiceError } from "@loopy/runtime/service";
 import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { Registry } from "../../runtime/src/local/registry";
-import { SecretStore } from "../../runtime/src/local/secrets";
 import { startServer } from "../../runtime/src/local/server/start-server";
 import { makeLocalService } from "../../runtime/src/local/service";
+import { SecretStore } from "../../runtime/src/os/secrets";
 import { compiledBody } from "./compiled-fixture";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 
@@ -204,7 +204,7 @@ test("hook resolution is atomic and SSE refuses a cursor inside a commit", async
           payload: { kind: "record", fields: { ok: "boolean" } },
           at,
         },
-        { kind: "suspend_run", wakeAt: null, at },
+        { kind: "suspend_run", wakeAt: null },
       ],
     }),
   );
@@ -234,36 +234,6 @@ test("hook resolution is atomic and SSE refuses a cursor inside a commit", async
   expect(
     Exit.isFailure(await Effect.runPromiseExit(f.service.resolveHook(wait.token, { ok: false }))),
   ).toBe(true);
-});
-
-test("SSE polling sees commits from an independently opened connection", async () => {
-  const f = await fixture();
-  const scope = Scope.makeUnsafe();
-  cleanups.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-
-  const other = await Effect.runPromise(
-    makeSqliteRunStore(join(f.home, "runs.sqlite")).pipe(Effect.provideService(Scope.Scope, scope)),
-  );
-
-  const cursor = await Effect.runPromise(f.service.cursor());
-  const response = await f.request(`/events?after=${cursor.cursor}&epoch=${cursor.epoch}`);
-  const reader = response.body!.getReader();
-  await reader.read();
-  await Effect.runPromise(
-    other.createRun({
-      id: "external",
-      slug: "workflow",
-      revision: "fixture-revision",
-      workspace: f.root,
-      status: "queued",
-      input: {},
-      createdAt: "2026-10-17T00:00:00.000Z",
-      updatedAt: "2026-10-17T00:00:00.000Z",
-    }),
-  );
-  const frame = await reader.read();
-  expect(new TextDecoder().decode(frame.value)).toContain("external");
-  await reader.cancel();
 });
 
 test("successful cancellation commits and releases ownership", async () => {

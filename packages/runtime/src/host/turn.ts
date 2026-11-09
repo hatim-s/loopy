@@ -51,7 +51,7 @@ export function commitTurn(options: TurnOptions, event: EngineEvent) {
 
       effects.push(effect);
 
-      if (effect.kind === "schedule_retry" && (retryAt === null || effect.at < retryAt)) {
+      if (effect.kind === "schedule_activation" && (retryAt === null || effect.at < retryAt)) {
         retryAt = effect.at;
       }
     }

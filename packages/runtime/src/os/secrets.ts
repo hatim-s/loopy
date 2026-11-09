@@ -9,11 +9,16 @@ import {
   readFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { isString, requireRecord, setOwnProperty, validateSecretName } from "@loopy/core";
+import {
+  errnoCode,
+  isString,
+  requireRecord,
+  SecretError,
+  setOwnProperty,
+  validateSecretName,
+} from "@loopy/core";
 import { Effect } from "effect";
-import { SecretError } from "../service";
-import { errnoCode, withLockDirectory, writeFileAtomically } from "./fs";
-import { defaultHome } from "./home";
+import { withLockDirectory, writeFileAtomically } from "./fs";
 
 const MAX_VALUE_BYTES = 64 * 1024;
 
@@ -48,12 +53,12 @@ function parseSecrets(value: unknown) {
   return secrets;
 }
 
-/** Plaintext storage protected by user-only permissions. No values are printed by the CLI. */
+/** Plaintext storage protected by user-only permissions. */
 export class SecretStore {
   readonly directory: string;
   readonly file: string;
 
-  constructor(home = defaultHome()) {
+  constructor(home: string) {
     this.directory = resolve(home);
     this.file = join(this.directory, "secrets.json");
   }

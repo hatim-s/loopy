@@ -1,5 +1,11 @@
 import type { CommandResult, Duration, Json, RateLimit } from "@loopy/core";
-import { type CommandFlagSpec, type GraphRetry, type OutSchema, parseArgv } from "@loopy/core";
+import {
+  type CommandFlagSpec,
+  type CommandVariant,
+  type GraphRetry,
+  type OutSchema,
+  parseArgv,
+} from "@loopy/core";
 import { type CommandDescriptor, type Prepare, validateCommandDescriptor } from "../../descriptor";
 import { currentBuilder, retryPolicy } from "../builder";
 import { type CommandArguments, commandArgv } from "../command-argv";
@@ -52,6 +58,7 @@ function addCommand(
     argv: readonly (string | RefValue)[];
     flags: Readonly<Record<string, AuthorValue>>;
     flagSpec?: CommandFlagSpec;
+    variants?: Partial<Record<"darwin" | "linux", CommandVariant>>;
     okExitCodes: readonly number[];
     parse: Readonly<Record<string, AuthorValue>> | null;
   },
@@ -67,6 +74,7 @@ function addCommand(
       argv: node.argv.map((arg) => serialize(arg, builder)),
       flags: serializeValues(node.flags, builder),
       ...(node.flagSpec && { flagSpec: node.flagSpec }),
+      ...(node.variants && Object.keys(node.variants).length > 0 && { variants: node.variants }),
       options: {
         cwd: serialize(options.cwd, builder),
         env: serializeValues(options.env ?? {}, builder),
@@ -105,6 +113,7 @@ function descriptorCommand(
       argv: [rendered.program, ...rendered.operands],
       flags: rendered.flags,
       flagSpec: rendered.flagSpec,
+      variants: rendered.variants,
       okExitCodes: rendered.okExitCodes,
       parse: mode?.parses ? rendered.parseInput : null,
     },

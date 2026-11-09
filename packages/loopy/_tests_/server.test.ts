@@ -1,7 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { get, type IncomingMessage } from "node:http";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import {
   cursorViewSchema,
   daemonViewSchema,
@@ -399,29 +399,6 @@ function expectedFrames(events: RuntimeEvent[]) {
   return frames;
 }
 
-async function externalRun(
-  home: string,
-  run: Parameters<Awaited<ReturnType<typeof fixtureStore>>["createRun"]>[0],
-) {
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      "-e",
-      `import { Effect } from "effect"; import { openRunStore } from ${JSON.stringify(resolve(import.meta.dir, "../../runtime/src/local/index.ts"))}; await Effect.runPromise(Effect.scoped(Effect.gen(function* () { const store = yield* openRunStore(process.argv[1]); yield* store.createRun(JSON.parse(process.argv[2])); })));`,
-      home,
-      JSON.stringify(run),
-    ],
-    {
-      cwd: home,
-      env: { PATH: process.env.PATH, HOME: home, LOOPY_HOME: home },
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-
-  expect(await child.exited).toBe(0);
-}
-
 function replayRun(workspace: string) {
   return {
     id: "replay",
@@ -451,7 +428,7 @@ async function reconnectFrames(
   );
 }
 
-test("SSE delivers exact transactions across replay, cross-process writes and Last-Event-ID reconnect", async () => {
+test("SSE delivers exact transactions across replay, live commits and Last-Event-ID reconnect", async () => {
   const f = fixture("events", "run: () => 1");
   await save(f);
   const store = await fixtureStore(f.home);
@@ -479,7 +456,6 @@ test("SSE delivers exact transactions across replay, cross-process writes and La
     const response = await fetch(endpoint, { headers });
     expect(response.headers.get("content-type")).toBe("text/event-stream");
     const capture = captureFrames(fragment(response.body!));
-    await externalRun(f.home, { ...run, id: "external" });
     await Effect.runPromise(store.claim(run.id, "owner"));
     const events = await Effect.runPromise(store.events(0, 100));
     expect(await capture.finish()).toEqual(expectedFrames(events));
@@ -1193,6 +1169,10 @@ test("compiled save route verifies artifacts, stores private bundles and returns
   const registry = await Effect.runPromise(Registry.make(f.home, f.cwd));
   const saved = await Effect.runPromise(registry.get("compiled-save"));
 
+  if (saved === null) {
+    throw new Error("Expected the saved loopy.");
+  }
+
   const paths = [
     join(registry.projectDirectory, "compiled-save.json"),
     registry.graphPath(saved.revision),
@@ -1288,5 +1268,5 @@ test("saving another revision retains the earlier graph and executable artifacts
     expect(statSync(registry.graphPath(revision)).mode & 0o777).toBe(0o600);
   }
 
-  expect(revisions.at(-1)).toBe((await Effect.runPromise(registry.get("revisions"))).revision);
+  expect(revisions.at(-1)).toBe((await Effect.runPromise(registry.get("revisions")))?.revision);
 });

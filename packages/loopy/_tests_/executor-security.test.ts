@@ -6,7 +6,7 @@ import { executionKeyString } from "@loopy/core";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { Effect } from "effect";
 import { receiptPath } from "../../runtime/src/executor/receipts";
-import { SecretStore } from "../../runtime/src/local/secrets";
+import { SecretStore } from "../../runtime/src/os/secrets";
 import { fixture } from "./fixtures/executor";
 
 for (const secret of ['quote"and\nnewline', "42"]) {

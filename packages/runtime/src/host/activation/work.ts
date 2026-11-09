@@ -15,32 +15,28 @@ const timestamp = Effect.map(Clock.currentTimeMillis, (now) => new Date(now).toI
 
 function dispatchResult(options: ActivationOptions, work: Dispatch) {
   return Effect.gen(function* () {
-    while (true) {
-      const receipt = yield* options.executor.lookup(work.executionKey, work.attempt);
+    const receipt = yield* options.executor.lookup(work.executionKey, work.attempt);
 
-      if (receipt.kind === "finished") {
-        return completionEvent(work, receipt.result, yield* timestamp);
-      }
-
-      if (receipt.kind === "none") {
-        const at = yield* timestamp;
-        const denial = yield* admitDispatch({ ...options, dispatch: work, at });
-
-        if (denial) {
-          return denial;
-        }
-
-        const result = yield* Effect.scoped(
-          Effect.flatMap(Effect.abortSignal, (signal) =>
-            options.executor.execute(work.executionKey, work.attempt, work.spec, signal),
-          ),
-        );
-
-        return completionEvent(work, result, yield* timestamp);
-      }
-
-      yield* Effect.sleep(100);
+    if (receipt.kind === "finished") {
+      return completionEvent(work, receipt.result, yield* timestamp);
     }
+
+    // A started attempt was admitted before. Execute waits for it instead of running it again.
+    if (receipt.kind === "none") {
+      const denial = yield* admitDispatch({ ...options, dispatch: work, at: yield* timestamp });
+
+      if (denial) {
+        return denial;
+      }
+    }
+
+    const result = yield* Effect.scoped(
+      Effect.flatMap(Effect.abortSignal, (signal) =>
+        options.executor.execute(work.executionKey, work.attempt, work.spec, signal),
+      ),
+    );
+
+    return completionEvent(work, result, yield* timestamp);
   });
 }
 

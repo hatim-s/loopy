@@ -1,28 +1,33 @@
 import { durationMs } from "../duration";
+import type { AttemptLog } from "../executor";
 import type { NodeRun } from "../graph/node-run";
-import type { Node } from "../graph/nodes";
-import { isBoolean, isNumber, isString } from "../validation";
+import type { ExecutableNode, Node } from "../graph/nodes";
+import { isScalar } from "../json";
+import { limitLogs } from "../logs";
 import type { ControlNode } from "./control";
 import { captureInput } from "./input";
-import { write } from "./node-run";
-import { type ResolutionContext, resolve } from "./resolve";
+import { addMs, type Execution, runBase, write } from "./node-run";
+import { resolve } from "./resolve";
 import { executionSpec } from "./spec";
 import type { Traversal, TraversalResult } from "./traversal";
 
-function dispatch(
-  traversal: Traversal,
-  node: Extract<Node, { kind: "code" | "command" }>,
-  options: { previous: NodeRun | undefined; context: ResolutionContext },
-): TraversalResult {
-  const { previous, context } = options;
+/** A log node succeeds with null and hands its bounded line to the inline write. */
+export type InvokeResult = TraversalResult | { kind: "logged"; log: AttemptLog | null };
 
-  if (previous?.status === "running" && !traversal.rehydrate) {
+// A started effect is emitted again only when the run rehydrates after losing its worker.
+function awaitingEffect(traversal: Traversal, previous: NodeRun | undefined): boolean {
+  return previous?.status === "running" && !traversal.rehydrate;
+}
+
+function dispatch(traversal: Traversal, execution: Execution<ExecutableNode>): TraversalResult {
+  const { node, key, previous, context } = execution;
+
+  if (awaitingEffect(traversal, previous)) {
     return { kind: "pending" };
   }
 
   const { transition, at } = traversal;
   const spec = executionSpec(node, transition.state, context);
-  const key = { runId: transition.state.runId, nodeId: node.id, scope: context.scope };
   const sameAttempt = previous?.status === "running" || previous?.status === "rate_limited";
 
   const run: NodeRun = sameAttempt
@@ -59,20 +64,19 @@ function dispatch(
 
 function pause(
   traversal: Traversal,
-  node: Extract<Node, { kind: "wait" | "sleep" }>,
-  options: { previous: NodeRun | undefined; context: ResolutionContext },
+  execution: Execution<Extract<Node, { kind: "wait" | "sleep" }>>,
 ): TraversalResult {
-  const { previous, context } = options;
+  const { node, key, previous } = execution;
   const { transition, at } = traversal;
 
   const wakeAt =
     previous?.status === "waiting" || previous?.status === "sleeping"
       ? previous.wakeAt
       : node.kind === "sleep"
-        ? new Date(Date.parse(at) + durationMs(node.duration)).toISOString()
+        ? addMs(at, durationMs(node.duration))
         : node.timeout === null
           ? null
-          : new Date(Date.parse(at) + durationMs(node.timeout)).toISOString();
+          : addMs(at, durationMs(node.timeout));
 
   if (wakeAt !== null && wakeAt <= at) {
     return node.kind === "sleep"
@@ -81,12 +85,11 @@ function pause(
   }
 
   if (wakeAt !== null) {
-    transition.effects.push({ kind: "schedule_retry", at: wakeAt });
+    transition.effects.push({ kind: "schedule_activation", at: wakeAt });
   }
 
   if (!previous) {
-    const key = { runId: transition.state.runId, nodeId: node.id, scope: context.scope };
-    const base = { key, attempt: 1, maxAttempts: 1, startedAt: at, receipt: "none" as const };
+    const base = runBase(execution, at);
 
     if (node.kind === "wait") {
       write(transition, { ...base, status: "waiting", wakeAt });
@@ -107,9 +110,10 @@ function pause(
 
 function formatted(
   traversal: Traversal,
-  node: Extract<Node, { kind: "format" }>,
-  context: ResolutionContext,
+  execution: Execution<Extract<Node, { kind: "format" }>>,
 ): string {
+  const { node, context } = execution;
+
   const values = new Map(
     Object.entries(node.values).map(([name, value]) => [
       name,
@@ -124,7 +128,7 @@ function formatted(
 
     const value = values.get(name);
 
-    if (!isString(value) && !isNumber(value) && !isBoolean(value)) {
+    if (!isScalar(value)) {
       throw new Error(`Format value '${name}' must be a scalar.`);
     }
 
@@ -134,13 +138,10 @@ function formatted(
 
 export function invoke(
   traversal: Traversal,
-  node: Exclude<Node, ControlNode>,
-  options: { previous: NodeRun | undefined; context: ResolutionContext },
-): TraversalResult {
-  const { previous, context } = options;
+  execution: Execution<Exclude<Node, ControlNode>>,
+): InvokeResult {
+  const { node, key, previous, context } = execution;
   const { transition, at } = traversal;
-  const key = { runId: transition.state.runId, nodeId: node.id, scope: context.scope };
-  const base = { key, attempt: 1, maxAttempts: 1, startedAt: at, receipt: "none" as const };
 
   if (traversal.cancelling) {
     return { kind: "cancelled" };
@@ -150,7 +151,7 @@ export function invoke(
     (previous?.status === "retrying" || previous?.status === "rate_limited") &&
     previous.nextRetryAt > at
   ) {
-    transition.effects.push({ kind: "schedule_retry", at: previous.nextRetryAt });
+    transition.effects.push({ kind: "schedule_activation", at: previous.nextRetryAt });
 
     return { kind: "pending" };
   }
@@ -158,16 +159,16 @@ export function invoke(
   switch (node.kind) {
     case "code":
     case "command":
-      return dispatch(traversal, node, { previous, context });
+      return dispatch(traversal, { ...execution, node });
     case "wait":
     case "sleep":
-      return pause(traversal, node, { previous, context });
+      return pause(traversal, { ...execution, node });
     case "now":
       return { kind: "succeeded", output: at };
     case "uuid":
     case "random": {
-      if (previous?.status !== "running" || traversal.rehydrate) {
-        write(transition, { ...base, status: "running" });
+      if (!awaitingEffect(traversal, previous)) {
+        write(transition, { ...runBase(execution, at), status: "running" });
         transition.effects.push({ kind: "sample", executionKey: key, valueKind: node.kind });
       }
 
@@ -175,7 +176,7 @@ export function invoke(
     }
 
     case "format":
-      return { kind: "succeeded", output: formatted(traversal, node, context) };
+      return { kind: "succeeded", output: formatted(traversal, { ...execution, node }) };
     case "fail":
       return {
         kind: "failed",
@@ -184,8 +185,17 @@ export function invoke(
           message: String(resolve(node.message, transition.state, context)),
         },
       };
-    case "log":
-      return { kind: "succeeded", output: null };
+    case "log": {
+      const [log] = limitLogs([
+        {
+          message: String(resolve(node.message, transition.state, context)),
+          data: node.data === null ? null : resolve(node.data, transition.state, context),
+        },
+      ]);
+
+      return { kind: "logged", log: log ?? null };
+    }
+
     case "join":
       return {
         kind: "succeeded",

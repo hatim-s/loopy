@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { Registry } from "../../../runtime/src/local/registry";
 import { makeArtifactRegistry } from "../../../runtime/src/local/save-compiled";
 import { compiledBody } from "../compiled-fixture";
+import { runIn } from "../fixture";
 import { MemorySqlStore } from "../store-fixture";
 
 export class SummaryCountsStore extends MemorySqlStore {
@@ -105,24 +106,15 @@ export async function summaryServiceFixture() {
   const run = async (id: string, workspace: string, slug: string, status: RunRecord["status"]) => {
     const at = "2026-10-23T00:00:00.000Z";
 
-    const record: RunRecord = {
+    const record = runIn(status, {
       id,
       workspace,
       slug,
-      status,
       revision: "a".repeat(64),
       input: {},
       createdAt: at,
       updatedAt: at,
-    };
-
-    if (status === "succeeded") {
-      record.output = null;
-    }
-
-    if (status === "failed") {
-      record.error = "controlled";
-    }
+    });
 
     await Effect.runPromise(store.createRun(record));
 
