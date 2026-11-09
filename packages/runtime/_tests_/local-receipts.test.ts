@@ -179,8 +179,8 @@ test("a live trusted child retains completion authority, a killed child becomes 
   const f = await receiptsFixture();
   await writeFile(
     f.bundle,
-    // The bundle outlives its killed worker until the test releases it, then completes as an orphan.
-    // It reports completion through a file: on Linux its pid lives in the sandbox's PID namespace.
+    // On macOS the bundle outlives its killed worker until released, then completes as an orphan.
+    // It reports completion through a file because on Linux its pid lives in the sandbox's PID namespace.
     'await Bun.write("effect", "once"); while (!(await Bun.file("release").exists())) { await Bun.sleep(10); } await Bun.write("done", "released"); console.log(42);',
   );
 
@@ -228,7 +228,12 @@ test("a live trusted child retains completion authority, a killed child becomes 
       await Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
     ).toEqual(terminal.result);
     await writeFile(join(f.workspace, "release"), "release");
-    await waitForFile(join(f.workspace, "done"));
+
+    // Bubblewrap runs Linux bundles with --die-with-parent, so only macOS leaves an orphan to wait for.
+    if (process.platform === "darwin") {
+      await waitForFile(join(f.workspace, "done"));
+    }
+
     expect(await readFile(join(f.workspace, "effect"), "utf8")).toBe("once");
     expect(await Effect.runPromise(f.executor.lookup(f.key, 1))).toEqual(terminal);
   } finally {
