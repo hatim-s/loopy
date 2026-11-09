@@ -16,12 +16,10 @@ export const hook = defineCommand({
     Effect.gen(function* () {
       const [runId, name] = cli.args;
       const payload = yield* parseJsonText(cli.values.payload ?? "null", "--payload");
-      yield* request(
-        cli,
-        `/runs/${encodeURIComponent(runId)}/hooks/${encodeURIComponent(name)}`,
-        routes.resolveNamedHook.response,
-        { method: "POST", body: { payload } },
-      );
+      yield* request(cli, routes.resolveNamedHook, {
+        params: { id: runId, name },
+        body: { payload },
+      });
       printLine(`Resolved hook '${name}' for run ${runId}. The run is ready to continue.`);
     }),
 });

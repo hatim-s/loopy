@@ -69,7 +69,7 @@ for (const hold of ["retry", "rate-limit"] as const) {
             store,
             concurrency: 1,
             prepare: () => Effect.succeed({ graph, executor }),
-            revisionFor: () => Effect.succeed("bundle"),
+            definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
           });
 
           const loop = yield* Effect.forkChild(daemon.run);

@@ -6,7 +6,7 @@ import { resolveResult } from "../../sandbox/src/receipt-view";
 /** Read retained fixture state without opening a writer session or changing its format. */
 export function filesystemReceipt(root: string, id: string) {
   return Effect.gen(function* () {
-    const record = yield* new FilesystemAuthority(root).read(id);
+    const record = yield* new FilesystemAuthority(root).read({ id });
 
     if (!record) {
       return yield* Effect.fail(new Error(`Fixture receipt ${id} is missing.`));

@@ -1,4 +1,4 @@
-import { encodeBoundary, routes } from "@loopy/contract";
+import { eventFrame, type routes, SSE_CONNECTED, SSE_HEARTBEAT } from "@loopy/contract";
 import type { RuntimeEvent, Store } from "@loopy/core";
 import { Effect, type Schema } from "effect";
 import { ServiceError } from "./error";
@@ -15,8 +15,6 @@ type EventService = Pick<Service, "events">;
 const STALLED_READER_MS = 2000;
 
 const ENCODER = new TextEncoder();
-
-const encodeEvent = encodeBoundary(routes.events.response);
 
 type EventsQuery = Schema.Schema.Type<typeof routes.events.query>;
 
@@ -69,12 +67,12 @@ class EventFeed {
 
   start(controller: ReadableStreamDefaultController<Uint8Array>): void {
     this.controller = controller;
-    controller.enqueue(ENCODER.encode(": connected\n\n"));
+    controller.enqueue(ENCODER.encode(SSE_CONNECTED));
     this.unsubscribe = this.store.subscribe(this.enqueue);
 
     this.heartbeat = setInterval(() => {
       if ((controller.desiredSize ?? 0) > 0) {
-        controller.enqueue(ENCODER.encode(": heartbeat\n\n"));
+        controller.enqueue(ENCODER.encode(SSE_HEARTBEAT));
       }
     }, 15_000);
     this.signal.addEventListener("abort", this.abort, { once: true });
@@ -121,7 +119,6 @@ class EventFeed {
     }
 
     // One queued and one pending transaction bound memory without splitting large frames.
-    // Only two seconds without a pull while full identifies a reader that stopped draining.
     while (!this.closed && (controller.desiredSize ?? 0) <= 0) {
       await new Promise<void>((resolve) => {
         this.drained = resolve;
@@ -181,12 +178,9 @@ class EventFeed {
   }
 
   private async deliver(transaction: RuntimeEvent[]): Promise<void> {
-    const data = (await Effect.runPromise(this.service.events(transaction))).map((event) =>
-      encodeEvent(event),
-    );
-
+    const events = await Effect.runPromise(this.service.events(transaction));
     this.cursor = transaction.at(-1)?.sequence ?? this.cursor;
-    await this.send(`id: ${this.cursor}\nevent: txn\ndata: ${JSON.stringify(data)}\n\n`);
+    await this.send(eventFrame(this.cursor, events));
   }
 }
 

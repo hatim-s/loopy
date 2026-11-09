@@ -1,7 +1,8 @@
 import { readdir } from "node:fs/promises";
-import { resolve } from "node:path";
 import { errnoCode } from "@loopy/core";
 import { Effect, Schema } from "effect";
+import { SANDBOX_LABELS } from "../../../sandbox/src/docker/identity";
+import { stateLayout } from "../../../sandbox/src/state-root";
 import { filesystemReceipt } from "../filesystem-receipt";
 import { assert } from "../shared/assert";
 import { command, docker as runDocker } from "../shared/process";
@@ -25,13 +26,13 @@ const decodeContainer = Schema.decodeUnknownSync(containerSchema);
 
 export async function ownedContainer(name: string) {
   const [row] = decodeContainer(JSON.parse(await docker(["inspect", name])));
-  assert(row.Config.Labels["loopy.sandbox.owner"] === owner, "container_owner_mismatch");
+  assert(row.Config.Labels[SANDBOX_LABELS.owner] === owner, "container_owner_mismatch");
 
   return row;
 }
 
 export async function receipts() {
-  const files = await readdir(resolve(sandboxState, "receipts"));
+  const files = await readdir(stateLayout(sandboxState).receipts);
 
   return Effect.runPromise(
     Effect.all(

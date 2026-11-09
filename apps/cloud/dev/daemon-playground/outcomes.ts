@@ -38,7 +38,7 @@ export async function matchOutcome(
     return false;
   }
 
-  const graph = await daemon.request(`/runs/${snapshot.run.id}/graph`, routes.runGraph.response);
+  const graph = await daemon.call(routes.runGraph, { params: { id: snapshot.run.id } });
 
   return matchesControlledFailure({ label: rule.label, marker }, snapshot, graph);
 }

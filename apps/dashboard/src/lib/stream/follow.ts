@@ -4,7 +4,7 @@ import { applyBatch, resetStream } from "./apply";
 
 type FollowOptions = {
   client: QueryClient;
-  backend: Pick<LoopyBackend, "cursor" | "events">;
+  backend: LoopyBackend;
   signal: AbortSignal;
   onState: (state: StreamState) => void;
 };
@@ -19,7 +19,7 @@ export async function followSession(options: FollowOptions): Promise<void> {
 
   try {
     while (!signal.aborted) {
-      const cursor = await backend.cursor(signal);
+      const cursor = await backend.call("cursor", {}, signal);
       await client.invalidateQueries();
 
       if (signal.aborted) {

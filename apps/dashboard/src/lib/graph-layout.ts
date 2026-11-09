@@ -1,6 +1,6 @@
 import dagre from "@dagrejs/dagre";
+import { nodeIdParts } from "@loopy/contract";
 import type { GraphModel, GraphNodeModel, NodeRole } from "./graph";
-import { nodeIdParts } from "./node-id";
 
 type Size = { width: number; height: number };
 

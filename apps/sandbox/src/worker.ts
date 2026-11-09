@@ -1,11 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import {
-  decodeBoundary,
-  type ExecutionSpec,
-  executionSpecSchema,
-  SANDBOX_MAX_CAPTURE_BYTES,
-} from "@loopy/contract";
+import { decodeBoundary, type ExecutionSpec, executionSpecSchema } from "@loopy/contract";
+import { SANDBOX_MAX_CAPTURE_BYTES } from "@loopy/contract/sandbox";
 import { durationMs, type Json } from "@loopy/core";
 import { bundleResult } from "@loopy/runtime/executor/protocol";
 import { CommandExecutionError, renderCommand } from "@loopy/runtime/local/execution-host";

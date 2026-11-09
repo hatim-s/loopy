@@ -1,169 +1,87 @@
 import {
   AuthorityError,
-  type AuthorityFailure,
   type AuthorityInput,
   type AuthorityOutput,
-  artifactHelperName,
-  type ExportRecord,
-} from "@loopy/contract";
+  admitTransition,
+  beginExportTransition,
+  completeTransition,
+} from "@loopy/contract/sandbox";
 import type { ReceiptSql } from "./sql";
 
-function checked<T>(work: () => T): T | { kind: "rejected"; code: AuthorityFailure } {
-  try {
-    return work();
-  } catch (error) {
-    if (error instanceof AuthorityError) {
-      return { kind: "rejected", code: error.code };
-    }
-
-    throw error;
-  }
-}
-
+/** Applies the shared receipt transitions inside synchronous Durable Object transactions. */
 export class ReceiptAuthority {
   constructor(private readonly db: ReceiptSql) {}
 
-  admit(input: AuthorityInput<"admit">): AuthorityOutput<"admit"> {
-    return checked(() =>
-      this.db.storage.transactionSync(() => {
-        this.db.checkSession(input.session);
-        const existing = this.db.read(input.plan.id);
+  admit(input: AuthorityInput<"admit">, validPlan: boolean): AuthorityOutput<"admit"> {
+    return this.db.storage.transactionSync(() => {
+      const decision = admitTransition(input, {
+        current: this.db.current(),
+        validPlan,
+        existing: this.db.read(input.plan.id),
+        workspaceBusy: this.db.busy(input.plan.volume),
+      });
 
-        if (existing) {
-          if (existing.plan.requestHash !== input.plan.requestHash) {
-            throw new AuthorityError("request_conflict");
-          }
+      if (decision.kind === "created") {
+        this.db.write(decision.record);
+      }
 
-          return { kind: "existing" as const, record: existing };
-        }
+      return decision;
+    });
+  }
 
-        if (this.db.busy(input.plan.volume)) {
-          throw new AuthorityError("workspace_busy");
-        }
-
-        const record = { kind: "started" as const, plan: input.plan, session: input.session };
-        this.db.write(record);
-
-        return { kind: "created" as const, record };
-      }),
-    );
+  /** Decides without writing, so the caller can verify result bytes outside the transaction. */
+  completion(input: AuthorityInput<"complete">) {
+    return completeTransition(input, {
+      current: this.db.current(),
+      existing: this.db.read(input.id),
+      inlineRef: null,
+    });
   }
 
   complete(input: AuthorityInput<"complete">): AuthorityOutput<"complete"> {
-    return checked(() =>
-      this.db.storage.transactionSync(() => {
-        this.db.checkSession(input.session);
-        const previous = this.db.read(input.id);
+    return this.db.storage.transactionSync(() => {
+      const decision = this.completion(input);
 
-        if (!previous) {
-          throw new AuthorityError("missing");
-        }
+      if (decision.kind !== "publish") {
+        return decision;
+      }
 
-        if (previous.plan.requestHash !== input.requestHash) {
-          throw new AuthorityError("request_conflict");
-        }
+      this.db.write(decision.record);
 
-        if (previous.kind === "finished") {
-          if (
-            previous.result.kind !== "blob" ||
-            previous.result.ref.sha256 !== input.result.sha256 ||
-            previous.result.ref.size !== input.result.size
-          ) {
-            throw new AuthorityError("request_conflict");
-          }
-
-          return { kind: "finished" as const, record: previous };
-        }
-
-        const record = {
-          ...previous,
-          kind: "finished" as const,
-          result: { kind: "blob" as const, ref: input.result },
-        };
-
-        this.db.write(record);
-
-        return { kind: "finished" as const, record };
-      }),
-    );
+      return { kind: "finished", record: decision.record };
+    });
   }
 
   beginExport(input: AuthorityInput<"beginExport">): AuthorityOutput<"beginExport"> {
-    return checked(() =>
-      this.db.storage.transactionSync(() => {
-        this.db.checkSession(input.session);
-        const existing = this.db.export(input.token);
+    return this.db.storage.transactionSync(() => {
+      const decision = beginExportTransition(input, {
+        current: this.db.current(),
+        token: this.db.export(input.token),
+        attempt: this.db.read(input.attemptId),
+        workspaceBusy: (volume) => this.db.pendingStarted(volume) || this.db.busy(volume),
+      });
 
-        if (existing) {
-          if (existing.record.attemptId !== input.attemptId) {
-            throw new AuthorityError("request_conflict");
-          }
+      if (decision.kind !== "create") {
+        return decision;
+      }
 
-          if (!existing.active) {
-            throw new AuthorityError("invalid_state");
-          }
+      this.db.insertExport(decision.record);
 
-          return { kind: "granted" as const, record: existing.record };
-        }
-
-        const attempt = this.db.read(input.attemptId);
-
-        if (!attempt) {
-          throw new AuthorityError("missing");
-        }
-
-        if (attempt.kind !== "finished") {
-          throw new AuthorityError("invalid_state");
-        }
-
-        const volume = attempt.plan.volume;
-
-        const pending =
-          this.db.storage.sql
-            .exec(
-              "SELECT id FROM receipt_attempts WHERE volume=? AND kind='started' LIMIT 1",
-              volume,
-            )
-            .toArray().length > 0;
-
-        if (pending || this.db.busy(volume)) {
-          throw new AuthorityError("workspace_busy");
-        }
-
-        const record: ExportRecord = {
-          token: input.token,
-          session: input.session,
-          attemptId: input.attemptId,
-          volume,
-          helper: artifactHelperName(input.attemptId),
-        };
-
-        this.db.storage.sql
-          .exec(
-            "INSERT INTO receipt_exports VALUES (?,?,1,?)",
-            input.token,
-            volume,
-            JSON.stringify(record),
-          )
-          .toArray();
-
-        return { kind: "granted" as const, record };
-      }),
-    );
+      return { kind: "granted", record: decision.record };
+    });
   }
 
-  endExport(input: AuthorityInput<"endExport">): void {
-    this.db.storage.transactionSync(() => {
+  endExport(input: AuthorityInput<"endExport">): null {
+    return this.db.storage.transactionSync(() => {
       this.db.checkSession(input.session);
-      const previous = this.db.export(input.token);
 
-      if (!previous) {
+      if (!this.db.export(input.token)) {
         throw new AuthorityError("missing");
       }
 
-      this.db.storage.sql
-        .exec("UPDATE receipt_exports SET active=0 WHERE token=?", input.token)
-        .toArray();
+      this.db.releaseExport(input.token);
+
+      return null;
     });
   }
 }

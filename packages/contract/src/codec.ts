@@ -12,7 +12,8 @@ export const encodeBoundary = <S extends Schema.ConstraintEncoder<unknown>>(sche
 export const decodeJson = <S extends Schema.ConstraintDecoder<unknown>>(schema: S) =>
   Schema.decodeUnknownSync(Schema.fromJsonString(schema), boundaryOptions);
 
-export const queryNumber = Schema.Unknown.pipe(
+// URL search values arrive as text; typed callers pass numbers.
+export const queryNumber = Schema.Union([Schema.String, Schema.Finite]).pipe(
   Schema.decodeTo(Schema.Finite, {
     decode: SchemaGetter.transform(Number),
     encode: SchemaGetter.transform((value) => value),
@@ -56,3 +57,21 @@ export const base64Text = Schema.String.check(
 /** Base64 text whose decoded size stays within maxBytes. */
 export const boundedBase64 = (maxBytes: number) =>
   base64Text.check(Schema.isMaxLength(Math.ceil(maxBytes / 3) * 4));
+
+// Web Crypto digests need bytes backed by a plain ArrayBuffer.
+const bufferBytes = Schema.declare(
+  (value): value is Uint8Array<ArrayBuffer> =>
+    value instanceof Uint8Array && value.buffer instanceof ArrayBuffer,
+);
+
+/** Bytes on the wire as canonical base64, so callers pass the compiler's Uint8Array directly. */
+export const base64Bytes = base64Text.pipe(
+  Schema.decodeTo(bufferBytes, {
+    decode: SchemaGetter.transform((text) =>
+      Uint8Array.from(atob(text), (char) => char.charCodeAt(0)),
+    ),
+    encode: SchemaGetter.transform((bytes) =>
+      btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join("")),
+    ),
+  }),
+);

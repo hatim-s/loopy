@@ -1,6 +1,5 @@
-import { isRecord, isRef, type Ref, type Value } from "@loopy/contract";
+import { isRecord, isRef, nodeIdParts, type Ref, type Value } from "@loopy/contract";
 import type { GraphNode } from "./graph";
-import { nodeIdParts } from "./node-id";
 
 export function refText(ref: Ref): string {
   return [nodeIdParts(ref.ref).local, ...ref.path].join(".");

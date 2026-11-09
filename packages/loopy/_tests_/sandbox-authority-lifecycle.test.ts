@@ -2,11 +2,11 @@ import { afterEach, expect, test } from "bun:test";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExecutionResult } from "@loopy/contract";
+import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
 import { failure } from "../../../apps/sandbox/src/operations";
 import { stateLayout } from "../../../apps/sandbox/src/state-root";
-import type { AuthorityInput } from "../../contract/src/sandbox-journal-rpc";
 import { artifactReader, successful, uncertain } from "./fixtures/sandbox-authority";
 import { cleanup, fixture, open } from "./fixtures/sandbox-authority-lifecycle";
 import { run } from "./fixtures/sandbox-run";
@@ -19,7 +19,7 @@ class FaultAuthority extends FilesystemAuthority {
   failBeforeCommit = false;
   reads = 0;
   readonly dropped = Promise.withResolvers<void>();
-  override read(id: string) {
+  override read(input: AuthorityInput<"read">) {
     const baseread = super.read.bind(this);
 
     return Effect.gen({ self: this }, function* () {
@@ -29,7 +29,7 @@ class FaultAuthority extends FilesystemAuthority {
         return yield* Effect.fail(failure("fixture", new Error("Authority read unavailable")));
       }
 
-      return yield* baseread(id);
+      return yield* baseread(input);
     });
   }
   override admit(input: AuthorityInput<"admit">) {

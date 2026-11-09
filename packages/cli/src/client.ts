@@ -1,13 +1,19 @@
-import { boundaryOptions, errorBodySchema } from "@loopy/contract";
+import {
+  decodeRouteResponse,
+  type ErrorCode,
+  type Route,
+  type RouteInput,
+  routeRequest,
+} from "@loopy/contract";
 import { readDaemonFile } from "@loopy/runtime/local";
-import { Data, Effect, Exit, Schema } from "effect";
+import { Data, Effect, Exit } from "effect";
 import type { Context } from "./context";
 import { daemonCommand } from "./entry";
 import { CliError, cliSync } from "./errors";
 
 type ClientContext = Pick<Context, "home" | "cwd">;
 
-type Method = "GET" | "POST" | "PUT" | "DELETE";
+type Method = Route["method"];
 
 const DISCOVERY_TIMEOUT_MS = 5000;
 
@@ -15,7 +21,7 @@ const DISCOVERY_POLL_MS = 50;
 
 export class HttpError extends Data.TaggedError("HttpError")<{
   status: number;
-  code: typeof errorBodySchema.Type.error.code;
+  code: ErrorCode;
   message: string;
 }> {}
 
@@ -77,48 +83,40 @@ const daemon = Effect.fn(function* (context: ClientContext) {
   );
 });
 
-export const request = <S extends Schema.Top & { readonly DecodingServices: never }>(
-  context: ClientContext,
-  path: string,
-  schema: S,
-  options: { method: Method; body?: object } = { method: "GET" },
-) =>
+/** Calls one contract route on the daemon, starting it first when no daemon is published. */
+export const request = <R extends Route>(context: ClientContext, route: R, input: RouteInput<R>) =>
   Effect.gen(function* () {
     const record = yield* daemon(context);
+    const { method, url, headers, body } = yield* cliSync(() => routeRequest(route, input));
 
     // Consume the body while fetch still owns its cancellation signal. Never retry mutations.
-    const { ok, status, value } = yield* Effect.tryPromise({
+    const { status, text } = yield* Effect.tryPromise({
       try: async (signal) => {
-        const response = await fetch(`http://127.0.0.1:${record.port}/api${path}`, {
-          method: options.method,
-          headers: { Authorization: `Bearer ${record.token}`, "Content-Type": "application/json" },
-          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        const response = await fetch(`http://127.0.0.1:${record.port}${url}`, {
+          method,
+          headers: { ...headers, Authorization: `Bearer ${record.token}` },
+          body,
           signal,
         });
 
-        const value: unknown = await response.json();
-
-        return { ok: response.ok, status: response.status, value };
+        return { status: response.status, text: await response.text() };
       },
-      catch: (cause) => new TransportError({ operation: "fetch", method: options.method, cause }),
+      catch: (cause) => new TransportError({ operation: "fetch", method, cause }),
     });
 
-    if (!ok) {
-      const { error } = yield* Schema.decodeUnknownEffect(errorBodySchema)(
-        value,
-        boundaryOptions,
-      ).pipe(
-        Effect.mapError(
-          (cause) => new TransportError({ operation: "decode", method: options.method, cause }),
-        ),
-      );
+    const outcome = decodeRouteResponse(route, status, text);
 
-      return yield* new HttpError({ status, ...error });
+    switch (outcome.kind) {
+      case "ok": {
+        return outcome.value;
+      }
+
+      case "error": {
+        return yield* new HttpError({ status, ...outcome.error });
+      }
+
+      case "malformed": {
+        return yield* new TransportError({ operation: "decode", method, cause: undefined });
+      }
     }
-
-    return yield* Schema.decodeUnknownEffect(schema)(value, boundaryOptions).pipe(
-      Effect.mapError(
-        (cause) => new TransportError({ operation: "decode", method: options.method, cause }),
-      ),
-    );
   });

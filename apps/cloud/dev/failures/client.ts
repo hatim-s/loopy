@@ -5,23 +5,26 @@ import {
   type RunSnapshotView,
   receiptSchema,
   routes,
+} from "@loopy/contract";
+import {
   type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
+import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { assert, JourneyFailure } from "../shared/assert";
 import { ApiClient, EvidenceLog } from "../shared/fixture-client";
 import { until } from "../shared/poll";
-import { DOCKER_CONTEXT, root, SANDBOX_IMAGE } from "../stack/constants";
+import { root } from "../stack/constants";
 import { api, sandbox, state } from "./config";
 import { docker, ownedContainer, receipts } from "./resources";
 import { FailureStack } from "./stack";
 
 export class FailureJourney {
   readonly stack = new FailureStack();
-  readonly api = new ApiClient({ base: `${api}/api`, token: this.stack.token, timeoutMs: 10_000 });
+  readonly api = new ApiClient({ origin: api, token: this.stack.token, timeoutMs: 10_000 });
   private readonly provider = new ApiClient({
-    base: sandbox,
+    origin: sandbox,
     token: this.stack.sandboxToken,
     timeoutMs: 10_000,
   });
@@ -31,7 +34,7 @@ export class FailureJourney {
     api,
     sandbox,
     stateRoot: state,
-    dockerContext: DOCKER_CONTEXT,
+    dockerContext: SANDBOX_DOCKER_CONTEXT,
     image: SANDBOX_IMAGE,
     gaps: [
       "No remote deployment or provider tested.",
@@ -41,7 +44,8 @@ export class FailureJourney {
   });
 
   async start(slug: string) {
-    const run = await this.api.json(routes.startRun.response, `/loopies/${slug}/runs`, {
+    const run = await this.api.call(routes.startRun, {
+      params: { slug },
       body: { input: {}, workspace: "fixtures" },
     });
 
@@ -51,7 +55,7 @@ export class FailureJourney {
   }
 
   snapshot(id: string) {
-    return this.api.json(routes.run.response, `/runs/${id}`);
+    return this.api.call(routes.run, { params: { id } });
   }
 
   until<T>(

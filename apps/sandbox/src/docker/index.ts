@@ -1,13 +1,12 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { decodeBoundary, type ExecutionResult, executionResultSchema } from "@loopy/contract";
 import {
   type DockerAttemptPlan,
-  decodeBoundary,
-  type ExecutionResult,
-  executionResultSchema,
+  inputHelperName,
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptRequest,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Result, Schema } from "effect";
 import type { SandboxConfig } from "../config";
@@ -17,7 +16,7 @@ import { checked, failure, io } from "../operations";
 import { failed } from "../result";
 import { stateLayout } from "../state-root";
 import type { DockerClient } from "./client";
-import { attemptContainerArgs, inputContainerArgs, inputHelperName } from "./plan";
+import { attemptContainerArgs, inputContainerArgs } from "./plan";
 
 const inspectionSchema = Schema.Array(
   Schema.Struct({

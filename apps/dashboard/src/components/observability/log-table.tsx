@@ -1,7 +1,7 @@
+import { nodeIdParts } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
 import { Fragment, type ReactNode, useState } from "react";
 import { preciseTime, shortId } from "../../lib/format";
-import { nodeIdParts } from "../../lib/node-id";
 import { useLog } from "../../lib/ui-data";
 import type { LogRow } from "../../lib/view-models";
 import { JsonBlock } from "../json-preview";
@@ -92,19 +92,15 @@ export function LogTable({
                   </td>
                 )}
                 <td className="max-w-44 truncate font-mono text-xs">
-                  {log.nodeId === null ? (
-                    <span className="text-faint">run</span>
-                  ) : (
-                    <Link
-                      to="/runs/$runId"
-                      params={{ runId: log.runId }}
-                      search={{ node: log.nodeId }}
-                      className="text-ink hover:text-active"
-                    >
-                      {nodeIdParts(log.nodeId).local}
-                      {log.attempt > 1 && <span className="text-faint"> try {log.attempt}</span>}
-                    </Link>
-                  )}
+                  <Link
+                    to="/runs/$runId"
+                    params={{ runId: log.runId }}
+                    search={{ node: log.nodeId }}
+                    className="text-ink hover:text-active"
+                  >
+                    {nodeIdParts(log.nodeId).local}
+                    {log.attempt > 1 && <span className="text-faint"> try {log.attempt}</span>}
+                  </Link>
                 </td>
                 <td className="max-w-0 truncate font-mono text-xs" title={log.message}>
                   {log.message}

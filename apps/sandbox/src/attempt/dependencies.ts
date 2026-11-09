@@ -1,7 +1,8 @@
 import type { Effect } from "effect";
 import type { ArtifactReader } from "../artifacts";
+import type { ResultsFor, SandboxAttemptAuthority } from "../authority";
 import type { AttemptBackend } from "../docker";
-import type { ResultsFor, SandboxAttemptAuthority, SandboxFailure } from "../operations";
+import type { SandboxFailure } from "../operations";
 
 export interface AttemptDependencies {
   authority: SandboxAttemptAuthority;

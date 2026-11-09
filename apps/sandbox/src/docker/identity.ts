@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 
 export const SANDBOX_IMAGE = "loopy-sandbox:bun-1.4.0";
 
+// The dedicated Colima profile named in the README. The CLI still requires --docker-context.
+export const SANDBOX_DOCKER_CONTEXT = "colima-loopy-cloud-phase1";
+
 export const SANDBOX_LABELS = {
   owner: "loopy.sandbox.owner",
   request: "loopy.sandbox.request",

@@ -1,12 +1,9 @@
-import { routes } from "@loopy/contract";
-import { isTerminalRun } from "@loopy/core";
+import { isTerminalRun, PAGE_LIMIT, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { request } from "../client";
 import { defineCommand, RUN_ID } from "../command";
 import type { Context } from "../context";
 import { printJson, printLine } from "../output";
-
-const LOG_PAGE_SIZE = 200;
 
 // Follow polls until the CLI gains an SSE reader like the dashboard's.
 const FOLLOW_POLL_MS = 500;
@@ -20,11 +17,10 @@ function drainLogs(
     let cursor = after;
 
     while (true) {
-      const logs = yield* request(
-        context,
-        `/runs/${encodeURIComponent(id)}/logs?after=${cursor}`,
-        routes.logs.response,
-      );
+      const logs = yield* request(context, routes.logs, {
+        params: { id },
+        query: { after: cursor, limit: PAGE_LIMIT },
+      });
 
       for (const log of logs) {
         if (follow) {
@@ -36,7 +32,7 @@ function drainLogs(
         cursor = log.seq;
       }
 
-      if (logs.length < LOG_PAGE_SIZE) {
+      if (logs.length < PAGE_LIMIT) {
         return cursor;
       }
     }
@@ -60,11 +56,7 @@ export const logs = defineCommand({
       let after = 0;
 
       while (true) {
-        const snapshot = yield* request(
-          cli,
-          `/runs/${encodeURIComponent(id)}`,
-          routes.run.response,
-        );
+        const snapshot = yield* request(cli, routes.run, { params: { id } });
 
         after = yield* drainLogs(cli, id, { after, follow });
 

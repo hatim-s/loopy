@@ -1,27 +1,10 @@
-import { createHash } from "node:crypto";
 import {
-  attemptIdInput,
   SANDBOX_MAX_BUNDLE_BYTES,
-  type SandboxAttemptIdentity,
   type SandboxAttemptRequest,
-} from "@loopy/contract";
-import { canonicalJson } from "@loopy/core";
+  verifiedBase64,
+} from "@loopy/contract/sandbox";
 import { Effect } from "effect";
-import { verifiedBytes } from "./bytes";
 import { SandboxRequestError } from "./request-error";
-
-export function attemptHash(
-  value:
-    | SandboxAttemptRequest
-    | (SandboxAttemptIdentity & { root: string })
-    | { root: string; workspace: string; runId: string },
-) {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
-}
-
-export function attemptId(root: string, identity: SandboxAttemptIdentity) {
-  return attemptHash(attemptIdInput(root, identity));
-}
 
 export function validateBundles(request: SandboxAttemptRequest) {
   return Effect.gen(function* () {
@@ -35,14 +18,11 @@ export function validateBundles(request: SandboxAttemptRequest) {
     const supplied = new Set<string>();
 
     for (const bundle of request.bundles) {
-      const bytes = verifiedBytes(bundle.bytes, bundle.hash);
+      const bytes = yield* Effect.promise(() =>
+        verifiedBase64(bundle.bytes, bundle.hash, SANDBOX_MAX_BUNDLE_BYTES),
+      );
 
-      if (
-        bytes === null ||
-        bytes.byteLength > SANDBOX_MAX_BUNDLE_BYTES ||
-        supplied.has(bundle.hash) ||
-        !required.includes(bundle.hash)
-      ) {
+      if (bytes === null || supplied.has(bundle.hash) || !required.includes(bundle.hash)) {
         return yield* Effect.fail(
           new SandboxRequestError(
             "invalid_request",

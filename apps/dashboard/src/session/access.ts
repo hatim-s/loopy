@@ -53,10 +53,7 @@ export function useAccess(): Access {
  * instead of an error in every widget. Other API errors open the dashboard, where each widget
  * reports its own failure.
  */
-export async function checkAccess(
-  backend: Pick<LoopyBackend, "cursor">,
-  token: string | null,
-): Promise<Access> {
+export async function checkAccess(backend: LoopyBackend, token: string | null): Promise<Access> {
   if (token === null) {
     access.set("missing");
 
@@ -66,7 +63,7 @@ export async function checkAccess(
   access.set("checking");
 
   try {
-    await backend.cursor(AbortSignal.timeout(PROBE_TIMEOUT_MS));
+    await backend.call("cursor", {}, AbortSignal.timeout(PROBE_TIMEOUT_MS));
     access.set("open");
   } catch (error) {
     // The probe's own timeout rejects with a DOMException, which also means nothing answered.

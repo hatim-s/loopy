@@ -1,16 +1,17 @@
 import { mkdir, open } from "node:fs/promises";
 import { resolve } from "node:path";
-import { decodeBoundary, errorBodySchema, type routes } from "@loopy/contract";
+import {
+  decodeRouteResponse,
+  type Route,
+  type RouteInput,
+  type RouteResult,
+  routeRequest,
+} from "@loopy/contract";
 import { readDaemonFile } from "@loopy/runtime/local";
-import type { Schema } from "effect";
 import { requireFreePorts } from "../stack/ports";
 import { cli, environment, home, port, source, state } from "./config";
 import { DAEMON } from "./plan";
 import { runtimeSource } from "./source";
-
-type Mutation =
-  | Schema.Schema.Type<typeof routes.startRun.body>
-  | Schema.Schema.Type<typeof routes.resolveNamedHook.body>;
 
 export class OwnedDaemon {
   private child?: ReturnType<typeof Bun.spawn>;
@@ -116,27 +117,37 @@ export class OwnedDaemon {
     return { exitCode, rejected: exitCode !== 0, reason: stderr.trim() };
   }
 
-  async request<T>(path: string, schema: Schema.Codec<T, unknown, never, never>, body?: Mutation) {
+  async call<R extends Route>(route: R, input: RouteInput<R>): Promise<RouteResult<R>> {
     const record = readDaemonFile(home);
 
     if (!this.child || record?.pid !== this.child.pid || record.port !== port) {
       throw new Error("Daemon discovery does not match the process this runner owns.");
     }
 
-    const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
-      method: body === undefined ? "GET" : "POST",
-      headers: { Authorization: `Bearer ${record.token}`, "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+    const { method, url, headers, body } = routeRequest(route, input);
+
+    const response = await fetch(`http://127.0.0.1:${port}${url}`, {
+      method,
+      headers: { ...headers, Authorization: `Bearer ${record.token}` },
+      body,
       signal: AbortSignal.timeout(10_000),
     });
 
-    const value: unknown = await response.json();
+    const outcome = decodeRouteResponse(route, response.status, await response.text());
 
-    if (!response.ok) {
-      throw new Error(`${response.status}: ${decodeBoundary(errorBodySchema)(value).error.code}`);
+    switch (outcome.kind) {
+      case "ok": {
+        return outcome.value;
+      }
+
+      case "error": {
+        throw new Error(`${response.status}: ${outcome.error.code}`);
+      }
+
+      case "malformed": {
+        throw new Error(`${response.status}: the daemon answered ${route.path} off contract.`);
+      }
     }
-
-    return decodeBoundary(schema)(value);
   }
 
   async stop(signal: "SIGTERM" | "SIGKILL" = "SIGTERM") {

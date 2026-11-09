@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { DashboardReader } from "@loopy/contract";
 import type { RunRecord, Schedule } from "@loopy/core";
-import { makeDaemon, PreparationError, ScheduleRevisionError } from "@loopy/runtime/host";
+import { makeDaemon, PreparationError, ScheduleDefinitionError } from "@loopy/runtime/host";
 import { loopy } from "@loopy/sdk/graph";
 import type { Cause } from "effect";
 import { Effect } from "effect";
@@ -41,7 +41,7 @@ const settled = (store: Pick<DashboardReader, "queryRuns">, count: number) =>
   );
 
 for (const mode of ["due", "disabled", "stale", "minute-late"] as const) {
-  test(`schedule ${mode} preserves startup and fire-key policy`, async () => {
+  test(`schedule ${mode} coalesces missed slots into one fire`, async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -50,7 +50,6 @@ for (const mode of ["due", "disabled", "stale", "minute-late"] as const) {
           const store = new MemorySqlStore();
           const passes = countPasses(store);
 
-          // The startup rule applies to the first pass, so the schedule exists before the loop starts.
           yield* store.putSchedule(
             schedule(
               mode === "disabled"
@@ -67,20 +66,19 @@ for (const mode of ["due", "disabled", "stale", "minute-late"] as const) {
             store,
             concurrency: 4,
             prepare: () => Effect.succeed({ graph, executor: new FakeExecutor() }),
-            revisionFor: () => Effect.succeed("bundle"),
+            definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
           });
 
           yield* Effect.forkScoped(daemon.run);
 
-          // A minute-late slot fires at once and its successor at the current minute fires next.
-          const fired = mode === "due" ? 1 : mode === "minute-late" ? 2 : 0;
+          const fired = mode === "disabled" ? 0 : 1;
           yield* settled(store, fired);
           yield* nextPass(daemon, passes);
           expect(yield* runs(store)).toHaveLength(fired);
 
           if (mode === "stale") {
             expect((yield* store.listSchedules())[0]).toMatchObject({
-              lastFireKey: "old",
+              lastFireKey: `test@${new Date(base - 120_000).toISOString()}`,
               nextFireAt: new Date(base + 60_000).toISOString(),
             });
           }
@@ -110,7 +108,7 @@ test("preparation failure finishes that run, reports its Cause and permits other
             run.id === "run"
               ? Effect.fail(new PreparationError({ cause: "Missing revision" }))
               : Effect.succeed({ graph, executor: new FakeExecutor() }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
           onError: (cause, run) => {
             errors.push({ cause, run });
           },
@@ -136,7 +134,7 @@ test("preparation failure finishes that run, reports its Cause and permits other
   );
 });
 
-test("a failed schedule lookup reports once per pass and does not block a different schedule", async () => {
+test("a failed schedule lookup waits for its retry deadline without blocking another schedule", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -149,10 +147,10 @@ test("a failed schedule lookup reports once per pass and does not block a differ
           store,
           concurrency: 2,
           prepare: () => Effect.succeed({ graph, executor: new FakeExecutor() }),
-          revisionFor: (schedule) =>
+          definitionFor: (schedule) =>
             schedule.slug === "broken"
-              ? Effect.fail(new ScheduleRevisionError({ cause: "Missing revision" }))
-              : Effect.succeed("bundle"),
+              ? Effect.fail(new ScheduleDefinitionError({ cause: "Missing revision" }))
+              : Effect.succeed({ revision: "bundle", graph }),
           onError: (cause) => {
             errors.push(cause);
           },
@@ -163,7 +161,15 @@ test("a failed schedule lookup reports once per pass and does not block a differ
         yield* Effect.forkScoped(daemon.run);
         yield* settled(store, 1);
         yield* nextPass(daemon, passes);
-        expect(errors.length).toBe(passes());
+        expect(errors).toHaveLength(1);
+        expect(yield* store.scheduleFailures(10)).toEqual([
+          {
+            workspace: "/workspace",
+            slug: "broken",
+            error: "Missing revision",
+            retryAt: new Date(Date.parse(newRun().createdAt) + 5000).toISOString(),
+          },
+        ]);
       }),
     ).pipe(Effect.provide(TestClock.layer())),
   );
@@ -196,7 +202,7 @@ test("queued runs activate and prune runs at startup and hourly", async () => {
           store,
           concurrency: 1,
           prepare: () => Effect.succeed({ graph, executor: new FakeExecutor() }),
-          revisionFor: () => Effect.succeed("bundle"),
+          definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
         });
 
         yield* store.createRun(newRun());

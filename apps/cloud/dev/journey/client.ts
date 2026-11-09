@@ -1,8 +1,21 @@
 import { resolve } from "node:path";
-import { errorBodySchema, type Json, type PutLoopyBody, routes } from "@loopy/contract";
+import {
+  errorBodySchema,
+  type Json,
+  type PutLoopyBody,
+  type Route,
+  type RouteInput,
+  routes,
+} from "@loopy/contract";
 import type { Schema } from "effect";
 import { assert } from "../shared/assert";
-import { ApiClient, EvidenceLog, type RequestOptions, readJson } from "../shared/fixture-client";
+import {
+  ApiClient,
+  type CallOptions,
+  EvidenceLog,
+  type RequestOptions,
+  readJson,
+} from "../shared/fixture-client";
 import { root } from "../stack/constants";
 import { principalToken, readLocalCredentials } from "../stack/credentials";
 
@@ -10,7 +23,11 @@ const api = "http://127.0.0.1:14870";
 
 type Principal = "fixtures" | "other" | "none" | "invalid";
 
-export type JourneyRequest = Omit<RequestOptions, "token"> & { principal?: Principal };
+type As = { principal?: Principal };
+
+export type JourneyCall = Omit<CallOptions, "token"> & As;
+
+export type JourneyRequest = Omit<RequestOptions, "token"> & As;
 
 export class Journey {
   readonly evidence = new EvidenceLog(resolve(root, ".notes/cloud/evidence/journey.json"), {
@@ -22,7 +39,7 @@ export class Journey {
   private readonly client: ApiClient;
 
   private constructor(private readonly tokens: { fixtures: string; other: string }) {
-    this.client = new ApiClient({ base: `${api}/api`, token: tokens.fixtures, timeoutMs: 15_000 });
+    this.client = new ApiClient({ origin: api, token: tokens.fixtures, timeoutMs: 15_000 });
   }
 
   static async open() {
@@ -45,6 +62,7 @@ export class Journey {
     }
   }
 
+  /** Raw requests reach the cloud-only artifact route, which the daemon contract does not name. */
   request(path: string, { principal, ...options }: JourneyRequest = {}) {
     return this.client.request(path, { ...options, token: this.token(principal) });
   }
@@ -57,12 +75,28 @@ export class Journey {
     return this.client.json(schema, path, { ...options, token: this.token(principal) });
   }
 
-  async denied(path: string, status: number, code: string, options: JourneyRequest = {}) {
-    const response = await this.request(path, options);
+  send<R extends Route>(
+    route: R,
+    input: RouteInput<R>,
+    { principal, ...options }: JourneyCall = {},
+  ) {
+    return this.client.send(route, input, { ...options, token: this.token(principal) });
+  }
+
+  call<R extends Route>(
+    route: R,
+    input: RouteInput<R>,
+    { principal, ...options }: JourneyCall = {},
+  ) {
+    return this.client.call(route, input, { ...options, token: this.token(principal) });
+  }
+
+  async denied(sent: Promise<Response>, status: number, code: string) {
+    const response = await sent;
     const actualStatus = response.status;
     const parsed = await readJson(response, errorBodySchema);
     assert(actualStatus === status && parsed.error.code === code, "expected_denial_failed", {
-      path,
+      path: new URL(response.url).pathname,
       expectedStatus: status,
       actualStatus,
       expectedCode: code,
@@ -71,14 +105,12 @@ export class Journey {
   }
 
   async upload(body: PutLoopyBody) {
-    await this.json(routes.putLoopy.response, `/loopies/${body.graph.name}`, {
-      method: "PUT",
-      body,
-    });
+    await this.call(routes.putLoopy, { params: { slug: body.graph.name }, body });
   }
 
   async start(slug: string, input: Json) {
-    const run = await this.json(routes.startRun.response, `/loopies/${slug}/runs`, {
+    const run = await this.call(routes.startRun, {
+      params: { slug },
       body: { input, workspace: "fixtures" },
     });
 

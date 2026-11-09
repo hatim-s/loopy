@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
-import { SANDBOX_IMAGE } from "../stack/constants";
+import { SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 
 const profileNameSchema = Schema.UndefinedOr(Schema.Literal("architecture"));
 

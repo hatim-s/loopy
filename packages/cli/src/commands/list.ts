@@ -11,12 +11,6 @@ export const list = defineCommand({
   positionals: [],
   run: (cli) =>
     Effect.gen(function* () {
-      printJson(
-        yield* request(
-          cli,
-          `/loopies?workspace=${encodeURIComponent(cli.cwd)}`,
-          routes.loopies.response,
-        ),
-      );
+      printJson(yield* request(cli, routes.loopies, { query: { workspace: cli.cwd } }));
     }),
 });

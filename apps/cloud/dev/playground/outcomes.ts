@@ -93,7 +93,7 @@ export async function classification(
     return null;
   }
 
-  const graph = await client.json(routes.runGraph.response, `/runs/${snapshot.run.id}/graph`);
+  const graph = await client.call(routes.runGraph, { params: { id: snapshot.run.id } });
 
   return matchesControlledFailure(rule, snapshot, graph) ? ("controlled-failure" as const) : null;
 }

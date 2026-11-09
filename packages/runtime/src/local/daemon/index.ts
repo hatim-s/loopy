@@ -3,7 +3,7 @@ import { errorMessage, type RunRecord } from "@loopy/core";
 import type { Cause } from "effect";
 import { Clock, Data, Effect } from "effect";
 import { FilesystemReceipts, LocalExecutor } from "../../executor";
-import { makeDaemon, PreparationError, ScheduleRevisionError } from "../../host";
+import { makeDaemon, PreparationError, ScheduleDefinitionError } from "../../host";
 import type { SqliteRunStore } from "../../store";
 import { withLockDirectory } from "../fs";
 import { Registry } from "../registry";
@@ -30,8 +30,8 @@ type DaemonOptions = {
   cwd: string;
   store: SqliteRunStore;
   concurrency: number;
-  port?: number;
-  assets?: string;
+  port: number;
+  assets: string;
   onError?: (cause: Cause.Cause<unknown>, run?: RunRecord) => void;
 };
 
@@ -44,12 +44,13 @@ export const localDaemon = (options: DaemonOptions) =>
       store: options.store,
       concurrency: options.concurrency,
       onError: options.onError,
-      revisionFor: (schedule) =>
+      definitionFor: (schedule) =>
         Effect.gen(function* () {
           const registry = yield* Registry.make(options.home, schedule.workspace);
+          const { revision, graph } = yield* registry.get(schedule.slug);
 
-          return (yield* registry.get(schedule.slug)).revision;
-        }).pipe(Effect.mapError((cause) => new ScheduleRevisionError({ cause }))),
+          return { revision, graph };
+        }).pipe(Effect.mapError((cause) => new ScheduleDefinitionError({ cause }))),
       prepare: (run) =>
         Effect.gen(function* () {
           const registry = yield* Registry.make(options.home, run.workspace);
@@ -71,7 +72,6 @@ export const localDaemon = (options: DaemonOptions) =>
 
     const service = makeLocalService({
       home: options.home,
-      cwd: options.cwd,
       store: options.store,
       clock: { now: Date.now },
     });
@@ -110,7 +110,7 @@ export const localDaemon = (options: DaemonOptions) =>
               ...options,
               service,
               token,
-              daemon: { startedAt, concurrency: options.concurrency },
+              daemon: { pid: process.pid, startedAt, concurrency: options.concurrency },
             });
             created = true;
             writeDaemonFile(options.home, {

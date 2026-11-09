@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
-import { artifactHelperName } from "@loopy/contract";
+import { artifactHelperName } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { DockerArtifacts } from "../../../apps/sandbox/src/artifacts";
 import { DockerClient } from "../../../apps/sandbox/src/docker/client";
@@ -11,7 +11,7 @@ import { run } from "./fixtures/sandbox-run";
 
 test("helper cleanup checks exact name and labels, then verifies absence after removal", async () => {
   const { config, plan, root } = await authorityFixture();
-  const receipt = plan();
+  const receipt = await plan();
   const helper = artifactHelperName(receipt.id);
   let present = true;
   let wrongOwner = false;

@@ -1,63 +1,60 @@
+import { decodeBoundary, receiptSchema } from "@loopy/contract";
 import {
-  decodeBoundary,
-  receiptSchema,
   type SandboxArtifactRead,
   type SandboxArtifactRequest,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
   sandboxErrorSchema,
-} from "@loopy/contract";
+  sandboxErrorStatus,
+} from "@loopy/contract/sandbox";
 import type { ExecutionKey, ExecutionSpec } from "@loopy/core";
 import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
+import type { BodyLimitError, BodyReadError } from "@loopy/runtime/service";
 import { Effect } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
-import { localEndpoint } from "./environment";
-import { type BodyLimitError, readBoundedText } from "./http";
+import type { CloudConfig } from "./environment";
+import { readBoundedText } from "./http";
 import type { CloudProtocolError } from "./operation";
 import { CloudError, decodeProtocol, platform } from "./operation";
 
 export class SandboxProvider implements DurableExecutionProvider {
   private readonly base: URL;
   constructor(
-    private readonly options: {
-      url: string;
-      token: string;
+    private readonly options: CloudConfig["sandbox"] & {
       workspace: string;
       artifacts: Pick<R2ArtifactRegistry, "getBundle">;
     },
   ) {
-    this.base = localEndpoint(options.url);
+    this.base = options.url;
+  }
+  private send(url: URL, timeoutMs: number, body?: SandboxAttemptRequest) {
+    return platform("sandbox request", (signal) =>
+      fetch(url, {
+        method: body === undefined ? "GET" : "POST",
+        headers: {
+          Authorization: `Bearer ${this.options.token}`,
+          "Content-Type": "application/json",
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+      }),
+    );
   }
   private request(url: URL, body?: SandboxAttemptRequest) {
     return Effect.gen({ self: this }, function* () {
-      const response = yield* platform("sandbox request", (signal) =>
-        fetch(url, {
-          method: body === undefined ? "GET" : "POST",
-          headers: {
-            Authorization: `Bearer ${this.options.token}`,
-            "Content-Type": "application/json",
-          },
-          body: body === undefined ? undefined : JSON.stringify(body),
-          signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-        }),
-      );
+      const response = yield* this.send(url, 5000, body);
+      const text = yield* readBoundedText(response, 4 * 1024 * 1024);
 
       if (!response.ok) {
-        const body = response.body;
-
-        if (body) {
-          yield* platform("cancel sandbox response", () => body.cancel());
-        }
+        const { error } = yield* sandboxError(response, text);
 
         return yield* Effect.fail(
           new CloudError({
             operation: "sandbox request",
-            cause: `Sandbox returned HTTP ${response.status}. Restore the local provider before resuming.`,
+            cause: `Sandbox rejected the attempt request (${error.code}): ${error.message}`,
           }),
         );
       }
-
-      const text = yield* readBoundedText(response, 4 * 1024 * 1024);
 
       return yield* decodeProtocol("receipt", () =>
         decodeBoundary(receiptSchema)(JSON.parse(text)),
@@ -74,23 +71,19 @@ export class SandboxProvider implements DurableExecutionProvider {
       return yield* this.request(url);
     }).pipe(
       Effect.mapError(
-        (cause) =>
-          new DurableProviderError({
-            operation: "lookup",
-            reason:
-              cause._tag === "BodyLimitError" || cause._tag === "CloudProtocolError"
-                ? "protocol"
-                : "transport",
-            message:
-              "Sandbox lookup failed. Reconcile the same attempt after restoring the provider.",
-            cause,
-          }),
+        providerError(
+          "lookup",
+          "Sandbox lookup failed. Reconcile the same attempt after restoring the provider.",
+        ),
       ),
     );
   }
   artifact(
     request: SandboxArtifactRequest,
-  ): Effect.Effect<SandboxArtifactRead, CloudError | BodyLimitError | CloudProtocolError> {
+  ): Effect.Effect<
+    SandboxArtifactRead,
+    CloudError | BodyLimitError | BodyReadError | CloudProtocolError
+  > {
     return Effect.gen({ self: this }, function* () {
       const url = new URL("/artifacts", this.base);
       url.searchParams.set("workspace", this.options.workspace);
@@ -98,29 +91,21 @@ export class SandboxProvider implements DurableExecutionProvider {
       url.searchParams.set("attempt", String(request.attempt));
       url.searchParams.set("path", request.path);
 
-      const response = yield* platform("sandbox artifact", (signal) =>
-        fetch(url, {
-          headers: { Authorization: `Bearer ${this.options.token}` },
-          signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
-        }),
-      );
-
+      const response = yield* this.send(url, 15000);
       const text = yield* readBoundedText(response, 2 * 1024 * 1024);
-      const body: unknown = yield* decodeProtocol("artifact", () => JSON.parse(text));
 
       if (!response.ok) {
-        if (![400, 404, 409, 413].includes(response.status)) {
+        const { error } = yield* sandboxError(response, text);
+
+        // Credentials and sandbox faults belong to the provider, not to the reader's request.
+        if (error.code === "unauthorized" || error.code === "internal") {
           return yield* Effect.fail(
             new CloudError({
               operation: "sandbox artifact",
-              cause: `Sandbox artifact request returned HTTP ${response.status}.`,
+              cause: `Sandbox artifact request failed (${error.code}): ${error.message}`,
             }),
           );
         }
-
-        const { error } = yield* decodeProtocol("artifact", () =>
-          decodeBoundary(sandboxErrorSchema)(body),
-        );
 
         return { kind: "error", error };
       }
@@ -128,7 +113,7 @@ export class SandboxProvider implements DurableExecutionProvider {
       return {
         kind: "artifact",
         artifact: yield* decodeProtocol("artifact", () =>
-          decodeBoundary(sandboxArtifactSchema)(body),
+          decodeBoundary(sandboxArtifactSchema)(JSON.parse(text)),
         ),
       };
     });
@@ -151,17 +136,37 @@ export class SandboxProvider implements DurableExecutionProvider {
       });
     }).pipe(
       Effect.mapError(
-        (cause) =>
-          new DurableProviderError({
-            operation: "start",
-            reason:
-              cause._tag === "BodyLimitError" || cause._tag === "CloudProtocolError"
-                ? "protocol"
-                : "transport",
-            message: "Sandbox start failed. Reconcile the same attempt before dispatching again.",
-            cause,
-          }),
+        providerError(
+          "start",
+          "Sandbox start failed. Reconcile the same attempt before dispatching again.",
+        ),
       ),
     );
   }
+}
+
+/** Every non-ok sandbox response carries a coded error whose status the contract fixes. */
+function sandboxError(response: Response, text: string) {
+  return decodeProtocol("artifact", () => {
+    const body = decodeBoundary(sandboxErrorSchema)(JSON.parse(text));
+
+    if (sandboxErrorStatus[body.error.code] !== response.status) {
+      throw new Error(`Sandbox answered ${body.error.code} with HTTP ${response.status}.`);
+    }
+
+    return body;
+  });
+}
+
+function providerError(operation: "lookup" | "start", message: string) {
+  return (cause: { readonly _tag: string }) =>
+    new DurableProviderError({
+      operation,
+      reason:
+        cause._tag === "BodyLimitError" || cause._tag === "CloudProtocolError"
+          ? "protocol"
+          : "transport",
+      message,
+      cause,
+    });
 }

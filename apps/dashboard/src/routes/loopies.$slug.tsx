@@ -1,9 +1,10 @@
-import type { GraphRevisionView } from "@loopy/contract";
+import type { GraphRevisionView, LoopyView } from "@loopy/contract";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useMemo, useState } from "react";
 import { SourcePane } from "../components/code/source-pane";
 import { GraphPane } from "../components/graph/pane";
+import { loopyTarget } from "../components/loopy-select";
 import { NodeDetails } from "../components/run/node-panel";
 import { RunTable } from "../components/runs/run-table";
 import { CronReading, FireTime } from "../components/schedules/text";
@@ -19,11 +20,11 @@ import { useRunPages } from "../lib/pages";
 import { definitionMarks } from "../lib/run-marks";
 import { searchField } from "../lib/search";
 import { useLoopyGraph, useLoopyRows, useLoopySource } from "../lib/ui-data";
-import type { LoopyRow } from "../lib/view-models";
 
 const PANES = ["both", "code", "graph"] as const;
 
 const searchSchema = Schema.Struct({
+  workspace: searchField(Schema.String),
   node: searchField(Schema.String),
   panes: searchField(Schema.Literals(PANES)),
 });
@@ -44,7 +45,7 @@ function PaneToggle(props: { label: string; shown: boolean; onToggle: () => void
   );
 }
 
-function Definition({ loopy, graph }: { loopy: LoopyRow; graph: GraphRevisionView }) {
+function Definition({ loopy, graph }: { loopy: LoopyView; graph: GraphRevisionView }) {
   const { node: selected = null, panes = "both" } = Route.useSearch();
   const navigate = Route.useNavigate();
   const source = useLoopySource(loopy.slug, loopy.workspace);
@@ -129,15 +130,16 @@ function Definition({ loopy, graph }: { loopy: LoopyRow; graph: GraphRevisionVie
 
 const RUN_ROWS = 25;
 
-function LoopyRuns({ slug }: { slug: string }) {
-  const pager = useRunPages({ slug }, RUN_ROWS);
+function LoopyRuns({ loopy }: { loopy: LoopyView }) {
+  const target = loopyTarget(loopy);
+  const pager = useRunPages(target, RUN_ROWS);
   const now = useClock();
 
   return (
     <section className="table-card" aria-label="Runs of this loopy">
       <div className="panel-head">
         <h2>Runs</h2>
-        <Link to="/runs" search={{ slug }} className="ml-auto text-xs">
+        <Link to="/runs" search={target} className="ml-auto text-xs">
           Filter all runs
         </Link>
       </div>
@@ -159,7 +161,7 @@ function LoopyRuns({ slug }: { slug: string }) {
   );
 }
 
-function LoopyHead({ loopy, graph }: { loopy: LoopyRow; graph: GraphRevisionView | null }) {
+function LoopyHead({ loopy, graph }: { loopy: LoopyView; graph: GraphRevisionView | null }) {
   const [starting, setStarting] = useState(false);
   const now = useClock();
 
@@ -266,7 +268,7 @@ function LoopyHead({ loopy, graph }: { loopy: LoopyRow; graph: GraphRevisionView
   );
 }
 
-function LoopyView({ loopy }: { loopy: LoopyRow }) {
+function LoopyDetail({ loopy }: { loopy: LoopyView }) {
   const graph = useLoopyGraph(loopy.slug, loopy.workspace);
 
   return (
@@ -275,25 +277,30 @@ function LoopyView({ loopy }: { loopy: LoopyRow }) {
       <Load value={graph} pending={<Note>Loading the saved graph.</Note>}>
         {(data) => <Definition loopy={loopy} graph={data} />}
       </Load>
-      <LoopyRuns slug={loopy.slug} />
+      <LoopyRuns loopy={loopy} />
     </>
   );
 }
 
 function LoopyPage() {
   const { slug } = Route.useParams();
+  const { workspace } = Route.useSearch();
   const loopies = useLoopyRows();
 
   return (
     <div className="flex w-full flex-col gap-4 px-6 pt-5 pb-10 max-md:px-3">
       <Load value={loopies} pending={<p className="text-muted">Loading loopy.</p>}>
         {(data) => {
-          const loopy = data.find((item) => item.slug === slug);
+          // Every workspace sees a global definition, so its row may name another workspace.
+          const loopy = data.find(
+            (item) =>
+              item.slug === slug && (item.workspace === workspace || item.scope === "global"),
+          );
 
           return loopy ? (
-            <LoopyView loopy={loopy} />
+            <LoopyDetail loopy={loopy} />
           ) : (
-            <p className="text-muted">No saved loopy has this slug.</p>
+            <p className="text-muted">No saved loopy has this slug in this workspace.</p>
           );
         }}
       </Load>

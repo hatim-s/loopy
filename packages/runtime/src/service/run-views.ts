@@ -13,10 +13,8 @@ import {
 import type { RunRecord, RuntimeEvent } from "@loopy/core";
 import type { Schema } from "effect";
 import { Effect } from "effect";
+import { runNotFound, type ServiceContext } from "./context";
 import { type DefinitionCatalog, makeDefinitionCatalog } from "./definition-catalog";
-import { ServiceError } from "./error";
-import type { ServiceOptions } from "./registry";
-import { nodeEventPreview } from "./views";
 
 function definitionCounts(rows: RunDefinitionCount[]) {
   const projects = new Map<string, Map<string, StatusCounts>>();
@@ -36,18 +34,14 @@ function definitionCounts(rows: RunDefinitionCount[]) {
   return { projects, global };
 }
 
-export function makeRunViews(options: ServiceOptions) {
-  const timestamp = () => {
-    return new Date(options.clock.now()).toISOString();
-  };
-
+export function makeRunViews(context: ServiceContext) {
   const view = Effect.fn("run-views.view")(function* (run: RunRecord) {
     return (yield* resolve([run]))(run);
   });
 
   const resolve = Effect.fn("run-views.resolve")(function* (
     runs: RunRecord[],
-    catalog: DefinitionCatalog = makeDefinitionCatalog(options.registry),
+    catalog: DefinitionCatalog = makeDefinitionCatalog(context.registry),
   ) {
     const descriptions = new Map<RunRecord, string | null>();
 
@@ -58,8 +52,8 @@ export function makeRunViews(options: ServiceOptions) {
     }
 
     const ids = runs.map((run) => run.id);
-    const now = timestamp();
-    const hooks = yield* options.store.pendingHooks(ids, now);
+    const now = context.now();
+    const hooks = yield* context.store.pendingHooks(ids, now);
 
     return (run: RunRecord): RunView =>
       runView({
@@ -67,29 +61,29 @@ export function makeRunViews(options: ServiceOptions) {
         loopy: { slug: run.slug, description: descriptions.get(run) ?? null },
         hook: hooks.get(run.id),
         now,
-        leaseMs: options.store.leaseMs,
+        leaseMs: context.store.leaseMs,
       });
   });
 
   const listRuns = Effect.fn("run-views.listRuns")(function* (
     query: Schema.Schema.Type<typeof routes.runs.query>,
   ) {
-    const runs = yield* options.store.queryRuns({ ...query, now: timestamp() });
+    const runs = yield* context.store.queryRuns({ ...query, now: context.now() });
     const resolved = yield* resolve(runs);
 
     return runs.map(resolved);
   });
 
-  const listLoopies = Effect.fn("run-views.listLoopies")(function* (callerWorkspace = "") {
+  const listLoopies = Effect.fn("run-views.listLoopies")(function* (callerWorkspace: string) {
     const [workspaces, schedules, rows] = yield* Effect.all([
-      options.store.runWorkspaces(),
-      options.store.listSchedules(),
-      options.store.runCountsByDefinition(),
+      context.store.runWorkspaces(),
+      context.store.listSchedules(),
+      context.store.runCountsByDefinition(),
     ]);
 
     const counts = definitionCounts(rows);
     const views = new Map<string, LoopyView>();
-    const catalog: DefinitionCatalog = makeDefinitionCatalog(options.registry);
+    const catalog: DefinitionCatalog = makeDefinitionCatalog(context.registry);
 
     // Load each selected registry once before resolving recent runs across workspaces.
     const selected = new Set([
@@ -106,7 +100,11 @@ export function makeRunViews(options: ServiceOptions) {
       const { identity } = yield* catalog.resolve(workspace);
 
       for (const saved of yield* catalog.list(workspace)) {
-        if (views.has(saved.slug)) {
+        // Every workspace lists a global definition; the caller's workspace names it first.
+        const key =
+          saved.scope === "global" ? `global\0${saved.slug}` : `${identity}\0${saved.slug}`;
+
+        if (views.has(key)) {
           continue;
         }
 
@@ -116,34 +114,24 @@ export function makeRunViews(options: ServiceOptions) {
           filter.workspace = identity;
         }
 
-        const recent = yield* options.store.queryRuns({
-          ...filter,
-          limit: 10,
-          now: timestamp(),
-        });
-
+        const recent = yield* context.store.queryRuns({ ...filter, limit: 10, now: context.now() });
         const resolved = yield* resolve(recent, catalog);
-        const latestRuns = recent.map(resolved);
-
-        const view = loopyView(
-          { ...saved, workspace: identity },
-          schedules.find(
-            (schedule) => schedule.slug === saved.slug && schedule.workspace === identity,
-          ) ?? null,
-          [],
-        );
 
         const selectedCounts =
           saved.scope === "global"
             ? counts.global.get(saved.slug)
             : counts.projects.get(identity)?.get(saved.slug);
 
-        views.set(saved.slug, {
-          ...view,
-          counts: selectedCounts ?? emptyRunCounts(),
-          lastRun: latestRuns[0] ?? null,
-          latestRuns,
-        });
+        views.set(
+          key,
+          loopyView(
+            { ...saved, workspace: identity },
+            schedules.find(
+              (schedule) => schedule.slug === saved.slug && schedule.workspace === identity,
+            ) ?? null,
+            { counts: selectedCounts ?? emptyRunCounts(), latest: recent.map(resolved) },
+          ),
+        );
       }
     }
 
@@ -151,12 +139,10 @@ export function makeRunViews(options: ServiceOptions) {
   });
 
   const runSnapshot = Effect.fn("run-views.runSnapshot")(function* (id: string) {
-    const snapshot = yield* options.store.dashboardSnapshot(id);
+    const snapshot = yield* context.store.dashboardSnapshot(id);
 
     if (!snapshot) {
-      return yield* Effect.fail(
-        new ServiceError("not_found", `No run '${id}'. Use loopy runs to list run ids.`),
-      );
+      return yield* runNotFound(id);
     }
 
     return { ...snapshot, run: yield* view(snapshot.run) };
@@ -166,13 +152,11 @@ export function makeRunViews(options: ServiceOptions) {
     const runs = transaction.flatMap((event) => (event.entity === "run" ? [event.record] : []));
     const view = yield* resolve(runs);
 
-    return transaction.map((event) =>
-      event.entity === "node" ? nodeEventPreview(event) : serverEvent(event, view),
-    );
+    return transaction.map((event) => serverEvent(event, view));
   });
 
   const cursor = Effect.fn("run-views.cursor")(function* () {
-    return yield* options.store.eventCursor();
+    return yield* context.store.eventCursor();
   });
 
   return { view, resolve, listRuns, listLoopies, runSnapshot, events, cursor };

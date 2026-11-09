@@ -2,6 +2,7 @@ import type { DurableObjectNamespace, R2Bucket } from "@cloudflare/workers-types
 import { decodeBoundary } from "@loopy/contract";
 import { Schema } from "effect";
 
+// Wrangler passes every var as a string, so the config schema decodes from strings.
 export interface Environment {
   WORKSPACES: DurableObjectNamespace;
   ARTIFACTS: R2Bucket;
@@ -17,29 +18,50 @@ export interface Environment {
   RECEIPTS_ROOT: string;
 }
 
-const principalsSchema = Schema.Array(
-  Schema.Struct({
-    token: Schema.String.check(Schema.isMinLength(32)),
-    workspace: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,62}$/)),
-  }),
-).check(Schema.isMinLength(1), Schema.isMaxLength(16));
+const LOOPBACK_HOSTS = ["127.0.0.1", "localhost"];
 
-const concurrencySchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16 }));
+export const workspaceIdSchema = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,62}$/));
 
-export function principals(env: Environment) {
-  return decodeBoundary(principalsSchema)(JSON.parse(env.LOCAL_AUTH));
+const configSchema = Schema.Struct({
+  LOOPY_STAGE: Schema.Literal("local"),
+  LOCAL_AUTH: Schema.fromJsonString(
+    Schema.Array(
+      Schema.Struct({
+        token: Schema.String.check(Schema.isMinLength(32)),
+        workspace: workspaceIdSchema,
+      }),
+    ).check(Schema.isMinLength(1), Schema.isMaxLength(16)),
+  ),
+  CONCURRENCY: Schema.FiniteFromString.check(
+    Schema.isInt(),
+    Schema.isBetween({ minimum: 1, maximum: 16 }),
+  ),
+  SANDBOX_URL: Schema.String,
+  SANDBOX_TOKEN: Schema.String.check(Schema.isMinLength(1)),
+});
+
+export type CloudConfig = {
+  stage: "local";
+  principals: readonly { token: string; workspace: string }[];
+  concurrency: number;
+  sandbox: { url: URL; token: string };
+};
+
+export function isLoopbackUrl(url: URL): boolean {
+  return LOOPBACK_HOSTS.includes(url.hostname);
 }
 
-export function concurrency(env: Environment): number {
-  return decodeBoundary(concurrencySchema)(Number(env.CONCURRENCY));
+/** The phase 2 approval boundary: only the local stage on a loopback host is served. */
+export function servesLocally(env: Pick<Environment, "LOOPY_STAGE">, url: URL): boolean {
+  return env.LOOPY_STAGE === "local" && isLoopbackUrl(url);
 }
 
-export function localEndpoint(value: string): URL {
+function localEndpoint(value: string): URL {
   const url = new URL(value);
 
   if (
     url.protocol !== "http:" ||
-    !["127.0.0.1", "localhost"].includes(url.hostname) ||
+    !isLoopbackUrl(url) ||
     url.username ||
     url.password ||
     url.search ||
@@ -50,4 +72,34 @@ export function localEndpoint(value: string): URL {
   }
 
   return url;
+}
+
+const parsed = new WeakMap<Environment, CloudConfig>();
+
+/** Parses each Worker environment once; the platform reuses the same object across requests. */
+export function cloudConfig(env: Environment): CloudConfig {
+  const cached = parsed.get(env);
+
+  if (cached) {
+    return cached;
+  }
+
+  const vars = decodeBoundary(configSchema)({
+    LOOPY_STAGE: env.LOOPY_STAGE,
+    LOCAL_AUTH: env.LOCAL_AUTH,
+    CONCURRENCY: env.CONCURRENCY,
+    SANDBOX_URL: env.SANDBOX_URL,
+    SANDBOX_TOKEN: env.SANDBOX_TOKEN,
+  });
+
+  const config: CloudConfig = {
+    stage: vars.LOOPY_STAGE,
+    principals: vars.LOCAL_AUTH,
+    concurrency: vars.CONCURRENCY,
+    sandbox: { url: localEndpoint(vars.SANDBOX_URL), token: vars.SANDBOX_TOKEN },
+  };
+
+  parsed.set(env, config);
+
+  return config;
 }

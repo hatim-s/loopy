@@ -23,14 +23,12 @@ function pendingToggle(client: QueryClient) {
 
   const request = toggleSchedule(
     client,
-    {
-      setScheduleEnabled: () => {
-        started.resolve();
-
-        return reply.promise;
-      },
-    },
     { slug: schedule.slug, workspace: schedule.workspace, enabled: false },
+    () => {
+      started.resolve();
+
+      return reply.promise;
+    },
   );
 
   return { reply, started: started.promise, request };

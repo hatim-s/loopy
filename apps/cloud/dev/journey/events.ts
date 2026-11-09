@@ -1,15 +1,23 @@
-import { boundaryOptions, routes } from "@loopy/contract";
-import { Result, Schema } from "effect";
+import { decodeEventBatch, routes, type ServerEvent, splitSseFrames } from "@loopy/contract";
 import { assert, equal, JourneyFailure } from "../shared/assert";
 import type { Journey } from "./client";
+
+function decode(data: string): ServerEvent[] {
+  try {
+    return decodeEventBatch(data);
+  } catch {
+    throw new JourneyFailure({ failure: "sse_transaction_schema_failed" });
+  }
+}
 
 export async function frame(journey: Journey, after: number, epoch: string, lastEventId?: number) {
   const aborter = new AbortController();
   const timer = setTimeout(() => aborter.abort(), 15_000);
 
   try {
-    const response = await journey.request(
-      `/events?after=${after}&epoch=${encodeURIComponent(epoch)}`,
+    const response = await journey.send(
+      routes.events,
+      { query: { after, epoch } },
       {
         headers: lastEventId === undefined ? {} : { "Last-Event-ID": String(lastEventId) },
         signal: aborter.signal,
@@ -31,42 +39,22 @@ export async function frame(journey: Journey, after: number, epoch: string, last
       assert(!chunk.done, "sse_ended_before_transaction");
       buffer += decoder.decode(chunk.value, { stream: true });
       assert(buffer.length < 4 * 1024 * 1024, "sse_frame_exceeds_limit");
-      let separator = buffer.indexOf("\n\n");
+      const split = splitSseFrames(buffer);
+      buffer = split.rest;
+      const first = split.frames[0];
 
-      while (separator >= 0) {
-        const frame = buffer.slice(0, separator);
-        buffer = buffer.slice(separator + 2);
-        const data = frame.split("\n").find((line) => line.startsWith("data: "));
+      if (first) {
+        const events = decode(first.data);
+        assert(events.length > 0, "sse_transaction_schema_failed");
+        const id = Number(first.id);
+        equal(id, events.at(-1)?.sequence, "sse_id_not_transaction_end");
+        assert(
+          events.every((event) => event.sequence > (lastEventId ?? after)),
+          "sse_replayed_acknowledged_events",
+        );
+        equal(new Set(events.map((event) => event.txn)).size, 1, "sse_mixed_transactions");
 
-        if (data) {
-          const decoded = Schema.decodeUnknownResult(
-            Schema.Array(routes.events.response),
-            boundaryOptions,
-          )(JSON.parse(data.slice(6)));
-
-          assert(Result.isSuccess(decoded), "sse_transaction_schema_failed");
-          const events = decoded.success;
-
-          assert(events.length > 0, "sse_transaction_schema_failed");
-
-          const id = Number(
-            frame
-              .split("\n")
-              .find((line) => line.startsWith("id: "))
-              ?.slice(4),
-          );
-
-          equal(id, events.at(-1)?.sequence, "sse_id_not_transaction_end");
-          assert(
-            events.every((event) => event.sequence > (lastEventId ?? after)),
-            "sse_replayed_acknowledged_events",
-          );
-          equal(new Set(events.map((event) => event.txn)).size, 1, "sse_mixed_transactions");
-
-          return { id, events: events };
-        }
-
-        separator = buffer.indexOf("\n\n");
+        return { id, events };
       }
     }
   } catch (cause) {

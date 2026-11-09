@@ -1,6 +1,12 @@
-import { encodeRunCursor, type RunView, routes } from "@loopy/contract";
+import {
+  encodeRunCursor,
+  type Route,
+  type RouteInput,
+  type RouteResult,
+  type RunView,
+  routes,
+} from "@loopy/contract";
 import { executionKeyString } from "@loopy/core";
-import type { Schema } from "effect";
 import type { Capture } from "./artifacts";
 import { createMeasure } from "./request";
 import { resources } from "./resources";
@@ -64,16 +70,18 @@ export async function sampleApi(options: {
 
   const measureAny = createMeasure(options.request, samples);
 
-  const measure = <T>(
+  const measure = <R extends Route>(
     endpoint: Endpoint,
-    path: string,
-    schema: Schema.Codec<T, unknown, never, never>,
-    observe?: (value: T) => Sample["observation"],
-  ) => measureAny(endpoint, path, schema, observe);
+    route: R,
+    input: RouteInput<R>,
+    observe?: (value: RouteResult<R>) => Sample["observation"],
+  ) => measureAny(endpoint, route, input, observe);
+
+  const page = { limit: 50 };
 
   const plan = [
     () =>
-      measure("runs.latest", "/runs?limit=50", routes.runs.response, (value) => {
+      measure("runs.latest", routes.runs, { query: page }, (value) => {
         runs = value;
         const last = value.at(-1);
         before = last ? encodeRunCursor(last) : undefined;
@@ -81,7 +89,7 @@ export async function sampleApi(options: {
         return { items: value.length };
       }),
     () =>
-      measure("loopies.counts", "/loopies", routes.loopies.response, (value) => ({
+      measure("loopies.counts", routes.loopies, {}, (value) => ({
         items: value.length,
         runs: value.reduce(
           (sum, loopy) => sum + Object.values(loopy.counts).reduce((a, b) => a + b, 0),
@@ -89,63 +97,49 @@ export async function sampleApi(options: {
         ),
       })),
     () =>
-      measure("runs.waiting", "/runs?waiting=true&limit=50", routes.runs.response, (v) => ({
+      measure("runs.waiting", routes.runs, { query: { ...page, waiting: true } }, (v) => ({
         items: v.length,
       })),
     () =>
-      measure("runs.failed", "/runs?status=failed&limit=50", routes.runs.response, (v) => ({
+      measure("runs.failed", routes.runs, { query: { ...page, status: "failed" } }, (v) => ({
         items: v.length,
       })),
     () =>
       measure(
         "overview.counts",
-        `/overview?${new URLSearchParams({ from: windowStart, to: windowEnd })}`,
-        routes.overview.response,
+        routes.overview,
+        { query: { from: windowStart, to: windowEnd } },
         (v) => ({ ...v.counts, buckets: v.buckets.length }),
       ),
     () =>
-      measure("logs.latest", "/logs?limit=50", routes.globalLogs.response, (v) => {
+      measure("logs.latest", routes.globalLogs, { query: page }, (v) => {
         logBefore = v.next;
 
         return { items: v.items.length, scanned: v.scanned, hasMore: v.hasMore };
       }),
     () =>
-      measure("events.latest", "/event-history?limit=50", routes.eventHistory.response, (v) => {
+      measure("events.latest", routes.eventHistory, { query: page }, (v) => {
         eventBefore = v.next;
 
         return { items: v.items.length, scanned: v.scanned, hasMore: v.hasMore };
       }),
     () =>
-      measure("daemon", "/daemon", routes.daemon.response, (v) => ({
+      measure("daemon", routes.daemon, {}, (v) => ({
         running: v.running,
         concurrency: v.concurrency,
       })),
-    () => {
-      const query = new URLSearchParams({ limit: "50" });
-
-      if (before) {
-        query.set("before", before);
-      }
-
-      return measure("runs.page2", `/runs?${query}`, routes.runs.response, (v) => ({
+    () =>
+      measure("runs.page2", routes.runs, { query: { ...page, before } }, (v) => ({
         items: v.length,
         cursorSupplied: before !== undefined,
-      }));
-    },
-    () => {
-      const query = new URLSearchParams({ limit: "50" });
-
-      if (runs[0]) {
-        query.set("slug", runs[0].slug);
-      }
-
-      return measure("runs.slug", `/runs?${query}`, routes.runs.response, (v) => ({
+      })),
+    () =>
+      measure("runs.slug", routes.runs, { query: { ...page, slug: runs[0]?.slug } }, (v) => ({
         items: v.length,
         filterSupplied: runs[0] !== undefined,
-      }));
-    },
+      })),
     () =>
-      measure("logs.text", "/logs?text=playground&limit=50", routes.globalLogs.response, (v) => ({
+      measure("logs.text", routes.globalLogs, { query: { ...page, text: "playground" } }, (v) => ({
         items: v.items.length,
         scanned: v.scanned,
         hasMore: v.hasMore,
@@ -153,15 +147,15 @@ export async function sampleApi(options: {
     () =>
       measure(
         "events.run-filter",
-        "/event-history?entity=run&limit=50",
-        routes.eventHistory.response,
+        routes.eventHistory,
+        { query: { ...page, entity: "run" } },
         (v) => ({ items: v.items.length, scanned: v.scanned, hasMore: v.hasMore }),
       ),
     () =>
       measure(
         "logs.page2",
-        `/logs?limit=50${logBefore === null ? "" : `&before=${logBefore}`}`,
-        routes.globalLogs.response,
+        routes.globalLogs,
+        { query: { ...page, before: logBefore ?? undefined } },
         (v) => ({
           items: v.items.length,
           scanned: v.scanned,
@@ -172,8 +166,8 @@ export async function sampleApi(options: {
     () =>
       measure(
         "events.page2",
-        `/event-history?limit=50${eventBefore === null ? "" : `&before=${eventBefore}`}`,
-        routes.eventHistory.response,
+        routes.eventHistory,
+        { query: { ...page, before: eventBefore ?? undefined } },
         (v) => ({
           items: v.items.length,
           scanned: v.scanned,
@@ -185,7 +179,7 @@ export async function sampleApi(options: {
       const run = runs[index % Math.max(1, runs.length)];
 
       if (run) {
-        await measure("run.snapshot", `/runs/${run.id}`, routes.run.response, (v) => ({
+        await measure("run.snapshot", routes.run, { params: { id: run.id } }, (v) => ({
           nodes: v.nodeRuns.length,
           hooks: v.hooks.length,
           status: v.run.status,
@@ -196,7 +190,7 @@ export async function sampleApi(options: {
       const run = runs[0];
 
       if (run) {
-        await measure("run.payload", `/runs/${run.id}/payload`, routes.runPayload.response);
+        await measure("run.payload", routes.runPayload, { params: { id: run.id } });
       }
     },
     async () => {
@@ -205,8 +199,8 @@ export async function sampleApi(options: {
       if (run) {
         await measure(
           "execution.page",
-          `/runs/${run.id}/executions?limit=50`,
-          routes.executions.response,
+          routes.executions,
+          { params: { id: run.id }, query: page },
           (v) => {
             executionKey = v.items[0] ? executionKeyString(v.items[0].key) : undefined;
 
@@ -221,8 +215,8 @@ export async function sampleApi(options: {
       if (run && executionKey) {
         await measure(
           "execution.detail",
-          `/runs/${run.id}/execution?${new URLSearchParams({ key: executionKey })}`,
-          routes.execution.response,
+          routes.execution,
+          { params: { id: run.id }, query: { key: executionKey } },
           (v) => ({ attempts: v.attempts.length, status: v.node.status }),
         );
       }

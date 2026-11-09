@@ -1,10 +1,10 @@
 # Local acceptance
 
-Run `bun run acceptance:local` from the repository after a large core or runtime refactor. It runs seven scenarios over six authored loopies through real Bun CLI subprocesses and an owned daemon. It is separate from `bun test` and `bun run check`.
+Run `bun run acceptance:local` from the repository after a large core or runtime refactor. It runs seven scenarios over six authored loopies through real Bun CLI subprocesses and an owned daemon. It is separate from `bun test` and `bun run check`. Neither this suite nor `bun run acceptance:package` runs in CI, so run them by hand.
 
 The suite uses a fresh `.loopy/acceptance/run-*` directory with its own HOME, Loopy home and project registry marker. It does not read personal Loopy state. The daemon binds port 0. Workloads use local commands and sandboxed code bundles. No global install, cloud, Docker, provider or network workload is needed.
 
-The cases verify:
+Each entry in `cases.ts` is one record holding its fixture, input, optional step before completion and verification. Add a case by adding a record. The cases verify:
 
 - Command stdout, a compiled command parser, code output, references, both branch choices, skipped branch effects, ordered concurrent map results and executable parallel children.
 - A command failing its first attempt and succeeding its second, the persisted execution identity across retry, rescue output and one finally cleanup marker.

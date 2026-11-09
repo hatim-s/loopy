@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract";
+import { SANDBOX_MAX_REQUEST_BYTES } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
 import {
@@ -76,7 +76,7 @@ test("internal routes separate bridge and principal credentials and reject names
 });
 
 test("malformed, extra-field and oversized commands cannot mutate the authority", async () => {
-  const before = await Effect.runPromise(harness.authority.status());
+  const before = await Effect.runPromise(harness.authority.status({}));
   expect((await internal({ body: "{" })).status).toBe(400);
   expect(
     (
@@ -89,7 +89,7 @@ test("malformed, extra-field and oversized commands cannot mutate the authority"
     ).status,
   ).toBe(400);
   expect((await internal({ body: "x".repeat(SANDBOX_MAX_REQUEST_BYTES + 1) })).status).toBe(400);
-  expect(await Effect.runPromise(harness.authority.status())).toEqual(before);
+  expect(await Effect.runPromise(harness.authority.status({}))).toEqual(before);
 });
 
 test("root-derived identities include ordered scope and cannot name another authority's Docker resources", async () => {
@@ -97,7 +97,7 @@ test("root-derived identities include ordered scope and cannot name another auth
     harness.authority.openSession({ expectedEpoch: 0, nonce: "identity" }),
   );
 
-  const plan = harness.plan("identity");
+  const plan = await harness.plan("identity");
   expect(
     await Effect.runPromise(
       harness.authority.admit({
@@ -112,7 +112,7 @@ test("root-derived identities include ordered scope and cannot name another auth
     kind: "rejected",
     code: "invalid_state",
   });
-  expect(await Effect.runPromise(harness.authority.read(plan.id))).toBeNull();
+  expect(await Effect.runPromise(harness.authority.read({ id: plan.id }))).toBeNull();
 });
 
 test("HTTP adapter refuses cloud origins and rejects malformed operation responses", async () => {
@@ -141,7 +141,9 @@ test("HTTP adapter refuses cloud origins and rejects malformed operation respons
       namespace,
     });
 
-    await expect(Effect.runPromise(client.read("f".repeat(64)))).rejects.toThrow("Expected");
+    await expect(Effect.runPromise(client.read({ id: "f".repeat(64) }))).rejects.toThrow(
+      "Expected",
+    );
   } finally {
     await server.stop(true);
   }

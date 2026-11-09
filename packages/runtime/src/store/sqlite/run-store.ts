@@ -8,6 +8,7 @@ import type {
   ScopeItemsQuery,
 } from "@loopy/contract";
 import {
+  type DurableTurnStore,
   type ExecutionKey,
   executionKeyString,
   type Json,
@@ -66,22 +67,25 @@ import {
   wakeRun,
 } from "./runs";
 import {
-  advanceSchedule,
   deleteSchedule,
+  failSchedule,
   fireSchedule,
   putSchedule,
+  readDueSchedules,
   readNextScheduleAt,
+  readScheduleFailures,
   readScheduleOverview,
   readSchedules,
   setScheduleEnabled,
 } from "./schedules";
 import { initializeSchema } from "./schema/fresh";
+import { readDueTurns, readNextTurnAt, readStrandedTurns, readTurnErrors, saveTurn } from "./turns";
 import { readWaits, resolveWait } from "./waits";
 
 const DEFAULT_LEASE_MS = 60_000;
 
 /** The caller owns the connection, including Durable Object eviction and disposal. */
-export class SqlRunStore implements Store, DashboardReader {
+export class SqlRunStore implements Store, DurableTurnStore, DashboardReader {
   readonly leaseMs: number;
   protected readonly ctx: SqlContext;
   protected readonly listeners = new EventListeners();
@@ -236,10 +240,6 @@ export class SqlRunStore implements Store, DashboardReader {
     return this.write("setScheduleEnabled", (write) => setScheduleEnabled(write, options));
   }
 
-  advanceSchedule(options: Parameters<Store["advanceSchedule"]>[0]) {
-    return this.write("advanceSchedule", (write) => advanceSchedule(write, options));
-  }
-
   listSchedules() {
     return this.query("listSchedules", readSchedules);
   }
@@ -252,8 +252,40 @@ export class SqlRunStore implements Store, DashboardReader {
     return this.write("deleteSchedule", (write) => deleteSchedule(write, { workspace, slug }));
   }
 
+  dueSchedules(now: string, limit: number) {
+    return this.query("dueSchedules", (ctx) => readDueSchedules(ctx, now, limit));
+  }
+
   fireSchedule(options: Parameters<Store["fireSchedule"]>[0]) {
     return this.write("fireSchedule", (write) => fireSchedule(write, options));
+  }
+
+  failSchedule(options: Parameters<Store["failSchedule"]>[0]) {
+    return this.write("failSchedule", (write) => failSchedule(write, options));
+  }
+
+  scheduleFailures(limit: number) {
+    return this.query("scheduleFailures", (ctx) => readScheduleFailures(ctx, limit));
+  }
+
+  strandedTurns(now: string, limit: number) {
+    return this.query("strandedTurns", (ctx) => readStrandedTurns(ctx, now, limit));
+  }
+
+  dueTurns(now: string, concurrency: number) {
+    return this.snapshot("dueTurns", (ctx) => readDueTurns(ctx, now, concurrency));
+  }
+
+  saveTurn(turn: Parameters<DurableTurnStore["saveTurn"]>[0]) {
+    return this.write("saveTurn", (write) => saveTurn(write, turn));
+  }
+
+  nextTurnAt(concurrency: number) {
+    return this.query("nextTurnAt", (ctx) => readNextTurnAt(ctx, concurrency));
+  }
+
+  turnErrors(limit: number) {
+    return this.query("turnErrors", (ctx) => readTurnErrors(ctx, limit));
   }
 
   scheduleOverview() {

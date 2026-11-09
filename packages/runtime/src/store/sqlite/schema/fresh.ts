@@ -1,7 +1,8 @@
 import { StoreRejectedError } from "../../operation";
 import type { SqlDriver } from "../driver";
+import { SCHEMA_15_TO_16 } from "./upgrade";
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export const SCHEDULE_OVERVIEW_INDEX = `CREATE INDEX IF NOT EXISTS schedules_enabled_next
   ON schedules(enabled,next_fire_at,workspace,slug)`;
@@ -76,18 +77,32 @@ const FRESH_SCHEMA = `
     PRIMARY KEY(workspace,slug)
   );
   ${SCHEDULE_OVERVIEW_INDEX};
+  CREATE TABLE schedule_failures (
+    workspace TEXT NOT NULL, slug TEXT NOT NULL, version INTEGER NOT NULL,
+    retry_at TEXT, error TEXT NOT NULL,
+    PRIMARY KEY(workspace,slug),
+    FOREIGN KEY(workspace,slug) REFERENCES schedules(workspace,slug) ON DELETE CASCADE
+  );
+  CREATE TABLE run_turns (
+    run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+    next_at TEXT NOT NULL, cursor TEXT, error TEXT
+  );
 `;
 
 export function markSchemaVersion(db: SqlDriver): void {
   db.query("INSERT OR REPLACE INTO meta VALUES ('schema_version',?)").run(String(SCHEMA_VERSION));
 }
 
-function createSchema(db: SqlDriver): void {
-  for (const statement of FRESH_SCHEMA.split(";")) {
+export function runScript(db: SqlDriver, script: string): void {
+  for (const statement of script.split(";")) {
     if (statement.trim().length > 0) {
       db.exec(statement);
     }
   }
+}
+
+function createSchema(db: SqlDriver): void {
+  runScript(db, FRESH_SCHEMA);
 
   db.query("INSERT INTO meta VALUES ('epoch',?)").run(crypto.randomUUID());
   markSchemaVersion(db);
@@ -114,6 +129,13 @@ export function initializeSchema(db: SqlDriver): void {
       ? db.query<{ value: string }, []>("SELECT value FROM meta WHERE key='schema_version'").get()
           ?.value
       : undefined;
+
+    if (version === "15") {
+      runScript(db, SCHEMA_15_TO_16);
+      markSchemaVersion(db);
+
+      return;
+    }
 
     if (version !== String(SCHEMA_VERSION)) {
       throw new StoreRejectedError(

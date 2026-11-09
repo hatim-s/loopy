@@ -89,9 +89,7 @@ export const loopyViewSchema = struct({
   ),
   lastRun: Schema.NullOr(runViewSchema),
   counts: Schema.Record(runStatusSchema, Schema.mutableKey(counter)),
-  latestRuns: Schema.optional(
-    Schema.Array(runViewSchema).pipe(Schema.mutable).check(Schema.isMaxLength(10)),
-  ),
+  latestRuns: Schema.Array(runViewSchema).pipe(Schema.mutable).check(Schema.isMaxLength(10)),
 });
 
 export type LoopyView = Schema.Schema.Type<typeof loopyViewSchema>;

@@ -1,8 +1,4 @@
-import type {
-  AuthorityError,
-  SandboxAttemptAuthority as WireAuthority,
-  ImmutableResults as WireResults,
-} from "@loopy/contract";
+import type { AuthorityError } from "@loopy/contract/sandbox";
 import type { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Data, Effect } from "effect";
 import type { ExportCleanupError, SandboxRequestError } from "./request-error";
@@ -19,18 +15,6 @@ export type SandboxFailure =
   | AuthorityError
   | ExportCleanupError
   | SandboxRequestError;
-
-type Native<T, E> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => Promise<infer B>
-    ? (...args: A) => Effect.Effect<B, E>
-    : never;
-};
-
-export type SandboxAttemptAuthority = Native<WireAuthority, AuthorityError | SandboxOperationError>;
-
-export type ImmutableResults = Native<WireResults, SandboxOperationError | AuthorityError>;
-
-export type ResultsFor = (workspace: string) => ImmutableResults;
 
 export function failure(
   operation: string,

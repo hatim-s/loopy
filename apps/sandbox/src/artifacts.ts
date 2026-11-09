@@ -1,13 +1,14 @@
+import { decodeBoundary } from "@loopy/contract";
 import {
   artifactHelperName,
   type DockerAttemptPlan,
-  decodeBoundary,
+  SANDBOX_MAX_ARTIFACT_BYTES,
   type SandboxArtifact,
   sandboxArtifactReadSchema,
-} from "@loopy/contract";
+  verifiedBase64,
+} from "@loopy/contract/sandbox";
 import type { CommandExecutionError } from "@loopy/runtime/local/execution-host";
 import { Effect, Schema } from "effect";
-import { verifiedBytes } from "./bytes";
 import type { SandboxConfig } from "./config";
 import type { DockerClient } from "./docker/client";
 import { artifactContainerArgs } from "./docker/plan";
@@ -174,7 +175,13 @@ export class DockerArtifacts implements ArtifactReader {
               );
             }
 
-            const bytes = verifiedBytes(response.artifact.bytes, response.artifact.sha256);
+            const bytes = yield* Effect.promise(() =>
+              verifiedBase64(
+                response.artifact.bytes,
+                response.artifact.sha256,
+                SANDBOX_MAX_ARTIFACT_BYTES,
+              ),
+            );
 
             if (
               response.artifact.path !== path ||

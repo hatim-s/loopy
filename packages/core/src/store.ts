@@ -39,6 +39,13 @@ export type WaitResolution =
   | { kind: "resolved"; runId: string }
   | { kind: "rejected"; code: "unknown_hook" | "bad_request"; message: string };
 
+export type ScheduleRef = Pick<Schedule, "workspace" | "slug" | "version">;
+
+export type ScheduleFailure = Pick<Schedule, "workspace" | "slug"> & {
+  error: string;
+  retryAt: string | null;
+};
+
 export interface Store {
   getWaits(runId: string): Effect.Effect<WaitRecord[], StorageError>;
   resolveWait(options: {
@@ -83,15 +90,40 @@ export interface Store {
       nextFireAt?: string;
     },
   ): Effect.Effect<Schedule, StorageError>;
-  advanceSchedule(
-    options: Pick<Schedule, "workspace" | "slug" | "version" | "nextFireAt">,
-  ): Effect.Effect<boolean, StorageError>;
   listSchedules(): Effect.Effect<Schedule[], StorageError>;
   deleteSchedule(workspace: string, slug: string): Effect.Effect<void, StorageError>;
-  fireSchedule(
-    options: Pick<Schedule, "workspace" | "slug" | "version" | "nextFireAt"> & {
-      fireKey: string;
-      run: RunRecord;
-    },
-  ): Effect.Effect<boolean, StorageError>;
+  dueSchedules(now: string, limit: number): Effect.Effect<Schedule[], StorageError>;
+  /** Fences on the observed slot; the store derives the fire key from it. */
+  fireSchedule(options: {
+    schedule: ScheduleRef & Pick<Schedule, "nextFireAt">;
+    next: string;
+    run: RunRecord;
+  }): Effect.Effect<boolean, StorageError>;
+  /** A null retry disables the schedule; either way the error stays readable until it fires. */
+  failSchedule(options: {
+    schedule: ScheduleRef;
+    error: string;
+    retryAt: string | null;
+  }): Effect.Effect<boolean, StorageError>;
+  scheduleFailures(limit: number): Effect.Effect<ScheduleFailure[], StorageError>;
+}
+
+export type DurableTurn = {
+  runId: string;
+  cursor: string | null;
+  owner: { token: string; heartbeatAt: string | null } | null;
+};
+
+/** Bounded activation turns of a durable host, with their persisted backoff deadlines. */
+export interface DurableTurnStore {
+  strandedTurns(now: string, limit: number): Effect.Effect<DurableTurn[], StorageError>;
+  dueTurns(now: string, concurrency: number): Effect.Effect<DurableTurn[], StorageError>;
+  saveTurn(turn: {
+    runId: string;
+    nextAt: string;
+    cursor: string | null;
+    error: string | null;
+  }): Effect.Effect<void, StorageError>;
+  nextTurnAt(concurrency: number): Effect.Effect<string | undefined, StorageError>;
+  turnErrors(limit: number): Effect.Effect<{ runId: string; error: string }[], StorageError>;
 }

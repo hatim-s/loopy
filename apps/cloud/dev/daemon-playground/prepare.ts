@@ -112,12 +112,10 @@ export async function prepare() {
         throw new Error(`Save failed for ${entry.slug}: ${stderr}`);
       }
 
-      const query = new URLSearchParams({ workspace: entry.workspace });
-
-      const saved = await daemon.request(
-        `/loopies/${entry.slug}/graph?${query}`,
-        routes.graph.response,
-      );
+      const saved = await daemon.call(routes.graph, {
+        params: { slug: entry.slug },
+        query: { workspace: entry.workspace },
+      });
 
       revisions.push({
         slug: entry.slug,

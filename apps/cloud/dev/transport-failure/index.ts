@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
 import { Effect } from "effect";
+import { SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../../../sandbox/src/docker/identity";
 import { assert, equal } from "../shared/assert";
 import { sourceHashes } from "../shared/hash";
-import { DOCKER_CONTEXT, root, SANDBOX_IMAGE } from "../stack/constants";
+import { root } from "../stack/constants";
 import { fixtureIO } from "./fixture-effect";
 import { command, docker, fixture } from "./resources";
 import { maxTimeoutMs, scenario } from "./scenario";
@@ -82,7 +83,7 @@ await Effect.runPromise(
               branch,
               head,
               bun: Bun.version,
-              dockerContext: DOCKER_CONTEXT,
+              dockerContext: SANDBOX_DOCKER_CONTEXT,
               image: SANDBOX_IMAGE,
               imageId,
             },

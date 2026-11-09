@@ -2,7 +2,7 @@ import { describeCron } from "@loopy/contract";
 import { Link } from "@tanstack/react-router";
 import { elapsed, runElapsed, shortId, span } from "../../lib/format";
 import { useRunPages } from "../../lib/pages";
-import { useLoopyRows, useScheduleOverview } from "../../lib/ui-data";
+import { useScheduleOverview } from "../../lib/ui-data";
 import { isWaiting, pageCount, useAwaitingRuns, type WaitingRun } from "../../lib/waiting";
 import { RespondRow } from "../respond";
 import { FireTime } from "../schedules/text";
@@ -132,17 +132,8 @@ export function RunningNow({ now }: { now: number }) {
 
 const NEXT_COUNT = 6;
 
-/**
- * The overview read spans every workspace. A loopy page resolves its slug to one workspace, so a
- * schedule whose workspace is not that one links to its own row on Schedules instead.
- */
 export function NextScheduled({ now }: { now: number }) {
   const overview = useScheduleOverview();
-  const loopies = useLoopyRows();
-
-  const opensLoopy = (slug: string, workspace: string) =>
-    loopies.state === "ready" &&
-    loopies.data.some((loopy) => loopy.slug === slug && loopy.workspace === workspace);
 
   return (
     <section className="panel min-w-0" aria-label="Next scheduled">
@@ -159,24 +150,15 @@ export function NextScheduled({ now }: { now: number }) {
                   className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0"
                 >
                   <span className="min-w-0">
-                    {opensLoopy(schedule.slug, schedule.workspace) ? (
-                      <Link
-                        to="/loopies/$slug"
-                        params={{ slug: schedule.slug }}
-                        className="cell-main text-ink hover:text-active"
-                      >
-                        {schedule.slug}
-                      </Link>
-                    ) : (
-                      <Link
-                        to="/schedules"
-                        search={{ workspace: schedule.workspace, slug: schedule.slug }}
-                        className="cell-main text-ink hover:text-active"
-                        title={schedule.workspace}
-                      >
-                        {schedule.slug}
-                      </Link>
-                    )}
+                    <Link
+                      to="/loopies/$slug"
+                      params={{ slug: schedule.slug }}
+                      search={{ workspace: schedule.workspace }}
+                      className="cell-main text-ink hover:text-active"
+                      title={schedule.workspace}
+                    >
+                      {schedule.slug}
+                    </Link>
                     <span className="cell-sub">{describeCron(schedule.cron) ?? schedule.cron}</span>
                   </span>
                   <span className="text-right">

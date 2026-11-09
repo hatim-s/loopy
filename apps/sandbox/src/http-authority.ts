@@ -1,17 +1,17 @@
+import { decodeBoundary } from "@loopy/contract";
 import {
-  type AuthorityCommand,
   AuthorityError,
   type AuthorityInput,
   authorityErrorSchema,
-  authorityOperations,
-  decodeBoundary,
-  resultOperations,
+  type OperationInput,
+  type OperationName,
+  operationOutput,
   SANDBOX_MAX_REQUEST_BYTES,
-} from "@loopy/contract";
-import type { Schema } from "effect";
+} from "@loopy/contract/sandbox";
+import { readBoundedBody } from "@loopy/runtime/service";
 import { Effect } from "effect";
-import { readBounded } from "./http-body";
-import { failure, type ImmutableResults, type SandboxAttemptAuthority } from "./operations";
+import type { ImmutableResults, SandboxAttemptAuthority } from "./authority";
+import { failure } from "./operations";
 
 export class HttpSandboxAuthority implements SandboxAttemptAuthority {
   private readonly endpoint: URL;
@@ -36,10 +36,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
     this.endpoint = new URL("/internal/sandbox-receipts", base);
   }
 
-  private request<S extends Schema.ConstraintDecoder<unknown>>(
-    command: AuthorityCommand,
-    schema: S,
-  ) {
+  private call<K extends OperationName>(operation: K, input: OperationInput<K>) {
     return Effect.tryPromise({
       try: async (signal) => {
         const response = await fetch(this.endpoint, {
@@ -50,7 +47,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
             "X-Loopy-Receipts-Namespace": this.options.namespace,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(command),
+          body: JSON.stringify({ operation, input }),
           signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
         });
 
@@ -70,7 +67,7 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
 
         const body: unknown = JSON.parse(await this.body(response));
 
-        return decodeBoundary(schema)(body);
+        return decodeBoundary(operationOutput(operation))(body);
       },
       catch: (cause) =>
         cause instanceof AuthorityError ? cause : failure("authority HTTP", cause),
@@ -82,78 +79,57 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
       throw new Error("Receipt authority returned an empty response.");
     }
 
-    const bytes = await readBounded(response.body, SANDBOX_MAX_REQUEST_BYTES);
+    const bytes = await Effect.runPromise(
+      readBoundedBody(response.body, SANDBOX_MAX_REQUEST_BYTES).pipe(
+        Effect.catchTag("BodyLimitError", () =>
+          Effect.fail(new Error("Receipt authority response exceeds its byte limit.")),
+        ),
+      ),
+    );
 
-    if (bytes === null) {
-      throw new Error("Receipt authority response exceeds 16 MiB.");
-    }
-
-    return bytes.toString("utf8");
+    return new TextDecoder().decode(bytes);
   }
 
-  status() {
-    return this.request({ operation: "status", input: {} }, authorityOperations.status.output);
+  status(input: AuthorityInput<"status">) {
+    return this.call("status", input);
   }
 
   openSession(input: AuthorityInput<"openSession">) {
-    return this.request(
-      { operation: "openSession", input },
-      authorityOperations.openSession.output,
-    );
+    return this.call("openSession", input);
   }
 
-  read(id: string) {
-    return this.request({ operation: "read", input: { id } }, authorityOperations.read.output);
+  read(input: AuthorityInput<"read">) {
+    return this.call("read", input);
   }
 
   admit(input: AuthorityInput<"admit">) {
-    return this.request({ operation: "admit", input }, authorityOperations.admit.output);
+    return this.call("admit", input);
   }
 
   complete(input: AuthorityInput<"complete">) {
-    return this.request({ operation: "complete", input }, authorityOperations.complete.output);
+    return this.call("complete", input);
   }
 
   beginExport(input: AuthorityInput<"beginExport">) {
-    return this.request(
-      { operation: "beginExport", input },
-      authorityOperations.beginExport.output,
-    );
+    return this.call("beginExport", input);
   }
 
   endExport(input: AuthorityInput<"endExport">) {
-    return this.request(
-      { operation: "endExport", input },
-      authorityOperations.endExport.output,
-    ).pipe(Effect.asVoid);
+    return this.call("endExport", input);
   }
 
   exportGuards(input: AuthorityInput<"exportGuards">) {
-    return this.request(
-      { operation: "exportGuards", input },
-      authorityOperations.exportGuards.output,
-    );
+    return this.call("exportGuards", input);
   }
 
   recoverable(input: AuthorityInput<"recoverable">) {
-    return this.request(
-      { operation: "recoverable", input },
-      authorityOperations.recoverable.output,
-    );
+    return this.call("recoverable", input);
   }
 
   resultsFor(workspace: string): ImmutableResults {
     return {
-      put: (value) =>
-        this.request(
-          { operation: "resultPut", input: { workspace, value } },
-          resultOperations.resultPut.output,
-        ),
-      get: (ref) =>
-        this.request(
-          { operation: "resultGet", input: { workspace, ref } },
-          resultOperations.resultGet.output,
-        ),
+      put: (value) => this.call("resultPut", { workspace, value }),
+      get: (ref) => this.call("resultGet", { workspace, ref }),
     };
   }
 }

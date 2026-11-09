@@ -1,4 +1,4 @@
-import { decodeBoundary, encodeRunCursor, routes } from "@loopy/contract";
+import { decodeRouteResponse, encodeRunCursor, routes, routeUrl } from "@loopy/contract";
 import { PlaygroundClient } from "../client";
 import { evidence, state } from "../config";
 import { journalDirectory, readAdmissions } from "../journal";
@@ -21,22 +21,22 @@ const startedAt = new Date().toISOString();
 let cursor: string | undefined;
 
 for (let pageIndex = 0; pageIndex < 20; pageIndex++) {
-  const query = new URLSearchParams({ limit: "50" });
-
-  if (cursor) {
-    query.set("before", cursor);
-  }
-
   const start = performance.now();
-  const response = await client.request(`/runs?${query}`, AbortSignal.timeout(15_000));
+
+  const response = await client.request(
+    routeUrl(routes.runs, { query: { limit: 50, before: cursor } }),
+    AbortSignal.timeout(15_000),
+  );
+
   const text = await response.text();
   const bytes = Buffer.byteLength(text);
+  const outcome = decodeRouteResponse(routes.runs, response.status, text);
 
-  if (!response.ok) {
+  if (outcome.kind !== "ok") {
     throw new Error(`Post-load inventory request returned HTTP ${response.status}.`);
   }
 
-  const page = decodeBoundary(routes.runs.response)(JSON.parse(text));
+  const page = outcome.value;
   pages.push({
     pageIndex,
     at: new Date().toISOString(),

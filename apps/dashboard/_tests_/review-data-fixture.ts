@@ -48,17 +48,13 @@ return "done";
   const service = makeLocalService({
     store,
     home,
-    cwd: workspaceA,
     clock: { now: Date.now },
   });
 
   const definition = {
     graph: compiled.graph,
     revision: compiled.revision,
-    bundles: compiled.bundles.map((bundle) => ({
-      ...bundle,
-      bytes: Buffer.from(bundle.bytes).toString("base64"),
-    })),
+    bundles: compiled.bundles,
     sourceArtifact: compiled.sourceArtifact,
     replace: false,
   };

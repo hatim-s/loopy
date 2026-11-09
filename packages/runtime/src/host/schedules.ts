@@ -1,89 +1,93 @@
-import { nextFire, parseCron, type RunRecord, type Schedule, type Store } from "@loopy/core";
+import {
+  errorMessage,
+  type Graph,
+  nextFire,
+  parseCron,
+  type Schedule,
+  type Store,
+  validateGraphInput,
+} from "@loopy/core";
 import { Cause, Data, Effect } from "effect";
 
-export class ScheduleRevisionError extends Data.TaggedError("ScheduleRevisionError")<{
+export class ScheduleDefinitionError extends Data.TaggedError("ScheduleDefinitionError")<{
   cause: unknown;
-}> {}
+}> {
+  override get message() {
+    return errorMessage(this.cause);
+  }
+}
 
-type Options = {
-  store: Store;
-  revisionFor: (schedule: Schedule) => Effect.Effect<string, ScheduleRevisionError>;
-  stopped: () => boolean;
-  report: (cause: Cause.Cause<unknown>) => Effect.Effect<void>;
+export type ScheduleDefinition = { revision: string; graph: Graph };
+
+export const SCHEDULE_POLICY = { batch: 32, retryMs: 5000, errorChars: 1000 } as const;
+
+export type ScheduleFiringOptions = {
+  store: Pick<Store, "dueSchedules" | "fireSchedule" | "failSchedule">;
+  definitionFor: (schedule: Schedule) => Effect.Effect<ScheduleDefinition, ScheduleDefinitionError>;
+  stopped?: () => boolean;
+  report?: (cause: Cause.Cause<unknown>) => Effect.Effect<void>;
 };
 
-// A daemon that starts this late after a fire time advances the schedule instead of firing it.
-const STARTUP_LATE_MS = 60_000;
+const fireOne = (options: ScheduleFiringOptions, schedule: Schedule, now: string) =>
+  Effect.gen(function* () {
+    const { revision, graph } = yield* options.definitionFor(schedule);
+    const input = validateGraphInput(graph, schedule.input);
 
-export class ScheduleScheduler {
-  private started = false;
-  constructor(private readonly options: Options) {}
+    if (!input.ok) {
+      yield* options.store.failSchedule({
+        schedule,
+        error: `Schedule disabled because the saved input no longer matches the current graph: ${input.error}`,
+        retryAt: null,
+      });
 
-  tick(now: string) {
-    return Effect.gen({ self: this }, function* () {
-      const schedules = yield* this.options.store.listSchedules();
-      const starting = !this.started;
-      this.started = true;
-      let fired = 0;
+      return false;
+    }
 
-      for (const schedule of schedules) {
-        if (this.options.stopped()) {
-          break;
-        }
-
-        yield* Effect.gen({ self: this }, function* () {
-          if (starting && Date.parse(now) - Date.parse(schedule.nextFireAt) > STARTUP_LATE_MS) {
-            yield* this.options.store.advanceSchedule({
-              workspace: schedule.workspace,
-              slug: schedule.slug,
-              version: schedule.version,
-              nextFireAt: nextFire(
-                parseCron(schedule.cron),
-                new Date(now),
-                schedule.tz,
-              ).toISOString(),
-            });
-
-            return;
-          }
-
-          if (schedule.enabled && Date.parse(schedule.nextFireAt) <= Date.parse(now)) {
-            fired += Number(yield* this.fire(schedule, now));
-          }
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Cause.hasInterrupts(cause) ? Effect.failCause(cause) : this.options.report(cause),
-          ),
-        );
-      }
-
-      return fired;
-    });
-  }
-
-  private fire(schedule: Schedule, now: string) {
-    return Effect.gen({ self: this }, function* () {
-      const at = new Date(schedule.nextFireAt);
-
-      const run: RunRecord = {
+    return yield* options.store.fireSchedule({
+      schedule,
+      next: nextFire(parseCron(schedule.cron), new Date(now), schedule.tz).toISOString(),
+      run: {
         id: crypto.randomUUID(),
         slug: schedule.slug,
-        revision: yield* this.options.revisionFor(schedule),
+        revision,
         workspace: schedule.workspace,
-        input: schedule.input,
+        input: input.value,
         status: "queued",
         createdAt: now,
         updatedAt: now,
-      };
-
-      return yield* this.options.store.fireSchedule({
-        workspace: schedule.workspace,
-        slug: schedule.slug,
-        version: schedule.version,
-        fireKey: `${schedule.slug}@${at.toISOString().slice(0, 16)}Z`,
-        run,
-        nextFireAt: nextFire(parseCron(schedule.cron), at, schedule.tz).toISOString(),
-      });
+      },
     });
-  }
-}
+  });
+
+/**
+ * Missed slots coalesce into one run whose next slot follows the current time. A failed schedule
+ * waits for a persisted retry deadline so later schedules still enter the batch.
+ */
+export const fireDueSchedules = (options: ScheduleFiringOptions, now: string) =>
+  Effect.gen(function* () {
+    let fired = 0;
+
+    for (const schedule of yield* options.store.dueSchedules(now, SCHEDULE_POLICY.batch)) {
+      if (options.stopped?.()) {
+        break;
+      }
+
+      fired += Number(
+        yield* fireOne(options, schedule, now).pipe(
+          Effect.catchCause((cause) =>
+            Cause.hasInterrupts(cause)
+              ? Effect.failCause(cause)
+              : options.store
+                  .failSchedule({
+                    schedule,
+                    error: errorMessage(Cause.squash(cause)).slice(0, SCHEDULE_POLICY.errorChars),
+                    retryAt: new Date(Date.parse(now) + SCHEDULE_POLICY.retryMs).toISOString(),
+                  })
+                  .pipe(Effect.andThen(options.report?.(cause) ?? Effect.void), Effect.as(false)),
+          ),
+        ),
+      );
+    }
+
+    return fired;
+  });

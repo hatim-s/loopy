@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
+import { DEFAULT_PORT } from "@loopy/contract";
 import {
-  DEFAULT_PORT,
   installDaemon,
   localDaemon,
   openRunStore,

@@ -1,9 +1,10 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary, isoDateTime } from "@loopy/contract";
+import { dockerAttemptPlanSchema } from "@loopy/contract/sandbox";
 import { errnoCode } from "@loopy/core";
 import { Schema } from "effect";
-import { sha256Hex } from "../shared/hash";
+import { ownerOf, SANDBOX_LABELS } from "../../../sandbox/src/docker/identity";
 import { docker } from "../shared/process";
 import { toolEnvironment } from "../stack/environment";
 import { sandboxState, state } from "./config";
@@ -11,7 +12,9 @@ import { atomic } from "./files";
 import { abortPath, writeAbort } from "./journal";
 import { CONCURRENCY } from "./plan";
 
-const owner = sha256Hex(sandboxState);
+const owner = ownerOf(sandboxState);
+
+const isAttemptContainer = Schema.is(dockerAttemptPlanSchema.fields.container);
 
 const FRESH_MS = 30_000;
 
@@ -67,10 +70,16 @@ async function inspectPressure() {
     docker(args, { env: toolEnvironment(state), timeoutMs: 10_000 }).then((text) => text.trim());
 
   const running = (
-    await run(["ps", "--filter", `label=loopy.sandbox.owner=${owner}`, "--format", "{{.Names}}"])
+    await run([
+      "ps",
+      "--filter",
+      `label=${SANDBOX_LABELS.owner}=${owner}`,
+      "--format",
+      "{{.Names}}",
+    ])
   )
     .split("\n")
-    .filter((name) => name.startsWith("loopy-attempt-"));
+    .filter(isAttemptContainer);
 
   const memory = await run(["stats", "--no-stream", "--format", "{{.MemUsage}}"]);
   const total = decodeBoundary(totalSchema)(await run(["info", "--format", "{{.MemTotal}}"]));

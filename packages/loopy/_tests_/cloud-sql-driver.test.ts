@@ -102,7 +102,7 @@ test("portable schema reopens with its epoch, records and cursor intact", async 
   expect(await Effect.runPromise(reopened.getRun("run"))).toEqual(newRun());
   expect(sqlite.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
   expect(sqlite.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-    value: "15",
+    value: "16",
   });
 });
 
@@ -178,7 +178,7 @@ test("schema 13 upgrades through the local migration to the fresh tables, indexe
   drivers.push(legacy);
   expect(legacy.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
   expect(legacy.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-    value: "15",
+    value: "16",
   });
 
   const tables = fresh

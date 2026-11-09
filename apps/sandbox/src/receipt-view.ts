@@ -1,11 +1,9 @@
-import type { AttemptRecord, Receipt } from "@loopy/contract";
+import type { Receipt } from "@loopy/contract";
+import type { AttemptRecord, FinishedAttemptRecord } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
-import type { ResultsFor } from "./operations";
+import type { ResultsFor } from "./authority";
 
-export function resolveResult(
-  resultsFor: ResultsFor,
-  record: Extract<AttemptRecord, { kind: "finished" }>,
-) {
+export function resolveResult(resultsFor: ResultsFor, record: FinishedAttemptRecord) {
   // Inline results exist only in retained legacy receipts. See the README exit condition.
   return record.result.kind === "inline"
     ? Effect.succeed(record.result.value)

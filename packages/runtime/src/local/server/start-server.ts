@@ -1,28 +1,24 @@
-import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
-import { errorMessage } from "@loopy/core";
+import { LOCAL_MAX_REQUEST_BYTES } from "@loopy/contract";
+import {
+  apiRoutes,
+  bearerMatches,
+  dispatch,
+  errorResponse,
+  type RouteDependencies,
+} from "../../service";
 import { daemonUrl } from "../daemon/file";
 import { serveAsset, snapshotAssets } from "./assets";
-import { apiRoutes, dispatch, errorResponse, json } from "./routes";
 import { type OriginPolicy, originSecurity } from "./security";
 
-export const DEFAULT_PORT = 4310;
-
-export type ServerOptions = Omit<Parameters<typeof apiRoutes>[0], "cwd"> & {
+export type ServerOptions = RouteDependencies & {
   token: string;
-  cwd?: string;
-  port?: number;
-  assets?: string;
+  port: number;
+  /** The built dashboard directory, which the CLI resolves from its own install layout. */
+  assets: string;
   publicOrigin?: string;
   allowedOrigins?: readonly string[];
 };
-
-function bearerMatches(request: Request, token: string): boolean {
-  const actual = Buffer.from(request.headers.get("authorization") ?? "");
-  const expected = Buffer.from(`Bearer ${token}`);
-
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
 
 export function startServer(options: ServerOptions) {
   // Validate configured origins before opening a listener.
@@ -35,8 +31,8 @@ export function startServer(options: ServerOptions) {
 
   const server = Bun.serve({
     hostname: "127.0.0.1",
-    port: options.port ?? DEFAULT_PORT,
-    maxRequestBodySize: 64 * 1024 * 1024,
+    port: options.port,
+    maxRequestBodySize: LOCAL_MAX_REQUEST_BYTES,
     async fetch(request, server) {
       const response = await handler(request);
 
@@ -58,34 +54,24 @@ export function startServer(options: ServerOptions) {
     throw error;
   }
 
+  const port = server.port ?? options.port;
+
   return {
-    port: server.port ?? DEFAULT_PORT,
-    url: daemonUrl({ port: server.port ?? DEFAULT_PORT, token: options.token }),
+    port,
+    url: daemonUrl({ port, token: options.token }),
     async stop() {
       await server.stop(true);
     },
   };
 }
 
-/** Cloud hosts supply their trusted public origin and existing service/store dependencies. */
 export function createRequestHandler(options: ServerOptions & OriginPolicy) {
   if (!options.token) {
     throw new Error("The HTTP server requires a nonempty bearer token.");
   }
 
-  const assets = snapshotAssets(
-    resolve(
-      options.assets ??
-        resolve(
-          import.meta.dir,
-          import.meta.filename.endsWith(".ts")
-            ? "../../../../loopy/dist/dashboard"
-            : "../../../../dashboard",
-        ),
-    ),
-  );
-
-  const table = apiRoutes({ ...options, cwd: resolve(options.cwd ?? process.cwd()) });
+  const assets = snapshotAssets(resolve(options.assets));
+  const table = apiRoutes({ ...options, cwd: resolve(options.cwd) });
   const security = originSecurity(options);
 
   return (request: Request) => respond(request, { assets, table, token: options.token, security });
@@ -117,7 +103,7 @@ async function respond(request: Request, options: RequestOptions): Promise<Respo
       return options.security.preflight(request);
     }
 
-    if (!bearerMatches(request, options.token)) {
+    if (!bearerMatches(request.headers.get("authorization"), options.token)) {
       return options.security.cors(request, errorResponse("unauthorized"));
     }
 
@@ -128,7 +114,7 @@ async function respond(request: Request, options: RequestOptions): Promise<Respo
     return options.security.cors(
       request,
       error instanceof URIError
-        ? json({ error: errorMessage(error) }, 400)
+        ? errorResponse("bad_request", "The request path has invalid percent-encoding.")
         : errorResponse("internal"),
     );
   }

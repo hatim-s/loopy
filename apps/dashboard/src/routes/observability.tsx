@@ -1,4 +1,4 @@
-import { runStatusSchema } from "@loopy/contract";
+import { LOG_LEVELS, RUNTIME_EVENT_ENTITIES, runStatusSchema } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
@@ -12,9 +12,7 @@ import { useEventPages, useLogPages } from "../lib/pages";
 import { DEFAULT_PERIOD, PERIOD_OPTIONS, PERIODS, type Period } from "../lib/period";
 import { searchField } from "../lib/search";
 import { statusWord } from "../lib/status";
-import { type EventFilters, LOG_LEVELS, type LogFilters } from "../lib/view-models";
-
-const ENTITIES = ["run", "node", "log", "hook", "schedule"] as const;
+import type { EventFilters, LogFilters } from "../lib/view-models";
 
 const RUN_STATUSES = runStatusSchema.literals;
 
@@ -31,12 +29,13 @@ const searchSchema = Schema.Struct({
   tab: searchField(Schema.Literals(["logs", "events"])),
   period: searchField(Schema.Literals(PERIODS)),
   slug: searchField(Schema.String),
+  workspace: searchField(Schema.String),
   runId: searchField(Schema.String),
   nodeId: searchField(Schema.String),
   status: searchField(runStatusSchema),
   level: searchField(Schema.Literals(LOG_LEVELS)),
   text: searchField(Schema.String),
-  entity: searchField(Schema.Literals(ENTITIES)),
+  entity: searchField(Schema.Literals(RUNTIME_EVENT_ENTITIES)),
   kind: searchField(Schema.String),
   txn: searchField(Schema.String),
   event: searchField(Schema.Int),
@@ -160,6 +159,7 @@ function ObservabilityPage() {
   const shared = {
     period,
     slug: search.slug,
+    workspace: search.workspace,
     runId: search.runId,
     nodeId: search.nodeId,
     status: search.status,
@@ -210,7 +210,10 @@ function ObservabilityPage() {
       </div>
       <section className="table-card" aria-label={tab === "logs" ? "Logs" : "Runtime events"}>
         <div className="table-bar">
-          <LoopySelect value={search.slug} onChange={(slug) => set({ slug })} />
+          <LoopySelect
+            value={{ slug: search.slug, workspace: search.workspace }}
+            onChange={(target) => set({ slug: target.slug, workspace: target.workspace })}
+          />
           <select
             className="field"
             aria-label="Run status"
@@ -271,11 +274,13 @@ function ObservabilityPage() {
                 aria-label="Entity"
                 value={search.entity ?? ""}
                 onChange={(event) =>
-                  set({ entity: ENTITIES.find((entity) => entity === event.target.value) })
+                  set({
+                    entity: RUNTIME_EVENT_ENTITIES.find((entity) => entity === event.target.value),
+                  })
                 }
               >
                 <option value="">Any entity</option>
-                {ENTITIES.map((entity) => (
+                {RUNTIME_EVENT_ENTITIES.map((entity) => (
                   <option key={entity} value={entity}>
                     {entity}
                   </option>

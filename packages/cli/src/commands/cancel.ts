@@ -12,10 +12,6 @@ export const cancel = defineCommand({
   run: (cli) =>
     Effect.gen(function* () {
       const [id] = cli.args;
-      printJson(
-        yield* request(cli, `/runs/${encodeURIComponent(id)}/cancel`, routes.cancelRun.response, {
-          method: "POST",
-        }),
-      );
+      printJson(yield* request(cli, routes.cancelRun, { params: { id } }));
     }),
 });

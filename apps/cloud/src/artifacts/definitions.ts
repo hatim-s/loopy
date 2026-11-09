@@ -3,14 +3,15 @@ import {
   type DefinitionSummary,
   decodeBoundary,
   definitionSummary,
+  type Graph,
   type PutLoopyBody,
+  type SavedLoopy,
 } from "@loopy/contract";
-import { validateSlug } from "@loopy/core";
+import { graphBundles, validateSlug } from "@loopy/core";
 import { ArtifactValidationError, RegistryConflictError } from "@loopy/runtime/service";
 import { ArtifactCapacity } from "./capacity";
 import { checkProjectionRow, definitionProjectionSchema, projectionJson } from "./projection";
-import { ARTIFACT_LIMITS, type ArtifactStorage } from "./storage";
-import { artifactEntry } from "./validation";
+import { ARTIFACT_LIMITS } from "./storage";
 
 export type Publication = {
   slug: string;
@@ -21,12 +22,29 @@ export type Publication = {
   projection_json: string | null;
 };
 
+export function artifactEntry(row: Publication, graph: Graph): SavedLoopy {
+  return {
+    version: 3,
+    slug: row.slug,
+    graph,
+    revision: row.revision,
+    source: row.source,
+    savedAt: row.saved_at,
+    bundles: graphBundles(graph).map(({ nodeId, bundleHash }) => {
+      if (bundleHash === null) {
+        throw new Error("Stored graph has an uncompiled executable. Save the loopy again.");
+      }
+
+      return { nodeId, bundleHash };
+    }),
+  };
+}
+
 export class ArtifactDefinitions {
   readonly capacity: ArtifactCapacity;
 
   constructor(
     private readonly storage: Pick<DurableObjectStorage, "sql" | "transactionSync">,
-    artifacts: ArtifactStorage,
     private readonly workspace: string,
   ) {
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS artifact_definitions (
@@ -40,7 +58,7 @@ export class ArtifactDefinitions {
       projection_json TEXT NOT NULL, PRIMARY KEY (workspace, slug)
     )`);
 
-    this.capacity = new ArtifactCapacity(storage, artifacts, workspace);
+    this.capacity = new ArtifactCapacity(storage, workspace);
   }
 
   pointer(slug: string): Publication | null {

@@ -1,10 +1,10 @@
-import type { AuthorityInput } from "@loopy/contract";
+import type { AuthorityInput } from "@loopy/contract/sandbox";
 import { ReceiptAuthority } from "../../../../apps/cloud/src/receipts/authority";
 import type { ReceiptSql } from "../../../../apps/cloud/src/receipts/sql";
 
 export function receiptRecoveryProbe(db: ReceiptSql, input: AuthorityInput<"admit">) {
   const authority = new ReceiptAuthority(db);
-  authority.admit(input);
+  authority.admit(input, true);
   authority.complete({
     session: input.session,
     id: input.plan.id,

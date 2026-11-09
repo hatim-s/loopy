@@ -1,51 +1,34 @@
 import type { R2Bucket } from "@cloudflare/workers-types";
+import { decodeBoundary, type ExecutionResult, executionResultSchema } from "@loopy/contract";
 import {
-  decodeBoundary,
-  type ExecutionResult,
-  executionResultSchema,
+  AuthorityError,
   type ResultRef,
-  SANDBOX_MAX_CAPTURE_BYTES,
-} from "@loopy/contract";
-import { canonicalJson } from "@loopy/core";
+  resultBytes,
+  resultRef,
+  sameRef,
+} from "@loopy/contract/sandbox";
 import { Effect } from "effect";
+import { ImmutableBucket, r2Key } from "../artifacts/storage";
 import { CloudError, cloudSync, platform } from "../operation";
-import { receiptHash } from "./identity";
 
 export class R2ImmutableResults {
-  private readonly prefix: string;
+  private readonly objects: ImmutableBucket;
 
-  constructor(
-    private readonly bucket: R2Bucket,
-    namespace: string,
-    workspace: string,
-  ) {
-    this.prefix = `receipts/${encodeURIComponent(namespace)}/workspaces/${encodeURIComponent(workspace)}/results/`;
+  constructor(bucket: R2Bucket, namespace: string, workspace: string) {
+    this.objects = new ImmutableBucket(bucket, r2Key.results(namespace, workspace));
   }
 
   put(result: ExecutionResult) {
     return Effect.gen({ self: this }, function* () {
-      let bytes = new TextEncoder().encode(canonicalJson(result));
+      const bytes = resultBytes(result);
 
-      if (bytes.byteLength > SANDBOX_MAX_CAPTURE_BYTES) {
-        bytes = new TextEncoder().encode(
-          canonicalJson({
-            kind: "failed",
-            error: { code: "output_limit", message: "Serialized attempt result exceeds 2 MiB." },
-            exitCode: null,
-            logs: [],
-          }),
-        );
+      if (bytes === null) {
+        return yield* Effect.fail(new AuthorityError("invalid_state"));
       }
 
-      const ref = { sha256: yield* receiptHash(bytes), size: bytes.byteLength };
+      const ref = yield* platform("hash result", () => resultRef(bytes));
 
-      const created = yield* platform("publish immutable bytes", () =>
-        this.bucket.put(this.prefix + ref.sha256, bytes, {
-          onlyIf: { etagDoesNotMatch: "*" },
-        }),
-      );
-
-      if (!created) {
+      if (!(yield* this.objects.put(ref.sha256, bytes))) {
         // An existing object must verify before its digest can be reused.
         yield* this.get(ref);
       }
@@ -56,13 +39,9 @@ export class R2ImmutableResults {
 
   get(ref: ResultRef) {
     return Effect.gen({ self: this }, function* () {
-      const object = yield* platform("read immutable bytes", () =>
-        this.bucket.get(this.prefix + ref.sha256, {
-          range: { offset: 0, length: ref.size + 1 },
-        }),
-      );
+      const bytes = yield* this.objects.read(ref.sha256, ref.size);
 
-      if (!object) {
+      if (!bytes) {
         return yield* Effect.fail(
           new CloudError({
             operation: "verify result",
@@ -71,26 +50,11 @@ export class R2ImmutableResults {
         );
       }
 
-      if (object.size !== ref.size || object.size > SANDBOX_MAX_CAPTURE_BYTES) {
-        yield* platform("cancel artifact read", () => object.body.cancel());
-
+      if (!sameRef(yield* platform("hash result", () => resultRef(bytes)), ref)) {
         return yield* Effect.fail(
           new CloudError({
             operation: "verify result",
-            cause: "Immutable result size does not match its receipt.",
-          }),
-        );
-      }
-
-      const bytes = new Uint8Array(
-        yield* platform("read artifact bytes", () => object.arrayBuffer()),
-      );
-
-      if (bytes.byteLength !== ref.size || (yield* receiptHash(bytes)) !== ref.sha256) {
-        return yield* Effect.fail(
-          new CloudError({
-            operation: "verify result",
-            cause: "Immutable result hash does not match its receipt.",
+            cause: "Immutable result does not match its receipt.",
           }),
         );
       }

@@ -1,27 +1,30 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
+import { decodeBoundary, encodeBoundary } from "@loopy/contract";
 import {
   type AuthorityCommand,
   AuthorityError,
-  type AuthorityInput,
-  type AuthorityOutput,
   authorityCommandSchema,
-  authorityOperations,
-  decodeBoundary,
-  type ExecutionResult,
-  encodeBoundary,
-  type ResultRef,
-  resultOperations,
+  type OperationInput,
+  type OperationName,
+  type OperationOutput,
+  operationOutput,
+  planMatches,
   SANDBOX_MAX_REQUEST_BYTES,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { Cause, Effect, Result } from "effect";
 import type { Environment } from "../environment";
 import { readBoundedText } from "../http";
-import { CloudError, cloudSync } from "../operation";
+import { CloudError, cloudSync, platform } from "../operation";
 import { ReceiptAuthority } from "./authority";
-import { validReceiptPlan } from "./identity";
 import { R2ImmutableResults } from "./results";
 import { receiptAccess, receiptsConfiguration } from "./route";
 import { ReceiptSql } from "./sql";
+
+type ReceiptHandlers = {
+  [K in OperationName]: (
+    input: OperationInput<K>,
+  ) => Effect.Effect<OperationOutput<K>, CloudError | AuthorityError>;
+};
 
 export class SandboxReceipts {
   private readonly db: ReceiptSql;
@@ -74,24 +77,16 @@ export class SandboxReceipts {
         return Response.json({ error: "invalid_request" }, { status: 400 });
       }
 
-      const command = parsed.success;
+      return Response.json(yield* this.command(parsed.success));
+    });
+  }
 
-      // Effect's empty Struct accepts arbitrary object fields. Status has no inputs.
-      if (command.operation === "status" && Object.keys(command.input).length !== 0) {
-        return Response.json({ error: "invalid_request" }, { status: 400 });
-      }
+  private command<K extends OperationName>(command: AuthorityCommand<K>) {
+    return Effect.gen({ self: this }, function* () {
+      const output = yield* this.handlers[command.operation](command.input);
 
-      const output = yield* this.command(command);
-
-      const schema =
-        command.operation === "resultPut"
-          ? resultOperations.resultPut.output
-          : command.operation === "resultGet"
-            ? resultOperations.resultGet.output
-            : authorityOperations[command.operation].output;
-
-      return Response.json(
-        yield* cloudSync("encode receipt response", () => encodeBoundary(schema)(output)),
+      return yield* cloudSync("encode receipt response", () =>
+        encodeBoundary(operationOutput(command.operation))(output),
       );
     });
   }
@@ -100,85 +95,38 @@ export class SandboxReceipts {
     return new R2ImmutableResults(this.env.RECEIPT_RESULTS, this.config.namespace, workspace);
   }
 
-  private complete(
-    input: AuthorityInput<"complete">,
-  ): Effect.Effect<AuthorityOutput<"complete">, CloudError> {
-    return Effect.gen({ self: this }, function* () {
-      const session = yield* Effect.result(receiptSync(() => this.db.checkSession(input.session)));
+  private readonly handlers: ReceiptHandlers = {
+    status: () => receiptSync(() => ({ epoch: this.db.current()?.epoch ?? 0 })),
+    openSession: (input) => receiptSync(() => this.db.openSession(input)),
+    read: (input) => receiptSync(() => this.db.read(input.id)),
+    admit: (input) =>
+      Effect.gen({ self: this }, function* () {
+        const valid = yield* platform("verify plan", () =>
+          planMatches(this.config.root, input.plan),
+        );
 
-      if (Result.isFailure(session)) {
-        if (session.failure instanceof AuthorityError) {
-          return { kind: "rejected", code: session.failure.code };
+        return yield* receiptSync(() => this.authority.admit(input, valid));
+      }),
+    complete: (input) =>
+      Effect.gen({ self: this }, function* () {
+        const decision = yield* receiptSync(() => this.authority.completion(input));
+
+        if (decision.kind !== "publish") {
+          return decision;
         }
 
-        return yield* Effect.fail(session.failure);
-      }
+        // Verify durable bytes before publishing their pointer. The transaction decides again.
+        yield* this.resultsFor(decision.record.plan.workspace).get(input.result);
 
-      const record = yield* cloudSync("read receipt", () => this.db.read(input.id));
-
-      if (!record) {
-        return { kind: "rejected", code: "missing" };
-      }
-
-      if (record.plan.requestHash !== input.requestHash) {
-        return { kind: "rejected", code: "request_conflict" };
-      }
-
-      if (
-        record.kind === "finished" &&
-        (record.result.kind !== "blob" ||
-          record.result.ref.sha256 !== input.result.sha256 ||
-          record.result.ref.size !== input.result.size)
-      ) {
-        return { kind: "rejected", code: "request_conflict" };
-      }
-
-      // Verify durable bytes before publishing their pointer. The transaction rechecks the session.
-      yield* this.resultsFor(record.plan.workspace).get(input.result);
-
-      return yield* cloudSync("complete receipt", () => this.authority.complete(input));
-    });
-  }
-
-  private command(
-    command: AuthorityCommand,
-  ): Effect.Effect<
-    AuthorityOutput<keyof typeof authorityOperations> | ResultRef | ExecutionResult,
-    CloudError | AuthorityError
-  > {
-    return Effect.gen({ self: this }, function* () {
-      switch (command.operation) {
-        case "status":
-          return { epoch: yield* receiptSync(() => this.db.current()?.epoch ?? 0) };
-        case "openSession":
-          return yield* receiptSync(() => this.db.openSession(command.input));
-        case "read":
-          return yield* receiptSync(() => this.db.read(command.input.id));
-        case "admit":
-          if (!(yield* validReceiptPlan(this.config.root, command.input.plan))) {
-            return { kind: "rejected", code: "invalid_state" };
-          }
-
-          return yield* receiptSync(() => this.authority.admit(command.input));
-        case "complete":
-          return yield* this.complete(command.input);
-        case "beginExport":
-          return yield* receiptSync(() => this.authority.beginExport(command.input));
-        case "endExport":
-          yield* receiptSync(() => this.authority.endExport(command.input));
-
-          return null;
-        case "exportGuards":
-          return yield* receiptSync(() => this.db.exportGuards(command.input));
-        case "recoverable":
-          return yield* receiptSync(() => this.db.recoverable(command.input));
-        case "resultPut":
-          return yield* this.resultsFor(command.input.workspace).put(command.input.value);
-        case "resultGet":
-          return yield* this.resultsFor(command.input.workspace).get(command.input.ref);
-      }
-    });
-  }
+        return yield* receiptSync(() => this.authority.complete(input));
+      }),
+    beginExport: (input) => receiptSync(() => this.authority.beginExport(input)),
+    endExport: (input) => receiptSync(() => this.authority.endExport(input)),
+    exportGuards: (input) => receiptSync(() => this.db.exportGuards(input)),
+    recoverable: (input) => receiptSync(() => this.db.recoverable(input)),
+    resultPut: (input) => this.resultsFor(input.workspace).put(input.value),
+    resultGet: (input) => this.resultsFor(input.workspace).get(input.ref),
+  };
 }
 
 function receiptSync<A>(work: () => A) {

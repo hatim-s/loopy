@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { AuthorityError, authorityCommandSchema, decodeBoundary } from "@loopy/contract";
+import { decodeBoundary } from "@loopy/contract";
+import { AuthorityError, authorityCommandSchema } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { HttpSandboxAuthority } from "../../../apps/sandbox/src/http-authority";
 import {
@@ -22,7 +23,7 @@ afterAll(async () => {
 async function session(nonce: string) {
   return Effect.runPromise(
     harness.authority.openSession({
-      expectedEpoch: (await Effect.runPromise(harness.authority.status())).epoch,
+      expectedEpoch: (await Effect.runPromise(harness.authority.status({}))).epoch,
       nonce,
     }),
   );
@@ -35,7 +36,7 @@ test("actual workerd rolls back admission on a later SQLite constraint failure",
     method: "POST",
     body: JSON.stringify({
       session: { epoch: 1, nonce: "rollback" },
-      plan: harness.plan("rollback"),
+      plan: await harness.plan("rollback"),
     }),
   });
 
@@ -48,7 +49,7 @@ test("actual workerd rolls back admission on a later SQLite constraint failure",
 
 test("one concurrent admission grant pins its original plan and session through duplicates and conflicts", async () => {
   const current = await session("admission");
-  const plan = harness.plan("admission");
+  const plan = await harness.plan("admission");
 
   const replies = await Promise.all(
     Array.from({ length: 12 }, () =>
@@ -58,7 +59,7 @@ test("one concurrent admission grant pins its original plan and session through 
 
   expect(replies.filter((reply) => reply.kind === "created")).toHaveLength(1);
   expect(replies.filter((reply) => reply.kind === "existing")).toHaveLength(11);
-  expect(await Effect.runPromise(harness.authority.read(plan.id))).toEqual({
+  expect(await Effect.runPromise(harness.authority.read({ id: plan.id }))).toEqual({
     kind: "started",
     plan,
     session: current,
@@ -100,7 +101,7 @@ test("one concurrent admission grant pins its original plan and session through 
 
 test("session CAS rejects delayed opens and stale writes; successor recovers the saved admitting session", async () => {
   const first = await session("first");
-  const plan = harness.plan("stale");
+  const plan = await harness.plan("stale");
   await Effect.runPromise(harness.authority.admit({ session: first, plan }));
   expect(
     await Effect.runPromise(
@@ -171,7 +172,7 @@ test("session CAS rejects delayed opens and stale writes; successor recovers the
 
 test("lost admission/completion responses survive full workerd reconstruction without creating a second grant", async () => {
   const current = await session("lost-response");
-  const plan = harness.plan("lost-response");
+  const plan = await harness.plan("lost-response");
   const drops = new Set(["admit", "complete"]);
   let readUnavailable = true;
 
@@ -214,9 +215,9 @@ test("lost admission/completion responses survive full workerd reconstruction wi
     await expect(Effect.runPromise(ambiguous.admit({ session: current, plan }))).rejects.toThrow(
       "HTTP 503",
     );
-    await expect(Effect.runPromise(ambiguous.read(plan.id))).rejects.toThrow("HTTP 503");
+    await expect(Effect.runPromise(ambiguous.read({ id: plan.id }))).rejects.toThrow("HTTP 503");
     await harness.reopen();
-    expect(await Effect.runPromise(harness.authority.read(plan.id))).toEqual({
+    expect(await Effect.runPromise(harness.authority.read({ id: plan.id }))).toEqual({
       kind: "started",
       plan,
       session: current,

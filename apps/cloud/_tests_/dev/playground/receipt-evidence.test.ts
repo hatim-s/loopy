@@ -1,13 +1,12 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { decodeBoundary, executionResultSchema } from "@loopy/contract";
 import {
-  decodeBoundary,
-  executionResultSchema,
+  attemptId,
   finishedAttemptRecordSchema,
   sandboxAttemptIdentitySchema,
-} from "@loopy/contract";
+} from "@loopy/contract/sandbox";
 import { Effect } from "effect";
-import { attemptHash } from "../../../../sandbox/src/admission";
 import { receiptEvidence } from "../../../dev/playground/receipt/evidence";
 
 const identity = decodeBoundary(sandboxAttemptIdentitySchema)({
@@ -18,7 +17,7 @@ const identity = decodeBoundary(sandboxAttemptIdentitySchema)({
 
 const root = "/synthetic/runtime-root/.loopy/cloud/sandbox";
 
-const id = attemptHash({ root, ...identity });
+const id = await attemptId(root, identity);
 
 const result = decodeBoundary(executionResultSchema)({
   kind: "succeeded",

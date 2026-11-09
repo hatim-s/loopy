@@ -36,15 +36,14 @@ export const run = defineCommand({
         });
       }
 
-      const { graph } = yield* request(
-        cli,
-        `/loopies/${encodeURIComponent(slug)}/graph?workspace=${encodeURIComponent(cli.cwd)}`,
-        routes.graph.response,
-      );
+      const { graph } = yield* request(cli, routes.graph, {
+        params: { slug },
+        query: { workspace: cli.cwd },
+      });
 
       printJson(
-        yield* request(cli, `/loopies/${encodeURIComponent(slug)}/runs`, routes.startRun.response, {
-          method: "POST",
+        yield* request(cli, routes.startRun, {
+          params: { slug },
           body: { input: yield* graphInput(graph.input, cli), workspace: cli.cwd },
         }),
       );

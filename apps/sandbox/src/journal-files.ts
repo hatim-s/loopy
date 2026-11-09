@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { AttemptRecord, ExportRecord } from "@loopy/contract";
+import type { AttemptRecord, ExportRecord } from "@loopy/contract/sandbox";
 import { errnoCode } from "@loopy/core";
 
 export async function syncDirectory(path: string) {

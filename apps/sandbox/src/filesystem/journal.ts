@@ -1,20 +1,18 @@
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { decodeBoundary } from "@loopy/contract";
 import {
   type AttemptRecord,
   AuthorityError,
   artifactHelperName,
   attemptRecordSchema,
-  attemptResourceNames,
   type DockerAttemptPlan,
-  decodeBoundary,
   type ExportRecord,
   exportRecordSchema,
-  workspaceVolumeInput,
-} from "@loopy/contract";
+  planMatches,
+} from "@loopy/contract/sandbox";
 import { Effect, Result } from "effect";
-import { attemptHash, attemptId } from "../admission";
 import { readBytes } from "../journal-files";
 import { checked, failure, io } from "../operations";
 import { stateLayout } from "../state-root";
@@ -26,14 +24,7 @@ export class FilesystemJournal {
     this.layout = stateLayout(root);
   }
   validPlan(plan: DockerAttemptPlan) {
-    const names = attemptResourceNames(plan.id, attemptHash(workspaceVolumeInput(this.root, plan)));
-
-    return (
-      plan.id === attemptId(this.root, plan) &&
-      plan.container === names.container &&
-      plan.inputVolume === names.inputVolume &&
-      plan.volume === names.volume
-    );
+    return Effect.promise(() => planMatches(this.root, plan));
   }
 
   read(id: string) {
@@ -58,7 +49,7 @@ export class FilesystemJournal {
         ? decoded.success
         : yield* checked("retained receipt decode", () => legacyRecord(value));
 
-      if (record.plan.id !== id || !this.validPlan(record.plan)) {
+      if (record.plan.id !== id || !(yield* this.validPlan(record.plan))) {
         return yield* Effect.fail(
           failure(
             "filesystem-journal",

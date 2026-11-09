@@ -93,12 +93,10 @@ export async function capture(daemon: OwnedDaemon, snapshot: RunSnapshotView, wo
   const retried = [];
 
   for (const node of snapshot.nodeRuns.filter((item) => item.attempt > 1)) {
-    const query = new URLSearchParams({ key: executionKeyString(node.key) });
-
-    const detail = await daemon.request(
-      `/runs/${runId}/execution?${query}`,
-      routes.execution.response,
-    );
+    const detail = await daemon.call(routes.execution, {
+      params: { id: runId },
+      query: { key: executionKeyString(node.key) },
+    });
 
     retried.push({ key: node.key, attempts: detail.attempts });
   }

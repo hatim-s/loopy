@@ -29,13 +29,13 @@ const beforeHash = await approvedDiagnostic({
   profile: profile.label,
 });
 
-// The queries below copy store and scheduler SQL, so the probe records the sources it mirrors.
+// The probe records the store sources whose exported SQL it runs.
 const sources = [
   "packages/runtime/src/store/sqlite/query/runs.ts",
   "packages/runtime/src/store/sqlite/query/feeds.ts",
   "packages/runtime/src/store/sqlite/query/nodes.ts",
   "packages/runtime/src/store/sqlite/schema/fresh.ts",
-  "apps/cloud/src/scheduler.ts",
+  "packages/runtime/src/store/sqlite/turns.ts",
   "apps/cloud/src/sql-driver.ts",
   "apps/cloud/dev/playground/metrics/sql-queries.ts",
 ];
@@ -88,7 +88,7 @@ try {
     });
   }
 
-  const counts = tableCounts(reader.db, [...runTables, "cloud_turns"]);
+  const counts = tableCounts(reader.db, [...runTables, "run_turns"]);
 
   const schema = reader.db
     .query(

@@ -16,7 +16,7 @@ export { compilerLauncher } from "./sandbox/compiler";
 
 export { SecretStore, validateSecretValue } from "./secrets";
 
-export { createRequestHandler, DEFAULT_PORT, type ServerOptions } from "./server/start-server";
+export { createRequestHandler, type ServerOptions } from "./server/start-server";
 
 export { type LocalService, makeLocalService, ServiceError } from "./service";
 

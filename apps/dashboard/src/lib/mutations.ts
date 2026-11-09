@@ -19,7 +19,9 @@ export function useRunMutation<Variables = void>(
 }
 
 export function useResolveHook(token: string) {
-  return useRunMutation((backend, payload: Json) => backend.resolveHook(token, payload));
+  return useRunMutation((backend, payload: Json) =>
+    backend.call("resolveHook", { params: { token }, body: { payload } }),
+  );
 }
 
 export function useSaveSchedule(slug: string, workspace: string) {
@@ -27,7 +29,8 @@ export function useSaveSchedule(slug: string, workspace: string) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (body: PutScheduleBody) => backend.putSchedule(slug, workspace, body),
+    mutationFn: (body: PutScheduleBody) =>
+      backend.call("putSchedule", { params: { slug }, query: { workspace }, body }),
     onSuccess: (schedule) => applyScheduleView(client, schedule),
   });
 }
@@ -35,8 +38,8 @@ export function useSaveSchedule(slug: string, workspace: string) {
 /** Identity guards keep a failed request from overwriting stream writes to the same row. */
 export async function toggleSchedule(
   client: QueryClient,
-  backend: Pick<LoopyBackend, "setScheduleEnabled">,
   change: { slug: string; workspace: string; enabled: boolean },
+  request: () => Promise<ScheduleView>,
 ) {
   const { slug, workspace, enabled } = change;
   await client.cancelQueries({ queryKey: keys.schedules(workspace) });
@@ -56,7 +59,7 @@ export async function toggleSchedule(
     ?.find((item) => item.slug === slug && item.workspace === workspace);
 
   try {
-    return await backend.setScheduleEnabled(slug, workspace, enabled);
+    return await request();
   } catch (error) {
     client.setQueryData<ScheduleView[]>(keys.schedules(workspace), (current) =>
       current?.map((item) => (item === written && previous ? previous : item)),
@@ -70,7 +73,14 @@ export function useToggleSchedule(slug: string, workspace: string) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: (enabled: boolean) => toggleSchedule(client, backend, { slug, workspace, enabled }),
+    mutationFn: (enabled: boolean) =>
+      toggleSchedule(client, { slug, workspace, enabled }, () =>
+        backend.call("setScheduleEnabled", {
+          params: { slug },
+          query: { workspace },
+          body: { enabled },
+        }),
+      ),
     onSuccess: (schedule) => applyScheduleView(client, schedule),
   });
 }
@@ -80,7 +90,7 @@ export function useRemoveSchedule(slug: string, workspace: string) {
   const client = useQueryClient();
 
   return useMutation({
-    mutationFn: () => backend.deleteSchedule(slug, workspace),
+    mutationFn: () => backend.call("deleteSchedule", { params: { slug }, query: { workspace } }),
     onSuccess: () => removeScheduleView(client, { slug, workspace }),
   });
 }

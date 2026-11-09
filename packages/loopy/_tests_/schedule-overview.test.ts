@@ -109,6 +109,11 @@ for (const version of [13, 14, 15] as const) {
 
     const db = version === 15 ? new Database(file) : legacyDatabase(file, version);
 
+    if (version === 15) {
+      // A schema 15 home predates the tables schema 16 adds.
+      db.exec("DROP TABLE schedule_failures; DROP TABLE run_turns");
+    }
+
     db.exec("DROP INDEX IF EXISTS schedules_enabled_next");
     db.exec("INSERT OR REPLACE INTO meta VALUES ('epoch','schedule-retained')");
     db.query(
@@ -154,7 +159,7 @@ for (const version of [13, 14, 15] as const) {
     const persisted = new Database(file);
     expect(persisted.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
     expect(persisted.query("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-      value: "15",
+      value: "16",
     });
 
     const plans = persisted

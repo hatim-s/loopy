@@ -1,13 +1,18 @@
 import { afterEach, expect, test } from "bun:test";
 import { readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { ExecutionResult } from "@loopy/contract";
+import {
+  AuthorityError,
+  type AuthorityOutput,
+  authorityCommandSchema,
+  resultBytes,
+  resultRef,
+  SANDBOX_MAX_CAPTURE_BYTES,
+} from "@loopy/contract/sandbox";
 import { Result, Schema } from "effect";
 import { FilesystemAuthority } from "../../../apps/sandbox/src/filesystem/authority";
-import { resultReference } from "../../../apps/sandbox/src/filesystem/results";
 import { stateLayout } from "../../../apps/sandbox/src/state-root";
-import { AuthorityError } from "../../contract/src/sandbox-journal";
-import type { AuthorityOutput } from "../../contract/src/sandbox-journal-rpc";
-import { authorityCommandSchema } from "../../contract/src/sandbox-journal-rpc";
 import { authorityFixture, successful, uncertain } from "./fixtures/sandbox-authority";
 import { run } from "./fixtures/sandbox-run";
 
@@ -16,6 +21,16 @@ const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
+
+function resultReference(result: ExecutionResult) {
+  const bytes = resultBytes(result);
+
+  if (bytes === null) {
+    throw new Error("Fixture result exceeds the capture limit.");
+  }
+
+  return resultRef(bytes);
+}
 
 async function fixture() {
   const value = await authorityFixture();
@@ -27,7 +42,7 @@ async function fixture() {
 test("filesystem authority deduplicates, rejects stale/changed requests and seals a hash-verified terminal result", async () => {
   const { authority, resultsFor, plan, config } = await fixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "first" }));
-  const input = { session, plan: plan() };
+  const input = { session, plan: await plan() };
   const responses = await Promise.all(Array.from({ length: 8 }, () => run(authority.admit(input))));
   expect(responses.filter((reply) => reply.kind === "created")).toHaveLength(1);
   expect(responses.filter((reply) => reply.kind === "existing")).toHaveLength(7);
@@ -41,7 +56,9 @@ test("filesystem authority deduplicates, rejects stale/changed requests and seal
     code: "stale_session",
   });
   expect(
-    await run(authority.admit({ session, plan: { ...plan(2), container: input.plan.container } })),
+    await run(
+      authority.admit({ session, plan: { ...(await plan(2)), container: input.plan.container } }),
+    ),
   ).toEqual({ kind: "rejected", code: "invalid_state" });
   const result = await run(resultsFor(input.plan.workspace).put(successful));
   expect(await run(resultsFor(input.plan.workspace).get(result))).toEqual(successful);
@@ -66,7 +83,7 @@ test("filesystem authority deduplicates, rejects stale/changed requests and seal
   const next = await run(second.openSession({ expectedEpoch: 0, nonce: "second" }));
   expect(next.epoch).toBe(session.epoch);
   expect(next.nonce).not.toBe(session.nonce);
-  expect((await run(second.read(input.plan.id)))?.session).toEqual(session);
+  expect((await run(second.read({ id: input.plan.id })))?.session).toEqual(session);
   expect(
     await readFile(join(stateLayout(config.stateRoot).receipts, `${input.plan.id}.json`), "utf8"),
   ).toBe(before);
@@ -75,7 +92,7 @@ test("filesystem authority deduplicates, rejects stale/changed requests and seal
 test("export guards persist, block only their volume and release older guards under the current caller session", async () => {
   const { authority, resultsFor, plan, config } = await fixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "first" }));
-  const first = plan();
+  const first = await plan();
   await run(authority.admit({ session, plan: first }));
   await run(
     authority.complete({
@@ -92,11 +109,13 @@ test("export guards persist, block only their volume and release older guards un
 
   expect(guard.kind).toBe("granted");
   expect(guard.kind === "granted" && guard.record.helper).toBe(`loopy-artifact-${first.id}`);
-  expect(await run(authority.admit({ session, plan: plan(2) }))).toEqual({
+  expect(await run(authority.admit({ session, plan: await plan(2) }))).toEqual({
     kind: "rejected",
     code: "workspace_busy",
   });
-  expect((await run(authority.admit({ session, plan: plan(1, "other") }))).kind).toBe("created");
+  expect((await run(authority.admit({ session, plan: await plan(1, "other") }))).kind).toBe(
+    "created",
+  );
   expect((await run(authority.admit({ session, plan: first }))).kind).toBe("existing");
   await run(authority.close());
   const second = new FilesystemAuthority(config.stateRoot);
@@ -119,17 +138,17 @@ test("export guards persist, block only their volume and release older guards un
   await run(second.endExport({ session: next, token: "guard-one" }));
   expect((await run(second.recoverable({ after: null, limit: 200 }))).exports).toHaveLength(1);
   await run(second.endExport({ session: next, token: "guard-two" }));
-  expect((await run(second.admit({ session: next, plan: plan(2) }))).kind).toBe("created");
+  expect((await run(second.admit({ session: next, plan: await plan(2) }))).kind).toBe("created");
 });
 
 test("legacy receipts decode without rewriting, missing/corrupt results never become absence, and recovery pages cover every entry", async () => {
   const { authority, config, plan, resultsFor } = await fixture();
   const session = await run(authority.openSession({ expectedEpoch: 0, nonce: "session" }));
-  const legacy = { ...plan(), kind: "finished", result: successful };
+  const legacy = { ...(await plan()), kind: "finished", result: successful };
   const path = join(stateLayout(config.stateRoot).receipts, `${legacy.id}.json`);
   const content = JSON.stringify(legacy);
   await writeFile(path, content);
-  const decoded = await run(authority.read(legacy.id));
+  const decoded = await run(authority.read({ id: legacy.id }));
   expect(decoded?.kind === "finished" && decoded.result).toEqual({
     kind: "inline",
     value: successful,
@@ -142,14 +161,14 @@ test("legacy receipts decode without rewriting, missing/corrupt results never be
           session,
           id: legacy.id,
           requestHash: legacy.requestHash,
-          result: resultReference(successful),
+          result: await resultReference(successful),
         }),
       )
     ).kind,
   ).toBe("finished");
 
   for (let index = 2; index <= 5; index++) {
-    await run(authority.admit({ session, plan: plan(index) }));
+    await run(authority.admit({ session, plan: await plan(index) }));
   }
 
   await run(authority.beginExport({ session, attemptId: legacy.id, token: "guard" }));
@@ -172,18 +191,18 @@ test("legacy receipts decode without rewriting, missing/corrupt results never be
   // The guard was denied while attempts sharing the volume were running.
   expect(seen).toHaveLength(4);
   expect(new Set(seen).size).toBe(4);
-  const missingRef = resultReference(successful);
+  const missingRef = await resultReference(successful);
   await expect(
     run(
       authority.complete({
         session,
-        id: plan(2).id,
-        requestHash: plan(2).requestHash,
+        id: (await plan(2)).id,
+        requestHash: (await plan(2)).requestHash,
         result: missingRef,
       }),
     ),
   ).rejects.toThrow("missing");
-  expect((await run(authority.read(plan(2).id)))?.kind).toBe("started");
+  expect((await run(authority.read({ id: (await plan(2)).id })))?.kind).toBe("started");
   await run(resultsFor("fixture").put(successful));
 
   const resultFile = (await readdir(stateLayout(config.stateRoot).results)).find((name) =>
@@ -194,13 +213,27 @@ test("legacy receipts decode without rewriting, missing/corrupt results never be
   await writeFile(join(stateLayout(config.stateRoot).results, resultFile ?? "unexpected"), "{}");
   await expect(run(resultsFor("fixture").get(missingRef))).rejects.toThrow("immutable");
   await writeFile(path, "{malformed");
-  await expect(run(authority.read(legacy.id))).rejects.toThrow();
+  await expect(run(authority.read({ id: legacy.id }))).rejects.toThrow();
 });
 
-test("wire operations reject missing admitting sessions and unscoped results", () => {
+test("filesystem results reject an oversized canonical result as invalid_state, like the DO", async () => {
+  const { resultsFor } = await fixture();
+
+  await expect(
+    run(
+      resultsFor("fixture").put({
+        kind: "succeeded",
+        output: "x".repeat(SANDBOX_MAX_CAPTURE_BYTES),
+        logs: [],
+      }),
+    ),
+  ).rejects.toEqual(new AuthorityError("invalid_state"));
+});
+
+test("wire operations reject missing admitting sessions and unscoped results", async () => {
   for (const command of [
     { operation: "resultPut", input: { value: successful } },
-    { operation: "resultGet", input: { ref: resultReference(successful) } },
+    { operation: "resultGet", input: { ref: await resultReference(successful) } },
     { operation: "admit", input: { plan: {} } },
   ]) {
     expect(
@@ -217,7 +250,7 @@ test("export-only recovery filters exact volume metadata without reading receipt
   const expected = [];
 
   for (const token of ["z", "A", "a"]) {
-    const target = plan(1, `export-${token}`);
+    const target = await plan(1, `export-${token}`);
     await run(authority.admit({ session, plan: target }));
     await run(
       authority.complete({

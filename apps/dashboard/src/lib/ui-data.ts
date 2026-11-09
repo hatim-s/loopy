@@ -3,6 +3,7 @@ import type {
   ExecutionDetail,
   GraphRevisionView,
   LogRecord,
+  LoopyView,
   OverviewView,
   RunSnapshotView,
   routes,
@@ -34,9 +35,8 @@ import {
   scheduleOverviewQuery,
   schedulesQuery,
   scopesQuery,
-  workspaceLoopiesQuery,
 } from "./queries";
-import type { ExecutionView, Lazy, Loaded, LoopyRow, ScopeTuple } from "./view-models";
+import type { ExecutionView, Lazy, Loaded, ScopeTuple } from "./view-models";
 
 // The overview window moves a minute at a time so its query key stays put between ticks.
 const OVERVIEW_TICK_MS = 60_000;
@@ -56,22 +56,8 @@ export function useOverview(period: Period, slug?: string): Loaded<OverviewView>
   );
 }
 
-export function useLoopyRows(): Loaded<LoopyRow[]> {
-  return mapLoaded(loaded(useQuery(loopiesQuery(useBackend()))), (rows) =>
-    rows.map((row) => ({ ...row, latestRuns: row.latestRuns ?? [] })),
-  );
-}
-
-export function useWorkspaceLoopyRows(workspace: string | null): Lazy<LoopyRow[]> {
-  const query = useQuery(workspaceLoopiesQuery(useBackend(), workspace));
-
-  if (workspace === null) {
-    return { state: "idle" };
-  }
-
-  return mapLoaded(loaded(query), (rows) =>
-    rows.map((row) => ({ ...row, latestRuns: row.latestRuns ?? [] })),
-  );
+export function useLoopyRows(workspace?: string): Loaded<LoopyView[]> {
+  return loaded(useQuery(loopiesQuery(useBackend(), workspace)));
 }
 
 export function useRunSnapshot(id: string): Loaded<RunSnapshotView> {

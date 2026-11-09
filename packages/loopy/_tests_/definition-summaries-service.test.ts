@@ -43,7 +43,7 @@ test("definition projection hides graph, bundles and secrets and displays JSON i
   });
 });
 
-test("one grouped counts read maps globals across workspaces, projects to their workspace and keeps first slug selection", async () => {
+test("one grouped counts read lists a global once and each project definition in its own workspace", async () => {
   const f = await fixture();
   await f.save(f.a, "shared", "global");
   await f.save(f.a, "project");
@@ -60,7 +60,12 @@ test("one grouped counts read maps globals across workspaces, projects to their 
   );
 
   expect(f.store.groupedReads).toBe(1);
-  expect(views.map((view) => view.slug)).toEqual(["project", "shared", "zero"]);
+  expect(views.map((view) => [view.workspace, view.slug])).toEqual([
+    [f.a, "project"],
+    [f.a, "shared"],
+    [f.b, "project"],
+    [f.b, "zero"],
+  ]);
   expect(views.find((view) => view.slug === "shared")?.counts).toEqual({
     queued: 1,
     running: 0,
@@ -72,6 +77,9 @@ test("one grouped counts read maps globals across workspaces, projects to their 
   expect(views.find((view) => view.slug === "project")).toMatchObject({
     workspace: f.a,
     counts: { succeeded: 1, failed: 0 },
+  });
+  expect(views.find((view) => view.slug === "project" && view.workspace === f.b)).toMatchObject({
+    counts: { succeeded: 0, failed: 1 },
   });
   expect(views.find((view) => view.slug === "zero")?.counts).toEqual({
     queued: 0,
@@ -144,7 +152,6 @@ test("native adapter distinguishes absence from corrupt existing files", async (
     store: f.store,
     clock: { now: Date.now },
     home: f.home,
-    cwd: f.a,
   });
 
   await expect(Effect.runPromise(service.startRun("missing", {}, f.a))).rejects.toMatchObject({

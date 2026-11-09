@@ -12,10 +12,6 @@ export const resume = defineCommand({
   run: (cli) =>
     Effect.gen(function* () {
       const [id] = cli.args;
-      printJson(
-        yield* request(cli, `/runs/${encodeURIComponent(id)}/resume`, routes.resumeRun.response, {
-          method: "POST",
-        }),
-      );
+      printJson(yield* request(cli, routes.resumeRun, { params: { id } }));
     }),
 });

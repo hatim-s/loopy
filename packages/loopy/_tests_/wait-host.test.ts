@@ -6,10 +6,10 @@ import { runSnapshotViewSchema, runViewSchema } from "@loopy/contract";
 import { type Executor } from "@loopy/core";
 import { activate } from "@loopy/runtime/host";
 import { makeLocalService, Registry } from "@loopy/runtime/local";
+import { apiRoutes, dispatch } from "@loopy/runtime/service";
 import { makeSqliteRunStore } from "@loopy/runtime/store";
 import { code, finally_, loopy, parallel, sleep, uuid, wait } from "@loopy/sdk/graph";
 import { Deferred, Effect, Exit, Schema, Scope } from "effect";
-import { apiRoutes, dispatch } from "../../runtime/src/local/server/routes";
 import { FakeExecutor, newRun } from "./fixture";
 import { MemorySqlStore, runAt } from "./store-fixture";
 
@@ -45,7 +45,7 @@ async function fixture() {
     makeSqliteRunStore(file).pipe(Effect.provideService(Scope.Scope, scope)),
   );
 
-  const service = makeLocalService({ home, cwd: home, store, clock });
+  const service = makeLocalService({ home, store, clock });
 
   const graph = loopy("approval", {
     input: {},
@@ -94,7 +94,7 @@ test("approval suspends without executing, named HTTP signal wakes once, and res
   const table = apiRoutes({
     ...f,
     cwd: f.home,
-    daemon: { startedAt: new Date(0).toISOString(), concurrency: 1 },
+    daemon: { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 1 },
   });
 
   const url = new URL("http://localhost/api/runs/run/hooks/approve");
@@ -150,7 +150,7 @@ test("opaque token HTTP route resolves and timeout rehydration preserves the ori
   const table = apiRoutes({
     ...f,
     cwd: f.home,
-    daemon: { startedAt: new Date(0).toISOString(), concurrency: 1 },
+    daemon: { pid: process.pid, startedAt: new Date(0).toISOString(), concurrency: 1 },
   });
 
   const url = new URL(`http://localhost/api/hooks/${hook.token}`);

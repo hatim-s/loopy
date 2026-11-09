@@ -1,9 +1,5 @@
-import {
-  type AttemptRecord,
-  decodeBoundary,
-  dockerAttemptPlanSchema,
-  executionResultSchema,
-} from "@loopy/contract";
+import { decodeBoundary, executionResultSchema } from "@loopy/contract";
+import { type AttemptRecord, dockerAttemptPlanSchema } from "@loopy/contract/sandbox";
 import { struct } from "@loopy/core";
 import { Schema } from "effect";
 

@@ -2,12 +2,14 @@ import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+// The runner config loader transforms workspace TypeScript, so the port comes from the contract.
+import { DEFAULT_PORT } from "@loopy/contract";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, searchForWorkspaceRoot } from "vite";
 
-const apiOrigin = process.env.LOOPY_API_ORIGIN ?? "http://127.0.0.1:4310";
+const apiOrigin = process.env.LOOPY_API_ORIGIN ?? `http://127.0.0.1:${DEFAULT_PORT}`;
 
 const require = createRequire(import.meta.url);
 
