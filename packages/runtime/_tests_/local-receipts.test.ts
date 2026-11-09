@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { ExecutionWorker } from "../src/executor/execution";
 import { FilesystemReceipts, type LocalReceipt, receiptPath } from "../src/executor/receipts";
 import { receiptsFixture } from "./fixtures/local-receipts";
-import { waitForExit, waitForFile } from "./fixtures/wait";
+import { waitForFile } from "./fixtures/wait";
 
 const result: ExecutionResult = { kind: "succeeded", output: 42, logs: [] };
 
@@ -180,7 +180,8 @@ test("a live trusted child retains completion authority, a killed child becomes 
   await writeFile(
     f.bundle,
     // The bundle outlives its killed worker until the test releases it, then completes as an orphan.
-    'await Bun.write("pid", String(process.pid)); await Bun.write("effect", "once"); while (!(await Bun.file("release").exists())) { await Bun.sleep(10); } console.log(42);',
+    // It reports completion through a file: on Linux its pid lives in the sandbox's PID namespace.
+    'await Bun.write("effect", "once"); while (!(await Bun.file("release").exists())) { await Bun.sleep(10); } await Bun.write("done", "released"); console.log(42);',
   );
 
   const completion = Effect.runPromise(
@@ -191,7 +192,6 @@ test("a live trusted child retains completion authority, a killed child becomes 
   );
 
   await waitForFile(join(f.workspace, "effect"));
-  const bundlePid = Number(await readFile(join(f.workspace, "pid"), "utf8"));
   const receipt = await Effect.runPromise(f.receipts.read(f.identity));
 
   if (receipt?.kind !== "started") {
@@ -228,7 +228,7 @@ test("a live trusted child retains completion authority, a killed child becomes 
       await Effect.runPromise(f.executor.execute(f.key, 1, f.spec, new AbortController().signal)),
     ).toEqual(terminal.result);
     await writeFile(join(f.workspace, "release"), "release");
-    await waitForExit(bundlePid);
+    await waitForFile(join(f.workspace, "done"));
     expect(await readFile(join(f.workspace, "effect"), "utf8")).toBe("once");
     expect(await Effect.runPromise(f.executor.lookup(f.key, 1))).toEqual(terminal);
   } finally {
