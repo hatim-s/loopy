@@ -177,3 +177,6 @@ export type AuthorityCommand<K extends OperationName = OperationName> = {
 }[K];
 
 export const authorityErrorSchema = struct({ error: authorityFailureSchema });
+
+/** The bridge status for an authority rejection, whose body is an authorityErrorSchema value. */
+export const AUTHORITY_REJECTED_STATUS = 409;

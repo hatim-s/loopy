@@ -1,5 +1,5 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
-import { CLOUD_MAX_REQUEST_BYTES, encodeBoundary } from "@loopy/contract";
+import { API_MOUNT, CLOUD_MAX_REQUEST_BYTES, encodeBoundary } from "@loopy/contract";
 import { cloudRoutes, cloudStatusSchema, WORKSPACE_HEADER } from "@loopy/contract/sandbox";
 import {
   apiRoutes,
@@ -21,10 +21,9 @@ import { DurableSqlDriver } from "./sql-driver";
 
 const WORKSPACE_KEY = "workspace";
 
-// Route paths sit under the `/api` mount that routeUrl adds.
-const STATUS_PATH = `/api${cloudRoutes.status.path}`;
+const STATUS_PATH = `${API_MOUNT}${cloudRoutes.status.path}`;
 
-const ARTIFACT_PATH = `/api${cloudRoutes.artifact.path}`;
+const ARTIFACT_PATH = `${API_MOUNT}${cloudRoutes.artifact.path}`;
 
 const SCHEDULER_ERROR_KEY = "cloud_scheduler_error";
 

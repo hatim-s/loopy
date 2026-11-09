@@ -2,7 +2,7 @@ import type { SqlDriver } from "../driver";
 import { StoreRejectedError } from "../operation";
 import { SCHEMA_15_TO_16 } from "./upgrade";
 
-const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 16;
 
 const FRESH_SCHEMA = `
   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);

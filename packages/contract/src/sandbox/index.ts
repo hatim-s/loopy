@@ -30,6 +30,7 @@ export {
 
 export {
   AUTHORITY_MAX_BODY_BYTES,
+  AUTHORITY_REJECTED_STATUS,
   type AuthorityCommand,
   type AuthorityInput,
   type AuthorityOutput,

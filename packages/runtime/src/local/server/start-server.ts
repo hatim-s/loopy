@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { LOCAL_MAX_REQUEST_BYTES } from "@loopy/contract";
+import { API_MOUNT, LOCAL_MAX_REQUEST_BYTES } from "@loopy/contract";
 import { bearerMatches } from "../../http";
 import { apiRoutes, dispatch, errorResponse, type RouteDependencies } from "../../service";
 import { daemonUrl } from "../daemon/file";
@@ -84,7 +84,7 @@ async function respond(request: Request, options: RequestOptions): Promise<Respo
 
     const path = decodeURIComponent(url.pathname);
 
-    if (path !== "/api" && !path.startsWith("/api/")) {
+    if (path !== API_MOUNT && !path.startsWith(`${API_MOUNT}/`)) {
       return serveAsset(options.assets, request, path);
     }
 

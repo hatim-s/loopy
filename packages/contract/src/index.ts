@@ -72,6 +72,7 @@ export {
 } from "./api";
 
 export {
+  API_MOUNT,
   decodeRouteResponse,
   type RouteInput,
   type RouteName,

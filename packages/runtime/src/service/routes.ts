@@ -1,4 +1,5 @@
 import {
+  API_MOUNT,
   boundaryOptions,
   type DaemonView,
   type DashboardReader,
@@ -243,7 +244,7 @@ export function apiRoutes({
 
 function match(pattern: string, path: string): Record<string, string> | undefined {
   const expected = pattern.split("/");
-  const actual = path.slice("/api".length).split("/");
+  const actual = path.slice(API_MOUNT.length).split("/");
 
   if (expected.length !== actual.length) {
     return undefined;
