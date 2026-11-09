@@ -21,8 +21,6 @@ export {
 
 export { DriverCleanupFailed } from "./heartbeat";
 
-export { LeaseReleaseFailed, LeaseReleaseUnknown } from "./lease";
-
 export {
   fireDueSchedules,
   SCHEDULE_POLICY,

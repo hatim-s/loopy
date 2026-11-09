@@ -1,11 +1,12 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
 import { decodeBoundary, putLoopyBodySchema } from "@loopy/contract";
-import { canonicalJson, errorMessage } from "@loopy/core";
+import { errorMessage } from "@loopy/core";
 import { makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect, Schema } from "effect";
 import { R2ArtifactRegistry } from "../../src/artifacts";
 import { DurableSqlDriver } from "../../src/sql-driver";
+import { seedLegacyPointer } from "./legacy-pointer";
 
 const requestSchema = Schema.Struct({
   operation: Schema.Literals([
@@ -88,25 +89,10 @@ export class SummaryProbe {
       });
 
       if (input.operation === "legacy") {
-        storage.sql.exec(`CREATE TABLE artifact_definitions (
-          workspace TEXT NOT NULL, slug TEXT NOT NULL, revision TEXT NOT NULL,
-          source TEXT NOT NULL, saved_at TEXT NOT NULL, generation TEXT NOT NULL,
-          PRIMARY KEY (workspace, slug)
-        )`);
-        const saved = body();
-        await this.env.BUCKET.put(
-          `workspaces/${workspace}/graphs/${saved.revision}.json`,
-          canonicalJson(saved.graph),
-        );
-        storage.sql.exec(
-          "INSERT INTO artifact_definitions VALUES (?, ?, ?, ?, ?, ?)",
-          workspace,
-          saved.graph.name,
-          saved.revision,
-          saved.source.path,
-          "legacy-saved-at",
-          "legacy-generation",
-        );
+        await seedLegacyPointer({ sql: storage.sql, bucket: this.env.BUCKET, workspace }, body(), {
+          savedAt: "legacy-saved-at",
+          generation: "legacy-generation",
+        });
       }
 
       const registry = new R2ArtifactRegistry(storage, bucket, workspace);
@@ -204,7 +190,6 @@ export class SummaryProbe {
           const service = makeService({
             store,
             registry: () => Effect.succeed(registry),
-            clock: { now: Date.now },
             canonicalWorkspace: () => Effect.succeed(workspace),
             secrets: {
               list: () => Effect.succeed([]),

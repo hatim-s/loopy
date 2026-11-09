@@ -1,12 +1,12 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { compile } from "@loopy/compiler";
-import { requireRecord } from "@loopy/core";
+import { isRecord } from "@loopy/core";
 import { Effect } from "effect";
 import { LocalExecutor } from "../../src/executor";
 import { activate } from "../../src/host";
 import { makeLocalService, Registry } from "../../src/local";
 import { openRunStore } from "../../src/store";
+import { compileOrThrow } from "./compile";
 import { qualityTestRoot } from "./quality-test-root";
 
 /** A project directory holding one author definition and its Loopy home. */
@@ -24,15 +24,17 @@ export default loopy(${JSON.stringify(name)}, { input: {}, ${definition} });`,
 }
 
 export function object(text: string) {
-  return requireRecord(JSON.parse(text), "CLI output");
+  const value: unknown = JSON.parse(text);
+
+  if (!isRecord(value)) {
+    throw new Error(`CLI output must be an object: ${text}`);
+  }
+
+  return value;
 }
 
 export async function save(f: ReturnType<typeof fixture>) {
-  const result = await Effect.runPromise(compile(f.file));
-
-  if (!result.ok) {
-    throw new Error(JSON.stringify(result.diagnostics));
-  }
+  const result = await compileOrThrow(f.file);
 
   return Effect.runPromise(
     Effect.scoped(
@@ -42,7 +44,6 @@ export async function save(f: ReturnType<typeof fixture>) {
         const service = makeLocalService({
           store,
           home: f.home,
-          clock: { now: Date.now },
         });
 
         yield* service.putLoopy(result.graph.name, {
@@ -59,6 +60,7 @@ export async function save(f: ReturnType<typeof fixture>) {
   );
 }
 
+/** Starts the saved fixture loopy, activates it to completion and returns its record. */
 export async function runFixture(f: ReturnType<typeof fixture>) {
   return Effect.runPromise(
     Effect.scoped(
@@ -75,7 +77,6 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
         const service = makeLocalService({
           store,
           home: f.home,
-          clock: { now: Date.now },
         });
 
         const run = yield* service.startRun(saved.slug, {}, f.cwd);
@@ -92,7 +93,13 @@ export async function runFixture(f: ReturnType<typeof fixture>) {
           }),
         });
 
-        return { stdout: JSON.stringify(yield* store.getRun(run.id)), stderr: "", code: 0 };
+        const finished = yield* store.getRun(run.id);
+
+        if (!finished) {
+          throw new Error(`Run '${run.id}' disappeared after activation.`);
+        }
+
+        return finished;
       }),
     ),
   );

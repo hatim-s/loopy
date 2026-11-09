@@ -7,6 +7,7 @@ import {
   receiptSchema,
   runReceiptDirectory,
 } from "../../../../packages/runtime/src/executor/receipts";
+import { lstatOrAbsent } from "../shared/fs";
 import { sha256Hex } from "../shared/hash";
 import { home, state } from "./config";
 import type { OwnedDaemon } from "./daemon";
@@ -24,7 +25,7 @@ const decodeArtifactIdentity = Schema.decodeUnknownSync(artifactIdentitySchema);
 async function artifactIdentity(snapshot: RunSnapshotView, workspace: string) {
   const file = join(workspace, "loopies-playground/results/result.json");
 
-  if (!(await lstat(file).catch(() => null))) {
+  if (!(await lstatOrAbsent(file))) {
     if (snapshot.run.status === "succeeded") {
       throw new Error(`Successful run ${snapshot.run.id} did not write its catalog artifact.`);
     }
@@ -87,7 +88,7 @@ export async function capture(daemon: OwnedDaemon, snapshot: RunSnapshotView, wo
   await mkdir(destination, { recursive: true });
   const outputs = [];
 
-  if (await lstat(directory).catch(() => null)) {
+  if (await lstatOrAbsent(directory)) {
     await cp(directory, join(destination, "loopies-playground"), { recursive: true });
 
     for (const file of await sortedFiles(directory)) {
@@ -115,7 +116,6 @@ export async function capture(daemon: OwnedDaemon, snapshot: RunSnapshotView, wo
     run: snapshot.run,
     nodeRuns: snapshot.nodeRuns,
     retried,
-    logs: snapshot.logs,
     hooks: snapshot.hooks.map((hook) => ({
       runId: hook.runId,
       seq: hook.seq,

@@ -25,10 +25,6 @@ export function runInput(ordinal: number) {
   };
 }
 
-export function failsByInput(ordinal: number) {
-  return ordinal === FAIL_ORDINAL;
-}
-
 export function approves(ordinal: number) {
   return ordinal !== DENY_ORDINAL;
 }

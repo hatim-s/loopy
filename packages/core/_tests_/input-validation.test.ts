@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary, graphSchema } from "@loopy/contract";
 import { loopy } from "@loopy/sdk/graph";
-import { validateGraph, validateGraphInput } from "../src";
+import { graphSchema, validateGraph, validateGraphInput } from "../src";
+import { decode } from "./fixtures/decode";
 
 function graph() {
   return loopy("import-files", {
@@ -12,7 +12,7 @@ function graph() {
 }
 
 test("nonempty array input rejects empty and malformed values before execution", () => {
-  const definition = decodeBoundary(graphSchema)(graph());
+  const definition = decode(graphSchema)(graph());
 
   expect(validateGraphInput(definition, { paths: [] }).ok).toBe(false);
   expect(validateGraphInput(definition, { paths: [12] }).ok).toBe(false);

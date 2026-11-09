@@ -1,5 +1,5 @@
 import { Effect, Schema, SchemaGetter } from "effect";
-import { PAGE_LIMIT } from "./dashboard-reader";
+import { PAGE_LIMIT } from "./limits";
 
 export const boundaryOptions = { onExcessProperty: "error" } as const;
 
@@ -24,10 +24,10 @@ export const queryCounter = queryNumber
   .check(Schema.isInt())
   .check(Schema.isGreaterThanOrEqualTo(0));
 
+export const queryPositiveInt = queryNumber.check(Schema.isInt()).check(Schema.isGreaterThan(0));
+
 export const pageLimit = (fallback: number) =>
-  queryNumber
-    .check(Schema.isInt())
-    .check(Schema.isGreaterThan(0))
+  queryPositiveInt
     .check(Schema.isLessThanOrEqualTo(PAGE_LIMIT))
     .pipe(Schema.withDecodingDefault(Effect.succeed(fallback)));
 
@@ -54,9 +54,15 @@ export const base64Text = Schema.String.check(
   Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
 );
 
+/** The longest base64 text whose decoded bytes can fit within maxBytes. */
+export const base64Length = (maxBytes: number) => Math.ceil(maxBytes / 3) * 4;
+
+export const base64Decode = (text: string) =>
+  Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
+
 /** Base64 text whose decoded size stays within maxBytes. */
 export const boundedBase64 = (maxBytes: number) =>
-  base64Text.check(Schema.isMaxLength(Math.ceil(maxBytes / 3) * 4));
+  base64Text.check(Schema.isMaxLength(base64Length(maxBytes)));
 
 // Web Crypto digests need bytes backed by a plain ArrayBuffer.
 const bufferBytes = Schema.declare(
@@ -67,9 +73,7 @@ const bufferBytes = Schema.declare(
 /** Bytes on the wire as canonical base64, so callers pass the compiler's Uint8Array directly. */
 export const base64Bytes = base64Text.pipe(
   Schema.decodeTo(bufferBytes, {
-    decode: SchemaGetter.transform((text) =>
-      Uint8Array.from(atob(text), (char) => char.charCodeAt(0)),
-    ),
+    decode: SchemaGetter.transform(base64Decode),
     encode: SchemaGetter.transform((bytes) =>
       btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join("")),
     ),

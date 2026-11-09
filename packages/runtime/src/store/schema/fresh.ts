@@ -90,7 +90,7 @@ function markSchemaVersion(db: SqlDriver): void {
   db.query("INSERT OR REPLACE INTO meta VALUES ('schema_version',?)").run(String(SCHEMA_VERSION));
 }
 
-function runScript(db: SqlDriver, script: string): void {
+export function runScript(db: SqlDriver, script: string): void {
   for (const statement of script.split(";")) {
     if (statement.trim().length > 0) {
       db.exec(statement);
@@ -102,7 +102,7 @@ function createSchema(db: SqlDriver): void {
   runScript(db, FRESH_SCHEMA);
 
   db.query("INSERT INTO meta VALUES ('epoch',?)").run(crypto.randomUUID());
-  db.query("INSERT INTO meta VALUES ('schema_version',?)").run(String(SCHEMA_VERSION));
+  markSchemaVersion(db);
 }
 
 export function initializeSchema(db: SqlDriver): void {

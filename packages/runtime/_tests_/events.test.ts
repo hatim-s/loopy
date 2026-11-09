@@ -46,7 +46,6 @@ test("stored run and node events parse over SSE", async () => {
       runView({
         run,
         hook: undefined,
-        loopy: { slug: run.slug, description: null },
         now: run.updatedAt,
         leaseMs: store.leaseMs,
       }),

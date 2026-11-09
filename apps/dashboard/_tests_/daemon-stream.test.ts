@@ -4,12 +4,7 @@ import { decodeBoundary, nodeIdSchema, routes } from "@loopy/contract";
 import { localDaemon, makeLocalService } from "@loopy/runtime/local";
 import { Effect, Scope } from "effect";
 import { newRun } from "../../../packages/core/_tests_/fixtures/run";
-import {
-  fixture,
-  object,
-  runFixture,
-  save,
-} from "../../../packages/runtime/_tests_/fixtures/project";
+import { fixture, runFixture, save } from "../../../packages/runtime/_tests_/fixtures/project";
 import { fixtureStore } from "../../../packages/runtime/_tests_/fixtures/service-runtime";
 import { fixtureScope } from "../../../packages/runtime/_tests_/fixtures/test-scope";
 import { applyToSnapshot } from "../src/lib/stream/snapshot";
@@ -20,7 +15,6 @@ test("the cache retains the server's streamed output preview size", async () => 
 
   const service = makeLocalService({
     store,
-    clock: { now: Date.now },
     home: f.home,
   });
 
@@ -88,7 +82,7 @@ test("HTTP dashboard reads pin source and page diagnostic payloads outside the s
   );
 
   await save(f);
-  const run = object((await runFixture(f)).stdout);
+  const run = await runFixture(f);
   const store = await fixtureStore(f.home);
 
   const daemon = await Effect.runPromise(
@@ -117,7 +111,6 @@ test("HTTP dashboard reads pin source and page diagnostic payloads outside the s
 
   try {
     const snapshot = decodeBoundary(routes.run.response)(await get(`/runs/${run.id}`));
-    expect(snapshot.logs).toEqual([]);
 
     const firstLogs = decodeBoundary(routes.logs.response)(
       await get(`/runs/${run.id}/logs?limit=1`),
@@ -161,7 +154,7 @@ test("HTTP dashboard reads pin source and page diagnostic payloads outside the s
       await get(`/event-history/${events.items[0]?.sequence}`),
     );
 
-    expect(run.id).toBe(event.runId);
+    expect(event.runId).toBe(run.id);
 
     const nodes = decodeBoundary(routes.executions.response)(
       await get(`/runs/${run.id}/executions?limit=1`),

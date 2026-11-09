@@ -5,7 +5,8 @@ export type Evidence = Record<string, Json>;
 
 export class JourneyFailure extends Error {
   constructor(readonly evidence: Evidence) {
-    super("Journey assertion failed. See safe evidence.");
+    // Evidence holds no secrets, so the message carries it for callers that record only text.
+    super(`Journey assertion failed: ${JSON.stringify(evidence)}`);
   }
 }
 

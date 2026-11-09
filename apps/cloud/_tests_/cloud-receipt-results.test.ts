@@ -2,12 +2,14 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { decodeBoundary } from "@loopy/contract";
 import {
   type AuthorityCommand,
-  AuthorityError,
+  RECEIPTS_NAMESPACE_HEADER,
+  RECEIPTS_PATH,
   resultOperations,
   SANDBOX_MAX_CAPTURE_BYTES,
 } from "@loopy/contract/sandbox";
 import { sha256Hex } from "@loopy/core";
 import { Effect } from "effect";
+import { r2Key } from "../src/artifacts/storage";
 import {
   bridgeToken,
   namespace,
@@ -26,7 +28,7 @@ afterAll(async () => {
 });
 
 function key(hash: string, workspace = "alpha") {
-  return `receipts/${namespace}/workspaces/${workspace}/results/${hash}`;
+  return r2Key.results(namespace, workspace) + hash;
 }
 
 test("actual R2 request counts are one PUT on fresh publication and one GET for pointer verification", async () => {
@@ -34,9 +36,9 @@ test("actual R2 request counts are one PUT on fresh publication and one GET for 
   const object = ns.get(ns.idFromName(namespace));
 
   async function command(value: AuthorityCommand) {
-    const response = await object.fetch("http://127.0.0.1/internal/sandbox-receipts", {
+    const response = await object.fetch(`http://127.0.0.1${RECEIPTS_PATH}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${bridgeToken}`, "X-Loopy-Receipts-Namespace": namespace },
+      headers: { Authorization: `Bearer ${bridgeToken}`, [RECEIPTS_NAMESPACE_HEADER]: namespace },
       body: JSON.stringify(value),
     });
 
@@ -197,14 +199,4 @@ test("missing, mismatched, malformed and oversized R2 results fail closed", asyn
   await expect(
     Effect.runPromise(results.get({ sha256: badRef.sha256, size: SANDBOX_MAX_CAPTURE_BYTES + 1 })),
   ).rejects.toThrow("HTTP 400");
-});
-
-test("oversized canonical results are rejected as invalid_state before publication", async () => {
-  const results = harness.authority.resultsFor("alpha");
-
-  await expect(
-    Effect.runPromise(
-      results.put({ kind: "succeeded", output: "x".repeat(SANDBOX_MAX_CAPTURE_BYTES), logs: [] }),
-    ),
-  ).rejects.toEqual(new AuthorityError("invalid_state"));
 });

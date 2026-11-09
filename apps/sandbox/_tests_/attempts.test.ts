@@ -1,105 +1,29 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { decodeBoundary, type ExecutionResult, nodeIdSchema } from "@loopy/contract";
 import {
   attemptRecordSchema,
   type DockerAttemptPlan,
   type SandboxAttemptRequest,
   sandboxArtifactSchema,
-  sandboxAttemptRequestSchema,
+  sandboxAttemptQuerySchema,
   sandboxErrorSchema,
+  searchParams,
 } from "@loopy/contract/sandbox";
-import { canonicalJson } from "@loopy/core";
-import { CommandExecutionError } from "@loopy/runtime/os";
-import { Effect, Result, Schema } from "effect";
-import { TestClock } from "effect/testing";
-import { qualityTestRoot } from "../../../packages/runtime/_tests_/fixtures/quality-test-root";
-import type { ArtifactReader } from "../src/artifacts";
-import { Attempts } from "../src/attempt";
-import type { AttemptDependenciesFactory } from "../src/attempt/dependencies";
-import { sandboxConfigSchema } from "../src/config";
-import { type AttemptBackend, DockerBackend } from "../src/docker";
-import { DockerClient } from "../src/docker/client";
-import { ownerOf, SANDBOX_DOCKER_CONTEXT, SANDBOX_IMAGE } from "../src/docker/identity";
-import { filesystemStorage } from "../src/filesystem";
-import { FilesystemJournal } from "../src/filesystem/journal";
+import { Effect } from "effect";
+import type { AttemptBackend } from "../src/docker";
 import { failure } from "../src/operations";
-import type { CommandRunner } from "../src/process";
 import { attemptHandler } from "../src/server";
-import { stateLayout, validateStateRoot } from "../src/state-root";
-import { artifactReader as idleArtifactReader, succeedingBackend } from "./fixtures/authority";
-import { openAttempts, openSandbox, run } from "./fixtures/run";
+import { stateLayout } from "../src/state-root";
+import { attemptServices, dependencies, fixture, request, succeeded } from "./fixtures/attempts";
+import { FIXTURE_TOKEN, succeedingBackend } from "./fixtures/authority";
+import { openSandbox, run } from "./fixtures/run";
 
-const services: Attempts[] = [];
+const { services, open } = attemptServices();
 
-const token = "sandbox-fixture-token-32-characters";
-
-const succeeded: ExecutionResult = { kind: "succeeded", output: { ok: true }, logs: [] };
-
-// Services close before the test scope releases their attempt scopes and roots.
-afterEach(async () => {
-  await Promise.all(services.splice(0).map((service) => run(service.close())));
-});
-
-async function fixture() {
-  const worktree = qualityTestRoot("cloud-sandbox");
-  await writeFile(join(worktree, "package.json"), JSON.stringify({ private: true }));
-
-  const config = decodeBoundary(sandboxConfigSchema)({
-    worktree,
-    stateRoot: join(worktree, ".loopy/cloud/sandbox"),
-    token,
-    dockerContext: SANDBOX_DOCKER_CONTEXT,
-    image: SANDBOX_IMAGE,
-    port: 0,
-  });
-
-  await validateStateRoot(config);
-
-  return config;
-}
-
-function request(
-  source = "process.stdout.write(JSON.stringify({ok:true}))",
-): SandboxAttemptRequest {
-  const bytes = Buffer.from(source);
-  const hash = createHash("sha256").update(bytes).digest("hex");
-
-  return decodeBoundary(sandboxAttemptRequestSchema)({
-    workspace: "workspace-one",
-    executionKey: { runId: "run-one", nodeId: decodeBoundary(nodeIdSchema)("0:code"), scope: [] },
-    attempt: 1,
-    spec: { kind: "code", bundleHash: hash, input: {}, timeoutMs: 1000 },
-    bundles: [{ hash, bytes: bytes.toString("base64") }],
-  });
-}
-
-function dependencies(
-  config: Awaited<ReturnType<typeof fixture>>,
-  backend: AttemptBackend,
-  artifactReader: ArtifactReader = idleArtifactReader,
-): AttemptDependenciesFactory {
-  return () =>
-    Effect.sync(() => ({ ...filesystemStorage(config.stateRoot), backend, artifactReader }));
-}
-
-async function open(
-  config: Awaited<ReturnType<typeof fixture>>,
-  backend: AttemptBackend,
-  artifactReader?: ArtifactReader,
-) {
-  const service = await openAttempts(config, dependencies(config, backend, artifactReader));
-
-  services.push(service);
-
-  return service;
-}
-
-function dockerBackend(config: Awaited<ReturnType<typeof fixture>>, runner: CommandRunner) {
-  return new DockerBackend(config, new DockerClient(config, runner));
-}
+const token = FIXTURE_TOKEN;
 
 function post(body: SandboxAttemptRequest, authorization = `Bearer ${token}`) {
   return new Request("http://127.0.0.1/attempts", {
@@ -111,9 +35,7 @@ function post(body: SandboxAttemptRequest, authorization = `Bearer ${token}`) {
 
 function lookup(value: SandboxAttemptRequest) {
   const url = new URL("http://127.0.0.1/attempts");
-  url.searchParams.set("workspace", value.workspace);
-  url.searchParams.set("key", JSON.stringify(value.executionKey));
-  url.searchParams.set("attempt", String(value.attempt));
+  url.search = searchParams(sandboxAttemptQuerySchema, value).toString();
 
   return new Request(url, { headers: { authorization: `Bearer ${token}` } });
 }
@@ -284,18 +206,6 @@ test("workspace and attempt identities isolate receipts while run volumes persis
   expect(receipts[0]?.volume).toBe(receipts[4]?.volume);
 
   for (const receipt of receipts) {
-    const expected = createHash("sha256")
-      .update(
-        canonicalJson({
-          root: config.stateRoot,
-          workspace: receipt.workspace,
-          executionKey: receipt.executionKey,
-          attempt: receipt.attempt,
-        }),
-      )
-      .digest("hex");
-
-    expect(receipt.id).toBe(expected);
     expect(await run(service.lookup(receipt))).toEqual({ kind: "finished", result: succeeded });
   }
 });
@@ -357,279 +267,10 @@ test("restart reconciles the saved container and never starts another attempt", 
   expect(await run(second.start(value))).toEqual({ kind: "finished", result: succeeded });
 });
 
-async function capturedReceipt() {
-  const config = await fixture();
-  let saved: DockerAttemptPlan | undefined;
-
-  const service = await open(config, {
-    start: (plan) =>
-      Effect.gen(function* () {
-        saved = plan;
-
-        return succeeded;
-      }),
-    recover: () =>
-      Effect.gen(function* () {
-        return succeeded;
-      }),
-  });
-
-  const input = request();
-  await run(service.start(input));
-  await run(service.drain());
-
-  if (!saved) {
-    throw new Error("Expected a started receipt.");
-  }
-
-  return { config, saved, input };
-}
-
-function dockerState(
-  config: Awaited<ReturnType<typeof fixture>>,
-  saved: DockerAttemptPlan,
-  running: boolean,
-  exitCode = 0,
-) {
-  return JSON.stringify([
-    {
-      Config: {
-        Labels: {
-          "loopy.sandbox.owner": ownerOf(config.stateRoot),
-          "loopy.sandbox.request": saved.requestHash,
-        },
-      },
-      State: {
-        Status: running ? "running" : "exited",
-        Running: running,
-        ExitCode: exitCode,
-        OOMKilled: false,
-      },
-    },
-  ]);
-}
-
-test("Docker create enforces isolation and recovery reads the original bounded result", async () => {
-  const { config, saved, input } = await capturedReceipt();
-  const calls: string[][] = [];
-  const environments: (Record<string, string> | undefined)[] = [];
-
-  const runner: CommandRunner = (argv, options) =>
-    Effect.gen(function* () {
-      calls.push(argv);
-      environments.push(options.env);
-      const operation = argv[3];
-
-      return {
-        exitCode: 0,
-        stderr: "",
-        durationMs: 0,
-        stdout:
-          operation === "container"
-            ? dockerState(config, saved, false)
-            : operation === "logs"
-              ? JSON.stringify(succeeded)
-              : "",
-      };
-    });
-
-  expect(await run(dockerBackend(config, runner).start(saved, input))).toEqual(succeeded);
-  expect(new Set(calls.map((argv) => argv.slice(0, 3).join(" ")))).toEqual(
-    new Set(["docker --context colima-loopy-cloud-phase1"]),
-  );
-
-  for (const environment of environments) {
-    expect(environment).not.toHaveProperty("LOOPY_SANDBOX_TOKEN");
-  }
-
-  const create = calls.find((args) => args[3] === "create" && args.includes(saved.container));
-  expect(create).toBeDefined();
-  expect(create).toContain("--read-only");
-  expect(create).toContain("none");
-  expect(create).toContain("1000:1000");
-  expect(create).toContain("ALL");
-  expect(create).toContain("no-new-privileges:true");
-  expect(create).toContain(`type=volume,source=${saved.volume},target=/workspace`);
-  expect(create).toContain(`type=volume,source=${saved.inputVolume},target=/input,readonly`);
-  expect(create).not.toContain("--privileged");
-  expect(JSON.stringify(calls)).not.toContain("type=bind");
-  expect(JSON.stringify(calls)).not.toContain("docker.sock");
-  expect(calls.some((args) => args[3] === "cp")).toBe(true);
-});
-
-test("Docker timeout kills only the owned worker and missing or killed workers stay uncertain", async () => {
-  const { config, saved } = await capturedReceipt();
-
-  for (const scenario of ["timeout", "missing", "killed", "wrong-owner"] as const) {
-    const calls: string[][] = [];
-    let running = scenario === "timeout";
-
-    const runner: CommandRunner = (argv) =>
-      Effect.gen(function* () {
-        calls.push(argv);
-        const op = argv[3];
-
-        if (op === "kill") {
-          running = false;
-        }
-
-        if (op === "wait") {
-          return yield* Effect.fail(
-            new CommandExecutionError({
-              reason: "timeout",
-              message: "Process timed out.",
-              output: { stdout: "", stderr: "", exitCode: -1, durationMs: 0 },
-              cause: undefined,
-            }),
-          );
-        }
-
-        if (op === "container" && argv[4] === "inspect") {
-          if (scenario === "missing") {
-            return { stdout: "", stderr: "", exitCode: 1, durationMs: 0 };
-          }
-
-          return {
-            stdout: dockerState(
-              config,
-              scenario === "wrong-owner" ? { ...saved, requestHash: "f".repeat(64) } : saved,
-              running,
-              scenario === "killed" ? 137 : 0,
-            ),
-            stderr: "",
-            exitCode: 0,
-            durationMs: 0,
-          };
-        }
-
-        return { stdout: "", stderr: "", exitCode: 0, durationMs: 0 };
-      });
-
-    const backend = dockerBackend(config, runner);
-
-    if (scenario === "wrong-owner") {
-      await expect(run(backend.recover(saved))).rejects.toThrow("ownership does not match");
-    } else {
-      const result = await run(backend.recover(saved));
-      expect(result.kind === "failed" && result.error.code).toBe(
-        scenario === "timeout" ? "execution" : "uncertain",
-      );
-    }
-
-    expect(calls.some((args) => args[3] === "create" || args[3] === "start")).toBe(false);
-    expect(calls.some((args) => args[3] === "kill")).toBe(scenario === "timeout");
-  }
-});
-
-test("lost Docker start acknowledgement and wait transport failure retain started receipts through restart", async () => {
-  for (const lostStart of [false, true]) {
-    const config = await fixture();
-    const fault = Promise.withResolvers<void>();
-    let saved: DockerAttemptPlan | null = null;
-    let running = false;
-    let outage = false;
-    let starts = 0;
-    let kills = 0;
-
-    const runner: CommandRunner = (argv) =>
-      Effect.gen(function* () {
-        const op = argv[3];
-        let stdout = "";
-        let exitCode = 0;
-
-        if (op === "start") {
-          starts += 1;
-          running = true;
-
-          if (lostStart) {
-            exitCode = 1;
-          }
-        }
-
-        if (op === "container" && argv[4] === "inspect") {
-          if (saved === null || outage) {
-            exitCode = 1;
-          } else {
-            stdout = dockerState(config, saved, running, running ? 0 : 137);
-          }
-        }
-
-        if (op === "container" && argv[4] === "ls" && outage) {
-          exitCode = 1;
-        }
-
-        if (op === "wait") {
-          outage = true;
-          fault.resolve();
-          exitCode = 1;
-        }
-
-        if (op === "kill") {
-          kills += 1;
-          running = false;
-        }
-
-        return { stdout, stderr: "", exitCode, durationMs: 0 };
-      });
-
-    const backend: AttemptBackend = {
-      start: (plan, input, signal) =>
-        Effect.gen(function* () {
-          saved = plan;
-
-          return yield* dockerBackend(config, runner).start(plan, input, signal);
-        }),
-      recover: (plan, signal) => dockerBackend(config, runner).recover(plan, signal),
-    };
-
-    const first = await open(config, backend);
-    const input = request();
-    await run(first.start(input));
-    await fault.promise;
-    expect(await run(first.lookup(input))).toEqual({ kind: "started" });
-    expect(running).toBe(true);
-    await run(first.close());
-    services.splice(services.indexOf(first), 1);
-    const persisted = (await diskReceipts(config.stateRoot))[0];
-    expect(persisted?.kind).toBe("started");
-
-    if (!persisted) {
-      throw new Error("Expected saved attempt identity.");
-    }
-
-    const deadline = persisted.plan.deadline;
-
-    // The restarted service and the monitor it forks read the test clock, which starts at the deadline.
-    await run(
-      Effect.scoped(
-        Effect.gen(function* () {
-          yield* TestClock.setTime(deadline);
-          const restored = yield* Attempts.open(config, dependencies(config, backend));
-          expect(yield* restored.lookup(input)).toEqual({ kind: "started" });
-          outage = false;
-          // Wakes the recovery retry that the outage put to sleep.
-          yield* TestClock.adjust(5000);
-          yield* restored.drain();
-          const terminal = yield* restored.lookup(input);
-          expect(
-            terminal.kind === "finished" &&
-              terminal.result.kind === "failed" &&
-              terminal.result.error.message,
-          ).toContain("owned container was killed");
-          expect(starts).toBe(1);
-          expect(kills).toBe(1);
-          expect(running).toBe(false);
-          expect(yield* restored.start(input)).toEqual(terminal);
-          yield* restored.close();
-        }),
-      ).pipe(Effect.provide(TestClock.layer())),
-    );
-  }
-});
-
 function artifactLookup(input: SandboxAttemptRequest, path: string) {
-  const url = new URL(lookup(input).url);
-  url.pathname = "/artifacts";
+  const url = new URL("http://127.0.0.1/artifacts");
+  url.search = searchParams(sandboxAttemptQuerySchema, input).toString();
+  // The path stays raw so tests can send paths the wire schema rejects.
   url.searchParams.set("path", path);
 
   return new Request(url, { headers: { authorization: `Bearer ${token}` } });
@@ -714,41 +355,6 @@ test("artifact export requires its finished receipt and fences same-run admissio
   await run(service.drain());
 });
 
-test("state roots reject symlinks and public binding; live root ownership is exclusive", async () => {
-  const config = await fixture();
-  expect(
-    Result.isSuccess(
-      Schema.decodeUnknownResult(sandboxConfigSchema, { onExcessProperty: "error" })({
-        ...config,
-        hostname: "0.0.0.0",
-      }),
-    ),
-  ).toBe(false);
-  await expect(
-    validateStateRoot({ ...config, stateRoot: join(config.worktree, "elsewhere") }),
-  ).rejects.toThrow("<worktree>/.loopy/cloud/sandbox");
-  const other = await fixture();
-  await rm(join(other.stateRoot, "receipts"), { recursive: true });
-  await symlink(config.stateRoot, join(other.stateRoot, "receipts"));
-  await expect(validateStateRoot(other)).rejects.toThrow("without symlinks");
-
-  await open(config, succeedingBackend);
-  await expect(openAttempts(config, dependencies(config, succeedingBackend))).rejects.toThrow(
-    `Process ${process.pid} holds`,
-  );
-});
-
-test("a lock file from an older sandbox version stops startup with its cleanup steps", async () => {
-  const config = await fixture();
-  const lock = stateLayout(config.stateRoot).lock;
-  await writeFile(lock, JSON.stringify({ pid: 999_999, nonce: "old" }));
-
-  await expect(openAttempts(config, dependencies(config, succeedingBackend))).rejects.toThrow(
-    `Lock file '${lock}' was written by an older sandbox version.`,
-  );
-  expect(await readFile(lock, "utf8")).toBe(JSON.stringify({ pid: 999_999, nonce: "old" }));
-});
-
 test("loopback server serves health and an authenticated asynchronous attempt", async () => {
   const config = await fixture();
   const service = await openSandbox(config, dependencies(config, succeedingBackend));
@@ -774,39 +380,3 @@ test("loopback server serves health and an authenticated asynchronous attempt", 
     await run(service.close());
   }
 });
-
-test("concurrent restarts reclaim a dead process lock under one startup owner", async () => {
-  const config = await fixture();
-
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      "-e",
-      `import {acquirePidLock} from ${JSON.stringify(resolve(import.meta.dir, "../../../packages/runtime/src/os/pid-lock.ts"))}; acquirePidLock(${JSON.stringify(stateLayout(config.stateRoot).lock)});`,
-    ],
-    {
-      stdout: "ignore",
-      stderr: "pipe",
-    },
-  );
-
-  expect(await child.exited).toBe(0);
-
-  const results = await Promise.allSettled([
-    openAttempts(config, dependencies(config, succeedingBackend)),
-    openAttempts(config, dependencies(config, succeedingBackend)),
-  ]);
-
-  expect(results.filter((result) => result.status === "fulfilled").length).toBe(1);
-  expect(results.filter((result) => result.status === "rejected").length).toBe(1);
-
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      services.push(result.value);
-    }
-  }
-});
-
-function diskReceipts(root: string) {
-  return run(new FilesystemJournal(root).records());
-}

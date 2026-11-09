@@ -32,6 +32,7 @@ export {
   MAX_SECRET_VALUE_BYTES,
   type Node,
   type NodeRun,
+  nodeIdParts,
   nodeIdSchema,
   nodeRunSchema,
   nodeSchema,
@@ -133,8 +134,6 @@ export {
 export * from "./graph";
 
 export * from "./limits";
-
-export { parseModuleOutput } from "./module-output";
 
 export { canCancelRun, cancelRefusal, canResumeRun, runMatchesQuery } from "./run-rules";
 

@@ -1,5 +1,5 @@
 import { durationMs } from "../duration";
-import { DEFAULT_TIMEOUT_MS, type ExecutionSpec } from "../executor";
+import { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS, type ExecutionSpec } from "../executor";
 import type { Node } from "../graph/nodes";
 import { bundleHash, carriesBundle } from "../revision";
 import { isStringArray } from "../validation";
@@ -51,8 +51,8 @@ export function executionSpec(
     key: node.key,
     argv: commandArgv(node, state, context),
     flags: resolveValues(node.flags, state, context),
-    flagSpec: node.flagSpec ?? null,
-    variants: node.variants ?? {},
+    flagSpec: node.flagSpec,
+    variants: node.variants,
     cwd: options.cwd === null ? null : String(resolve(options.cwd, state, context)),
     env: Object.fromEntries(
       Object.entries(resolveValues(options.env, state, context)).map(([key, value]) => [
@@ -61,8 +61,8 @@ export function executionSpec(
       ]),
     ),
     stdin: options.stdin === null ? null : String(resolve(options.stdin, state, context)),
-    timeoutMs: options.timeout === undefined ? DEFAULT_TIMEOUT_MS : durationMs(options.timeout),
-    maxOutputBytes: options.maxOutputBytes ?? null,
+    timeoutMs: options.timeout === null ? DEFAULT_TIMEOUT_MS : durationMs(options.timeout),
+    maxOutputBytes: options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
     okExitCodes: [...node.okExitCodes],
     parse: carriesBundle(node)
       ? { bundleHash: bundleHash(node), timeoutMs: DEFAULT_TIMEOUT_MS }

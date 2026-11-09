@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { compile } from "@loopy/compiler";
 import { Effect } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { LocalExecutor } from "../src/executor";
 import { activate } from "../src/host";
 import { makeSqliteRunStore } from "../src/store";
+import { compileOrThrow } from "./fixtures/compile";
 import { fixture } from "./fixtures/executor";
 import { onCleanup, runScoped } from "./fixtures/test-scope";
 
@@ -48,11 +48,7 @@ export default loopy("parsed", {input: {}, mode: "full", run: () => {
   return {repository, path, counts, response};
 }});`,
   );
-  const compiled = await Effect.runPromise(compile(source));
-
-  if (!compiled.ok) {
-    throw new Error(JSON.stringify(compiled.diagnostics));
-  }
+  const compiled = await compileOrThrow(source);
 
   for (const bundle of compiled.bundles) {
     await Bun.write(join(f.home, "bundles", `${bundle.bundleHash}.js`), bundle.bytes);

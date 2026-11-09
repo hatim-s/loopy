@@ -3,6 +3,7 @@ import { decodeBoundary, graphViewSchema, nodeRunSchema } from "@loopy/contract"
 import { focusNodes, graphModel } from "../src/lib/graph";
 import { graphGroups, layoutGraph } from "../src/lib/graph-layout";
 import { predicateText } from "../src/lib/graph-text";
+import { nodeTally, runMarks } from "../src/lib/run-marks";
 import { RELEASE, REVIEW, TRIAGE_V1, TRIAGE_V2 } from "./graph-fixtures";
 
 const AT = "2026-10-19T10:00:00.000Z";
@@ -142,6 +143,33 @@ test("scoped executions roll up to the most urgent status with counts", () => {
     status: "failed",
     counts: { succeeded: 1, failed: 1, running: 1 },
   });
+});
+
+test("the graph and the code view print one tally for a node, in flight or settled", () => {
+  const classify = (nodeRuns: ReturnType<typeof record>[]) => {
+    const model = graphModel(TRIAGE_V2, {
+      status: "running",
+      coverage: [{ scope: [], complete: true }],
+      nodeRuns,
+    });
+
+    const node = model.nodes.find((entry) => entry.id === "1:classify");
+    const marks = runMarks({ model, itemOpen: true, scopes: [], now: Date.parse(AT) });
+
+    return node && { tally: nodeTally(node), note: marks.get(node.id)?.note };
+  };
+
+  const items = [
+    record("1:classify", "succeeded", 0),
+    record("1:classify", "skipped", 1),
+    record("1:classify", "running", 2),
+  ];
+
+  expect(classify(items)).toEqual({ tally: "1/2", note: "1/2" });
+
+  const retried = decodeBoundary(nodeRunSchema)({ ...record("1:classify", "running"), attempt: 2 });
+  expect(classify([retried])).toEqual({ tally: "try 2 of 3", note: "try 2 of 3" });
+  expect(classify([record("1:classify", "running")])?.tally).toBeNull();
 });
 
 test("records from another revision surface as orphans instead of attaching to nodes", () => {

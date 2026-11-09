@@ -1,5 +1,5 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
-import { decodeBoundary, nodeIdSchema } from "@loopy/contract";
+import { CLOUD_MAX_REQUEST_BYTES, decodeBoundary, nodeIdSchema } from "@loopy/contract";
 import { apiRoutes, dispatch, makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect } from "effect";
@@ -9,7 +9,8 @@ import { DurableSqlDriver } from "../../src/sql-driver";
 
 const at = "2026-10-22T00:00:00.000Z";
 
-const later = "2026-10-22T01:00:00.000Z";
+// The service reads the wall clock, so a pending deadline lies far ahead of it.
+const later = "2126-10-22T01:00:00.000Z";
 
 async function seed(store: SqlRunStore) {
   const hooks = [];
@@ -104,7 +105,6 @@ export async function paginationResponse(
 
   const service = makeService({
     store,
-    clock: { now: () => Date.parse(at) },
     registry: () => Effect.succeed(registry),
     canonicalWorkspace: () => Effect.succeed("pagination"),
     secrets: { list: unsupported, set: unsupported, remove: unsupported },
@@ -116,6 +116,7 @@ export async function paginationResponse(
     store,
     cwd: "pagination",
     daemon: { pid: null, startedAt: at, concurrency: 1 },
+    maxBodyBytes: CLOUD_MAX_REQUEST_BYTES,
   });
 
   url.pathname = "/api/runs";

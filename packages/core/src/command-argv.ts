@@ -1,5 +1,5 @@
 import type { CommandSpec } from "./executor";
-import type { CommandFlag, CommandFlagSpec } from "./graph";
+import { COMMAND_PLATFORMS, type CommandFlag, type CommandFlagSpec } from "./graph";
 import type { Json } from "./json";
 
 /** Graph construction defers checks of reference values until execution resolves them. */
@@ -191,8 +191,8 @@ function renderCommandArgv(
 export function renderCommand(spec: CommandSpec, platform: string): [string, ...string[]] {
   const [program, ...operands] = spec.argv;
 
-  const variant =
-    platform === "darwin" || platform === "linux" ? spec.variants[platform] : undefined;
+  const host = COMMAND_PLATFORMS.find((candidate) => candidate === platform);
+  const variant = host === undefined ? undefined : spec.variants[host];
 
   if (variant === undefined) {
     return [program, ...renderCommandArgv(spec.flagSpec, operands, spec.flags)];

@@ -1,17 +1,13 @@
 import { resolve } from "node:path";
 import { LOCAL_MAX_REQUEST_BYTES } from "@loopy/contract";
-import {
-  apiRoutes,
-  bearerMatches,
-  dispatch,
-  errorResponse,
-  type RouteDependencies,
-} from "../../service";
+import { bearerMatches } from "../../http";
+import { apiRoutes, dispatch, errorResponse, type RouteDependencies } from "../../service";
 import { daemonUrl } from "../daemon/file";
 import { serveAsset, snapshotAssets } from "./assets";
 import { type OriginPolicy, originSecurity } from "./security";
 
-export type ServerOptions = RouteDependencies & {
+// The local listener caps bodies itself, so callers never choose the route limit.
+export type ServerOptions = Omit<RouteDependencies, "maxBodyBytes"> & {
   token: string;
   port: number;
   /** The built dashboard directory, which the CLI resolves from its own install layout. */
@@ -71,7 +67,13 @@ export function createRequestHandler(options: ServerOptions & OriginPolicy) {
   }
 
   const assets = snapshotAssets(resolve(options.assets));
-  const table = apiRoutes({ ...options, cwd: resolve(options.cwd) });
+
+  const table = apiRoutes({
+    ...options,
+    cwd: resolve(options.cwd),
+    maxBodyBytes: LOCAL_MAX_REQUEST_BYTES,
+  });
+
   const security = originSecurity(options);
 
   return (request: Request) => respond(request, { assets, table, token: options.token, security });

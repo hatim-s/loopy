@@ -8,6 +8,10 @@ import type { SandboxConfig } from "./config";
 // Journal records stay small; legacy receipts that embed a captured result fit as well.
 export const STATE_FILE_BYTES = 2 * 1024 * 1024;
 
+export function sandboxStateRoot(worktree: string) {
+  return join(resolve(worktree), ".loopy", "cloud", "sandbox");
+}
+
 export function stateLayout(root: string) {
   return {
     receipts: join(root, "receipts"),
@@ -28,7 +32,7 @@ function rejectPreviousLock(path: string) {
   }
 }
 
-export async function validateStateRoot(config: Pick<SandboxConfig, "worktree" | "stateRoot">) {
+export async function validateStateRoot(config: Pick<SandboxConfig, "worktree">) {
   const worktree = resolve(config.worktree);
 
   if ((await realpath(worktree)) !== worktree) {
@@ -39,12 +43,7 @@ export async function validateStateRoot(config: Pick<SandboxConfig, "worktree" |
     throw new Error("Sandbox worktree cannot be the personal home directory.");
   }
 
-  const root = join(worktree, ".loopy", "cloud", "sandbox");
-
-  if (resolve(config.stateRoot) !== root) {
-    throw new Error("Sandbox state root must be <worktree>/.loopy/cloud/sandbox.");
-  }
-
+  const root = sandboxStateRoot(worktree);
   const layout = stateLayout(root);
 
   // Parents come first, so every component is checked before anything is created beneath it.

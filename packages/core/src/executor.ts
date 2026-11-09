@@ -6,10 +6,11 @@ import { jsonSchema } from "./json";
 
 const dictionary = Schema.Record(Schema.String, Schema.mutableKey(jsonSchema));
 
-const timeoutMs = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
-
 /** Commands without a declared timeout and every parser get this budget. */
 export const DEFAULT_TIMEOUT_MS = 300_000;
+
+/** Commands without a declared output cap and every code bundle may capture this much. */
+export const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
 // Covers worker startup, bundle staging and receipt publication around the attempt's own budget.
 const ATTEMPT_GRACE_MS = 30_000;
@@ -20,7 +21,7 @@ export const executionSpecSchema = Schema.Union([
     kind: Schema.Literal("code"),
     bundleHash: hashSchema,
     input: dictionary,
-    timeoutMs,
+    timeoutMs: positiveInt,
   }),
   struct({
     kind: Schema.Literal("command"),
@@ -32,10 +33,10 @@ export const executionSpecSchema = Schema.Union([
     cwd: Schema.NullOr(Schema.String),
     env: Schema.Record(Schema.String, Schema.mutableKey(Schema.String)),
     stdin: Schema.NullOr(Schema.String),
-    timeoutMs,
-    maxOutputBytes: Schema.NullOr(positiveInt),
+    timeoutMs: positiveInt,
+    maxOutputBytes: positiveInt,
     okExitCodes: Schema.Array(Schema.Int).pipe(Schema.mutable),
-    parse: Schema.NullOr(struct({ bundleHash: hashSchema, timeoutMs })),
+    parse: Schema.NullOr(struct({ bundleHash: hashSchema, timeoutMs: positiveInt })),
   }),
 ]);
 

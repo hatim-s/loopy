@@ -8,11 +8,11 @@ export const localState = resolve(root, ".loopy/cloud");
 
 const credentialsPath = resolve(localState, "local.json");
 
-const token = Schema.String.check(Schema.isMinLength(32));
+export const tokenSchema = Schema.String.check(Schema.isMinLength(32));
 
 const localCredentialsSchema = Schema.Struct({
-  principals: Schema.Array(Schema.Struct({ workspace: Schema.String, token })),
-  sandboxToken: token,
+  principals: Schema.Array(Schema.Struct({ workspace: Schema.String, token: tokenSchema })),
+  sandboxToken: tokenSchema,
 });
 
 export type LocalCredentials = typeof localCredentialsSchema.Type;

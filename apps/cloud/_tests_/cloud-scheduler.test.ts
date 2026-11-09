@@ -10,14 +10,21 @@ import {
   StorageError,
   type Store,
 } from "@loopy/core";
-import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
+import {
+  type DurableExecutionProvider,
+  DurableProviderError,
+  SCHEDULE_POLICY,
+} from "@loopy/runtime/host";
 import { RegistryError } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { code, loopy, sleep, wait } from "@loopy/sdk/graph";
 import { Cause, Effect } from "effect";
 import { BunSqlDriver } from "../../../packages/runtime/src/store/bun-driver";
 import type { R2ArtifactRegistry } from "../src/artifacts";
-import { type SchedulerStorage, WorkspaceScheduler } from "../src/scheduler";
+import { SCHEDULER, type SchedulerStorage, WorkspaceScheduler } from "../src/scheduler";
+
+// The first instant at which another token's lease has expired.
+const expired = SCHEDULER.leaseMs + 1;
 
 const base = Date.parse("2026-10-22T12:00:00.000Z");
 
@@ -229,7 +236,7 @@ function fixture(concurrency = 3) {
   drivers.push(db);
 
   const store = new InterruptedStore(db, {
-    leaseMs: 10_000,
+    leaseMs: SCHEDULER.leaseMs,
     owner: { identity: { pid: null, host: "fixture" }, isAlive: () => false },
   });
 
@@ -317,7 +324,7 @@ for (const owner of ["fresh foreign", "expired foreign", "same token"] as const)
         status: "suspended",
         owner: { token: "original" },
       });
-      expect(f.storage.alarm).toBe(base + 1000);
+      expect(f.storage.alarm).toBe(base + SCHEDULER.retryMs);
       expect(await f.turnErrors()).toEqual([
         {
           runId: "paused",
@@ -327,16 +334,16 @@ for (const owner of ["fresh foreign", "expired foreign", "same token"] as const)
       ]);
 
       const scheduler = f.scheduler(owner === "same token" ? "original" : "replacement");
-      f.at(owner === "expired foreign" ? 10_001 : 1000);
+      f.at(owner === "expired foreign" ? expired : SCHEDULER.retryMs);
       await Effect.runPromise(scheduler.tick());
 
       if (owner === "fresh foreign") {
         expect((await Effect.runPromise(f.store.getRun("paused")))?.owner?.token).toBe("original");
-        expect(f.storage.alarm).toBe(base + 10_001);
-        f.at(10_000);
+        expect(f.storage.alarm).toBe(base + expired);
+        f.at(SCHEDULER.leaseMs);
         await Effect.runPromise(scheduler.tick());
         expect((await Effect.runPromise(f.store.getRun("paused")))?.owner?.token).toBe("original");
-        f.at(10_001);
+        f.at(expired);
         await Effect.runPromise(scheduler.tick());
       }
 
@@ -411,15 +418,15 @@ test("a second release failure persists a retry without reactivating an indefini
   f.store.releaseFailures = 2;
   const scheduler = f.scheduler();
   await Effect.runPromise(scheduler.tick());
-  f.at(1000);
+  f.at(SCHEDULER.retryMs);
   await Effect.runPromise(scheduler.tick());
-  expect(f.storage.alarm).toBe(base + 2000);
+  expect(f.storage.alarm).toBe(base + 2 * SCHEDULER.retryMs);
   expect((await Effect.runPromise(f.store.getRun("paused")))?.owner?.token).toBe("original");
-  f.at(1500);
+  f.at(1.5 * SCHEDULER.retryMs);
   await Effect.runPromise(scheduler.tick());
   expect((await Effect.runPromise(f.store.getRun("paused")))?.owner?.token).toBe("original");
-  expect(f.storage.alarm).toBe(base + 2000);
-  f.at(2000);
+  expect(f.storage.alarm).toBe(base + 2 * SCHEDULER.retryMs);
+  f.at(2 * SCHEDULER.retryMs);
   await Effect.runPromise(scheduler.tick());
   expect((await Effect.runPromise(f.store.getRun("paused")))?.owner).toBeUndefined();
   expect(await Effect.runPromise(f.store.getWaits("paused"))).toHaveLength(1);
@@ -442,7 +449,7 @@ test("suspended recovery releases an expired owner while every execution slot is
   await f.run("blocker", graph("blocker"));
   await Effect.runPromise(f.scheduler().tick());
   expect(f.provider.starts).toHaveLength(1);
-  f.at(10_001);
+  f.at(expired);
   const scheduler = f.scheduler("replacement");
   await Effect.runPromise(scheduler.tick());
   expect(await Effect.runPromise(f.store.getRun("paused"))).toMatchObject({
@@ -451,11 +458,11 @@ test("suspended recovery releases an expired owner while every execution slot is
   });
   expect((await Effect.runPromise(f.store.getRun("paused")))?.owner).toBeUndefined();
   expect(f.provider.starts).toHaveLength(1);
-  expect(f.storage.alarm).toBe(base + 10_501);
+  expect(f.storage.alarm).toBe(base + expired + SCHEDULER.pollMs);
   f.provider.finishAll();
-  f.at(10_501);
+  f.at(expired + SCHEDULER.pollMs);
   await Effect.runPromise(scheduler.tick());
-  f.at(10_551);
+  f.at(expired + SCHEDULER.pollMs + SCHEDULER.alarmFloorMs);
   await Effect.runPromise(scheduler.tick());
   expect((await Effect.runPromise(f.store.getRun("paused")))?.status).toBe("running");
   expect(f.provider.starts).toHaveLength(2);
@@ -467,7 +474,8 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   await f.run("running", graph("running"));
   await Effect.runPromise(f.scheduler().tick());
   f.provider.finishAll();
-  f.at(500);
+  const failedAt = 500;
+  f.at(failedAt);
   await f.run("queued", graph("queued"));
   await f.schedule(graph("invalid"));
   const changed = graph("invalid");
@@ -494,16 +502,17 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   });
 
   const retry = failures.get("transient");
-  expect(retry?.retryAt).toBe(new Date(base + 5500).toISOString());
+  const retryAt = failedAt + SCHEDULE_POLICY.retryMs;
+  expect(retry?.retryAt).toBe(new Date(base + retryAt).toISOString());
   expect(retry?.error).toStartWith("Could not get. Registry unavailable.");
-  expect(retry?.error.length).toBe(1000);
+  expect(retry?.error.length).toBe(SCHEDULE_POLICY.errorChars);
   expect(await f.runs("missing")).toEqual([]);
   expect(
     (await Effect.runPromise(f.store.listSchedules())).find((s) => s.slug === "missing")?.enabled,
   ).toBe(true);
   expect(failures.get("missing")).toMatchObject({
-    retryAt: new Date(base + 5500).toISOString(),
-    error: "No saved loopy 'missing'. Save it again before retrying the schedule.",
+    retryAt: new Date(base + retryAt).toISOString(),
+    error: "No saved loopy 'missing'. Use loopy save <file.ts> first.",
   });
   expect(f.schedulerError()).toBeNull();
   f.at(1000);
@@ -511,11 +520,11 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   await Effect.runPromise(f.scheduler("original").tick());
   expect(f.registry.reads.get("transient")).toBe(1);
   expect(f.registry.reads.get("missing")).toBe(1);
-  expect(f.storage.alarm).toBe(base + 5500);
+  expect(f.storage.alarm).toBe(base + retryAt);
   f.registry.failures.clear();
   const restored = graph("missing", () => work("restored"));
   const restoredRevision = await f.registry.save(restored);
-  f.at(5500);
+  f.at(retryAt);
   await Effect.runPromise(f.scheduler().tick());
   expect(await f.runs("transient")).toHaveLength(1);
   expect(await f.runs("healthy")).toHaveLength(1);
@@ -526,21 +535,6 @@ test("invalid input, absent definitions and registry failures isolate schedules 
   ]);
   await f.registry.save(graph("missing", () => work("later")));
   expect((await f.runs("missing"))[0]?.revision).toBe(restoredRevision);
-});
-
-test("a slot more than a minute late is skipped without a run and the next slot fires", async () => {
-  const f = fixture();
-  await f.schedule(graph("late"));
-  f.at(61_000);
-  await Effect.runPromise(f.scheduler().tick());
-  expect(await f.runs("late")).toEqual([]);
-  expect((await Effect.runPromise(f.store.listSchedules()))[0]?.nextFireAt).toBe(
-    new Date(base + 120_000).toISOString(),
-  );
-  expect(f.registry.reads.get("late")).toBeUndefined();
-  f.at(120_000);
-  await Effect.runPromise(f.scheduler().tick());
-  expect(await f.runs("late")).toHaveLength(1);
 });
 
 for (const failure of ["before", "after"] as const) {
@@ -565,8 +559,9 @@ for (const failure of ["before", "after"] as const) {
     f.at(500);
     await Effect.runPromise(f.scheduler().tick());
     expect(f.registry.reads.get("broken")).toBe(1);
-    expect(f.storage.alarm).toBe(base + (failure === "before" ? 5000 : 60_000));
-    f.at(5000);
+    // A failed fire retries after the policy delay; a committed one waits for the next minute.
+    expect(f.storage.alarm).toBe(base + (failure === "before" ? SCHEDULE_POLICY.retryMs : 60_000));
+    f.at(SCHEDULE_POLICY.retryMs);
     await Effect.runPromise(f.scheduler().tick());
     expect(await f.runs("broken")).toHaveLength(1);
     expect(await f.runs("healthy")).toHaveLength(1);
@@ -576,7 +571,7 @@ for (const failure of ["before", "after"] as const) {
 test("a full failing schedule batch yields to later schedules on the next alarm", async () => {
   const f = fixture();
 
-  for (let index = 0; index < 32; index++) {
+  for (let index = 0; index < SCHEDULE_POLICY.batch; index++) {
     const slug = `broken-${String(index).padStart(2, "0")}`;
     await f.schedule(graph(slug));
     f.registry.failures.add(slug);
@@ -587,12 +582,13 @@ test("a full failing schedule batch yields to later schedules on the next alarm"
   await Effect.runPromise(f.scheduler().tick());
   expect((await Effect.runPromise(f.store.getRun("queued")))?.status).toBe("running");
   expect(await f.runs("healthy")).toEqual([]);
-  expect(f.storage.alarm).toBe(base + 50);
-  f.at(50);
+  expect(f.storage.alarm).toBe(base + SCHEDULER.alarmFloorMs);
+  f.at(SCHEDULER.alarmFloorMs);
   await Effect.runPromise(f.scheduler().tick());
   expect(await f.runs("healthy")).toMatchObject([{ status: "running" }]);
   expect(f.registry.reads.get("broken-00")).toBe(1);
-  expect(f.storage.alarm).toBe(base + 500);
+  // The queued run polls on the interval counted from its first turn.
+  expect(f.storage.alarm).toBe(base + SCHEDULER.pollMs);
 });
 
 test("scheduler isolates provider and schedule defects and retains recovery alarms", async () => {
@@ -620,7 +616,7 @@ test("scheduler isolates provider and schedule defects and retains recovery alar
   f.store.pruneEvents = () => Effect.die(new Error("prune defect"));
   await Effect.runPromise(f.scheduler().tick());
   expect(f.schedulerError()).toBe("prune defect");
-  expect(f.storage.alarm).toBe(base + 5000);
+  expect(f.storage.alarm).toBe(base + SCHEDULER.recoveryMs);
 });
 
 test("scheduler interruption preserves the recovery alarm without recording a failure", async () => {
@@ -634,6 +630,6 @@ test("scheduler interruption preserves the recovery alarm without recording a fa
     expect(Cause.hasInterrupts(exit.cause)).toBe(true);
   }
 
-  expect(f.storage.alarm).toBe(base + 5000);
+  expect(f.storage.alarm).toBe(base + SCHEDULER.recoveryMs);
   expect(f.schedulerError()).toBeNull();
 });

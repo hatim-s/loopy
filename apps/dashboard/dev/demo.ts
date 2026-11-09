@@ -3,7 +3,7 @@
  * dashboard's screens: a live run, a run pinned to an older revision, a run waiting on a hook,
  * a map in progress, a failed run and a schedule. Ctrl-C stops the daemon and deletes its state.
  *
- *   bun apps/dashboard/dev/demo.ts [--port 4310]
+ *   bun apps/dashboard/dev/demo.ts [--port <port>]  (default: a free port)
  */
 import { mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +12,8 @@ import { parseArgs } from "node:util";
 import { decodeBoundary, type Json, routes } from "@loopy/contract";
 import { Schema } from "effect";
 
-const cli = resolve(import.meta.dir, "../../../packages/loopy/src/cli.ts");
+// The same entry as the root `loopy` script.
+const cli = resolve(import.meta.dir, "../../../packages/cli/src/index.ts");
 
 const { values } = parseArgs({ options: { port: { type: "string", default: "0" } } });
 

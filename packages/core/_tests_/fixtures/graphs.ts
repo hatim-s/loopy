@@ -1,15 +1,14 @@
-import { graphSchema } from "@loopy/contract";
-import { Schema } from "effect";
+import { graphSchema } from "../../src";
+import { decode } from "./decode";
 
 // This boundary fixture fixes the builder's call-order ids and explicit scope joins for H2.
-export const approveDemoGraph = Schema.decodeUnknownSync(graphSchema)({
+export const approveDemoGraph = decode(graphSchema)({
   version: 1,
   meta: { description: null, schedule: null, secrets: [], mode: "sandbox", scope: "project" },
   name: "approve-demo",
   input: { "subject?": "string" },
   entry: "0:draft",
   outputs: { ref: "9:join", path: [] },
-  warnings: [],
   nodes: [
     {
       id: "0:draft",
@@ -57,7 +56,9 @@ export const approveDemoGraph = Schema.decodeUnknownSync(graphSchema)({
       out: { kind: "record", fields: { stdout: "string", stderr: "string", exitCode: "number" } },
       argv: ["bun", "apply.ts", { ref: "4:format", path: [] }],
       flags: {},
-      options: { cwd: null, env: {}, stdin: null },
+      flagSpec: null,
+      variants: {},
+      options: { cwd: null, env: {}, stdin: null, timeout: null, maxOutputBytes: null },
       rateLimit: null,
       retry: { attempts: 3, retryOnExit: false },
       okExitCodes: [0],

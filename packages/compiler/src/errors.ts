@@ -20,18 +20,12 @@ export function authorFailure(code: CompilerDiagnosticCode, file: string, messag
   return new AuthorDiagnostics({ diagnostics: [{ code, message, file, line: 1, column: 1 }] });
 }
 
-/** Graph diagnostics without a source position point at the entry module. */
+/** Graph diagnostics carry no source position, so they point at the entry module. */
 export function graphDiagnostics(
   diagnostics: readonly Diagnostic[],
   file: string,
 ): CompilerDiagnostic[] {
-  return diagnostics.map((value) => ({
-    code: value.code,
-    message: value.message,
-    file: value.source?.module ?? file,
-    line: value.source?.line ?? 1,
-    column: value.source?.column ?? 1,
-  }));
+  return diagnostics.map(({ code, message }) => ({ code, message, file, line: 1, column: 1 }));
 }
 
 export const compilerIO = <A>(operation: string, file: string, run: () => Promise<A>) =>

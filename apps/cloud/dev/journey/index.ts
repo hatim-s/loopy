@@ -2,6 +2,7 @@ import { type CursorView, type Json, routes } from "@loopy/contract";
 import { Effect } from "effect";
 import { assert, equal, failureEvidence } from "../shared/assert";
 import { compileFixture } from "../shared/fixture-client";
+import { LOCAL_STACK } from "../stack/ports";
 import { Journey } from "./client";
 import { docker } from "./docker";
 import { frame } from "./events";
@@ -26,7 +27,7 @@ async function main() {
       "unauthorized",
     );
     await journey.denied(
-      journey.send(routes.runs, {}, { headers: { Origin: "http://127.0.0.1:14872" } }),
+      journey.send(routes.runs, {}, { headers: { Origin: LOCAL_STACK.origin("dashboard") } }),
       403,
       "forbidden",
     );

@@ -1,6 +1,7 @@
 import {
   type AttemptLog,
   type CommandSpec,
+  DEFAULT_MAX_OUTPUT_BYTES,
   type ExecutionKey,
   type ExecutionResult,
   type ExecutionSpec,
@@ -150,7 +151,7 @@ export class ExecutionWorker {
             },
             stdin: JSON.stringify(input),
           },
-          { timeoutMs, maxOutputBytes: 2 * 1024 * 1024, signal },
+          { timeoutMs, maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES, signal },
         ),
     ).pipe(
       Effect.catchTag("ScratchCleanupError", (error) => keepOutcome(error, redact, cleanupLogs)),

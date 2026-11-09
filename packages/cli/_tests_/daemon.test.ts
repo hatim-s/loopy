@@ -7,7 +7,6 @@ import { Effect, Exit, Scope } from "effect";
 import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
 import { onCleanup, runScoped } from "../../runtime/_tests_/fixtures/test-scope";
 import { until } from "../../runtime/_tests_/fixtures/wait";
-import { writeDaemonFile } from "../../runtime/src/local/daemon/file";
 import { cli, spawnCli } from "./fixtures/cli";
 
 function place() {
@@ -87,15 +86,9 @@ test("second foreground daemon reports an actionable error", async () => {
 
 test("ui refuses an explicit port that differs from the running daemon", async () => {
   const at = place();
-  writeDaemonFile(at.home, {
-    pid: process.pid,
-    port: 4999,
-    token: "fixture-token",
-    startedAt: new Date().toISOString(),
-  });
-
-  const ui = await cli(at, "ui", "--port", "5000");
-  expect(ui.stderr).toContain("A daemon is already running on port 4999.");
+  const port = Number((await startInProcess(at)).port);
+  const ui = await cli(at, "ui", "--port", String(port + 1));
+  expect(ui.stderr).toContain(`A daemon is already running on port ${port}.`);
   expect(ui.code).toBe(1);
 });
 

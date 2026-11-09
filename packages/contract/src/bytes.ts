@@ -1,6 +1,6 @@
 import { sha256Hex } from "@loopy/core";
 import { Schema } from "effect";
-import { base64Text } from "./codec";
+import { base64Decode, base64Length, base64Text } from "./codec";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -21,11 +21,11 @@ function canonicalPadding(text: string) {
 
 /** Decodes canonical base64 and returns the bytes only when they fit and match the SHA-256. */
 export async function verifiedBase64(text: string, sha256: string, limit: number) {
-  if (text.length > Math.ceil(limit / 3) * 4 || !isBase64(text) || !canonicalPadding(text)) {
+  if (text.length > base64Length(limit) || !isBase64(text) || !canonicalPadding(text)) {
     return null;
   }
 
-  const bytes = Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
+  const bytes = base64Decode(text);
 
   return bytes.byteLength <= limit && (await sha256Hex(bytes)) === sha256 ? bytes : null;
 }

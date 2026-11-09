@@ -51,7 +51,7 @@ const result = await sampleApi({
   phase,
   seconds,
   requestsPerSecond,
-  request: (path, signal) => client.request(path, signal),
+  request: (path, signal) => client.request(path, { signal }),
   shouldStop: () => stopping,
   onProgress: (progress) =>
     process.stdout.write(`${JSON.stringify({ status: "progress", ...progress })}\n`),

@@ -9,7 +9,8 @@ import {
   NODE_PAGE_PROJECTION,
 } from "../../../../../packages/runtime/src/store/query/nodes";
 import {
-  PENDING_HOOK,
+  PENDING_HOOK_PROJECTION,
+  pendingHook,
   RUN_PREVIEW_COLUMNS,
 } from "../../../../../packages/runtime/src/store/query/runs";
 import { FEED_SCAN_LIMIT } from "../../../../../packages/runtime/src/store/query/scan";
@@ -63,7 +64,7 @@ export function sqlCases(db: Database) {
   add(
     "runs.waiting",
     runSource,
-    `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE EXISTS(${PENDING_HOOK}) ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
+    `SELECT ${RUN_PREVIEW_COLUMNS} FROM runs r WHERE EXISTS(${pendingHook("1")}) ORDER BY r.created_at DESC,r.id DESC LIMIT ?`,
     [now, 50],
   );
   add("counts.all", runSource, "SELECT status,count(*) AS count FROM runs r  GROUP BY status");
@@ -74,21 +75,11 @@ export function sqlCases(db: Database) {
     [run.slug, run.workspace],
   );
 
-  for (const count of [50, 99, 100, 200]) {
+  const projection = `${PENDING_HOOK_PROJECTION} WHERE r.id IN (SELECT value FROM json_each(?))`;
+
+  for (const count of [50, 100, 200]) {
     const ids = runs.slice(0, count).map((value) => value.id);
-    const projection = `SELECT r.id,(${PENDING_HOOK.replace("SELECT w.record", "SELECT json_set(w.record,'$.expiresAt',json_extract(n.record,'$.wakeAt'))")}) AS record FROM runs r WHERE r.id IN `;
-    add(
-      `pending-hooks.historical-in-${count}`,
-      `${runSource}:historical-pre-fix-exact-shape`,
-      `${projection}(${ids.map(() => "?").join(",")})`,
-      [now, ...ids],
-    );
-    add(
-      `pending-hooks.current-json-each-${count}`,
-      `${runSource}:current-post-fix-exact-shape`,
-      `${projection}(SELECT value FROM json_each(?))`,
-      [now, JSON.stringify(ids)],
-    );
+    add(`pending-hooks.json-each-${count}`, runSource, projection, [now, JSON.stringify(ids)]);
   }
 
   const feedSource = "packages/runtime/src/store/query/feeds.ts";

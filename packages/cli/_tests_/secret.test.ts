@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { join, resolve } from "node:path";
 import { localDaemon } from "@loopy/runtime/local";
+import { SecretStore } from "@loopy/runtime/os";
 import { openRunStore } from "@loopy/runtime/store";
 import { Effect } from "effect";
 import { qualityTestRoot } from "../../runtime/_tests_/fixtures/quality-test-root";
 import { onCleanup, runScoped } from "../../runtime/_tests_/fixtures/test-scope";
-import { SecretStore } from "../../runtime/src/os/secrets";
 import { cli, spawnCli } from "./fixtures/cli";
 
 const READER = resolve(import.meta.dir, "fixtures/secret-reader.ts");

@@ -10,18 +10,17 @@ bun run cloud:build-sandbox
 
 The image uses the official `oven/bun:1.4.0` image for its build and runtime stages. Its build stage installs from the repository `bun.lock` with `--frozen-lockfile`, and `Dockerfile.dockerignore` limits the context to package manifests, the lockfile and package sources. The runtime stage includes Bun, the base image's commands and the two bundled workers. In-container paths are defined in `src/container-layout.ts`. Build a derived image when a workflow needs other executables, then pass its tag through `--image`.
 
-Start the service with an existing private token of at least 32 characters in `LOOPY_SANDBOX_TOKEN`. From the real checkout directory, use its absolute path in both path flags:
+Start the service with an existing private token of at least 32 characters in `LOOPY_SANDBOX_TOKEN`. From the real checkout directory, pass its absolute path:
 
 ```sh
 bun apps/sandbox/src/index.ts \
   --worktree "$PWD" \
-  --state-root "$PWD/.loopy/cloud/sandbox" \
   --docker-context colima-loopy-cloud-phase1 \
   --image loopy-sandbox:bun-1.4.0 \
   --hostname 127.0.0.1 --port 4010
 ```
 
-`--worktree`, `--state-root`, `--docker-context` and the token are required. The state root must be exactly `<worktree>/.loopy/cloud/sandbox`. The service rejects symlinked state directories and worktree paths. It never uses `~/.loopy`. Binding is limited to `127.0.0.1` and `::1`. A process lock prevents two services from reconciling the same receipts. A dead service PID is reclaimed under an exclusive startup guard. A crash during startup can leave `service.lock.guard`. Verify that no startup process is running before removing that guard.
+`--worktree`, `--docker-context` and the token are required. The state root is always `<worktree>/.loopy/cloud/sandbox`; `sandboxStateRoot` in `src/state-root.ts` derives it, and tooling imports that function instead of rebuilding the path. The service rejects symlinked state directories and worktree paths. It never uses `~/.loopy`. Binding is limited to `127.0.0.1` and `::1`. A process lock prevents two services from reconciling the same receipts. A dead service PID is reclaimed under an exclusive startup guard. A crash during startup can leave `service.lock.guard`. Verify that no startup process is running before removing that guard.
 
 Execution flags are `--max-timeout-ms 600000`, `--memory 256m`, `--cpus 1` and `--pids 64`. The timeout flag caps the entire attempt, including staging. Requested code timeouts and command timeouts also apply inside the container. Commands default to 300 seconds, and parsers have a separate 300 second limit. The outer deadline allows 30 seconds for staging, up to the configured maximum.
 
@@ -33,7 +32,7 @@ The architecture playground injects `HttpSandboxAuthority` backed by the Worker'
 
 The dependency factory in `startSandbox(config, createDependencies)` is optional; omitting it selects filesystem authority. DO-backed callers pass a custom factory supplying authority, matching result storage, execution backend and artifact reader together. The coordinator validates the state root and acquires its process lock before invoking the selected factory, then opens a session and reconciles persisted work. A durable harness rejects populated filesystem receipts/exports when selecting DO authority; use a fresh root rather than switch an existing dataset in place.
 
-The local Worker bridge uses `POST /internal/sandbox-receipts`. DO composition requires `RECEIPTS_TOKEN`, `RECEIPTS_NAMESPACE` and `RECEIPTS_ROOT`, with matching client credentials and namespace. The namespace/root pair is fixed in receipt SQL. The bridge token must differ from user principal tokens. `SANDBOX_RECEIPTS`, `RECEIPT_RESULTS` and the `v2-receipts` migration are declared in the [cloud configuration](../cloud/README.md#receipt-authority-and-configuration). Keep generated private config and credentials out of output and commits.
+The local Worker bridge uses `POST /internal/sandbox-receipts` with the `X-Loopy-Receipts-Namespace` header; `RECEIPTS_PATH` and `RECEIPTS_NAMESPACE_HEADER` in `@loopy/contract/sandbox` name both for the client and the Worker. DO composition requires `RECEIPTS_TOKEN`, `RECEIPTS_NAMESPACE` and `RECEIPTS_ROOT`, with matching client credentials and namespace. The namespace/root pair is fixed in receipt SQL. The bridge token must differ from user principal tokens. `SANDBOX_RECEIPTS`, `RECEIPT_RESULTS` and the `v2-receipts` migration are declared in the [cloud configuration](../cloud/README.md#receipt-authority-and-configuration). Keep generated private config and credentials out of output and commits.
 
 ## HTTP contract
 
@@ -53,7 +52,7 @@ The local Worker bridge uses `POST /internal/sandbox-receipts`. DO composition r
 
 `workspace` is an opaque namespace, not a host filesystem path. `attempt` is a positive integer. Bundle bytes use canonical base64 and must match their SHA-256 hash. Supply exactly the bundle referenced by the code spec or command parser, or an empty array for a command without a parser. No host secrets are injected. Explicit `spec.env` values belong to the request, so callers must not send secrets to this phase-one service.
 
-`GET /attempts?workspace=...&key=...&attempt=1` looks up a receipt. Set `key` to `JSON.stringify(executionKey)` and encode query parameters using `URLSearchParams`.
+`GET /attempts?workspace=...&key=...&attempt=1` looks up a receipt. `key` is the JSON execution key. Build the query with `searchParams(sandboxAttemptQuerySchema, identity)` from `@loopy/contract/sandbox`, which the service decodes with the same schema.
 
 Both routes return the shared `Receipt` union:
 
@@ -63,9 +62,9 @@ Both routes return the shared `Receipt` union:
 { kind: "finished", result: ExecutionResult }
 ```
 
-`none` occurs only on lookup. Duplicate POSTs return the existing receipt. Changed content for the same workspace, execution key and attempt returns HTTP 409, including after completion. Other errors have `{error:{code,message}}`, with 400 for invalid requests, 401 for authentication, 404 for unknown routes, 413 for oversized requests and 500 for storage failures. `sandboxErrorStatus` fixes the status for each code, and the cloud provider rejects a response whose status disagrees.
+`none` occurs only on lookup. Duplicate POSTs return the existing receipt. Changed content for the same workspace, execution key and attempt returns HTTP 409, including after completion. Other errors have `{error:{code,message}}`, with `invalid_request` 400 for invalid requests, `unauthorized` 401, `not_found` 404 for unknown routes, `too_large` 413 for attempt requests over 16 MiB and `internal` 500 for storage failures. `sandboxErrorStatus` fixes the status for each code, and the cloud provider rejects a response whose status disagrees.
 
-The Effect schemas and inferred types are browser-safe. `@loopy/contract/sandbox` exports `sandboxAttemptRequestSchema`, `sandboxAttemptIdentitySchema`, `sandboxArtifactRequestSchema`, `sandboxArtifactSchema` and `sandboxErrorSchema`. `@loopy/contract` exports `executionSpecSchema`, `executionResultSchema` and `receiptSchema`. The main contract entry, which the dashboard imports, carries no sandbox protocol.
+The Effect schemas and inferred types are browser-safe. `@loopy/contract/sandbox` exports the request, query, artifact and error schemas, the receipt bridge names and the cloud-only `cloudRoutes`. `@loopy/contract` exports `executionSpecSchema`, `executionResultSchema` and `receiptSchema`. The main contract entry, which the dashboard imports, carries no sandbox protocol.
 
 ## Workspace artifact export
 
@@ -75,7 +74,7 @@ The Effect schemas and inferred types are browser-safe. `@loopy/contract/sandbox
 { path: string, bytes: string, sha256: string, size: number }
 ```
 
-`bytes` is canonical base64, `sha256` is the SHA-256 of the decoded bytes, and `size` is the decoded byte count. The maximum file size is 1 MiB. Empty regular files are supported. Missing receipts, volumes and files return 404. Invalid paths, symlinks and nonregular files return 400. Oversized files return 413 with code `output_limit`. Started attempts or an active worker sharing the volume return 409. The authority persists an export guard before helper work and blocks same-volume admission until cleanup is confirmed. Failed cleanup keeps the guard for reconciliation, including across restart; released-token records prevent a delayed duplicate from reopening an export.
+`bytes` is canonical base64, `sha256` is the SHA-256 of the decoded bytes, and `size` is the decoded byte count. The maximum file size is 1 MiB. Empty regular files are supported. Missing receipts, volumes and files return 404. Invalid paths, symlinks and nonregular files return 400. Oversized files return 413 with code `output_limit`. Started attempts or an active worker sharing the volume return 409. The authority persists an export guard before helper work and blocks same-volume admission until cleanup is confirmed. Failed cleanup keeps the guard for reconciliation, including across restart; released-token records prevent a delayed duplicate from reopening an export. Ending an unknown or already released token is a no-op, so a retried release succeeds.
 
 Paths must be relative, at most 1,024 characters and slash-separated. Absolute paths, empty components, `.` and `..`, backslashes, colons and control characters are rejected. A trusted helper opens every ancestor directory and the final file through held descriptors with `O_NOFOLLOW`, checks the final descriptor is a regular file, reads at most the limit plus one byte, and rejects files whose metadata changes during the read. The helper mounts the receipt's volume read-only and runs without network, capabilities, new privileges, host mounts or host credentials. It has a read-only root, a 128 MiB memory limit, 0.5 CPU, 32 PIDs and a 10 second read deadline. Its exact name is `loopy-artifact-<receipt.id>`. Ownership labels are checked before cleanup.
 

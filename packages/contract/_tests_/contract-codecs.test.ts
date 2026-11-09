@@ -19,7 +19,6 @@ const graph = {
   edges: [],
   entry: "entry",
   outputs: null,
-  warnings: [],
 };
 
 test("strict codecs reject nested private fields on decode and encode", () => {

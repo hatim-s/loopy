@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { graphSchema } from "@loopy/contract";
-import { isRecord } from "@loopy/core";
+import { DEFAULT_MAX_OUTPUT_BYTES, isRecord } from "@loopy/core";
 import { initialState, step } from "@loopy/core/engine";
 import { loopy, sh } from "@loopy/sdk/graph";
 import { Effect, Schema } from "effect";
@@ -26,7 +26,7 @@ test("full inherited environment stays out of sandbox launcher arguments", async
         env: { LOOPY_ENV_PROBE: "private-env-value" },
         stdin: null,
         timeoutMs: 1000,
-        maxOutputBytes: null,
+        maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
       },
       { workspace: f.workspace, mode: "full", protectedHome: f.home, sensitiveEnv: {} },
     ),

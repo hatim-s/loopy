@@ -51,29 +51,6 @@ export class ReadmodelProbe {
 
     const limit = Number(url.searchParams.get("limit"));
 
-    if (url.pathname === "/old") {
-      try {
-        const indices = Array.from(Array(limit).keys(), (index) => index * 2);
-        this.ctx.storage.sql
-          .exec(
-            `SELECT item_index,status,count(*) AS count FROM node_scopes WHERE run_id=? AND map_node=? AND parent_scope=? AND item_index IN (${indices.map(() => "?").join(",")}) GROUP BY item_index,status ORDER BY item_index`,
-            "scope-run",
-            "map",
-            "[]",
-            ...indices,
-          )
-          .toArray();
-
-        return Response.json({ error: null });
-      } catch (cause) {
-        if (!(cause instanceof Error)) {
-          throw new Error("Unexpected SQL binding failure.", { cause });
-        }
-
-        return Response.json({ error: cause.message });
-      }
-    }
-
     if (url.pathname === "/scope") {
       const status = url.searchParams.get("status");
       const after = url.searchParams.get("after");

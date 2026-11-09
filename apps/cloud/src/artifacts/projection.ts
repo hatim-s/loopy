@@ -39,10 +39,24 @@ export function checkProjectionRow(row: {
   }
 }
 
-export function checkDefinitionRows(body: PutLoopyBody): void {
+/** Bytes of one definition pointer row, including its generation UUID and timestamp. */
+export function definitionPointerBytes(pointer: {
+  workspace: string;
+  slug: string;
+  revision: string;
+  path: string;
+}): number {
   // UUIDs use 36 ASCII bytes; even an extended-year ISO timestamp uses at most 27.
-  const pointerBytes =
-    rowBytes([body.source.workspace, body.graph.name, body.revision, body.source.path]) + 36 + 27;
+  return rowBytes([pointer.workspace, pointer.slug, pointer.revision, pointer.path]) + 36 + 27;
+}
+
+export function checkDefinitionRows(body: PutLoopyBody): void {
+  const pointerBytes = definitionPointerBytes({
+    workspace: body.source.workspace,
+    slug: body.graph.name,
+    revision: body.revision,
+    path: body.source.path,
+  });
 
   if (pointerBytes > ARTIFACT_LIMITS.metadataRowBytes) {
     throw new Error(

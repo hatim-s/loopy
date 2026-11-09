@@ -70,8 +70,6 @@ export const makeArtifactRegistry = (registry: Registry): ArtifactRegistry => ({
   listSummaries: () =>
     registry.list().pipe(Effect.map((entries) => entries.map(definitionSummary))),
   get: (slug) => registry.get(slug),
-  summary: (slug) =>
-    registry.get(slug).pipe(Effect.map((entry) => entry && definitionSummary(entry))),
   revisionGraph: (revision) => registry.revisionGraph(revision),
   revisionSource: (slug, revision) => registry.revisionSource(slug, revision),
   save: (body) => saveCompiled(registry, body).pipe(Effect.asVoid),

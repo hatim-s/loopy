@@ -38,7 +38,6 @@ export class ArtifactValidationError extends Data.TaggedError("ArtifactValidatio
 export interface ArtifactRegistry {
   workspace(): Effect.Effect<string, RegistryError>;
   listSummaries(): Effect.Effect<DefinitionSummary[], RegistryError>;
-  summary(slug: string): Effect.Effect<DefinitionSummary | null, RegistryError>;
   get(slug: string): Effect.Effect<SavedLoopy | null, RegistryError>;
   revisionGraph(revision: string): Effect.Effect<Graph, RegistryError>;
   revisionSource(slug: string, revision: string): Effect.Effect<SourceArtifact, RegistryError>;
@@ -60,7 +59,6 @@ export interface SecretOperations {
 export interface ServiceOptions {
   store: Store & DashboardReader;
   registry: (workspace: string) => Effect.Effect<ArtifactRegistry, RegistryError | ServiceError>;
-  clock: { now(): number };
   canonicalWorkspace: (workspace: string) => Effect.Effect<string, WorkspaceError | ServiceError>;
   secrets: SecretOperations;
   generateTypes: (

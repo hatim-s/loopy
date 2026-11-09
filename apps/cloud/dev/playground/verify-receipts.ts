@@ -1,17 +1,21 @@
-import { resolve } from "node:path";
 import { executionKeyString } from "@loopy/core";
 import { Effect } from "effect";
 import { sha256Hex } from "../shared/hash";
 import { config, evidence, sandboxState, state } from "./config";
-import { atomic } from "./files";
 import { journalDirectory } from "./journal";
-import { postloadInventory, readArtifact } from "./metrics/artifacts";
+import {
+  artifactPath,
+  durableReceiptsReport,
+  postloadInventory,
+  readArtifact,
+  writeReport,
+} from "./metrics/artifacts";
 import { planTotals } from "./plan";
 import { receiptEvidence } from "./receipt/evidence";
 import { receiptInventory } from "./receipt/inventory";
 import { receiptAuthority, requireFreshDurableRoot } from "./receipt/selection";
 import { catalogs } from "./repository";
-import { decodeRuntimeQueue, runtimeQueuePath, unresolvedOutcomes } from "./runtime-queue";
+import { parseRuntimeQueue, runtimeQueuePath, unresolvedOutcomes } from "./runtime-queue";
 
 const QUEUE_LIMIT_BYTES = 16 * 1024 * 1024;
 
@@ -38,10 +42,7 @@ const queueBytes = await queueFile.text();
 
 const queueHash = sha256Hex(queueBytes);
 
-const entries = queueBytes
-  .trim()
-  .split("\n")
-  .map((line) => decodeRuntimeQueue(JSON.parse(line)));
+const entries = parseRuntimeQueue(queueBytes, "strict").values;
 
 const unresolved: readonly string[] = unresolvedOutcomes;
 
@@ -103,9 +104,7 @@ if (sha256Hex(await queueFile.text()) !== queueHash) {
   throw new Error("Runtime journal changed during terminal receipt verification.");
 }
 
-const output = resolve(evidence, "playground-durable-receipts.json");
-
-atomic(output, {
+writeReport(evidence, durableReceiptsReport, {
   status: "passed",
   batch: settings.batch,
   startedAt,
@@ -124,4 +123,9 @@ atomic(output, {
   ],
 });
 
-console.log(JSON.stringify({ output, verifiedReceipts: records.length }));
+console.log(
+  JSON.stringify({
+    output: artifactPath(evidence, durableReceiptsReport),
+    verifiedReceipts: records.length,
+  }),
+);

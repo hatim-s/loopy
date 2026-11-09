@@ -17,7 +17,7 @@ export class GraphBuildError extends Error {
 }
 
 export function refuse(code: DiagnosticCode, message: string, node: NodeId | null = null): never {
-  throw new GraphBuildError({ code, message, node, source: null });
+  throw new GraphBuildError({ code, message, node });
 }
 
 export function validatePredicate(
@@ -27,7 +27,7 @@ export function validatePredicate(
   const error = checkPredicate(predicate, graphTypeResolver(graph))[0];
 
   if (error) {
-    throw new GraphBuildError({ ...error, node: null, source: null });
+    throw new GraphBuildError({ ...error, node: null });
   }
 }
 

@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { CommandDescriptor } from "@loopy/sdk/host";
+import type { CommandDescriptor } from "@loopy/sdk";
 import { parseFlags } from "./help-flags";
 import {
   parsePositionals,

@@ -1,24 +1,32 @@
-// package.ts copies this file into the packed consumer and points the private
-// compiler specifier at the vendored dist module, which has no public entry.
+// package.ts copies this file into the packed consumer, which imports only public entries.
 import { join } from "node:path";
-import { compile } from "@loopy/compiler";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { localDaemon, makeLocalService, openRunStore, readDaemonFile } from "loopy/local";
 
-const [home, cwd] = process.argv.slice(2);
-
-if (!home || !cwd) {
-  throw new Error("Pass the Loopy home and consumer directory: bun execute.ts <home> <cwd>.");
-}
-
-const entry = join(cwd, "entry.ts");
+const [home, cwd] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String]))(
+  process.argv.slice(2),
+);
 
 const cliPath = join(cwd, "node_modules/loopy/dist/cli/src/index.js");
 
-const compiled = await Effect.runPromise(compile(entry));
+/** Runs the packed CLI against this home and returns its stdout, failing on a nonzero exit. */
+async function packedCli(args: string[]) {
+  const child = Bun.spawn(
+    [process.execPath, "--no-env-file", cliPath, "--home", home, "--cwd", cwd, ...args],
+    { stdout: "pipe", stderr: "pipe" },
+  );
 
-if (!compiled.ok) {
-  throw new Error(JSON.stringify(compiled.diagnostics));
+  const [stdout, stderr, exit] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+
+  if (exit !== 0) {
+    throw new Error(`Packed CLI ${args.join(" ")} exited ${exit}: ${stdout}${stderr}`);
+  }
+
+  return stdout;
 }
 
 const assertDashboardServed = async (url: string) => {
@@ -41,7 +49,7 @@ await Effect.runPromise(
   Effect.scoped(
     Effect.gen(function* () {
       const store = yield* openRunStore(home);
-      const service = makeLocalService({ home, store, clock: { now: Date.now } });
+      const service = makeLocalService({ home, store });
 
       const daemon = yield* localDaemon({
         home,
@@ -54,16 +62,15 @@ await Effect.runPromise(
 
       const url = yield* daemon.start;
       yield* Effect.promise(() => assertDashboardServed(url));
-      yield* service.putLoopy("packed", {
-        graph: compiled.graph,
-        revision: compiled.revision,
-        bundles: compiled.bundles,
-        replace: false,
-        source: { path: entry, workspace: cwd },
-      });
-      const run = yield* service.startRun("packed", {}, cwd);
+      // The packed CLI compiles and saves through this daemon, as an installed user would.
+      yield* Effect.promise(() => packedCli(["save", "entry.ts"]));
+
+      const { id } = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Struct({ id: Schema.String })),
+      )(yield* Effect.promise(() => packedCli(["run", "packed"])));
+
       yield* Effect.forkScoped(daemon.run);
-      let snapshot = yield* service.runSnapshot(run.id);
+      let snapshot = yield* service.runSnapshot(id);
 
       for (
         let attempt = 0;
@@ -71,7 +78,7 @@ await Effect.runPromise(
         attempt++
       ) {
         yield* Effect.sleep(50);
-        snapshot = yield* service.runSnapshot(run.id);
+        snapshot = yield* service.runSnapshot(id);
       }
 
       if (snapshot.run.status !== "succeeded" || snapshot.run.output !== 42) {
@@ -101,24 +108,15 @@ const stopAutostartedDaemon = async () => {
 };
 
 try {
-  const cli = Bun.spawn(
-    [process.execPath, "--no-env-file", cliPath, "--home", home, "--cwd", cwd, "list"],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  await packedCli(["list"]);
 
-  const [stdout, stderr, exit] = await Promise.all([
-    new Response(cli.stdout).text(),
-    new Response(cli.stderr).text(),
-    cli.exited,
-  ]);
-
-  if (exit !== 0 || !readDaemonFile(home)) {
-    throw new Error(`Packaged CLI daemon autostart failed: ${stdout}${stderr}`);
+  if (!readDaemonFile(home)) {
+    throw new Error("Packaged CLI daemon autostart left no discovery file.");
   }
 } finally {
   await stopAutostartedDaemon();
 }
 
 console.log(
-  "Packed SDK, strict declarations, compiler, builtin parser, worker, dashboard assets and CLI daemon autostart passed.",
+  "Packed SDK, strict declarations, CLI save and run, builtin parser, worker, dashboard assets and CLI daemon autostart passed.",
 );

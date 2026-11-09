@@ -88,3 +88,18 @@ export function loopyTable(loopies: LoopyView[], query: LoopyTableQuery) {
 
   return { rows, counts };
 }
+
+/**
+ * A project definition shadows a global one with its slug in that workspace. The global row
+ * may name another workspace, since the service lists it once under the first that sees it.
+ */
+export function loopyInWorkspace(
+  rows: readonly LoopyView[],
+  slug: string,
+  workspace: string | undefined,
+) {
+  return (
+    rows.find((row) => row.slug === slug && row.workspace === workspace) ??
+    rows.find((row) => row.slug === slug && row.scope === "global")
+  );
+}

@@ -9,6 +9,7 @@ import {
   type ModelAction,
   modelStep,
 } from "./authority-model";
+import { authorityRules, openCurrent } from "./authority-rules";
 
 const run = Effect.runPromise;
 
@@ -19,18 +20,6 @@ export interface AuthoritySubject {
   plan(runId: string, attempt?: number): Promise<DockerAttemptPlan>;
   /** Drops in-memory state as a process or isolate restart does and keeps durable state. */
   restart(): Promise<void>;
-  /**
-   * Ending an export token that never existed. The filesystem adapter treats it as already
-   * released and the DO rejects it as missing; both must leave other guards in place.
-   */
-  readonly unknownExportToken: "released" | "missing";
-}
-
-// The filesystem adapter keeps one in-memory epoch and the DO persists a counter, so callers ask.
-async function openCurrent(authority: SandboxAttemptAuthority, nonce: string) {
-  const { epoch } = await run(authority.status({}));
-
-  return run(authority.openSession({ expectedEpoch: epoch, nonce }));
 }
 
 const outcome = (reply: { kind: string; code?: string }) =>
@@ -90,14 +79,10 @@ export function authorityContract(name: string, open: () => Promise<AuthoritySub
     });
     const later = await subject.plan("export-guard-later");
     expect((await run(authority.admit({ session: successor, plan: later }))).kind).toBe("created");
-    const foreign = run(authority.endExport({ session: successor, token: "foreign-token" }));
-
-    if (subject.unknownExportToken === "missing") {
-      await expect(foreign).rejects.toEqual(new AuthorityError("missing"));
-    } else {
-      expect(await foreign).toBeNull();
-    }
-
+    // Ending an unknown token is a retried release, so it succeeds and leaves other guards alone.
+    expect(
+      await run(authority.endExport({ session: successor, token: "foreign-token" })),
+    ).toBeNull();
     expect(await guards()).toHaveLength(1);
 
     // No helper exists here, so the current session may confirm that absence and release.
@@ -125,6 +110,8 @@ export function authorityContract(name: string, open: () => Promise<AuthoritySub
       await replay(await open(), trace, `model-${index}`);
     }
   });
+
+  authorityRules(name, open);
 }
 
 async function replay(subject: AuthoritySubject, trace: ModelAction[], id: string) {

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary, nodeRunSchema } from "@loopy/contract";
 import { code, loopy, map, sh } from "@loopy/sdk/graph";
-import { type Graph, type Json, outputBytes } from "../src";
+import { type Graph, type Json, nodeRunSchema, outputBytes } from "../src";
 import { type EngineState, initialState, step } from "../src/engine";
+import { decode } from "./fixtures/decode";
 import { at, dispatches, failed, start } from "./fixtures/engine-control";
 import { approveDemoGraph } from "./fixtures/graphs";
 
@@ -51,7 +51,7 @@ test("code records resolved inputs before dispatch and keeps its own snapshot", 
 
   expect(dispatch?.spec).toMatchObject({ kind: "code", input: { subject: input.subject } });
   expect(recorded?.inputView).toEqual({ state: "available", value: { subject: input.subject } });
-  expect(decodeBoundary(nodeRunSchema)(recorded).inputView).toEqual(recorded?.inputView);
+  expect(decode(nodeRunSchema)(recorded).inputView).toEqual(recorded?.inputView);
   expect(result.effects[0]).toEqual({ kind: "write_node_run", nodeRun: recorded });
   expect(result.effects[1]).toBe(dispatch);
 

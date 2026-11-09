@@ -1,8 +1,9 @@
 import { appendFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { decodeBoundary, encodeBoundary, executionKeySchema } from "@loopy/contract";
+import { encodeBoundary, executionKeySchema } from "@loopy/contract";
 import { EXECUTION_ERROR_CODES } from "@loopy/core";
 import { Schema } from "effect";
+import { parseJsonLines, readJsonLines } from "../shared/jsonl";
 
 const nonNegative = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));
 
@@ -24,9 +25,15 @@ export const runtimeQueueSchema = Schema.Struct({
 
 export type RuntimeQueueEntry = typeof runtimeQueueSchema.Type;
 
-export const decodeRuntimeQueue = decodeBoundary(runtimeQueueSchema);
-
 export const runtimeQueuePath = (state: string) => resolve(state, "runtime-queue.jsonl");
+
+export function parseRuntimeQueue(text: string, mode: "strict" | "tolerant") {
+  return parseJsonLines(text, runtimeQueueSchema, mode);
+}
+
+export function readRuntimeQueue(state: string, mode: "strict" | "tolerant") {
+  return readJsonLines(runtimeQueuePath(state), runtimeQueueSchema, mode);
+}
 
 export async function appendRuntimeQueue(state: string, entry: RuntimeQueueEntry) {
   await appendFile(

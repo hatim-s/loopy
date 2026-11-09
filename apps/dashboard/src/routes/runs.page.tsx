@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE } from "@loopy/contract";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { LoopySelect } from "../components/loopy-select";
@@ -32,8 +33,6 @@ export const Route = createFileRoute("/runs/")({
   component: RunsPage,
 });
 
-const PAGE_SIZE = 50;
-
 const TAB_FILTER = {
   all: {},
   failed: { status: "failed" },
@@ -44,7 +43,7 @@ const TAB_FILTER = {
 } satisfies Record<StatusTab, RunListFilters>;
 
 function RunsTable({ filters }: { filters: RunListFilters }) {
-  const pager = useRunPages(filters, PAGE_SIZE);
+  const pager = useRunPages(filters, DEFAULT_PAGE_SIZE);
   const now = useClock();
 
   return (

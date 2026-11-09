@@ -49,7 +49,12 @@ export function itemsStarted(total: number, running: boolean): string {
   return running ? `${items} started so far` : `${items} started`;
 }
 
-function note(node: GraphNodeModel, now: number): string | null {
+/**
+ * The tally the graph and the code view both print for a node that ran: how many executions
+ * passed out of those that ran, with skipped arms left out, or the retry of a single execution.
+ * Null when neither applies, so each view prints its own fallback.
+ */
+export function nodeTally(node: GraphNodeModel): string | null {
   const { executions, state } = node;
 
   if (state.kind !== "ran") {
@@ -64,12 +69,17 @@ function note(node: GraphNodeModel, now: number): string | null {
 
   const [only] = executions;
 
-  if (!only) {
-    return null;
-  }
+  return executions.length === 1 && only !== undefined && only.attempt > 1
+    ? `try ${only.attempt} of ${only.maxAttempts}`
+    : null;
+}
 
-  if (only.attempt > 1) {
-    return `try ${only.attempt} of ${only.maxAttempts}`;
+function note(node: GraphNodeModel, now: number): string | null {
+  const tally = nodeTally(node);
+  const [only] = node.executions;
+
+  if (tally !== null || node.state.kind !== "ran" || node.executions.length !== 1 || !only) {
+    return tally;
   }
 
   return "endedAt" in only

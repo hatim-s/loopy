@@ -24,8 +24,7 @@ test("dashboard queries bound payloads independently across 10k map rows and 10k
 
   const snapshot = decodeBoundary(routes.run.response)((await reads.mapSnapshot()).value);
   expect(snapshot.nodeRuns.length).toBeLessThanOrEqual(PAGE_LIMIT);
-  expect(snapshot.logs).toEqual([]);
-  expect(snapshot.scopes?.[0]?.total).toBe(10000);
+  expect((await Effect.runPromise(map.store.scopeCounts(map.runId, "[]")))[0]?.total).toBe(10000);
   expect(bytes(snapshot)).toBeLessThan(25000);
   expect(snapshot.run.truncatedFields?.input).toBeGreaterThan(MAX_PREVIEW_BYTES);
 

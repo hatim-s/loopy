@@ -17,6 +17,21 @@ export const durationSchema = Schema.declare<Duration>((value): value is Duratio
   isNumber(value) ? Number.isFinite(value) && value >= 0 : isString(value) && DURATION.test(value),
 );
 
+/**
+ * Timeouts and rate-limit windows become whole positive milliseconds, the only budget the
+ * process layer accepts, so a zero or sub-millisecond value fails when the graph is validated.
+ */
+export const positiveDurationSchema = durationSchema.check(
+  Schema.makeFilter(
+    (value) => {
+      const milliseconds = durationMs(value);
+
+      return Number.isSafeInteger(milliseconds) && milliseconds > 0;
+    },
+    { message: "Supply a duration of at least 1 ms in whole milliseconds, such as 1500 or '30s'." },
+  ),
+);
+
 export function durationMs(duration: Duration): number {
   const match = isNumber(duration) ? null : DURATION.exec(duration);
 

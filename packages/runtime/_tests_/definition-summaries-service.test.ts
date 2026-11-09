@@ -78,32 +78,22 @@ test("one grouped counts read lists a global once and each project definition in
       [f.b, 1],
     ]),
   );
-  expect(f.calls.summaries.size).toBe(0);
   expect(f.calls.graphs).toEqual([]);
 });
 
-test("run metadata fetches each selected slug once per canonical workspace and caches missing definitions", async () => {
+test("run views read no registry, including runs of deleted definitions", async () => {
   const f = await fixture();
-  const saved = await f.save(f.a, "chosen");
-  await f.save(f.a, "unrelated");
+  await f.save(f.a, "chosen");
   await f.run("canonical", f.a, "chosen", "queued");
   await f.run("alias", "alias", "chosen", "queued");
-  await f.run("missing-a", f.a, "removed", "queued");
-  await f.run("missing-alias", "alias", "removed", "queued");
+  await f.run("missing", f.a, "removed", "queued");
   const runs = await Effect.runPromise(f.service.listRuns({ limit: 200 }));
-  expect(runs.filter((run) => run.slug === "chosen").map((run) => run.loopy.description)).toEqual([
-    saved.graph.meta.description,
-    saved.graph.meta.description,
+  expect(runs.map((run) => [run.id, run.slug]).sort()).toEqual([
+    ["alias", "chosen"],
+    ["canonical", "chosen"],
+    ["missing", "removed"],
   ]);
-  expect(
-    runs.filter((run) => run.slug === "removed").every((run) => run.loopy.description === null),
-  ).toBe(true);
-  expect(f.calls.summaries).toEqual(
-    new Map([
-      [JSON.stringify([f.a, "chosen"]), 1],
-      [JSON.stringify([f.a, "removed"]), 1],
-    ]),
-  );
+  expect(f.calls.registries).toBe(0);
   expect(f.calls.lists.size).toBe(0);
   expect(f.calls.graphs).toEqual([]);
 });
@@ -133,7 +123,6 @@ test("native adapter distinguishes absence from corrupt existing files", async (
 
   const service = makeLocalService({
     store: f.store,
-    clock: { now: Date.now },
     home: f.home,
   });
 
@@ -145,15 +134,15 @@ test("native adapter distinguishes absence from corrupt existing files", async (
   ).rejects.toMatchObject({
     code: "not_found",
   });
+  // An old-format entry is corrupt saved data, never an absent definition.
   writeFileSync(join(f.a, ".loopy", "loopies", "obsolete.json"), JSON.stringify({ version: 1 }));
   await expect(Effect.runPromise(service.startRun("obsolete", {}, f.a))).rejects.toMatchObject({
-    code: "not_found",
+    _tag: "RegistryError",
+    message: expect.stringContaining("uses an old format"),
   });
   await expect(
     Effect.runPromise(service.putSchedule("obsolete", { cron: "* * * * *" }, f.a)),
-  ).rejects.toMatchObject({
-    code: "not_found",
-  });
+  ).rejects.toHaveProperty("_tag", "RegistryError");
   writeFileSync(join(f.a, ".loopy", "loopies", "native.json"), JSON.stringify({ version: 3 }));
   await expect(Effect.runPromise(service.startRun("native", {}, f.a))).rejects.toHaveProperty(
     "_tag",

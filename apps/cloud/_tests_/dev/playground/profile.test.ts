@@ -4,13 +4,13 @@ import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
 import { qualityTestRoot } from "../../../../../packages/runtime/_tests_/fixtures/quality-test-root";
-import { playgroundConfigSchema, withReceiptMode } from "../../../dev/playground/config";
+import { playgroundConfigSchema } from "../../../dev/playground/config";
 import { approvedDiagnostic, diagnosticPath } from "../../../dev/playground/metrics/snapshot";
 import type { PlaygroundProfile } from "../../../dev/playground/profile";
 import { playgroundProfile, profilePorts } from "../../../dev/playground/profile";
 
 const decodeConfig = (selected: PlaygroundProfile, input: Record<string, string>) =>
-  withReceiptMode(selected, decodeBoundary(playgroundConfigSchema(selected))(input));
+  decodeBoundary(playgroundConfigSchema(selected))(input);
 
 const freshRoot = () => qualityTestRoot("profile");
 

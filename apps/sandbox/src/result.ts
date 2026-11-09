@@ -1,5 +1,5 @@
 import { type ExecutionResult } from "@loopy/contract";
-import { SANDBOX_MAX_CAPTURE_BYTES } from "@loopy/contract/sandbox";
+import { resultBytes } from "@loopy/contract/sandbox";
 import { limitLogs, MAX_OUTPUT_BYTES, outputBytes } from "@loopy/core";
 
 export function failed(
@@ -16,7 +16,7 @@ export function boundedResult(result: ExecutionResult): ExecutionResult {
 
   const bounded = { ...result, logs: limitLogs(result.logs) };
 
-  return Buffer.byteLength(JSON.stringify(bounded)) > SANDBOX_MAX_CAPTURE_BYTES
+  return resultBytes(bounded) === null
     ? failed("output_limit", "Attempt terminal result exceeds its serialized byte limit.")
     : bounded;
 }

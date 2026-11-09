@@ -10,6 +10,8 @@ import {
   authoritySessionSchema,
   type ExportRecord,
   exportRecordSchema,
+  parseRecoveryCursor,
+  recoveryCursor,
 } from "@loopy/contract/sandbox";
 
 export class ReceiptSql {
@@ -57,14 +59,6 @@ export class ReceiptSql {
       .toArray()[0];
 
     return row ? decodeBoundary(authoritySessionSchema)(row) : null;
-  }
-
-  checkSession(session: AuthoritySession): void {
-    const current = this.current();
-
-    if (current?.epoch !== session.epoch || current.nonce !== session.nonce) {
-      throw new AuthorityError("stale_session");
-    }
   }
 
   openSession(input: AuthorityInput<"openSession">): AuthoritySession {
@@ -209,17 +203,18 @@ export class ReceiptSql {
 
   recoverable(input: AuthorityInput<"recoverable">): AuthorityOutput<"recoverable"> {
     return this.storage.transactionSync(() => {
-      const afterExport = input.after?.startsWith("e:") ?? false;
+      const after = input.after === null ? null : parseRecoveryCursor(input.after);
 
-      const attempts = afterExport
-        ? []
-        : this.storage.sql
-            .exec<{ id: string }>(
-              "SELECT id FROM receipt_attempts WHERE kind='started' AND id>? ORDER BY id LIMIT ?",
-              input.after?.slice(2) ?? "",
-              input.limit + 1,
-            )
-            .toArray();
+      const attempts =
+        after?.kind === "export"
+          ? []
+          : this.storage.sql
+              .exec<{ id: string }>(
+                "SELECT id FROM receipt_attempts WHERE kind='started' AND id>? ORDER BY id LIMIT ?",
+                after?.id ?? "",
+                input.limit + 1,
+              )
+              .toArray();
 
       const remaining = input.limit + 1 - attempts.length;
 
@@ -229,15 +224,19 @@ export class ReceiptSql {
           : this.storage.sql
               .exec<{ token: string }>(
                 "SELECT token FROM receipt_exports WHERE active=1 AND token>? ORDER BY token LIMIT ?",
-                afterExport ? (input.after?.slice(2) ?? "") : "",
+                after?.kind === "export" ? after.token : "",
                 remaining,
               )
               .toArray();
 
       const rows = [
-        ...attempts.map(({ id }) => ({ cursor: `a:${id}`, id, kind: "attempt" as const })),
+        ...attempts.map(({ id }) => ({
+          cursor: recoveryCursor({ kind: "attempt", id }),
+          id,
+          kind: "attempt" as const,
+        })),
         ...exports.map(({ token }) => ({
-          cursor: `e:${token}`,
+          cursor: recoveryCursor({ kind: "export", token }),
           id: token,
           kind: "export" as const,
         })),

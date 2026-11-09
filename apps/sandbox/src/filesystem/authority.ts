@@ -10,9 +10,10 @@ import {
   beginExportTransition,
   completeTransition,
   type ExportRecord,
+  endExportTransition,
+  recoveryCursor,
   resultBytes,
   resultRef,
-  sameSession,
 } from "@loopy/contract/sandbox";
 import { syncDirectory, writeFileAtomically } from "@loopy/runtime/os";
 import { Effect, Semaphore } from "effect";
@@ -172,11 +173,16 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
   endExport(input: AuthorityInput<"endExport">) {
     return this.serial(() => {
       return Effect.gen({ self: this }, function* () {
-        if (!sameSession(input.session, this.session)) {
-          return yield* Effect.fail(new AuthorityError("stale_session"));
-        }
-
         const guard = (yield* this.journal.guards()).find((record) => record.token === input.token);
+
+        const decision = endExportTransition(input, {
+          current: this.session,
+          active: guard !== undefined,
+        });
+
+        if (decision.kind === "rejected") {
+          return yield* Effect.fail(new AuthorityError(decision.code));
+        }
 
         if (guard) {
           yield* persist(this.journal.releasedPath(guard.token), guard);
@@ -216,8 +222,14 @@ export class FilesystemAuthority implements SandboxAttemptAuthority {
       const entries = [
         ...(yield* this.journal.records())
           .filter((record) => record.kind === "started")
-          .map((record) => ({ key: `a:${record.plan.id}`, record })),
-        ...(yield* this.journal.guards()).map((guard) => ({ key: `e:${guard.attemptId}`, guard })),
+          .map((record) => ({
+            key: recoveryCursor({ kind: "attempt", id: record.plan.id }),
+            record,
+          })),
+        ...(yield* this.journal.guards()).map((guard) => ({
+          key: recoveryCursor({ kind: "export", token: guard.token }),
+          guard,
+        })),
       ]
         .filter((entry) => input.after === null || byteOrder(entry.key, input.after) > 0)
         .sort((a, b) => byteOrder(a.key, b.key));

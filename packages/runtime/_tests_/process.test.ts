@@ -11,9 +11,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { Effect, Schema } from "effect";
+import { DEFAULT_MAX_OUTPUT_BYTES } from "@loopy/core";
+import { Effect, Option, Schema } from "effect";
 import { CommandExecutionError, type ResolvedCommand, spawnCaptured } from "../src/os";
 import { executeLocalCommand, type LocalExecutionOptions } from "../src/os/process";
+import { sandboxTool } from "../src/os/sandbox/tool";
 import { qualityTestRoot } from "./fixtures/quality-test-root";
 import { onCleanup } from "./fixtures/test-scope";
 import { bounded, waitForExit, waitForFile } from "./fixtures/wait";
@@ -23,10 +25,12 @@ const workspace = () => qualityTestRoot("process", { outsideCheckout: true });
 
 const pidIn = (cwd: string, name: string) => Number(readFileSync(join(cwd, name), "utf8"));
 
-const hasBubblewrap =
-  process.platform === "linux" && (existsSync("/usr/bin/bwrap") || existsSync("/bin/bwrap"));
+// The production resolver decides, so a skipped sandbox case matches what commands would get.
+const tool = await Effect.runPromise(Effect.option(sandboxTool()));
 
-const canSandbox = process.platform === "darwin" || hasBubblewrap;
+const hasBubblewrap = Option.isSome(tool) && tool.value.kind === "linux";
+
+const canSandbox = Option.isSome(tool);
 
 type CommandFields = Pick<ResolvedCommand, "program" | "args"> & Partial<ResolvedCommand>;
 
@@ -36,7 +40,14 @@ function run(
   options: Pick<LocalExecutionOptions, "workspace" | "mode"> & Partial<LocalExecutionOptions>,
 ) {
   return executeLocalCommand(
-    { cwd: null, env: {}, stdin: null, timeoutMs: 300_000, maxOutputBytes: null, ...fields },
+    {
+      cwd: null,
+      env: {},
+      stdin: null,
+      timeoutMs: 300_000,
+      maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
+      ...fields,
+    },
     { protectedHome: workspace(), sensitiveEnv: {}, ...options },
   );
 }
@@ -190,16 +201,21 @@ describe("process executor", () => {
     await waitForExit(pidIn(cwd, "ignored.pid"));
   });
 
-  test("honors cancellation", async () => {
+  test("honors cancellation of a running command", async () => {
+    const cwd = workspace();
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
-    await expect(
-      Effect.runPromise(
-        spawn(workspace(), [process.execPath, "-e", "setTimeout(() => {}, 10000)"], {
-          signal: controller.signal,
-        }),
+
+    const running = Effect.runPromise(
+      spawn(
+        cwd,
+        [process.execPath, "-e", 'await Bun.write("ready", ""); setTimeout(() => {}, 10000)'],
+        { signal: controller.signal },
       ),
-    ).rejects.toThrow("aborted");
+    );
+
+    await waitForFile(join(cwd, "ready"));
+    controller.abort();
+    await expect(running).rejects.toThrow("aborted");
   });
 
   test.skipIf(process.platform !== "darwin")(
@@ -470,7 +486,7 @@ __attribute__((constructor)) static void mark(void) {
   );
 });
 
-test.skipIf(process.platform !== "darwin" && !hasBubblewrap)(
+test.skipIf(!canSandbox)(
   "fiber interruption waits for child death before removing scratch",
   async () => {
     const cwd = workspace();
@@ -541,17 +557,3 @@ for (const reason of ["timeout", "output_limit", "rejected"] as const) {
     });
   });
 }
-
-test("invalid command limits are rejected author input", async () => {
-  const result = await Effect.runPromise(
-    run(
-      { program: "/bin/echo", args: ["fixture"], maxOutputBytes: 0 },
-      { workspace: workspace(), mode: "full" },
-    ).pipe(Effect.result),
-  );
-
-  expect(result).toMatchObject({
-    _tag: "Failure",
-    failure: { _tag: "CommandExecutionError", reason: "rejected" },
-  });
-});

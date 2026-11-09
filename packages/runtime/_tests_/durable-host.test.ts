@@ -15,6 +15,7 @@ import {
   type DurableExecutionProvider,
   DurableProviderError,
 } from "../src/host";
+import { withBundles } from "./fixtures/compiled";
 import { MemorySqlStore, runAt } from "./fixtures/stores";
 
 const success: ExecutionResult = {
@@ -35,11 +36,7 @@ function work() {
 }
 
 function compiled(graph = loopy("test", { input: {}, run: work })) {
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
+  withBundles(graph);
 
   return graph;
 }

@@ -9,10 +9,8 @@ const now = newRun().createdAt;
 
 const leaseMs = 60_000;
 
-const loopy = { slug: "test", description: null };
-
 function view(run: core.RunRecord, hook?: contract.PendingHook) {
-  return contract.runView({ run, loopy, hook, now, leaseMs });
+  return contract.runView({ run, hook, now, leaseMs });
 }
 
 const hook: contract.PendingHook = {
@@ -42,12 +40,10 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
       )({ ...derived, owner: run.owner }),
     ),
   ).toBe(false);
-  expect(derived.loopy).toEqual({ slug: "test", description: null });
   expect(derived.ownerStale).toBe(false);
   expect(
     contract.runView({
       run,
-      loopy,
       hook: undefined,
       now: new Date(Date.parse(now) + leaseMs).toISOString(),
       leaseMs,
@@ -56,7 +52,6 @@ test("views strip fencing tokens and derive staleness at the lease boundary", ()
   expect(
     contract.runView({
       run,
-      loopy,
       hook: undefined,
       now: new Date(Date.parse(now) + leaseMs + 1).toISOString(),
       leaseMs,
@@ -178,7 +173,6 @@ test("serialized loopy and snapshot views exclude private registry and owner key
   const snapshot: contract.RunSnapshotView = {
     nodeRuns: [],
     run,
-    logs: [],
     hooks: [],
     cursor: 0,
     epoch: "epoch",
@@ -209,16 +203,6 @@ test("strict edges reject misspelled request keys and injected view tokens", () 
       )({ ...view(newRun()), token: "private" }),
     ),
   ).toBe(false);
-
-  const described = contract.runView({
-    run: newRun(),
-    loopy: { slug: "test", description: "Review approvals" },
-    hook: undefined,
-    now,
-    leaseMs,
-  });
-
-  expect(described.loopy).toEqual({ slug: "test", description: "Review approvals" });
 });
 
 test("run cursors preserve timestamp ties and reject timestamp-only paging", () => {
@@ -378,7 +362,7 @@ test("graph wire views reject paths and hashes, including command parser hashes"
     return node;
   });
 
-  const view = { ...approveDemoGraph, nodes, warnings: [] };
+  const view = { ...approveDemoGraph, nodes };
   expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
   expect(
     Schema.decodeUnknownExit(contract.graphViewSchema)(approveDemoGraph, {
@@ -398,29 +382,32 @@ test("graph wire views reject paths and hashes, including command parser hashes"
   ).toBe(false);
 });
 
-test("graph warning views project node labels without source module paths", () => {
-  const graph = {
-    ...approveDemoGraph,
-    warnings: [
-      {
-        code: "predicate_type" as const,
-        message: "warning",
-        node: approveDemoGraph.entry,
-        source: { module: "/private/author.ts", line: 1, column: 1 },
-      },
-    ],
+test("schedule events reach the wire as schedule views with a null last fire key", () => {
+  const event: core.RuntimeEvent = {
+    entity: "schedule",
+    kind: "saved",
+    runId: null,
+    sequence: 1,
+    txn: "t1",
+    at: now,
+    record: {
+      workspace: "/work",
+      slug: "triage",
+      cron: "*/5 * * * *",
+      tz: "UTC",
+      input: {},
+      enabled: true,
+      nextFireAt: now,
+      version: 1,
+      failure: null,
+    },
   };
 
-  const view = contract.graphView(graph);
-  expect(view.warnings).toEqual([
-    { code: "predicate_type", message: "warning", nodeId: graph.entry, label: "draft" },
-  ]);
-  expect(contract.decodeBoundary(contract.graphViewSchema)(view)).toEqual(view);
-  expect(JSON.stringify(view)).not.toContain("/private/author.ts");
-  expect(
-    Schema.decodeUnknownExit(contract.graphViewSchema)(
-      { ...view, warnings: graph.warnings },
-      { onExcessProperty: "error" },
-    )._tag === "Success",
-  ).toBe(false);
+  const wire = contract.serverEvent(event, () => {
+    throw new Error("Schedule events carry no run.");
+  });
+
+  expect(wire).toEqual({ ...event, record: { ...event.record, lastFireKey: null } });
+  expect(contract.decodeBoundary(contract.serverEventSchema)(wire)).toEqual(wire);
+  expect(() => contract.decodeBoundary(contract.serverEventSchema)(event)).toThrow();
 });

@@ -1,15 +1,20 @@
 import { decodeBoundary, receiptSchema } from "@loopy/contract";
 import {
+  SANDBOX_MAX_ARTIFACT_RESPONSE_BYTES,
+  SANDBOX_MAX_RECEIPT_RESPONSE_BYTES,
   type SandboxArtifactRead,
   type SandboxArtifactRequest,
   type SandboxAttemptRequest,
+  sandboxArtifactQuerySchema,
   sandboxArtifactSchema,
+  sandboxAttemptQuerySchema,
   sandboxErrorSchema,
   sandboxErrorStatus,
+  searchParams,
 } from "@loopy/contract/sandbox";
 import { type ExecutionKey, type ExecutionSpec, specBundles } from "@loopy/core";
 import { type DurableExecutionProvider, DurableProviderError } from "@loopy/runtime/host";
-import type { BodyLimitError, BodyReadError } from "@loopy/runtime/service";
+import type { BodyLimitError, BodyReadError } from "@loopy/runtime/http";
 import { Effect } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
 import type { CloudConfig } from "./environment";
@@ -47,7 +52,7 @@ export class SandboxProvider implements DurableExecutionProvider {
   private request(url: URL, body?: SandboxAttemptRequest) {
     return Effect.gen({ self: this }, function* () {
       const response = yield* this.send(url, SANDBOX_REQUEST_TIMEOUT_MS, body);
-      const text = yield* readBoundedText(response, 4 * 1024 * 1024);
+      const text = yield* readBoundedText(response, SANDBOX_MAX_RECEIPT_RESPONSE_BYTES);
 
       if (!response.ok) {
         const { error } = yield* sandboxError(response, text);
@@ -66,9 +71,11 @@ export class SandboxProvider implements DurableExecutionProvider {
   lookup(key: ExecutionKey, attempt: number) {
     return Effect.gen({ self: this }, function* () {
       const url = new URL("/attempts", this.base);
-      url.searchParams.set("workspace", this.options.workspace);
-      url.searchParams.set("key", JSON.stringify(key));
-      url.searchParams.set("attempt", String(attempt));
+      url.search = searchParams(sandboxAttemptQuerySchema, {
+        workspace: this.options.workspace,
+        executionKey: key,
+        attempt,
+      }).toString();
 
       return yield* this.request(url);
     }).pipe(
@@ -81,20 +88,20 @@ export class SandboxProvider implements DurableExecutionProvider {
     );
   }
   artifact(
-    request: SandboxArtifactRequest,
+    request: Omit<SandboxArtifactRequest, "workspace">,
   ): Effect.Effect<
     SandboxArtifactRead,
     CloudError | BodyLimitError | BodyReadError | CloudProtocolError
   > {
     return Effect.gen({ self: this }, function* () {
       const url = new URL("/artifacts", this.base);
-      url.searchParams.set("workspace", this.options.workspace);
-      url.searchParams.set("key", JSON.stringify(request.executionKey));
-      url.searchParams.set("attempt", String(request.attempt));
-      url.searchParams.set("path", request.path);
+      url.search = searchParams(sandboxArtifactQuerySchema, {
+        ...request,
+        workspace: this.options.workspace,
+      }).toString();
 
       const response = yield* this.send(url, SANDBOX_ARTIFACT_TIMEOUT_MS);
-      const text = yield* readBoundedText(response, 2 * 1024 * 1024);
+      const text = yield* readBoundedText(response, SANDBOX_MAX_ARTIFACT_RESPONSE_BYTES);
 
       if (!response.ok) {
         const { error } = yield* sandboxError(response, text);

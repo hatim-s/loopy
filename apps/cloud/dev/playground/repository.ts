@@ -13,10 +13,11 @@ import {
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { decodeBoundary } from "@loopy/contract";
-import { errnoCode } from "@loopy/core";
 import { Schema } from "effect";
 import { within } from "../../../../packages/runtime/src/os/sandbox/paths";
-import { profile, root as workspace } from "./config";
+import { lstatOrAbsent, whenMissing } from "../shared/fs";
+import { root as workspace } from "../stack/constants";
+import { profile } from "./config";
 import { type Group, groups } from "./journal";
 import { burstGroups, FIXTURES_PER_GROUP } from "./plan";
 
@@ -52,19 +53,6 @@ export type CatalogEntry = (typeof catalogSchema.Type)[number];
 const sourceMarker = ".playground-source-sha256";
 
 const modulesPath = "modules/catalog.json";
-
-// Only a missing path counts as absent; permission errors must surface.
-async function lstatOrAbsent(path: string) {
-  try {
-    return await lstat(path);
-  } catch (cause) {
-    if (errnoCode(cause) === "ENOENT") {
-      return undefined;
-    }
-
-    throw cause;
-  }
-}
 
 export async function regularFiles(root: string): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true });
@@ -147,9 +135,9 @@ async function sourceSnapshot(): Promise<{
   for (const group of groups) {
     const root = join(sourceRoot, group);
 
-    const canonicalRoot = await realpath(root).catch(() => {
-      throw new Error(`Playground source group is missing: ${root}`);
-    });
+    const canonicalRoot = await realpath(root).catch(
+      whenMissing(`Playground source group is missing: ${root}`),
+    );
 
     if (canonicalRoot !== root) {
       throw new Error(`Playground source group resolves outside its expected directory: ${root}`);
@@ -214,9 +202,9 @@ export async function prepareRepository(): Promise<{ commit: string; files: numb
   if (existing) {
     const markerPath = join(repository, sourceMarker);
 
-    const recordedHash = await readFile(markerPath, "utf8").catch(() => {
-      throw new Error(`Refusing to replace existing playground repository without ${sourceMarker}`);
-    });
+    const recordedHash = await readFile(markerPath, "utf8").catch(
+      whenMissing(`Refusing to replace existing playground repository without ${sourceMarker}`),
+    );
 
     if (recordedHash.trim() !== snapshot.hash) {
       throw new Error(
@@ -280,9 +268,9 @@ export async function catalog(group: Group): Promise<readonly CatalogEntry[]> {
   const snapshot = await sourceSnapshot();
   const markerPath = join(repository, sourceMarker);
 
-  const recordedHash = await readFile(markerPath, "utf8").catch(() => {
-    throw new Error("Playground repository has not been prepared yet.");
-  });
+  const recordedHash = await readFile(markerPath, "utf8").catch(
+    whenMissing("Playground repository has not been prepared yet."),
+  );
 
   if (recordedHash.trim() !== snapshot.hash) {
     throw new Error(

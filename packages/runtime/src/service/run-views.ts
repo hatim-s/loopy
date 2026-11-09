@@ -39,26 +39,14 @@ export function makeRunViews(context: ServiceContext) {
     return (yield* resolve([run]))(run);
   });
 
-  const resolve = Effect.fn("run-views.resolve")(function* (
-    runs: RunRecord[],
-    catalog: DefinitionCatalog = makeDefinitionCatalog(context.registry),
-  ) {
-    const descriptions = new Map<RunRecord, string | null>();
-
-    for (const run of runs) {
-      const summary = yield* catalog.summary(run.workspace, run.slug);
-      // Runs outlive deleted definitions.
-      descriptions.set(run, summary?.description ?? null);
-    }
-
+  const resolve = Effect.fn("run-views.resolve")(function* (runs: RunRecord[]) {
+    const now = yield* context.now;
     const ids = runs.map((run) => run.id);
-    const now = context.now();
     const hooks = yield* context.store.pendingHooks(ids, now);
 
     return (run: RunRecord): RunView =>
       runView({
         run,
-        loopy: { slug: run.slug, description: descriptions.get(run) ?? null },
         hook: hooks.get(run.id),
         now,
         leaseMs: context.store.leaseMs,
@@ -68,7 +56,7 @@ export function makeRunViews(context: ServiceContext) {
   const listRuns = Effect.fn("run-views.listRuns")(function* (
     query: Schema.Schema.Type<typeof routes.runs.query>,
   ) {
-    const runs = yield* context.store.queryRuns({ ...query, now: context.now() });
+    const runs = yield* context.store.queryRuns({ ...query, now: yield* context.now });
     const resolved = yield* resolve(runs);
 
     return runs.map(resolved);
@@ -114,8 +102,13 @@ export function makeRunViews(context: ServiceContext) {
           filter.workspace = identity;
         }
 
-        const recent = yield* context.store.queryRuns({ ...filter, limit: 10, now: context.now() });
-        const resolved = yield* resolve(recent, catalog);
+        const recent = yield* context.store.queryRuns({
+          ...filter,
+          limit: 10,
+          now: yield* context.now,
+        });
+
+        const resolved = yield* resolve(recent);
 
         const selectedCounts =
           saved.scope === "global"

@@ -1,11 +1,12 @@
 import type { DurableObjectState, R2Bucket } from "@cloudflare/workers-types";
 import { decodeBoundary, putLoopyBodySchema, validateCompiled } from "@loopy/contract";
-import { canonicalJson, errorMessage } from "@loopy/core";
+import { errorMessage } from "@loopy/core";
 import { makeService } from "@loopy/runtime/service";
 import { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Effect, Schema } from "effect";
 import { R2ArtifactRegistry } from "../../src/artifacts";
 import { DurableSqlDriver } from "../../src/sql-driver";
+import { seedLegacyPointer } from "./legacy-pointer";
 
 const requestSchema = Schema.Struct({
   operation: Schema.Literals(["legacy", "save", "summary", "list", "service", "inspect"]),
@@ -50,24 +51,10 @@ export class SummarySizeProbe {
       if (input.operation === "legacy") {
         const body = decodeBoundary(putLoopyBodySchema)(input.body);
         await Effect.runPromise(validateCompiled(body));
-        this.ctx.storage.sql.exec(`CREATE TABLE artifact_definitions (
-          workspace TEXT NOT NULL, slug TEXT NOT NULL, revision TEXT NOT NULL,
-          source TEXT NOT NULL, saved_at TEXT NOT NULL, generation TEXT NOT NULL,
-          PRIMARY KEY (workspace, slug)
-        )`);
-        await bucket.put(
-          `workspaces/${workspace}/graphs/${body.revision}.json`,
-          canonicalJson(body.graph),
-        );
-        this.ctx.storage.sql.exec(
-          "INSERT INTO artifact_definitions VALUES (?, ?, ?, ?, ?, ?)",
-          workspace,
-          body.graph.name,
-          body.revision,
-          body.source.path,
-          new Date().toISOString(),
-          crypto.randomUUID(),
-        );
+        await seedLegacyPointer({ sql: this.ctx.storage.sql, bucket, workspace }, body, {
+          savedAt: new Date().toISOString(),
+          generation: crypto.randomUUID(),
+        });
       }
 
       const registry = new R2ArtifactRegistry(this.ctx.storage, bucket, workspace);
@@ -135,7 +122,6 @@ export class SummarySizeProbe {
           const service = makeService({
             store,
             registry: () => Effect.succeed(registry),
-            clock: { now: Date.now },
             canonicalWorkspace: () => Effect.succeed(workspace),
             secrets: {
               list: () => Effect.succeed([]),

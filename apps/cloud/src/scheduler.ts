@@ -7,6 +7,7 @@ import {
   SCHEDULE_POLICY,
   ScheduleDefinitionError,
 } from "@loopy/runtime/host";
+import { requireDefinition } from "@loopy/runtime/service";
 import type { SqlRunStore } from "@loopy/runtime/store/portable";
 import { Cause, Clock, Effect, Exit } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
@@ -205,17 +206,8 @@ export class WorkspaceScheduler {
             {
               store,
               definitionFor: (schedule) =>
-                registry.get(schedule.slug).pipe(
+                requireDefinition(registry, schedule.slug).pipe(
                   Effect.mapError((cause) => new ScheduleDefinitionError({ cause })),
-                  Effect.flatMap((saved) =>
-                    saved === null
-                      ? Effect.fail(
-                          new ScheduleDefinitionError({
-                            cause: `No saved loopy '${schedule.slug}'. Save it again before retrying the schedule.`,
-                          }),
-                        )
-                      : Effect.succeed(saved),
-                  ),
                 ),
             },
             iso(now),

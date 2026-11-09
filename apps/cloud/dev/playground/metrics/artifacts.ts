@@ -145,8 +145,43 @@ export const segmentsArtifact: Artifact<typeof segmentsSchema.Type> = {
   schema: segmentsSchema,
 };
 
-export const artifactPath = <T>(directory: string, artifact: Artifact<T>) =>
+/** Evidence that no command reads back. Naming it here keeps every writer on its own file. */
+type Report = Pick<Artifact<never>, "file" | "producer">;
+
+const metrics = (script: string, phase = "") =>
+  `bun --no-env-file apps/cloud/dev/playground/metrics/${script}.ts${phase && ` ${phase}`}`;
+
+export const matchedReport = (phase: string): Report => ({
+  file: `playground-performance-${phase}-matched.json`,
+  producer: metrics("matched", phase),
+});
+
+export const lifecycleReport = (phase: string): Report => ({
+  file: `playground-performance-${phase}-lifecycle.json`,
+  producer: metrics("journal", phase),
+});
+
+export const sqlReport = (phase: string): Report => ({
+  file: `playground-performance-${phase}-sql.json`,
+  producer: metrics("sql", phase),
+});
+
+export const runtimeReport: Report = {
+  file: "playground-performance-runtime.json",
+  producer: metrics("runtime"),
+};
+
+export const durableReceiptsReport: Report = {
+  file: "playground-durable-receipts.json",
+  producer: "bun --no-env-file apps/cloud/dev/playground/verify-receipts.ts",
+};
+
+export const artifactPath = (directory: string, artifact: Report) =>
   resolve(directory, artifact.file);
+
+export function writeReport<T>(directory: string, report: Report, value: T) {
+  atomic(artifactPath(directory, report), value);
+}
 
 export async function readArtifact<T>(directory: string, artifact: Artifact<T>) {
   const file = Bun.file(artifactPath(directory, artifact));

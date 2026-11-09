@@ -13,7 +13,6 @@ import type { LoopyView, RunView, ServerEvent } from "./views";
 
 type RunViewOptions = {
   run: RunPreview;
-  loopy: RunView["loopy"];
   hook: PendingHook | undefined;
   now: string;
   leaseMs: number;
@@ -68,7 +67,6 @@ export function runView(options: RunViewOptions): RunView {
     id: run.id,
     slug: run.slug,
     workspace: run.workspace,
-    loopy: { slug: options.loopy.slug, description: options.loopy.description },
     input: input.value,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
@@ -172,6 +170,12 @@ export function serverEvent(event: RuntimeEvent, view: (run: RunRecord) => RunVi
       return nodeEventPreview(event);
     }
 
+    case "schedule": {
+      return event.kind === "deleted"
+        ? event
+        : { ...event, record: { ...event.record, lastFireKey: event.record.lastFireKey ?? null } };
+    }
+
     default: {
       return event;
     }
@@ -188,11 +192,5 @@ export function graphView(graph: Graph): GraphView {
 
       return node.kind === "command" ? { ...node, parse: node.parse !== null } : node;
     }),
-    warnings: graph.warnings.map(({ code, message, node }) => ({
-      code,
-      message,
-      nodeId: node,
-      label: graph.nodes.find((entry) => entry.id === node)?.label ?? null,
-    })),
   };
 }

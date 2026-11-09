@@ -7,11 +7,10 @@ export {
   readRegularFile,
   syncDirectory,
   withLockDirectory,
-  writeExclusive,
   writeFileAtomically,
 } from "./fs";
 
-export { acquirePidLock, type PidLockAttempt, tryPidLock } from "./pid-lock";
+export { acquirePidLock, tryPidLock } from "./pid-lock";
 
 export { executeLocalCommand } from "./process";
 

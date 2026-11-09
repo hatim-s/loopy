@@ -1,12 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { decodeBoundary } from "@loopy/contract";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { root } from "../stack/constants";
-import { randomToken } from "../stack/credentials";
+import { randomToken, tokenSchema } from "../stack/credentials";
 import { type PlaygroundProfile, playgroundProfile } from "./profile";
-
-export { root };
 
 export const profile = playgroundProfile(root, process.env.LOOPY_PLAYGROUND_PROFILE);
 
@@ -14,59 +12,45 @@ export const { state, runtime, sandboxState, api, dashboard, evidence } = profil
 
 const configPath = resolve(state, "config.json");
 
-const token = Schema.String.check(Schema.isMinLength(32));
+const receiptMode = <const M extends PlaygroundProfile["receiptMode"]>(mode: M) =>
+  Schema.Literal(mode).pipe(Schema.withDecodingDefault(Effect.succeed(mode)));
 
+// The stored file holds the batch and secrets. The selected profile alone picks the receipt
+// mode, so the default profile rejects a receipts credential as an unknown field.
 export function playgroundConfigSchema(selected: PlaygroundProfile) {
   const base = {
     batch: Schema.String,
     api: Schema.Literal(selected.api),
     dashboard: Schema.Literal(selected.dashboard),
     workspace: Schema.Literal("playground"),
-    token,
-    otherToken: token,
-    sandboxToken: token,
+    token: tokenSchema,
+    otherToken: tokenSchema,
+    sandboxToken: tokenSchema,
     createdAt: Schema.String,
   };
 
-  return Schema.Union([
-    Schema.Struct(base),
-    Schema.Struct({ ...base, receiptsToken: token }).check(
-      Schema.makeFilter(
-        (value) =>
-          new Set([value.token, value.otherToken, value.sandboxToken, value.receiptsToken]).size ===
-          4,
-        { message: "Receipt, sandbox and user credentials must be distinct." },
-      ),
-    ),
-  ]);
-}
-
-type StoredConfig = ReturnType<typeof playgroundConfigSchema>["Type"];
-
-// The receipt mode comes from the selected profile; the file only holds the batch and secrets.
-export function withReceiptMode(selected: PlaygroundProfile, value: StoredConfig) {
   if (selected.receiptMode === "filesystem") {
-    if ("receiptsToken" in value) {
-      throw new Error("The default playground profile must not hold a receipts credential.");
-    }
-
-    return { ...value, receiptMode: selected.receiptMode };
+    return Schema.Struct({ ...base, receiptMode: receiptMode("filesystem") });
   }
 
-  if (!("receiptsToken" in value)) {
-    throw new Error("The architecture playground profile requires a receipts credential.");
-  }
-
-  return { ...value, receiptMode: selected.receiptMode };
+  return Schema.Struct({
+    ...base,
+    receiptsToken: tokenSchema,
+    receiptMode: receiptMode("durable-object"),
+  }).check(
+    Schema.makeFilter(
+      (value) =>
+        new Set([value.token, value.otherToken, value.sandboxToken, value.receiptsToken]).size ===
+        4,
+      { message: "Receipt, sandbox and user credentials must be distinct." },
+    ),
+  );
 }
 
-export type Config = ReturnType<typeof withReceiptMode>;
+export type Config = ReturnType<typeof playgroundConfigSchema>["Type"];
 
 export async function config() {
-  return withReceiptMode(
-    profile,
-    decodeBoundary(playgroundConfigSchema(profile))(await Bun.file(configPath).json()),
-  );
+  return decodeBoundary(playgroundConfigSchema(profile))(await Bun.file(configPath).json());
 }
 
 export async function initialize() {
@@ -87,7 +71,7 @@ export async function initialize() {
     const value =
       profile.receiptMode === "durable-object" ? { ...base, receiptsToken: randomToken() } : base;
 
-    withReceiptMode(profile, decodeBoundary(playgroundConfigSchema(profile))(value));
+    decodeBoundary(playgroundConfigSchema(profile))(value);
     await writeFile(configPath, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
   }
 

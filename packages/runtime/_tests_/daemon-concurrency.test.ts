@@ -4,8 +4,9 @@ import { loopy, sh } from "@loopy/sdk/graph";
 import { Deferred, Effect, Fiber } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { makeDaemon } from "../src/host";
-import { countPasses, nextPass, waitUntil } from "./fixtures/service-runtime";
+import { countPasses, nextPass } from "./fixtures/service-runtime";
 import { MemorySqlStore } from "./fixtures/stores";
+import { eventually } from "./fixtures/wait";
 
 test("six runs respect concurrency two while the loop keeps polling", async () => {
   await Effect.runPromise(
@@ -62,7 +63,8 @@ test("six runs respect concurrency two while the loop keeps polling", async () =
         yield* nextPass(daemon, passes);
         expect(peak).toBe(2);
         yield* Deferred.succeed(gate, undefined);
-        yield* waitUntil(
+        yield* eventually(
+          "six succeeded runs",
           Effect.map(
             store.queryRuns({ status: "succeeded", limit: 200, now: newRun().createdAt }),
             (runs) => runs.length === 6,

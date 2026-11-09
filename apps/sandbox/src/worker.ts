@@ -49,10 +49,7 @@ function command(spec: CommandSpec) {
       env: { ...environment, ...spec.env },
       stdin: spec.stdin ?? undefined,
       timeoutMs: spec.timeoutMs,
-      maxBytes: Math.min(
-        spec.maxOutputBytes ?? SANDBOX_MAX_CAPTURE_BYTES,
-        SANDBOX_MAX_CAPTURE_BYTES,
-      ),
+      maxBytes: Math.min(spec.maxOutputBytes, SANDBOX_MAX_CAPTURE_BYTES),
     });
 
     const step = commandResult(spec, raw, unredacted);

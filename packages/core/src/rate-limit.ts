@@ -1,15 +1,11 @@
 import { Schema } from "effect";
 import { positiveInt, struct } from "./codec";
-import { durationMs, durationSchema } from "./duration";
+import { positiveDurationSchema } from "./duration";
 
 export const rateLimitSchema = struct({
   key: Schema.String.check(Schema.isMinLength(1)),
   limit: positiveInt,
-  window: durationSchema.check(
-    Schema.makeFilter((value) => durationMs(value) > 0, {
-      message: "Supply a positive rate-limit window.",
-    }),
-  ),
+  window: positiveDurationSchema,
 });
 
 export type RateLimit = Schema.Schema.Type<typeof rateLimitSchema>;

@@ -1,4 +1,6 @@
 import type { DurableObjectState } from "@cloudflare/workers-types";
+import { CLOUD_MAX_REQUEST_BYTES, encodeBoundary } from "@loopy/contract";
+import { cloudRoutes, cloudStatusSchema, WORKSPACE_HEADER } from "@loopy/contract/sandbox";
 import {
   apiRoutes,
   dispatch,
@@ -18,6 +20,11 @@ import { SCHEDULER, WorkspaceScheduler } from "./scheduler";
 import { DurableSqlDriver } from "./sql-driver";
 
 const WORKSPACE_KEY = "workspace";
+
+// Route paths sit under the `/api` mount that routeUrl adds.
+const STATUS_PATH = `/api${cloudRoutes.status.path}`;
+
+const ARTIFACT_PATH = `/api${cloudRoutes.artifact.path}`;
 
 const SCHEDULER_ERROR_KEY = "cloud_scheduler_error";
 
@@ -73,7 +80,6 @@ export class Workspace {
 
     const service = makeService({
       store: this.store,
-      clock: { now: Date.now },
       canonicalWorkspace: requireWorkspace,
       registry: (value) => requireWorkspace(value).pipe(Effect.as(registry)),
       secrets: { list: unsupported, set: unsupported, remove: unsupported },
@@ -94,6 +100,7 @@ export class Workspace {
         store: this.store,
         cwd: workspace,
         daemon: { pid: null, startedAt: this.startedAt, concurrency: this.config.concurrency },
+        maxBodyBytes: CLOUD_MAX_REQUEST_BYTES,
       }),
       scheduler: new WorkspaceScheduler({
         storage: this.ctx.storage,
@@ -127,7 +134,7 @@ export class Workspace {
       this.serial
         .withPermit(
           Effect.gen({ self: this }, function* () {
-            const header = request.headers.get("X-Loopy-Workspace");
+            const header = request.headers.get(WORKSPACE_HEADER);
             const ready = header === null ? null : this.bind(header);
 
             if (!ready) {
@@ -144,15 +151,21 @@ export class Workspace {
               return errorResponse("forbidden");
             }
 
-            if (url.pathname === "/api/cloud/status") {
-              return json({ stage: "local", workspace, ...(yield* scheduler.status()) });
+            if (url.pathname === STATUS_PATH) {
+              return json(
+                encodeBoundary(cloudStatusSchema)({
+                  stage: "local",
+                  workspace,
+                  ...(yield* scheduler.status()),
+                }),
+              );
             }
 
             if (!["GET", "HEAD"].includes(request.method)) {
               yield* scheduler.wake();
             }
 
-            if (request.method === "GET" && url.pathname === "/api/cloud/artifacts") {
+            if (request.method === "GET" && url.pathname === ARTIFACT_PATH) {
               return yield* artifactResponse({ url, workspace, store: this.store, provider });
             }
 

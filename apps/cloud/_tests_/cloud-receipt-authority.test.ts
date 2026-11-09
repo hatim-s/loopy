@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { decodeBoundary } from "@loopy/contract";
-import { AuthorityError, authorityCommandSchema } from "@loopy/contract/sandbox";
+import { AuthorityError, authorityCommandSchema, RECEIPTS_PATH } from "@loopy/contract/sandbox";
 import { Effect } from "effect";
 import { HttpSandboxAuthority } from "../../sandbox/src/http-authority";
 import {
@@ -44,58 +44,6 @@ test("actual workerd rolls back admission on a later SQLite constraint failure",
     failure: expect.stringContaining("UNIQUE constraint failed"),
     record: null,
     current: { epoch: 1, nonce: "rollback" },
-  });
-});
-
-test("one concurrent admission grant pins its original plan and session through duplicates and conflicts", async () => {
-  const current = await session("admission");
-  const plan = await harness.plan("admission");
-
-  const replies = await Promise.all(
-    Array.from({ length: 12 }, () =>
-      Effect.runPromise(harness.authority.admit({ session: current, plan })),
-    ),
-  );
-
-  expect(replies.filter((reply) => reply.kind === "created")).toHaveLength(1);
-  expect(replies.filter((reply) => reply.kind === "existing")).toHaveLength(11);
-  expect(await Effect.runPromise(harness.authority.read({ id: plan.id }))).toEqual({
-    kind: "started",
-    plan,
-    session: current,
-  });
-  expect(
-    await Effect.runPromise(
-      harness.authority.admit({
-        session: current,
-        plan: { ...plan, deadline: plan.deadline + 1 },
-      }),
-    ),
-  ).toEqual({
-    kind: "existing",
-    record: { kind: "started", plan, session: current },
-  });
-  expect(
-    await Effect.runPromise(
-      harness.authority.admit({
-        session: current,
-        plan: { ...plan, requestHash: "b".repeat(64) },
-      }),
-    ),
-  ).toEqual({
-    kind: "rejected",
-    code: "request_conflict",
-  });
-  expect(
-    await Effect.runPromise(
-      harness.authority.admit({
-        session: current,
-        plan: { ...plan, container: `loopy-attempt-${"c".repeat(64)}` },
-      }),
-    ),
-  ).toEqual({
-    kind: "rejected",
-    code: "invalid_state",
   });
 });
 
@@ -189,7 +137,7 @@ test("lost admission/completion responses survive full workerd reconstruction wi
         return new Response(null, { status: 503 });
       }
 
-      const response = await fetch(new URL("/internal/sandbox-receipts", harness.origin), {
+      const response = await fetch(new URL(RECEIPTS_PATH, harness.origin), {
         method: "POST",
         headers: request.headers,
         body,

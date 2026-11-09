@@ -162,8 +162,6 @@ export function readDashboardSnapshot(ctx: SqlContext, id: string) {
     nodeRuns: nodes.items,
     nodeRunsNext: nodes.next,
     truncatedOutputs: nodes.truncatedOutputs,
-    scopes: readScopeCounts(ctx, id, "[]"),
-    logs: [],
     hooks: hooks.slice(0, PAGE_LIMIT),
     hooksTruncated: hooks.length > PAGE_LIMIT,
     ...readEventCursor(ctx),

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { Registry } from "../src/local";
@@ -94,20 +94,24 @@ test("changing scope removes only the other entry owned by the same source", asy
   expect(Effect.runSync(registry.get("saved"))?.revision).toBe("d".repeat(64));
 });
 
-test("stale registry entries are ignored and replaced without preserving the old format", async () => {
+test("an old-format registry entry fails loudly until it is deleted and saved again", async () => {
   const f = fixture();
   const registry = Effect.runSync(Registry.make(f.home, f.project));
   mkdirSync(registry.projectDirectory, { recursive: true });
   const file = join(registry.projectDirectory, "saved.json");
   writeFileSync(file, JSON.stringify({ slug: "saved", source: "different", bundleHash: "old" }));
-  expect(Effect.runSync(registry.list())).toEqual([]);
-  expect(Effect.runSync(registry.get("saved"))).toBeNull();
-  Effect.runSync(registry.save(await compiledBody("saved", f.source)));
+  const body = await compiledBody("saved", f.source);
+
+  expect(() => Effect.runSync(registry.list())).toThrow("uses an old format");
+  expect(() => Effect.runSync(registry.get("saved"))).toThrow("uses an old format");
+  expect(() => Effect.runSync(registry.save(body))).toThrow("uses an old format");
+
+  rmSync(file);
+  Effect.runSync(registry.save(body));
   expect(Effect.runSync(registry.get("saved"))).toMatchObject({
     version: 3,
     graph: { name: "saved" },
   });
-  expect(Effect.runSync(registry.get("saved"))).not.toHaveProperty("bundleHash");
 });
 
 test("marked temporary projects isolate saves and global fallback from an ancestor registry", async () => {

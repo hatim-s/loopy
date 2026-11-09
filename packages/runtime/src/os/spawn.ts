@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
-import type { CommandResult } from "@loopy/core";
+import type { ParserInput } from "@loopy/core";
 import { errorMessage } from "@loopy/core";
 import { Effect } from "effect";
 import { CommandExecutionError } from "./command-error";
@@ -24,8 +24,8 @@ export type SpawnOptions = {
   signal?: AbortSignal;
 };
 
-export function emptyOutput(): CommandResult {
-  return { stdout: "", stderr: "", exitCode: -1, durationMs: 0 };
+export function emptyOutput(): ParserInput {
+  return { stdout: "", stderr: "", exitCode: -1 };
 }
 
 /** An error raised before the process spawned, so retrying it is safe. */
@@ -116,7 +116,7 @@ function trySpawn(launch: Launch): ChildProcessWithoutNullStreams {
 export function spawnCaptured(
   launch: Launch,
   limits: SpawnOptions,
-): Effect.Effect<CommandResult, CommandExecutionError> {
+): Effect.Effect<ParserInput, CommandExecutionError> {
   const { signal } = limits;
 
   return Effect.callback((resume) => {
@@ -126,15 +126,13 @@ export function spawnCaptured(
       return;
     }
 
-    const started = performance.now();
-
     let complete!: () => void;
 
     const closed = new Promise<void>((resolve) => {
       complete = resolve;
     });
 
-    const resolveOutput = (value: CommandResult) => resume(Effect.succeed(value));
+    const resolveOutput = (value: ParserInput) => resume(Effect.succeed(value));
     const rejectOutput = (error: CommandExecutionError) => resume(Effect.fail(error));
     let child: ChildProcessWithoutNullStreams;
 
@@ -202,11 +200,10 @@ export function spawnCaptured(
       signal?.removeEventListener("abort", onAbort);
       const partial = Boolean(failure || error || exitSignal);
 
-      const output: CommandResult = {
+      const output: ParserInput = {
         stdout: decodeCaptured(stdout, partial),
         stderr: decodeCaptured(stderr, partial),
         exitCode: exitCode ?? -1,
-        durationMs: Math.round(performance.now() - started),
       };
 
       const reason =

@@ -35,7 +35,6 @@ export const compile = (path: string): Effect.Effect<CompileResult, CompilationE
         graph,
         bundles,
         revision: compiledRevision,
-        warnings: graph.warnings,
         sourceArtifact: captureSource(graph, compiledRevision, modules),
       } satisfies CompileResult;
     }),

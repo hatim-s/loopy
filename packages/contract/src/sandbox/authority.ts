@@ -15,6 +15,29 @@ import {
 /** The most attempts and export guards one journal page returns. */
 export const JOURNAL_PAGE_LIMIT = 200;
 
+/** The Worker bridge that serves the receipt authority to a local sandbox. */
+export const RECEIPTS_PATH = "/internal/sandbox-receipts";
+
+export const RECEIPTS_NAMESPACE_HEADER = "X-Loopy-Receipts-Namespace";
+
+// A command or reply carries at most one captured result or one journal page.
+export const AUTHORITY_MAX_BODY_BYTES = 16 * 1024 * 1024;
+
+type RecoveryEntry = { kind: "attempt"; id: string } | { kind: "export"; token: string };
+
+/** Recovery pages list started attempts by id, then active export guards by token. */
+export function recoveryCursor(entry: RecoveryEntry) {
+  return entry.kind === "attempt" ? `a:${entry.id}` : `e:${entry.token}`;
+}
+
+export function parseRecoveryCursor(cursor: string): RecoveryEntry {
+  const value = cursor.slice(2);
+
+  return cursor.startsWith("e:")
+    ? { kind: "export", token: value }
+    : { kind: "attempt", id: value };
+}
+
 const rejected = struct({ kind: Schema.Literal("rejected"), code: authorityFailureSchema });
 
 const session = { session: authoritySessionSchema };
@@ -79,7 +102,7 @@ export const authorityOperations = {
   },
   recoverable: {
     input: struct({
-      // Cursors name an attempt id (`a:`) or an export token (`e:`).
+      // Built by recoveryCursor.
       after: Schema.NullOr(
         Schema.String.check(Schema.isPattern(/^[ae]:/)).check(Schema.isMaxLength(258)),
       ),

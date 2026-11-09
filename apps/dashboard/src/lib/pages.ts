@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PAGE_SIZE,
   type EventSummaryView,
   executionKeyString,
   type GlobalLogsPage,
@@ -30,20 +31,17 @@ import type {
   ScopeItemRow,
 } from "./view-models";
 
-const PAGE_SIZE = 50;
-
-// Cursor metadata stays bounded even if a tab pages through an entire retained history.
-const MAX_CURSORS = 200;
-
-/** Keyset cursors for the pages behind the shown one. A new identity starts at the newest page. */
+/**
+ * Keyset cursors for the pages behind the shown one, so the page depth is the stack length.
+ * A new identity starts at the newest page.
+ */
 function useCursorStack<C extends string | number>(identity: string) {
-  const [state, setState] = useState<{ identity: string; cursors: C[]; offset: number }>({
+  const [state, setState] = useState<{ identity: string; cursors: C[] }>({
     identity,
     cursors: [],
-    offset: 0,
   });
 
-  const current = state.identity === identity ? state : { identity, cursors: [], offset: 0 };
+  const current = state.identity === identity ? state : { identity, cursors: [] };
 
   if (state.identity !== identity) {
     setState(current);
@@ -51,21 +49,11 @@ function useCursorStack<C extends string | number>(identity: string) {
 
   return {
     cursor: current.cursors.at(-1),
-    depth: current.offset,
-    hasPrevious: current.cursors.length > 1 || current.offset === 1,
-    push: (cursor: C) =>
-      setState((value) => ({
-        identity,
-        cursors: [...value.cursors, cursor].slice(-MAX_CURSORS),
-        offset: value.offset + 1,
-      })),
-    pop: () =>
-      setState((value) => ({
-        ...value,
-        cursors: value.cursors.slice(0, -1),
-        offset: Math.max(0, value.offset - 1),
-      })),
-    reset: () => setState({ identity, cursors: [], offset: 0 }),
+    depth: current.cursors.length,
+    hasPrevious: current.cursors.length > 0,
+    push: (cursor: C) => setState((value) => ({ identity, cursors: [...value.cursors, cursor] })),
+    pop: () => setState((value) => ({ ...value, cursors: value.cursors.slice(0, -1) })),
+    reset: () => setState({ identity, cursors: [] }),
   };
 }
 
@@ -146,7 +134,7 @@ export function useExecutions(
 
   return usePager({
     identity: { runId, filters },
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     query: (after: string | undefined) =>
       executionPageQuery(
         backend,
@@ -157,7 +145,7 @@ export function useExecutions(
               scope: JSON.stringify(filters.scope),
               nodeId: filters.nodeId,
               after,
-              limit: PAGE_SIZE,
+              limit: DEFAULT_PAGE_SIZE,
             },
       ),
     nextCursor: (data) => data.next,
@@ -176,14 +164,14 @@ export function useScopeItems(runId: string, filters: ScopeItemQuery): Pager<Sco
 
   return usePager({
     identity: { runId, filters },
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     query: (after: number | undefined) =>
       scopePageQuery(backend, runId, {
         nodeId: filters.nodeId,
         parentScope: JSON.stringify(filters.parentScope),
         status: filters.status,
         after,
-        limit: PAGE_SIZE,
+        limit: DEFAULT_PAGE_SIZE,
       }),
     nextCursor: (data) => data.next,
     view: (data) => ({ rows: data.items }),
@@ -196,7 +184,7 @@ export function useLogPages(filters: LogFilters): Pager<LogRow, ScanInfo> {
 
   return usePager({
     identity: filters,
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     query: (before: number | undefined, depth) =>
       logPageQuery(
         backend,
@@ -211,7 +199,7 @@ export function useLogPages(filters: LogFilters): Pager<LogRow, ScanInfo> {
           executionKey: filters.executionKey,
           from,
           before,
-          limit: PAGE_SIZE,
+          limit: DEFAULT_PAGE_SIZE,
         },
         filters.tail && depth === 0,
       ),
@@ -229,7 +217,7 @@ export function useEventPages(filters: EventFilters): Pager<EventSummaryView, Sc
 
   return usePager({
     identity: filters,
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_PAGE_SIZE,
     query: (before: number | undefined, depth) =>
       eventPageQuery(
         backend,
@@ -244,7 +232,7 @@ export function useEventPages(filters: EventFilters): Pager<EventSummaryView, Sc
           txn: filters.txn,
           from,
           before,
-          limit: PAGE_SIZE,
+          limit: DEFAULT_PAGE_SIZE,
         },
         depth === 0,
       ),

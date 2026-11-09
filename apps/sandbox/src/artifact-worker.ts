@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { decodeBoundary } from "@loopy/contract";
@@ -8,7 +7,7 @@ import {
   type SandboxArtifactRead,
   sandboxArtifactPathSchema,
 } from "@loopy/contract/sandbox";
-import { errnoCode } from "@loopy/core";
+import { errnoCode, sha256Hex } from "@loopy/core";
 import { CONTAINER } from "./container-layout";
 import { SandboxRequestError } from "./request-error";
 
@@ -94,7 +93,7 @@ async function readArtifactFile(path: string): Promise<SandboxArtifact> {
     return {
       path,
       bytes: bytes.toString("base64"),
-      sha256: createHash("sha256").update(bytes).digest("hex"),
+      sha256: await sha256Hex(Uint8Array.from(bytes)),
       size,
     };
   } finally {

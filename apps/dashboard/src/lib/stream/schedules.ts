@@ -62,7 +62,7 @@ export function applyScheduleEvent(client: QueryClient, event: ScheduleEvent): b
     return false;
   }
 
-  const view = { ...event.record, lastFireKey: event.record.lastFireKey ?? null };
+  const view = event.record;
 
   client.setQueryData<ScheduleView[]>(
     keys.schedules(view.workspace),

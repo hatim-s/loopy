@@ -136,3 +136,18 @@ export function beginExportTransition(
     },
   };
 }
+
+/**
+ * A `release` decision asks the caller to deactivate the guard. An unknown or released token is
+ * already in the state a retried release wants, so it is a no-op.
+ */
+export function endExportTransition(
+  input: AuthorityInput<"endExport">,
+  facts: { current: AuthoritySession | null; active: boolean },
+): { kind: "rejected"; code: AuthorityFailure } | { kind: "release" } | { kind: "released" } {
+  if (!sameSession(input.session, facts.current)) {
+    return rejected("stale_session");
+  }
+
+  return facts.active ? { kind: "release" } : { kind: "released" };
+}

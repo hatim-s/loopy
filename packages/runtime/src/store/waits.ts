@@ -2,7 +2,7 @@ import {
   checkOutSchema,
   executionKeyString,
   type HookRecord,
-  isTerminalRun,
+  isPendingWait,
   type Json,
   type NodeRun,
   outSchemaMessage,
@@ -63,15 +63,7 @@ function checkSignal({
   payload: Json;
   at: string;
 }): Extract<WaitResolution, { kind: "rejected" }> | null {
-  if (
-    !wait ||
-    !run ||
-    isTerminalRun(run.status) ||
-    wait.resolvedAt ||
-    wait.expiredAt ||
-    node?.status !== "waiting" ||
-    (node.wakeAt !== null && Date.parse(at) >= Date.parse(node.wakeAt))
-  ) {
+  if (!wait || !run || !isPendingWait({ wait, node, run, at })) {
     return {
       kind: "rejected",
       code: "unknown_hook",

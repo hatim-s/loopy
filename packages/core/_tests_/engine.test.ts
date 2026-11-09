@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { decodeBoundary, graphSchema } from "@loopy/contract";
 import { loopy, sh } from "@loopy/sdk/graph";
-import { type ExecutionKey, type ExecutionResult, type Json } from "../src";
+import { type ExecutionKey, type ExecutionResult, graphSchema, type Json } from "../src";
 import { type EngineEvent, initialState, nextDeadline, step } from "../src/engine";
+import { decode } from "./fixtures/decode";
 import { approveDemoGraph } from "./fixtures/graphs";
 
 const at = "2026-10-18T00:00:00.000Z";
@@ -18,7 +18,7 @@ function sequence() {
 
   draft.module.bundleHash = "a".repeat(64);
 
-  return decodeBoundary(graphSchema)({
+  return decode(graphSchema)({
     ...graph,
     nodes: [
       draft,

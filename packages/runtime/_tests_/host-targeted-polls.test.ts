@@ -5,6 +5,7 @@ import { code, loopy, parallel, sh, wait } from "@loopy/sdk/graph";
 import { Effect, Schema } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { activateDurable } from "../src/host";
+import { withBundles } from "./fixtures/compiled";
 import { PolicyProvider, policyGraph, policySuccess } from "./fixtures/host-policy";
 import { MemorySqlStore, memoryStore, runAt } from "./fixtures/stores";
 
@@ -128,11 +129,7 @@ test("started-only turns use two full reads plus B targeted reads without extra 
       ),
   });
 
-  for (const node of graph.nodes) {
-    if (node.kind === "code") {
-      node.module.bundleHash = "a".repeat(64);
-    }
-  }
+  withBundles(graph);
 
   await run(store.createRun(newRun()));
 

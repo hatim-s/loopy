@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { compile } from "@loopy/compiler";
 import { type NodeRun, type StoreEffect } from "@loopy/core";
 import { Effect, Scope } from "effect";
 import { makeLocalService, Registry } from "../../src/local";
 import { openRunStore } from "../../src/store";
+import { compileOrThrow } from "./compile";
 import { runAt } from "./stores";
 
 // The dashboard-scale test and the apps/cloud/dev/dashboard-queries.ts benchmark both seed these
@@ -32,22 +32,14 @@ export default loopy("reindex-docs", {
     join(root, "index-doc.ts"),
     "export default (input: {path:string}) => ({path:input.path});\n",
   );
-  const compiled = await Effect.runPromise(compile(source));
-
-  if (!compiled.ok) {
-    throw new Error(JSON.stringify(compiled.diagnostics));
-  }
+  const compiled = await compileOrThrow(source);
 
   const registry = await Effect.runPromise(Registry.make(home, root));
   let now = Date.parse("2026-10-22T06:00:00.000Z");
   const store = await openStore(home, scope);
   const onClock = runAt(() => now);
 
-  const service = makeLocalService({
-    store,
-    clock: { now: () => now },
-    home: home,
-  });
+  const service = makeLocalService({ store, home });
 
   await Effect.runPromise(
     service.putLoopy("reindex-docs", {
@@ -173,7 +165,6 @@ export async function manyRunsFixture(root: string, scope: Scope.Scope) {
 
   const service = makeLocalService({
     store,
-    clock: { now: Date.now },
     home: home,
   });
 
@@ -182,11 +173,7 @@ export async function manyRunsFixture(root: string, scope: Scope.Scope) {
     source,
     `import {loopy} from "loopy";\nexport default loopy("queue-drain",{input:{},run:()=>null});\n`,
   );
-  const compiled = await Effect.runPromise(compile(source));
-
-  if (!compiled.ok) {
-    throw new Error(JSON.stringify(compiled.diagnostics));
-  }
+  const compiled = await compileOrThrow(source);
 
   await Effect.runPromise(
     service.putLoopy("queue-drain", {

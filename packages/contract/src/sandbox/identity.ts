@@ -1,4 +1,11 @@
-import { canonicalJson, type ExecutionResult, type Json, sha256Hex } from "@loopy/core";
+import {
+  canonicalJson,
+  type ExecutionResult,
+  executionResultSchema,
+  type Json,
+  sha256Hex,
+} from "@loopy/core";
+import { decodeBoundary } from "../codec";
 import {
   SANDBOX_MAX_CAPTURE_BYTES,
   type SandboxAttemptIdentity,
@@ -68,4 +75,18 @@ export async function resultRef(bytes: Uint8Array<ArrayBuffer>): Promise<ResultR
 
 export function sameRef(left: ResultRef, right: ResultRef) {
   return left.sha256 === right.sha256 && left.size === right.size;
+}
+
+/** The result the stored bytes encode, or null when they are missing or do not match `ref`. */
+export async function verifiedResult(
+  bytes: Uint8Array<ArrayBuffer> | null,
+  ref: ResultRef,
+): Promise<ExecutionResult | null> {
+  if (!bytes || !sameRef(await resultRef(bytes), ref)) {
+    return null;
+  }
+
+  return decodeBoundary(executionResultSchema)(
+    JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+  );
 }
