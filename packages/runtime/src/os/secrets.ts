@@ -11,9 +11,9 @@ import {
 import { join, resolve } from "node:path";
 import {
   errnoCode,
+  isRecord,
   MAX_SECRET_VALUE_BYTES,
   SecretError,
-  secretNameSchema,
   secretValueSchema,
   setOwnProperty,
   validateSecretName,
@@ -35,7 +35,27 @@ function assertOwned(stats: ReturnType<typeof fstatSync>, label: string): void {
   }
 }
 
-const decodeSecrets = Schema.decodeUnknownSync(Schema.Record(secretNameSchema, secretValueSchema));
+// An invalid entry fails the read, so a later write cannot drop it. Errors name the key, never the value.
+// BOUNDARY: The secrets.json file is checked for an object with valid secret names and bounded string values.
+function parseSecrets(value: unknown) {
+  if (!isRecord(value)) {
+    throw new Error("The secret store must be an object.");
+  }
+
+  const secrets: Record<string, string> = {};
+
+  for (const [name, secret] of Object.entries(value)) {
+    validateSecretName(name);
+
+    if (!validSecretValue(secret)) {
+      throw invalidSecretValue(name);
+    }
+
+    setOwnProperty(secrets, name, secret);
+  }
+
+  return secrets;
+}
 
 /** Plaintext storage protected by user-only permissions. */
 export class SecretStore {
@@ -124,7 +144,7 @@ export class SecretStore {
       closeSync(fd);
     }
 
-    return { ...decodeSecrets(value) };
+    return parseSecrets(value);
   }
 
   snapshot() {

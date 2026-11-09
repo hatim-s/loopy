@@ -109,6 +109,21 @@ test("malformed stores and invalid values never echo secret contents", () => {
   });
 });
 
+test("an entry with an invalid name fails reads and writes and keeps the file intact", () => {
+  const { store } = setup();
+  Effect.runSync(store.set("ok", "other-marker"));
+  const stored = '{"TOKEN ":"sensitive-marker","ok":"other-marker"}';
+  writeFileSync(store.file, stored);
+
+  for (const attempt of [store.list(), store.set("fresh", "value"), store.remove("ok")]) {
+    const failure = Effect.runSync(Effect.flip(attempt));
+    expect(failure).toMatchObject({ _tag: "SecretError" });
+    expect(String(failure.cause)).not.toContain("sensitive-marker");
+  }
+
+  expect(readFileSync(store.file, "utf8")).toBe(stored);
+});
+
 test("redaction handles overlapping values, regex punctuation and truncated secrets", () => {
   expect(secretRedactor(["abc", "abcdef", "a.b?"])("abcdef abc a.b?")).toBe(
     "[redacted] [redacted] [redacted]",
