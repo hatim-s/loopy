@@ -48,10 +48,11 @@ export function isFieldValue(kind: FieldType, value: Json | undefined): boolean 
 export function matchesRecordSpec(value: Json, spec: RecordSpec): boolean {
   return (
     isRecord(value) &&
-    recordFields(spec).every(
-      ({ key, optional, kind }) =>
-        (optional && value[key] === undefined) || isFieldValue(kind, value[key]),
-    )
+    recordFields(spec).every(({ key, optional, kind }) => {
+      const field = Object.hasOwn(value, key) ? value[key] : undefined;
+
+      return (optional && field === undefined) || isFieldValue(kind, field);
+    })
   );
 }
 

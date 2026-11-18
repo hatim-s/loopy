@@ -97,3 +97,17 @@ test("scope decoding rejects invalid tuples with an actionable message", () => {
     decodeBoundary(routes.executions.query)({ scope: '[{"nodeId":"a","index":-1}]' }),
   ).toThrow("Scope must be a JSON array of {nodeId,index} tuples.");
 });
+
+test("the definition upload codec rejects noncanonical bundle bytes", () => {
+  const body = {
+    graph,
+    revision: "0".repeat(64),
+    bundles: [{ nodeId: "entry", bundleHash: "0".repeat(64), bytes: "YQ==" }],
+    source: { path: "entry.ts", workspace: "fixture" },
+    replace: false,
+  };
+
+  const decode = decodeBoundary(routes.putLoopy.body);
+  expect(decode(body).bundles[0]?.bytes).toEqual(new Uint8Array([97]));
+  expect(() => decode({ ...body, bundles: [{ ...body.bundles[0], bytes: "YR==" }] })).toThrow();
+});

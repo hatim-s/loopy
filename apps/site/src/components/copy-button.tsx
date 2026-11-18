@@ -14,11 +14,14 @@ export function CopyButton({ text }: { text: string }) {
     return () => clearTimeout(id);
   }, [state]);
 
-  const copy = () =>
-    navigator.clipboard.writeText(text).then(
-      () => setState("copied"),
-      () => setState("failed"),
-    );
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+  }
 
   return (
     <button

@@ -13,58 +13,6 @@ type Worktree = {
   prunable?: string;
 };
 
-const C_ESCAPES = new Map([
-  ["a", 7],
-  ["b", 8],
-  ["f", 12],
-  ["n", 10],
-  ["r", 13],
-  ["t", 9],
-  ["v", 11],
-  ['"', 34],
-  ["\\", 92],
-]);
-
-function worktreeValue(value: string, line: string): string {
-  if (!value.startsWith('"')) {
-    return value;
-  }
-
-  if (!value.endsWith('"')) {
-    unexpected("git worktree.list", line);
-  }
-
-  const body = value.slice(1, -1);
-  const bytes: number[] = [];
-  let cursor = 0;
-
-  for (const match of body.matchAll(/\\([0-7]{3}|[abfnrtv"\\])|([^"\\]+)/g)) {
-    if (match.index !== cursor) {
-      unexpected("git worktree.list", line);
-    }
-
-    const escape = match[1];
-
-    if (escape) {
-      bytes.push(
-        escape.length === 3
-          ? Number.parseInt(escape, 8)
-          : (C_ESCAPES.get(escape) ?? unexpected("git worktree.list", line)),
-      );
-    } else {
-      bytes.push(...new TextEncoder().encode(match[2]));
-    }
-
-    cursor += match[0].length;
-  }
-
-  if (cursor !== body.length) {
-    unexpected("git worktree.list", line);
-  }
-
-  return new TextDecoder().decode(new Uint8Array(bytes));
-}
-
 function worktreeState(entry: Worktree, line: string) {
   if (line === "bare") {
     entry.bare = true;
@@ -82,14 +30,14 @@ function worktreeState(entry: Worktree, line: string) {
     entry.locked = true;
 
     if (line.length > 7) {
-      entry.lockReason = worktreeValue(line.slice(7), line);
+      entry.lockReason = line.slice(7);
     }
 
     return;
   }
 
   if (line === "prunable" || line.startsWith("prunable ")) {
-    entry.prunable = worktreeValue(line.slice(9), line);
+    entry.prunable = line.slice(9);
 
     return;
   }
@@ -118,18 +66,22 @@ export function parseWorktreeList({ stdout }: ParserInput): Worktree[] {
     return [];
   }
 
+  if (!stdout.endsWith("\0\0")) {
+    unexpected("git worktree.list", stdout);
+  }
+
   return stdout
-    .replace(/\n+$/, "")
-    .split("\n\n")
+    .slice(0, -2)
+    .split("\0\0")
     .map((block) => {
-      const [first = "", ...rest] = block.split("\n");
+      const [first = "", ...rest] = block.split("\0");
 
       if (!first.startsWith("worktree ") || !first.slice(9)) {
         unexpected("git worktree.list", first);
       }
 
       const entry: Worktree = {
-        path: worktreeValue(first.slice(9), first),
+        path: first.slice(9),
         sha: null,
         branch: null,
         bare: false,

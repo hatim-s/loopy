@@ -23,7 +23,8 @@ const MAX_BACKOFF_MS = 5000;
 
 export const makeDaemon = (options: DaemonOptions) =>
   Effect.gen(function* () {
-    const scope = yield* Effect.scope;
+    // Workers must outlive the parent scope closing while its shutdown finalizer drains them.
+    const workerScope = yield* Scope.fork(yield* Effect.scope);
     const inbox = yield* Queue.sliding<void>(1);
     const lock = yield* Semaphore.make(1);
     const { store } = options;
@@ -119,7 +120,7 @@ export const makeDaemon = (options: DaemonOptions) =>
         yield* Effect.gen(function* () {
           const fired = yield* lock
             .withPermit(admitDue)
-            .pipe(Effect.provideService(Scope.Scope, scope));
+            .pipe(Effect.provideService(Scope.Scope, workerScope));
 
           const advanced = fired + progress;
           progress = 0;

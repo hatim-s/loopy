@@ -3,13 +3,13 @@
 Captured on Darwin on 2026-10-17 with `git version 2.50.1 (Apple Git-155)` from disposable repositories.
 These explicit machine formats are identical across platforms, so one capture serves both.
 `status-stash.linux.txt` is the only Linux capture.
-NUL bytes and final blank worktree record separators are intentional.
-Worktree paths retain the temporary capture root.
+NUL bytes and double NUL worktree record separators are intentional.
+The worktree fixtures use NUL framing adapted from the original captures. Paths retain the temporary capture root.
 
 `status` includes a merge conflict, an index rename with spaces, staged text and binary
 changes, an unstaged change, an untracked file, and a branch ahead 1 and behind 1.
-`status-detached` comes from a detached worktree. `worktree-list` contains the main,
-locked and detached worktrees; `worktree-bare` is a separate bare repository.
+`status-detached` comes from a detached worktree. `worktree-list-z` contains the main,
+locked and detached worktrees; `worktree-bare-z` is a separate bare repository.
 The other captures use the wrapper presets, with `--cached` for both diff commands.
 `log` has a multiline body, a blank line and an ASCII record-separator byte. It uses
 seven NUL-delimited fields per commit and `-z`, since NUL cannot occur in valid Git
@@ -17,7 +17,7 @@ commit messages. ASCII record separators can occur in bodies and are not delimit
 `tag` includes annotated and lightweight tags. `remote` has distinct fetch/push URLs.
 `stash-list` was captured after an explicit `git stash push -m 'Fixture stash'`.
 
-`worktree-quoted` adds a tab and a UTF-8 character in a worktree path, a lock
+`worktree-quoted-z` adds a tab, a UTF-8 character and a newline in a worktree path, a lock
 reason with a newline, and a missing worktree with a prunable reason.
 
 `status-paths` preserves literal newline, tab and UTF-8 characters in staged paths.

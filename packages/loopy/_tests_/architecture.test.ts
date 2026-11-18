@@ -64,8 +64,19 @@ const decodeManifest = Schema.decodeUnknownSync(
   ),
 );
 
+const manifests = new Map<string, ReturnType<typeof decodeManifest>>();
+
 function manifest(directory: string) {
-  return decodeManifest(readFileSync(join(directory, "package.json"), "utf8"));
+  const cached = manifests.get(directory);
+
+  if (cached) {
+    return cached;
+  }
+
+  const config = decodeManifest(readFileSync(join(directory, "package.json"), "utf8"));
+  manifests.set(directory, config);
+
+  return config;
 }
 
 function packageRoot(owner: Package): string {
@@ -98,7 +109,15 @@ function ownerOf(file: string): Package | undefined {
   });
 }
 
-function importsOf(file: string): string[] {
+const fileImports = new Map<string, readonly string[]>();
+
+function importsOf(file: string): readonly string[] {
+  const cached = fileImports.get(file);
+
+  if (cached) {
+    return cached;
+  }
+
   const source = ts.createSourceFile(
     file,
     readFileSync(file, "utf8"),
@@ -140,6 +159,7 @@ function importsOf(file: string): string[] {
   };
 
   visit(source);
+  fileImports.set(file, imports);
 
   return imports;
 }

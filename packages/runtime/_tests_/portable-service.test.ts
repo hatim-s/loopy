@@ -330,6 +330,17 @@ test("portable SSE rejects partial transaction cursors, epoch changes and pruned
   ).rejects.toMatchObject({ code: "stale_cursor" });
 });
 
+test("portable SSE rejects a cursor ahead of the current event log", async () => {
+  const { store, service } = await seededTransaction();
+  const { cursor, epoch } = await Effect.runPromise(store.eventCursor());
+  const aborter = new AbortController();
+  onCleanup(() => aborter.abort());
+
+  await expect(
+    Effect.runPromise(eventStream(store, service, { after: cursor + 1, epoch }, aborter.signal)),
+  ).rejects.toMatchObject({ code: "stale_cursor" });
+});
+
 test("portable routes refuse a request body over their limit before parsing it", async () => {
   const { service, store } = fixture();
 

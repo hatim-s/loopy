@@ -270,6 +270,16 @@ test("JSON patch rejects values that cannot survive JSON serialization", () => {
   expect(files["asset.json"]).toBe('{"version":1}');
 });
 
+test("JSON patch requires the same own keys even when a removed key is inherited", () => {
+  const original = '{"toString":1}';
+  const files = { "asset.json": original };
+
+  expect(() => writeAssetJson(files, "asset.json", { version: 1 })).toThrow(
+    "Refusing to reformat existing JSON structure",
+  );
+  expect(files["asset.json"]).toBe(original);
+});
+
 test("asset request rejects malformed identities, paths and options", () => {
   const input = {
     repository: "/fixture/uacode",

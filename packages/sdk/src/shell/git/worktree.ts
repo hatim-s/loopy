@@ -14,7 +14,7 @@ export const worktree = {
   }),
   list: builtin(
     {
-      preset: { flags: { porcelain: true, z: false } },
+      preset: { flags: { porcelain: true, z: true } },
       program: "git",
       path: ["worktree", "list"],
       flags: {

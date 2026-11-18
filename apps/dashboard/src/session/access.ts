@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import { BackendError, type LoopyBackend, type StreamState } from "../backend/backend";
+import { resetStream } from "../lib/stream/apply";
 import { followSession } from "../lib/stream/follow";
 import { useBackend } from "../router-context";
 
@@ -107,6 +108,7 @@ export function useSessionStream(): void {
 
     return () => {
       controller.abort();
+      resetStream(client);
       stream.set("idle");
     };
   }, [client, backend]);

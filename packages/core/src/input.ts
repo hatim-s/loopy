@@ -42,7 +42,7 @@ export function validateGraphInput(graph: Pick<Graph, "input" | "inputValidation
       Object.keys(input).some((key) => !fields.some((field) => field.key === key))) ||
     !matchesRecordSpec(input, spec) ||
     Object.entries(graph.inputValidation?.minItems ?? {}).some(([key, minimum]) => {
-      const value = input[key];
+      const value = Object.hasOwn(input, key) ? input[key] : undefined;
 
       return value !== undefined && (!Array.isArray(value) || value.length < minimum);
     })

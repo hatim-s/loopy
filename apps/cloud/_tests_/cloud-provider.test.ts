@@ -142,3 +142,38 @@ test("an oversized attempt request is the sandbox's coded 413, not a protocol fa
     ),
   );
 });
+
+test("provider lookup fails closed on a sandbox redirect", async () => {
+  const paths: string[] = [];
+
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const path = new URL(request.url).pathname;
+      paths.push(path);
+
+      return path === "/attempts"
+        ? Response.redirect(new URL("/elsewhere", request.url))
+        : Response.json({ kind: "none" });
+    },
+  });
+
+  try {
+    const provider = new SandboxProvider({
+      url: new URL(server.url.origin),
+      token: "synthetic",
+      workspace: "alpha",
+      artifacts: { getBundle: () => Effect.succeed(btoa("fixture bundle")) },
+    });
+
+    const exit = await Effect.runPromiseExit(provider.lookup(key("redirect"), 1));
+
+    expect(providerFailure(exit)).toMatchObject([
+      { _tag: "DurableProviderError", operation: "lookup", reason: "protocol" },
+    ]);
+    expect(paths).toEqual(["/attempts"]);
+  } finally {
+    await server.stop(true);
+  }
+});

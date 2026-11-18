@@ -64,3 +64,22 @@ test("JSON-root input contracts preserve all JSON values without pre-queue field
     expect(validateGraphInput(definition, input)).toEqual({ ok: true, value: input });
   }
 });
+
+test("record input treats inherited names as missing fields", () => {
+  expect(
+    validateGraphInput({ input: Object.fromEntries([["toString", "json" as const]]) }, {}).ok,
+  ).toBe(false);
+  expect(validateGraphInput({ input: { "toString?": "string" } }, {}).ok).toBe(true);
+  expect(
+    validateGraphInput(
+      { input: Object.fromEntries([["toString", "string" as const]]) },
+      Object.fromEntries([["toString", "own"]]),
+    ).ok,
+  ).toBe(true);
+  expect(
+    validateGraphInput(
+      inputGraph({ "toString?": "string[]" }, { minItems: { toString: 1 }, unknownKeys: "reject" }),
+      {},
+    ).ok,
+  ).toBe(true);
+});

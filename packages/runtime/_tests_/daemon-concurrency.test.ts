@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { Executor } from "@loopy/core";
 import { loopy, sh } from "@loopy/sdk";
-import { Deferred, Effect, Fiber } from "effect";
+import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { newRun } from "../../core/_tests_/fixtures/run";
 import { makeDaemon } from "../src/host";
 import { countPasses, nextPass } from "./fixtures/service-runtime";
@@ -78,7 +78,7 @@ test("six runs respect concurrency two while the loop keeps polling", async () =
   );
 });
 
-test("shutdown drains owned work without aborting its receipt and preserves queued runs", async () => {
+test.each(["explicit stop", "scope close"])("%s drains owned work", async (shutdown) => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -111,18 +111,24 @@ test("shutdown drains owned work without aborting its receipt and preserves queu
 
         const graph = loopy("test", { input: {}, run: () => sh(["printf", "done"]) });
 
+        const scope = yield* Scope.fork(yield* Effect.scope);
+
         const daemon = yield* makeDaemon({
           store,
           concurrency: 1,
           prepare: () => Effect.succeed({ graph, executor }),
           definitionFor: () => Effect.succeed({ revision: "bundle", graph }),
-        });
+        }).pipe(Effect.provideService(Scope.Scope, scope));
 
         yield* store.createRun(newRun());
         yield* store.createRun({ ...newRun(), id: "pending" });
         const running = yield* Effect.forkChild(daemon.run);
         yield* Deferred.await(entered);
-        const stopping = yield* Effect.forkChild(daemon.stop);
+
+        const stopping = yield* Effect.forkChild(
+          shutdown === "scope close" ? Scope.close(scope, Exit.void) : daemon.stop,
+        );
+
         yield* Effect.yieldNow;
         expect(aborted).toBe(false);
         yield* Deferred.succeed(gate, undefined);

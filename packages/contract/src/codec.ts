@@ -54,6 +54,21 @@ export const base64Text = Schema.String.check(
   Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
 );
 
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// atob ignores the unused low bits of the last symbol, so only zero bits there are canonical.
+export function canonicalPadding(text: string) {
+  const padding = text.endsWith("==") ? 2 : text.endsWith("=") ? 1 : 0;
+
+  if (padding === 0) {
+    return true;
+  }
+
+  const last = ALPHABET.indexOf(text.charAt(text.length - padding - 1));
+
+  return (last & (padding === 2 ? 0x0f : 0x03)) === 0;
+}
+
 /** The longest base64 text whose decoded bytes can fit within maxBytes. */
 export const base64Length = (maxBytes: number) => Math.ceil(maxBytes / 3) * 4;
 
@@ -82,9 +97,11 @@ const bufferBytes = Schema.declare(
 );
 
 /** Bytes on the wire as canonical base64, so callers pass the compiler's Uint8Array directly. */
-export const base64Bytes = base64Text.pipe(
-  Schema.decodeTo(bufferBytes, {
-    decode: SchemaGetter.transform(base64Decode),
-    encode: SchemaGetter.transform(base64Encode),
-  }),
-);
+export const base64Bytes = base64Text
+  .check(Schema.makeFilter(canonicalPadding, { message: "Supply canonical base64 padding bits." }))
+  .pipe(
+    Schema.decodeTo(bufferBytes, {
+      decode: SchemaGetter.transform(base64Decode),
+      encode: SchemaGetter.transform(base64Encode),
+    }),
+  );

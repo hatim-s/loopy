@@ -91,8 +91,8 @@ const daemon = Effect.fn(function* (context: ClientContext) {
 /** Calls one contract route on the daemon, starting it first when no daemon is published. */
 export const request = <R extends Route>(context: ClientContext, route: R, input: RouteInput<R>) =>
   Effect.gen(function* () {
-    const record = yield* daemon(context);
     const { method, url, headers, body } = yield* cliSync(() => routeRequest(route, input));
+    const record = yield* daemon(context);
 
     // Consume the body while fetch still owns its cancellation signal. Never retry mutations.
     const { status, text } = yield* Effect.tryPromise({
@@ -167,7 +167,11 @@ async function readEvents(
 
     return { kind: "ended" };
   } finally {
-    await reader.cancel();
+    try {
+      await reader.cancel();
+    } finally {
+      reader.releaseLock();
+    }
   }
 }
 

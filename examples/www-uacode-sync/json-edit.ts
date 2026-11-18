@@ -134,7 +134,7 @@ function compare(before: Json, after: Json, path: Path, spans: JsonSpans, change
   if (isObject(before) && isObject(after)) {
     if (
       Object.keys(before).length !== Object.keys(after).length ||
-      Object.keys(before).some((key) => !(key in after))
+      Object.keys(before).some((key) => !Object.hasOwn(after, key))
     ) {
       throw new Error(
         "Refusing to reformat existing JSON structure. Inspect the planned asset changes before retrying.",

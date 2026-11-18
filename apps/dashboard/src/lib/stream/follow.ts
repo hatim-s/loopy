@@ -20,6 +20,11 @@ export async function followSession(options: FollowOptions): Promise<void> {
   try {
     while (!signal.aborted) {
       const cursor = await backend.call("cursor", {}, signal);
+
+      if (signal.aborted) {
+        return;
+      }
+
       await client.invalidateQueries();
 
       if (signal.aborted) {

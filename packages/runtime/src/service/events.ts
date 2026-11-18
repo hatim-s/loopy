@@ -7,7 +7,7 @@ import type { Service } from "./service";
 
 export type EventReader = Pick<
   Store,
-  "oldestEventSequence" | "epoch" | "events" | "transactionEvents" | "subscribe"
+  "oldestEventSequence" | "epoch" | "eventCursor" | "events" | "transactionEvents" | "subscribe"
 >;
 
 type EventService = Pick<Service, "events">;
@@ -25,6 +25,12 @@ export const eventStream = Effect.fn("events.eventStream")(function* (
   query: EventsQuery,
   signal: AbortSignal,
 ) {
+  const { cursor } = yield* store.eventCursor();
+
+  if (query.after > cursor) {
+    return yield* Effect.fail(new ServiceError("stale_cursor"));
+  }
+
   yield* validateCursor(store, query.after, query.epoch);
   yield* readTransaction(store, query.after);
 

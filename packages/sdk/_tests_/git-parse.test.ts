@@ -95,7 +95,7 @@ test("branch and worktree records retain optional state", async () => {
     { name: "main", current: true, upstream: "origin/main", ahead: 1, behind: 1, validSha: true },
     { name: "other", current: false, upstream: null, ahead: 0, behind: 0, validSha: true },
   ]);
-  const worktrees = parseWorktreeList(result(await fixture("git", "worktree-list")));
+  const worktrees = parseWorktreeList(result(await fixture("git", "worktree-list-z")));
   expect(worktrees).toHaveLength(3);
   expect(worktrees[0]).toMatchObject({
     branch: "main",
@@ -112,7 +112,7 @@ test("branch and worktree records retain optional state", async () => {
     detached: true,
   });
   expect(worktrees.every(({ path, sha }) => path.startsWith("/") && sha?.length === 40)).toBe(true);
-  expect(parseWorktreeList(result(await fixture("git", "worktree-bare")))).toEqual([
+  expect(parseWorktreeList(result(await fixture("git", "worktree-bare-z")))).toEqual([
     {
       path: expect.stringContaining("/bare.git"),
       sha: null,
@@ -125,9 +125,9 @@ test("branch and worktree records retain optional state", async () => {
 });
 
 test("worktree lock reasons and prunable records", async () => {
-  const entries = parseWorktreeList(result(await fixture("git", "worktree-quoted")));
+  const entries = parseWorktreeList(result(await fixture("git", "worktree-quoted-z")));
   expect(entries.find(({ locked }) => locked)).toMatchObject({
-    path: expect.stringContaining("/quoted\té"),
+    path: expect.stringContaining("/quoted\té\nline"),
     lockReason: "Needs\nreview",
   });
   expect(entries.find(({ prunable }) => prunable)).toMatchObject({

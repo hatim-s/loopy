@@ -34,57 +34,63 @@ export class HttpSandboxAuthority implements SandboxAttemptAuthority {
   }
 
   private call<K extends OperationName>(operation: K, input: OperationInput<K>) {
-    return Effect.tryPromise({
-      try: async (signal) => {
-        const response = await fetch(this.endpoint, {
-          method: "POST",
-          redirect: "error",
-          headers: {
-            Authorization: `Bearer ${this.options.token}`,
-            [RECEIPTS_NAMESPACE_HEADER]: this.options.namespace,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ operation, input }),
-          signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-        });
+    return Effect.gen({ self: this }, function* () {
+      const controller = yield* Effect.acquireRelease(
+        Effect.sync(() => new AbortController()),
+        (controller) => Effect.sync(() => controller.abort()),
+      );
 
-        if (!response.ok) {
+      const response = yield* Effect.tryPromise({
+        try: () =>
+          fetch(this.endpoint, {
+            method: "POST",
+            redirect: "error",
+            headers: {
+              Authorization: `Bearer ${this.options.token}`,
+              [RECEIPTS_NAMESPACE_HEADER]: this.options.namespace,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ operation, input }),
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
+          }),
+        catch: (cause) => failure("authority HTTP", cause),
+      });
+
+      if (!response.ok && response.status !== AUTHORITY_REJECTED_STATUS) {
+        return yield* Effect.fail(
+          failure(
+            "authority HTTP",
+            new Error(
+              `Receipt authority returned HTTP ${response.status}. Restore local storage before resuming.`,
+            ),
+          ),
+        );
+      }
+
+      if (!response.body) {
+        return yield* Effect.fail(
+          failure("authority HTTP", new Error("Receipt authority returned an empty response.")),
+        );
+      }
+
+      const bytes = yield* readBoundedBody(response.body, AUTHORITY_MAX_BODY_BYTES).pipe(
+        Effect.mapError((cause) => failure("authority HTTP", cause)),
+      );
+
+      return yield* Effect.try({
+        try: () => {
+          const body: unknown = JSON.parse(new TextDecoder().decode(bytes));
+
           if (response.status === AUTHORITY_REJECTED_STATUS) {
-            const body: unknown = JSON.parse(await this.body(response));
-            const rejected = decodeBoundary(authorityErrorSchema)(body);
-            throw new AuthorityError(rejected.error);
+            throw new AuthorityError(decodeBoundary(authorityErrorSchema)(body).error);
           }
 
-          await response.body?.cancel();
-
-          throw new Error(
-            `Receipt authority returned HTTP ${response.status}. Restore local storage before resuming.`,
-          );
-        }
-
-        const body: unknown = JSON.parse(await this.body(response));
-
-        return decodeBoundary(operationOutput(operation))(body);
-      },
-      catch: (cause) =>
-        cause instanceof AuthorityError ? cause : failure("authority HTTP", cause),
-    });
-  }
-
-  private async body(response: Response) {
-    if (!response.body) {
-      throw new Error("Receipt authority returned an empty response.");
-    }
-
-    const bytes = await Effect.runPromise(
-      readBoundedBody(response.body, AUTHORITY_MAX_BODY_BYTES).pipe(
-        Effect.catchTag("BodyLimitError", () =>
-          Effect.die(new Error("Receipt authority response exceeds its byte limit.")),
-        ),
-      ),
-    );
-
-    return new TextDecoder().decode(bytes);
+          return decodeBoundary(operationOutput(operation))(body);
+        },
+        catch: (cause) =>
+          cause instanceof AuthorityError ? cause : failure("authority HTTP", cause),
+      });
+    }).pipe(Effect.scoped);
   }
 
   // TypeScript cannot build this per-operation record from the table without a cast, so each

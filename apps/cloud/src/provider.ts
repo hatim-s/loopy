@@ -20,8 +20,7 @@ import { Effect } from "effect";
 import type { R2ArtifactRegistry } from "./artifacts";
 import type { CloudConfig } from "./environment";
 import { readBoundedText } from "./http";
-import type { CloudProtocolError } from "./operation";
-import { CloudError, decodeProtocol, platform } from "./operation";
+import { CloudError, type CloudProtocolError, decodeProtocol, platform } from "./operation";
 
 export const SANDBOX_REQUEST_TIMEOUT_MS = 5000;
 
@@ -48,6 +47,8 @@ export class SandboxProvider implements DurableExecutionProvider {
     return platform("sandbox request", (signal) =>
       fetch(url, {
         method: body === undefined ? "GET" : "POST",
+        // Workerd supports manual redirects. The response checks reject their status.
+        redirect: "manual",
         headers: {
           Authorization: `Bearer ${this.options.token}`,
           "Content-Type": "application/json",

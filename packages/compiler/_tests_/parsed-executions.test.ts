@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { LocalExecutor } from "@loopy/runtime/executor";
 import { activate } from "@loopy/runtime/host";
@@ -13,13 +13,28 @@ import { compileOrThrow } from "./fixtures/compile";
 test("real parsed git, filesystem, text and redirecting curl executions persist their graph results", async () => {
   const f = await fixture();
 
+  const worktreePath = join(f.workspace, "repo\nline");
+  await mkdir(worktreePath);
+  const gitEnv = { PATH: process.env.PATH, HOME: f.home, LOOPY_HOME: f.home, LANG: "C.UTF-8" };
+
   const init = Bun.spawn(["git", "init", "--quiet", f.workspace], {
-    env: { PATH: process.env.PATH, HOME: f.home, LOOPY_HOME: f.home, LANG: "C.UTF-8" },
+    env: gitEnv,
     stdout: "pipe",
     stderr: "pipe",
   });
 
   expect(await init.exited).toBe(0);
+
+  const initWorktree = Bun.spawn(
+    ["git", "init", "--quiet", "--initial-branch=main", worktreePath],
+    {
+      env: gitEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+
+  expect(await initWorktree.exited).toBe(0);
   await writeFile(join(f.workspace, "words.txt"), "hello world\nsecond line\n");
   const body = "HTTP/1.1 200 body text\n__LOOPY_CURL__inside";
 
@@ -42,10 +57,11 @@ test("real parsed git, filesystem, text and redirecting curl executions persist 
     `import {loopy, git, fs, text, net} from "loopy";
 export default loopy("parsed", {input: {}, mode: "full", run: () => {
   const repository = git.revParse({flags: {showToplevel: true}}, {label: "git"});
+  const worktrees = git.worktree.list({}, {label: "worktrees", cwd: ${JSON.stringify(worktreePath)}});
   const path = fs.realpath({args: ["words.txt"]}, {label: "filesystem"});
   const counts = text.wc({args: ["words.txt"]}, {label: "text"});
   const response = net.curl({args: [${JSON.stringify(new URL("/redirect", server.url).href)}], flags: {location: true}}, {label: "curl"});
-  return {repository, path, counts, response};
+  return {repository, worktrees, path, counts, response};
 }});`,
   );
   const compiled = await compileOrThrow(source);
@@ -68,6 +84,16 @@ export default loopy("parsed", {input: {}, mode: "full", run: () => {
 
   const expected = {
     repository: f.workspace,
+    worktrees: [
+      {
+        path: worktreePath,
+        sha: "0".repeat(40),
+        branch: "main",
+        bare: false,
+        detached: false,
+        locked: false,
+      },
+    ],
     path: join(f.workspace, "words.txt"),
     counts: [{ lines: 2, words: 4, bytes: 24, file: "words.txt" }],
     response: {
@@ -87,8 +113,9 @@ export default loopy("parsed", {input: {}, mode: "full", run: () => {
     output: expected,
   });
   const nodes = await Effect.runPromise(store.getNodeRuns("run"));
-  expect(nodes.slice(0, 4)).toMatchObject([
+  expect(nodes.slice(0, 5)).toMatchObject([
     { status: "succeeded", output: expected.repository },
+    { status: "succeeded", output: expected.worktrees },
     { status: "succeeded", output: expected.path },
     { status: "succeeded", output: expected.counts },
     { status: "succeeded", output: expected.response },
